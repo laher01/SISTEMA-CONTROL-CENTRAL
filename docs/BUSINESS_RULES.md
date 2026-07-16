@@ -448,3 +448,150 @@ El Expediente es el activo principal del ERP.
 Todo gira alrededor del Expediente.
 
 Nunca alrededor de un documento individual.
+
+# REGLAS DE PLANIFICACIÓN, VALIDACIÓN Y SUPERVISIÓN
+
+---
+
+## Regla de Automatización Operativa
+
+FACT CENTRAL deberá automatizar progresivamente el trabajo manual de revisión documental que actualmente realizan múltiples secretarias.
+
+El sistema deberá revisar automáticamente:
+
+- Factura.
+- Guía de Remisión.
+- Voucher.
+- Retención.
+- Detracción.
+- Productos.
+- Montos.
+- Fechas.
+- Empresas.
+- Documentos faltantes.
+- Inconsistencias.
+
+La Secretaría pasará de procesar todos los documentos a supervisar alertas, excepciones e inconsistencias.
+
+---
+
+## Regla de Documentos Principales
+
+Los documentos principales del Expediente serán:
+
+- Factura.
+- Guía de Remisión Remitente.
+- Voucher.
+
+Un Expediente no podrá declararse completo si falta alguno de estos documentos, salvo que exista una regla específica autorizada para el tipo de operación.
+
+---
+
+## Regla de Documentos Importantes
+
+También deberán verificarse cuando corresponda:
+
+- Guía Transportista.
+- Constancia de Retención.
+- Constancia de Detracción.
+- Orden de Compra.
+- Requerimiento.
+- Correo.
+- WhatsApp.
+- Fotografías.
+- Actas.
+
+La ausencia de un documento importante podrá generar observación, alerta o bloqueo según la configuración de la operación.
+
+---
+
+## Regla de Clasificación de Productos
+
+Todo ítem de una Factura deberá ser clasificado automáticamente.
+
+Categorías iniciales:
+
+- Alimentos.
+- Bebidas.
+- Insumos.
+- Repuestos.
+- Servicios.
+- Abarrotes.
+- Productos gravados.
+- Productos no gravados.
+- Productos restringidos.
+- Productos fuera del giro.
+- Otros.
+
+La clasificación deberá almacenarse por producto y por Expediente.
+
+---
+
+## Regla de Productos Permitidos
+
+Cada Empresa Receptora podrá tener una configuración propia de:
+
+- categorías permitidas;
+- productos permitidos;
+- categorías observadas;
+- productos restringidos;
+- productos prohibidos;
+- condiciones especiales;
+- tratamiento tributario.
+
+Una Factura podrá ser válida para una Empresa Receptora y no ser válida para otra.
+
+---
+
+## Regla de Productos No Permitidos
+
+El sistema deberá observar o rechazar una Factura cuando contenga productos prohibidos o no útiles para la operación.
+
+Ejemplos iniciales, según configuración:
+
+- bebidas alcohólicas;
+- productos no gravados no aceptados;
+- pollo;
+- pescado;
+- productos incompatibles con el giro;
+- productos sin sustento comercial.
+
+Estas reglas deberán ser configurables y nunca quedar fijas dentro del código.
+
+---
+
+## Regla de Validación del Giro Comercial
+
+Antes de aprobar una Factura, el sistema deberá verificar que los productos o servicios facturados sean coherentes con:
+
+- el giro de la Empresa Receptora;
+- las reglas configuradas;
+- el historial comercial;
+- la categoría de la operación;
+- la necesidad real registrada.
+
+Si no existe coherencia suficiente, el Expediente quedará observado.
+
+---
+
+## Regla de Validación de Factura, Guía y Voucher
+
+El sistema deberá comprobar que:
+
+- la Factura y la Guía correspondan a la misma operación;
+- el emisor y receptor coincidan;
+- la fecha sea razonable;
+- el monto sea consistente;
+- el Voucher corresponda a la Factura;
+- el importe pagado sea coherente;
+- no existan documentos duplicados;
+- no existan relaciones contradictorias.
+
+---
+
+## Regla de Agente de Retención
+
+Cuando una Empresa Receptora sea Agente de Retención, el sistema deberá mostrar una leyenda visible:
+
+```text
+AGENTE DE RETENCIÓN
