@@ -31,6 +31,9 @@ Documentación interactiva: http://localhost:8000/docs
 3. `PATCH /api/v1/empresas/{id}` marca receptores como autorizados o agentes de retención.
 4. `POST /api/v1/expedientes/recalcular` reevalúa estados (p. ej. tarea diaria para vencimientos).
 5. `GET /api/v1/dashboard/resumen`, `/expedientes`, `/alertas` para consulta.
+6. `POST /api/v1/documentos/{id}/procesar` extrae texto de PDF o ejecuta OCR sobre
+   imágenes. Guarda método, motor, confianza e idioma, y puede sugerir un tipo documental
+   que siempre requiere confirmación humana.
 
 ## Estados del expediente
 
@@ -56,5 +59,8 @@ Con PostgreSQL se verifica además que la migración Alembic coincide con los mo
 ## Limitaciones conocidas del MVP
 
 - Un solo tenant (`FC_TENANT_DEFAULT`); sin autenticación.
-- Sin OCR: PDF/imágenes se clasifican manualmente al subir o vincular.
+- La clasificación sugerida por OCR no se aplica automáticamente; PDF e imágenes se vinculan
+  manualmente al expediente.
+- Los PDF con texto se leen mediante `pypdf`; las imágenes usan Tesseract si está instalado.
+  Los PDF escaneados se detectan y quedan marcados como `requiere_ocr`.
 - Almacenamiento local; S3-compatible queda para una fase posterior.
