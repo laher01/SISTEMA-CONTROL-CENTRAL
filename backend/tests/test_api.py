@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from pypdf import PdfWriter
 
 from app.api.routes import documentos as documentos_routes
+from app.services import procesamiento_documental
 from app.services.procesamiento_documental import ResultadoProcesamiento
 from tests.conftest import Reloj
 from tests.xml import RECEPTOR, factura, guia
@@ -227,7 +228,10 @@ def test_busqueda_de_expedientes(client: TestClient) -> None:
     assert numeros("100%") == []
 
 
-def test_procesar_pdf_conserva_resultado_verificable(client: TestClient) -> None:
+def test_procesar_pdf_conserva_resultado_verificable(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(procesamiento_documental.shutil, "which", lambda _: None)
     documento = subir(client, "escaneo.pdf", pdf_vacio())
     respuesta = client.post(f"/api/v1/documentos/{documento['id']}/procesar")
     assert respuesta.status_code == 200, respuesta.text
