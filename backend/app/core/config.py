@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     umbral_bancarizacion_usd: Decimal = Decimal("500")
     max_upload_mb: int = 20
     max_extracted_chars: int = 200_000
+    max_ocr_pdf_pages: int = 50
     cors_origins: list[str] = []
 
     def hoy(self) -> date:
