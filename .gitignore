@@ -1,0 +1,3 @@
+deploy/.env.production
+deploy/backups/
+deploy/.deploy.lock
