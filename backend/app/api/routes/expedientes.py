@@ -1,0 +1,119 @@
+import uuid
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query, status
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+
+from app.api.deps import HoyDep, SessionDep, SettingsDep, TenantDep
+from app.api.errores import no_encontrado, validar_gestor
+from app.enums import EstadoExpediente
+from app.models import Empresa, Expediente
+from app.schemas import ExpedienteDetalle, ExpedienteIn, ExpedienteOut, Recalculo
+from app.services.expedientes import (
+    buscar_expediente,
+    documentos_faltantes,
+    fecha_limite,
+    recalcular_expedientes,
+)
+from app.services.ingesta import crear_expediente
+
+router = APIRouter(prefix="/expedientes", tags=["expedientes"])
+
+
+@router.post("", response_model=ExpedienteOut, status_code=status.HTTP_201_CREATED)
+def crear(
+    session: SessionDep,
+    settings: SettingsDep,
+    hoy: HoyDep,
+    tenant_id: TenantDep,
+    datos: ExpedienteIn,
+) -> Expediente:
+    validar_gestor(session, tenant_id, datos.gestor_id)
+    existente = buscar_expediente(
+        session,
+        tenant_id,
+        datos.tipo_comprobante,
+        datos.serie,
+        str(int(datos.correlativo)),
+        datos.emisor.ruc,
+        datos.receptor.ruc,
+    )
+    if existente is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {"mensaje": "El expediente ya existe", "expediente_id": str(existente.id)},
+        )
+    try:
+        expediente = crear_expediente(
+            session,
+            settings,
+            hoy,
+            tenant_id,
+            receptor=(datos.receptor.ruc, datos.receptor.razon_social),
+            emisor=(datos.emisor.ruc, datos.emisor.razon_social),
+            tipo_comprobante=datos.tipo_comprobante,
+            serie=datos.serie,
+            correlativo=datos.correlativo,
+            fecha_emision=datos.fecha_emision,
+            moneda=datos.moneda,
+            importe_total=datos.importe_total,
+            requiere_guia=datos.requiere_guia,
+            gestor_id=datos.gestor_id,
+        )
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "El expediente ya existe") from exc
+    return expediente
+
+
+@router.get("", response_model=list[ExpedienteOut])
+def listar(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    estado: EstadoExpediente | None = None,
+    receptor_ruc: str | None = None,
+    pendiente_aprobacion: bool | None = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[Expediente]:
+    consulta = select(Expediente).where(
+        Expediente.tenant_id == tenant_id, Expediente.deleted_at.is_(None)
+    )
+    if estado is not None:
+        consulta = consulta.where(Expediente.estado == estado)
+    if pendiente_aprobacion is not None:
+        consulta = consulta.where(Expediente.pendiente_aprobacion == pendiente_aprobacion)
+    if receptor_ruc is not None:
+        consulta = consulta.join(Empresa, Expediente.receptor_id == Empresa.id).where(
+            Empresa.ruc == receptor_ruc
+        )
+    consulta = consulta.order_by(Expediente.fecha_emision.desc()).limit(limit).offset(offset)
+    return list(session.scalars(consulta))
+
+
+@router.post("/recalcular", response_model=Recalculo)
+def recalcular(
+    session: SessionDep, settings: SettingsDep, hoy: HoyDep, tenant_id: TenantDep
+) -> Recalculo:
+    actualizados = recalcular_expedientes(session, tenant_id, hoy, settings)
+    session.commit()
+    return Recalculo(actualizados=actualizados)
+
+
+@router.get("/{expediente_id}", response_model=ExpedienteDetalle)
+def detalle(
+    session: SessionDep, settings: SettingsDep, tenant_id: TenantDep, expediente_id: uuid.UUID
+) -> ExpedienteDetalle:
+    expediente = session.get(Expediente, expediente_id)
+    if expediente is None or expediente.tenant_id != tenant_id or expediente.deleted_at:
+        raise no_encontrado("Expediente")
+    base = ExpedienteOut.model_validate(expediente)
+    return ExpedienteDetalle(
+        **base.model_dump(),
+        documentos=[d for d in expediente.documentos if d.deleted_at is None],
+        alertas=expediente.alertas,
+        faltantes=documentos_faltantes(expediente),
+        fecha_limite=fecha_limite(expediente.fecha_emision, settings.dia_limite_expediente),
+    )

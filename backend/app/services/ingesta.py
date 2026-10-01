@@ -1,0 +1,242 @@
+import hashlib
+import uuid
+from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.core.config import Settings
+from app.enums import EstadoDocumento, Moneda, TipoComprobante, TipoDocumento
+from app.models import Documento, Expediente
+from app.services import auditoria
+from app.services.expedientes import (
+    actualizar_expediente,
+    buscar_expediente,
+    obtener_o_crear_empresa,
+)
+from app.services.ubl import ComprobanteUbl, parece_xml, parse_ubl
+from app.storage import AlmacenLocal
+
+
+class DocumentoDuplicado(Exception):
+    def __init__(self, documento_id: uuid.UUID) -> None:
+        super().__init__(f"Documento duplicado: {documento_id}")
+        self.documento_id = documento_id
+
+
+class ExpedienteNoEncontrado(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class ArchivoSubido:
+    nombre: str
+    mime_type: str
+    contenido: bytes
+
+
+def ingerir_documento(
+    session: Session,
+    almacen: AlmacenLocal,
+    settings: Settings,
+    hoy: date,
+    tenant_id: uuid.UUID,
+    archivo: ArchivoSubido,
+    tipo_documento: TipoDocumento | None = None,
+    expediente_id: uuid.UUID | None = None,
+    gestor_id: uuid.UUID | None = None,
+) -> Documento:
+    sha256 = hashlib.sha256(archivo.contenido).hexdigest()
+    existente = session.scalar(
+        select(Documento.id).where(Documento.tenant_id == tenant_id, Documento.sha256 == sha256)
+    )
+    if existente is not None:
+        raise DocumentoDuplicado(existente)
+
+    expediente: Expediente | None = None
+    if expediente_id is not None:
+        expediente = _expediente_del_tenant(session, tenant_id, expediente_id)
+
+    comprobante = (
+        parse_ubl(archivo.contenido) if parece_xml(archivo.nombre, archivo.contenido) else None
+    )
+    datos: dict[str, object] | None = None
+    if comprobante is not None:
+        tipo_documento = comprobante.tipo_documento
+        datos = comprobante.a_dict()
+        expediente = _expediente_para_comprobante(session, tenant_id, comprobante, gestor_id)
+
+    ruta = almacen.guardar(tenant_id, sha256, archivo.contenido)
+    documento = Documento(
+        tenant_id=tenant_id,
+        expediente_id=expediente.id if expediente else None,
+        tipo_documento=tipo_documento,
+        estado=_estado_documento(tipo_documento, expediente),
+        sha256=sha256,
+        nombre_original=archivo.nombre[:500],
+        mime_type=archivo.mime_type[:100],
+        tamano_bytes=len(archivo.contenido),
+        ruta_storage=ruta,
+        datos_extraidos=datos,
+        gestor_id=gestor_id,
+    )
+    session.add(documento)
+    session.flush()
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "DOCUMENTO_SUBIDO",
+        "documento",
+        documento.id,
+        {"sha256": sha256, "tipo_documento": tipo_documento, "expediente_id": _str(expediente)},
+    )
+    if expediente is not None:
+        actualizar_expediente(session, expediente, hoy, settings)
+    return documento
+
+
+def vincular_documento(
+    session: Session,
+    settings: Settings,
+    hoy: date,
+    documento: Documento,
+    expediente_id: uuid.UUID,
+    tipo_documento: TipoDocumento,
+) -> Documento:
+    expediente = _expediente_del_tenant(session, documento.tenant_id, expediente_id)
+    anterior = documento.expediente
+    documento.expediente_id = expediente.id
+    documento.tipo_documento = tipo_documento
+    documento.estado = EstadoDocumento.RELACIONADO
+    auditoria.registrar(
+        session,
+        documento.tenant_id,
+        "DOCUMENTO_VINCULADO",
+        "documento",
+        documento.id,
+        {"expediente_id": str(expediente.id), "tipo_documento": tipo_documento},
+    )
+    actualizar_expediente(session, expediente, hoy, settings)
+    if anterior is not None and anterior.id != expediente.id:
+        actualizar_expediente(session, anterior, hoy, settings)
+    return documento
+
+
+def crear_expediente(
+    session: Session,
+    settings: Settings,
+    hoy: date,
+    tenant_id: uuid.UUID,
+    receptor: tuple[str, str],
+    emisor: tuple[str, str],
+    tipo_comprobante: TipoComprobante,
+    serie: str,
+    correlativo: str,
+    fecha_emision: date,
+    moneda: Moneda,
+    importe_total: Decimal,
+    requiere_guia: bool,
+    gestor_id: uuid.UUID | None,
+) -> Expediente:
+    empresa_receptora = obtener_o_crear_empresa(session, tenant_id, *receptor)
+    empresa_emisora = obtener_o_crear_empresa(session, tenant_id, *emisor)
+    expediente = Expediente(
+        tenant_id=tenant_id,
+        receptor_id=empresa_receptora.id,
+        emisor_id=empresa_emisora.id,
+        tipo_comprobante=tipo_comprobante,
+        serie=serie,
+        correlativo=str(int(correlativo)),
+        fecha_emision=fecha_emision,
+        moneda=moneda,
+        importe_total=importe_total,
+        requiere_guia=requiere_guia and tipo_comprobante == TipoComprobante.FACT,
+        gestor_id=gestor_id,
+    )
+    session.add(expediente)
+    session.flush()
+    auditoria.registrar(session, tenant_id, "EXPEDIENTE_CREADO", "expediente", expediente.id)
+    actualizar_expediente(session, expediente, hoy, settings)
+    return expediente
+
+
+def _expediente_para_comprobante(
+    session: Session,
+    tenant_id: uuid.UUID,
+    comprobante: ComprobanteUbl,
+    gestor_id: uuid.UUID | None,
+) -> Expediente | None:
+    if comprobante.tipo_documento == TipoDocumento.FACT:
+        expediente = buscar_expediente(
+            session,
+            tenant_id,
+            TipoComprobante.FACT,
+            comprobante.serie,
+            comprobante.correlativo,
+            comprobante.emisor.ruc,
+            comprobante.receptor.ruc,
+        )
+        if expediente is not None:
+            return expediente
+        if comprobante.moneda is None or comprobante.importe_total is None:
+            return None
+        receptor = obtener_o_crear_empresa(
+            session, tenant_id, comprobante.receptor.ruc, comprobante.receptor.razon_social
+        )
+        emisor = obtener_o_crear_empresa(
+            session, tenant_id, comprobante.emisor.ruc, comprobante.emisor.razon_social
+        )
+        expediente = Expediente(
+            tenant_id=tenant_id,
+            receptor_id=receptor.id,
+            emisor_id=emisor.id,
+            tipo_comprobante=TipoComprobante.FACT,
+            serie=comprobante.serie,
+            correlativo=comprobante.correlativo,
+            fecha_emision=comprobante.fecha_emision,
+            moneda=comprobante.moneda,
+            importe_total=comprobante.importe_total,
+            gestor_id=gestor_id,
+        )
+        session.add(expediente)
+        session.flush()
+        auditoria.registrar(session, tenant_id, "EXPEDIENTE_CREADO", "expediente", expediente.id)
+        return expediente
+
+    referencia = comprobante.referencia
+    if referencia is None:
+        return None
+    return buscar_expediente(
+        session,
+        tenant_id,
+        TipoComprobante.FACT,
+        referencia.serie,
+        referencia.correlativo,
+        referencia.emisor_ruc or comprobante.emisor.ruc,
+        comprobante.receptor.ruc,
+    )
+
+
+def _expediente_del_tenant(
+    session: Session, tenant_id: uuid.UUID, expediente_id: uuid.UUID
+) -> Expediente:
+    expediente = session.get(Expediente, expediente_id)
+    if expediente is None or expediente.tenant_id != tenant_id or expediente.deleted_at:
+        raise ExpedienteNoEncontrado(str(expediente_id))
+    return expediente
+
+
+def _estado_documento(
+    tipo_documento: TipoDocumento | None, expediente: Expediente | None
+) -> EstadoDocumento:
+    if tipo_documento is None:
+        return EstadoDocumento.PENDIENTE_CLASIFICACION
+    if expediente is None:
+        return EstadoDocumento.PENDIENTE_RELACION
+    return EstadoDocumento.RELACIONADO
+
+
+def _str(expediente: Expediente | None) -> str | None:
+    return str(expediente.id) if expediente else None
