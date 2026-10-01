@@ -117,6 +117,12 @@ class ExpedienteDetalle(ExpedienteOut):
     fecha_limite: date
 
 
+class RelacionSugeridaOut(BaseModel):
+    expediente: ExpedienteOut
+    puntaje: float = Field(ge=0, le=1)
+    evidencias: list[str]
+
+
 class Recalculo(BaseModel):
     actualizados: int
 
