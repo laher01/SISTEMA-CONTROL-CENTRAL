@@ -277,3 +277,15 @@ button:disabled {
 .error {
   color: var(--rojo);
 }
+
+.texto-extraido {
+  max-width: 44rem;
+  max-height: 14rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #f5f7fa;
+  border: 1px solid #dfe3e8;
+  border-radius: 0.4rem;
+  padding: 0.75rem;
+}
