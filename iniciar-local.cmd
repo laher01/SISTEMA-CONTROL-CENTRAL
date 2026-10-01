@@ -1,6 +1,7 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+set "FACT_CENTRAL_ROOT=%~dp0"
+cd /d "%FACT_CENTRAL_ROOT%"
 
 where uv >nul 2>nul || (
   echo ERROR: instala uv antes de iniciar FACT CENTRAL.
@@ -25,8 +26,8 @@ cd ..\frontend
 call npm ci || goto :error
 
 cd ..
-start "FACT CENTRAL - Backend" cmd /k "cd /d "%~dp0backend" && uv run uvicorn app.main:app --host 127.0.0.1 --port 8000"
-start "FACT CENTRAL - Frontend" cmd /k "cd /d "%~dp0frontend" && npm run dev -- --host 127.0.0.1 --port 5173"
+start "FACT CENTRAL - Backend" cmd /k "cd /d ""%FACT_CENTRAL_ROOT%backend"" && uv run uvicorn app.main:app --host 127.0.0.1 --port 8000"
+start "FACT CENTRAL - Frontend" cmd /k "cd /d ""%FACT_CENTRAL_ROOT%frontend"" && npm run dev -- --host 127.0.0.1 --port 5173"
 
 echo.
 echo FACT CENTRAL se esta iniciando.
