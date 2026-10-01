@@ -6,6 +6,7 @@ from pypdf import PdfWriter
 
 from app.enums import TipoDocumento
 from app.services import procesamiento_documental as pd
+from app.services.extraccion_campos import extraer_campos
 
 
 def pdf_vacio(paginas: int = 1) -> bytes:
@@ -80,3 +81,40 @@ def test_ocr_imagen_registra_confianza(monkeypatch: pytest.MonkeyPatch) -> None:
     assert resultado.idioma == "spa+eng"
     assert resultado.sugerencia is not None
     assert resultado.sugerencia.tipo == TipoDocumento.VCHR
+
+
+def test_extrae_campos_de_factura_con_trazabilidad() -> None:
+    texto = """FACTURA ELECTRÓNICA F001-00000123
+    RUC EMISOR: 20500000002 CLIENTE RUC: 20100000001
+    Fecha de emisión: 17/09/2026 Moneda: SOLES TOTAL S/ 2,500.40"""
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    campos = resultado["campos"]
+    assert isinstance(campos, dict)
+    assert campos["serie"]["valor"] == "F001"
+    assert campos["correlativo"]["valor"] == "123"
+    assert campos["ruc_emisor"]["valor"] == "20500000002"
+    assert campos["ruc_receptor"]["valor"] == "20100000001"
+    assert campos["fecha_emision"]["valor"] == "2026-09-17"
+    assert campos["moneda"]["valor"] == "PEN"
+    assert campos["importe_total"]["valor"] == "2500.40"
+    assert campos["importe_total"]["fuente"] == "TEXTO_PDF"
+    assert campos["importe_total"]["requiere_confirmacion"] is True
+
+
+def test_extrae_voucher_ocr_sin_confundir_miles_y_decimales() -> None:
+    texto = "OPERACIÓN EXITOSA Nro. operación: AB-908771 TOTAL PAGADO US$ 1.234,56"
+    resultado = extraer_campos(texto, "OCR_IMAGEN", 0.8)
+    assert resultado is not None
+    campos = resultado["campos"]
+    assert isinstance(campos, dict)
+    assert campos["numero_operacion"]["valor"] == "AB-908771"
+    assert campos["moneda"]["valor"] == "USD"
+    assert campos["importe_total"]["valor"] == "1234.56"
+    assert campos["numero_operacion"]["fuente"] == "OCR"
+    assert campos["numero_operacion"]["confianza"] < 0.9
+
+
+def test_fecha_imposible_no_se_publica() -> None:
+    resultado = extraer_campos("FECHA DE EMISIÓN: 31/02/2026", "OCR_PDF", 0.9)
+    assert resultado is None

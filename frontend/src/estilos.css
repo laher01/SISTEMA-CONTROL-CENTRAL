@@ -260,6 +260,37 @@ button:disabled {
   margin: 0;
 }
 
+.campos-extraidos {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.5rem 0;
+}
+
+.campos-extraidos > div {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) 1fr;
+  gap: 0.75rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--borde);
+}
+
+.campos-extraidos dt {
+  font-weight: 600;
+}
+
+.campos-extraidos dd {
+  margin: 0;
+}
+
+.campos-extraidos small {
+  display: block;
+  color: #52606d;
+  max-width: 42rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .alertas li {
   margin-bottom: 0.35rem;
 }

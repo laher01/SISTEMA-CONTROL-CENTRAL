@@ -13,6 +13,9 @@ automáticamente una inferencia en un hecho aprobado.
 - Ejecutar Tesseract en imágenes JPEG, PNG, TIFF y WEBP cuando esté instalado.
 - Conservar método, motor, páginas, idioma y confianza junto con el texto extraído.
 - Proponer un tipo documental mediante indicadores explícitos.
+- Sugerir campos estructurados: serie, correlativo, RUC de emisor/receptor, fecha de emisión,
+  moneda, importe total y número de operación.
+- Conservar para cada campo el valor, fuente, evidencia textual y confianza.
 - Exigir confirmación humana antes de aplicar la clasificación sugerida.
 - Registrar auditoría de procesamiento completado o fallido.
 
@@ -37,3 +40,6 @@ documentos.datos_extraidos.procesamiento_documental
 ```
 
 Todo resultado incluye procedencia suficiente para diferenciar texto nativo de PDF y texto OCR.
+Los campos sugeridos se guardan en
+`procesamiento_documental.extraccion_estructurada`; nunca modifican por sí solos un expediente y
+se muestran en la bandeja de pendientes para revisión humana.
