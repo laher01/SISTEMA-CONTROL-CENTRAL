@@ -34,6 +34,9 @@ Documentación interactiva: http://localhost:8000/docs
 6. `POST /api/v1/documentos/{id}/procesar` extrae texto de PDF o ejecuta OCR sobre
    imágenes. Guarda método, motor, confianza e idioma, y puede sugerir un tipo documental
    que siempre requiere confirmación humana.
+7. `GET /api/v1/documentos/{id}/relaciones-sugeridas` compara serie-correlativo, RUC e
+   importe con expedientes del mismo tenant. Retorna candidatos con puntaje y evidencias;
+   nunca vincula automáticamente.
 
 ## Estados del expediente
 

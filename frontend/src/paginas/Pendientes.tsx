@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
-import { conParametros, enviarJson, urlArchivo, useDatos } from "../api";
+import { conParametros, enviarJson, obtener, urlArchivo, useDatos } from "../api";
 import { Estado, Paginacion } from "../componentes";
 import {
   ETIQUETA_ESTADO_DOCUMENTO,
@@ -10,7 +10,13 @@ import {
   formatearMonto,
   numeroComprobante,
 } from "../formato";
-import { TIPOS_DOCUMENTO, type Documento, type Expediente, type TipoDocumento } from "../tipos";
+import {
+  TIPOS_DOCUMENTO,
+  type Documento,
+  type Expediente,
+  type RelacionSugerida,
+  type TipoDocumento,
+} from "../tipos";
 
 const POR_PAGINA = 50;
 const ESTADOS_PENDIENTES = ["PENDIENTE_CLASIFICACION", "PENDIENTE_RELACION"] as const;
@@ -89,7 +95,15 @@ function Procesar({ documento }: { documento: Documento }) {
   const [resultado, setResultado] = useState<Documento>(documento);
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState("");
+  const [relaciones, setRelaciones] = useState<RelacionSugerida[]>([]);
   const lectura = obtenerLectura(resultado);
+
+  const buscarRelaciones = async () => {
+    const candidatas = await obtener<RelacionSugerida[]>(
+      `/api/v1/documentos/${documento.id}/relaciones-sugeridas`,
+    );
+    setRelaciones(candidatas);
+  };
 
   const procesar = async () => {
     setProcesando(true);
@@ -100,6 +114,7 @@ function Procesar({ documento }: { documento: Documento }) {
         "POST",
       );
       setResultado(actualizado);
+      await buscarRelaciones();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -127,6 +142,27 @@ function Procesar({ documento }: { documento: Documento }) {
         <button onClick={procesar} disabled={procesando}>
           {procesando ? "Procesando…" : "Reprocesar"}
         </button>
+        <button
+          onClick={() => buscarRelaciones().catch((e: unknown) => setError(String(e)))}
+          disabled={procesando}
+        >
+          Buscar expedientes
+        </button>
+        {relaciones.length > 0 && (
+          <ul>
+            {relaciones.map((relacion) => (
+              <li key={relacion.expediente.id}>
+                <Link to={`/expedientes/${relacion.expediente.id}`}>
+                  {numeroComprobante(
+                    relacion.expediente.serie,
+                    relacion.expediente.correlativo,
+                  )}
+                </Link>{" "}
+                · {Math.round(relacion.puntaje * 100)} % · {relacion.evidencias.join("; ")}
+              </li>
+            ))}
+          </ul>
+        )}
         {error && <span className="error">{error}</span>}
       </div>
     );
