@@ -9,7 +9,7 @@ automáticamente una inferencia en un hecho aprobado.
 ## Responsabilidad
 
 - Extraer la capa de texto de PDF mediante `pypdf`.
-- Marcar como `requiere_ocr` los PDF sin capa de texto.
+- Rasterizar con PDFium los PDF sin capa de texto y ejecutar OCR página por página.
 - Ejecutar Tesseract en imágenes JPEG, PNG, TIFF y WEBP cuando esté instalado.
 - Conservar método, motor, páginas, idioma y confianza junto con el texto extraído.
 - Proponer un tipo documental mediante indicadores explícitos.
@@ -21,7 +21,7 @@ automáticamente una inferencia en un hecho aprobado.
 - No modifica el original.
 - No vincula automáticamente el documento a un expediente.
 - No clasifica silenciosamente.
-- No interpreta todavía PDF escaneado; lo marca para una fase OCR posterior.
+- Limita el OCR de PDF a 50 páginas por defecto para controlar tiempo y memoria.
 - No depende de NEXUS.
 
 ## Contrato actual
