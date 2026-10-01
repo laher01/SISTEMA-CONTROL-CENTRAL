@@ -1,0 +1,81 @@
+name: deploy-staging
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+concurrency:
+  group: fact-central-staging
+  cancel-in-progress: false
+
+jobs:
+  verify-backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: fact
+          POSTGRES_PASSWORD: fact
+          POSTGRES_DB: fact_central
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U fact"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      FC_TEST_DATABASE_URL: postgresql+psycopg://fact:fact@localhost:5432/fact_central
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy app
+      - run: uv run pytest
+
+  verify-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  deploy:
+    if: vars.ENABLE_STAGING_DEPLOY == 'true'
+    needs: [verify-backend, verify-frontend]
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Configurar SSH
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Desplegar en VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+        run: ssh "$VPS_USER@$VPS_HOST" "cd -- '$VPS_DEPLOY_PATH' && bash deploy/deploy.sh"

@@ -182,6 +182,9 @@ El iniciador crea una base SQLite local, conserva los documentos en
 `backend/storage_local` y abre la interfaz en `http://127.0.0.1:5173`.
 PostgreSQL continúa siendo la base oficial para despliegues y validación de producción.
 
+Para la instalación aislada en la VPS de pruebas, PostgreSQL persistente, OCR, Cloudflare Tunnel,
+respaldos y despliegue automático desde GitHub, consulta [`deploy/README.md`](deploy/README.md).
+
 La extracción de texto PDF funciona con las dependencias del backend. Para OCR de imágenes
 debe instalarse Tesseract; el paquete de idioma español mejora el reconocimiento de documentos
 peruanos. Los resultados OCR conservan motor, idioma y confianza y no se aplican como
