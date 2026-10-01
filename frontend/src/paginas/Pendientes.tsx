@@ -20,6 +20,7 @@ import {
 
 const POR_PAGINA = 50;
 const ESTADOS_PENDIENTES = ["PENDIENTE_CLASIFICACION", "PENDIENTE_RELACION"] as const;
+type SeleccionSugerida = { expediente: Expediente; tipo?: TipoDocumento };
 
 export default function Pendientes() {
   const [parametros, setParametros] = useSearchParams();
@@ -63,22 +64,7 @@ export default function Pendientes() {
             </tr>
           </thead>
           <tbody>
-            {datos?.map((d) => (
-              <tr key={d.id}>
-                <td>
-                  <a href={urlArchivo(d.id)} target="_blank" rel="noreferrer">
-                    {d.nombre_original}
-                  </a>
-                </td>
-                <td>{formatearFecha(d.created_at)}</td>
-                <td>
-                  <Procesar documento={d} />
-                </td>
-                <td>
-                  <Vincular documento={d} alVincular={recargar} />
-                </td>
-              </tr>
-            ))}
+            {datos?.map((d) => <FilaPendiente key={d.id} documento={d} alVincular={recargar} />)}
           </tbody>
         </table>
       </Estado>
@@ -91,7 +77,44 @@ export default function Pendientes() {
   );
 }
 
-function Procesar({ documento }: { documento: Documento }) {
+function FilaPendiente({
+  documento,
+  alVincular,
+}: {
+  documento: Documento;
+  alVincular: () => void;
+}) {
+  const [seleccion, setSeleccion] = useState<SeleccionSugerida>();
+  return (
+    <tr>
+      <td>
+        <a href={urlArchivo(documento.id)} target="_blank" rel="noreferrer">
+          {documento.nombre_original}
+        </a>
+      </td>
+      <td>{formatearFecha(documento.created_at)}</td>
+      <td>
+        <Procesar documento={documento} alSeleccionar={setSeleccion} />
+      </td>
+      <td>
+        <Vincular
+          key={`${documento.id}:${seleccion?.expediente.id ?? "manual"}:${seleccion?.tipo ?? ""}`}
+          documento={documento}
+          seleccion={seleccion}
+          alVincular={alVincular}
+        />
+      </td>
+    </tr>
+  );
+}
+
+function Procesar({
+  documento,
+  alSeleccionar,
+}: {
+  documento: Documento;
+  alSeleccionar: (seleccion: SeleccionSugerida) => void;
+}) {
   const [resultado, setResultado] = useState<Documento>(documento);
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState("");
@@ -159,6 +182,16 @@ function Procesar({ documento }: { documento: Documento }) {
                   )}
                 </Link>{" "}
                 · {Math.round(relacion.puntaje * 100)} % · {relacion.evidencias.join("; ")}
+                <button
+                  onClick={() =>
+                    alSeleccionar({
+                      expediente: relacion.expediente,
+                      tipo: lectura.tipoSugerido,
+                    })
+                  }
+                >
+                  Usar candidato
+                </button>
               </li>
             ))}
           </ul>
@@ -206,10 +239,22 @@ function obtenerLectura(documento: Documento): {
   };
 }
 
-function Vincular({ documento, alVincular }: { documento: Documento; alVincular: () => void }) {
-  const [tipo, setTipo] = useState<TipoDocumento>(documento.tipo_documento ?? "VCHR");
-  const [buscar, setBuscar] = useState("");
-  const [expedienteId, setExpedienteId] = useState("");
+function Vincular({
+  documento,
+  seleccion,
+  alVincular,
+}: {
+  documento: Documento;
+  seleccion?: SeleccionSugerida;
+  alVincular: () => void;
+}) {
+  const [tipo, setTipo] = useState<TipoDocumento>(
+    seleccion?.tipo ?? documento.tipo_documento ?? "VCHR",
+  );
+  const [buscar, setBuscar] = useState(
+    seleccion ? numeroComprobante(seleccion.expediente.serie, seleccion.expediente.correlativo) : "",
+  );
+  const [expedienteId, setExpedienteId] = useState(seleccion?.expediente.id ?? "");
   const [error, setError] = useState("");
   const candidatos = useDatos<Expediente[]>(
     conParametros("/api/v1/expedientes", { buscar: buscar.trim(), limit: "20" }),
