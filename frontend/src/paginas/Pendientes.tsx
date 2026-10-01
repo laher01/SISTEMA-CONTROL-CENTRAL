@@ -52,6 +52,7 @@ export default function Pendientes() {
             <tr>
               <th>Archivo</th>
               <th>Subido</th>
+              <th>Lectura</th>
               <th>Vincular</th>
             </tr>
           </thead>
@@ -64,6 +65,9 @@ export default function Pendientes() {
                   </a>
                 </td>
                 <td>{formatearFecha(d.created_at)}</td>
+                <td>
+                  <Procesar documento={d} />
+                </td>
                 <td>
                   <Vincular documento={d} alVincular={recargar} />
                 </td>
@@ -79,6 +83,91 @@ export default function Pendientes() {
       />
     </>
   );
+}
+
+function Procesar({ documento }: { documento: Documento }) {
+  const [resultado, setResultado] = useState<Documento>(documento);
+  const [procesando, setProcesando] = useState(false);
+  const [error, setError] = useState("");
+  const lectura = obtenerLectura(resultado);
+
+  const procesar = async () => {
+    setProcesando(true);
+    setError("");
+    try {
+      const actualizado = await enviarJson<Documento>(
+        `/api/v1/documentos/${documento.id}/procesar`,
+        "POST",
+      );
+      setResultado(actualizado);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setProcesando(false);
+    }
+  };
+
+  if (lectura) {
+    return (
+      <div className="formulario-linea">
+        <span>
+          {lectura.metodo}
+          {lectura.confianza !== undefined
+            ? ` · ${Math.round(lectura.confianza * 100)} %`
+            : ""}
+          {lectura.tipoSugerido ? ` · Sugiere ${ETIQUETA_TIPO_DOCUMENTO[lectura.tipoSugerido]}` : ""}
+          {lectura.requiereOcr ? " · Requiere OCR" : ""}
+        </span>
+        {lectura.texto && (
+          <details>
+            <summary>Ver texto extraído</summary>
+            <pre className="texto-extraido">{lectura.texto}</pre>
+          </details>
+        )}
+        <button onClick={procesar} disabled={procesando}>
+          {procesando ? "Procesando…" : "Reprocesar"}
+        </button>
+        {error && <span className="error">{error}</span>}
+      </div>
+    );
+  }
+  return (
+    <div className="formulario-linea">
+      <button onClick={procesar} disabled={procesando}>
+        {procesando ? "Procesando…" : "Extraer texto"}
+      </button>
+      {error && <span className="error">{error}</span>}
+    </div>
+  );
+}
+
+function obtenerLectura(documento: Documento): {
+  metodo: string;
+  confianza?: number;
+  tipoSugerido?: TipoDocumento;
+  requiereOcr: boolean;
+  texto: string;
+} | null {
+  const proceso = documento.datos_extraidos?.procesamiento_documental;
+  if (!proceso || typeof proceso !== "object") return null;
+  const sugerencia = "clasificacion_sugerida" in proceso ? proceso.clasificacion_sugerida : null;
+  const tipo =
+    sugerencia &&
+    typeof sugerencia === "object" &&
+    "tipo" in sugerencia &&
+    TIPOS_DOCUMENTO.includes(sugerencia.tipo as TipoDocumento)
+      ? (sugerencia.tipo as TipoDocumento)
+      : undefined;
+  return {
+    metodo: "metodo" in proceso ? String(proceso.metodo) : "Procesado",
+    confianza:
+      "confianza" in proceso && typeof proceso.confianza === "number"
+        ? proceso.confianza
+        : undefined,
+    tipoSugerido: tipo,
+    requiereOcr: "requiere_ocr" in proceso && proceso.requiere_ocr === true,
+    texto: "texto" in proceso ? String(proceso.texto) : "",
+  };
 }
 
 function Vincular({ documento, alVincular }: { documento: Documento; alVincular: () => void }) {
