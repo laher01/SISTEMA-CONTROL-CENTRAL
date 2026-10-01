@@ -10,7 +10,7 @@ from app.api.deps import AlmacenDep, HoyDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado, validar_gestor
 from app.enums import EstadoDocumento, TipoDocumento
 from app.models import Documento
-from app.schemas import DocumentoOut, DocumentoVincular
+from app.schemas import DocumentoOut, DocumentoVincular, RelacionSugeridaOut
 from app.services import auditoria
 from app.services.ingesta import (
     ArchivoSubido,
@@ -20,6 +20,7 @@ from app.services.ingesta import (
     vincular_documento,
 )
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
+from app.services.relaciones_documentales import sugerir_relaciones
 from app.services.ubl import UblInvalido
 
 router = APIRouter(prefix="/documentos", tags=["documentos"])
@@ -180,6 +181,21 @@ def procesar_documento(
     )
     session.commit()
     return documento
+
+
+@router.get("/{documento_id}/relaciones-sugeridas", response_model=list[RelacionSugeridaOut])
+def relaciones_sugeridas(
+    session: SessionDep, tenant_id: TenantDep, documento_id: uuid.UUID
+) -> list[RelacionSugeridaOut]:
+    documento = _documento(session, tenant_id, documento_id)
+    return [
+        RelacionSugeridaOut(
+            expediente=sugerencia.expediente,
+            puntaje=sugerencia.puntaje,
+            evidencias=list(sugerencia.evidencias),
+        )
+        for sugerencia in sugerir_relaciones(session, documento)
+    ]
 
 
 @router.post("/{documento_id}/vincular", response_model=DocumentoOut)
