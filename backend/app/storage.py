@@ -19,4 +19,11 @@ class AlmacenLocal:
         return relativa.as_posix()
 
     def leer(self, ruta: str) -> bytes:
-        return (self.base / ruta).read_bytes()
+        return self.ruta_absoluta(ruta).read_bytes()
+
+    def ruta_absoluta(self, ruta: str) -> Path:
+        base = self.base.resolve()
+        absoluta = (base / ruta).resolve()
+        if not absoluta.is_relative_to(base):
+            raise ValueError("Ruta fuera del almacén")
+        return absoluta

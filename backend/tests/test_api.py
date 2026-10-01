@@ -172,3 +172,43 @@ def test_validaciones_de_carga(client: TestClient) -> None:
         "/api/v1/documentos", files={"archivo": ("f.xml", factura(emisor="123"))}
     )
     assert ubl_roto.status_code == 422
+
+
+def test_descarga_del_original_sin_modificar(client: TestClient) -> None:
+    contenido = b"%PDF-1.7 voucher original"
+    documento = subir(client, "voucher ñ.pdf", contenido)
+    respuesta = client.get(f"/api/v1/documentos/{documento['id']}/archivo")
+    assert respuesta.status_code == 200
+    assert respuesta.content == contenido
+    assert "voucher%20%C3%B1.pdf" in respuesta.headers["content-disposition"]
+    assert (
+        client.get("/api/v1/documentos/00000000-0000-0000-0000-000000000000/archivo").status_code
+        == 404
+    )
+
+
+def test_descarga_de_tipos_no_seguros_como_adjunto(client: TestClient) -> None:
+    respuesta = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("x.html", b"<script>alert(1)</script>", "text/html")},
+    )
+    assert respuesta.status_code == 201
+    descarga = client.get(f"/api/v1/documentos/{respuesta.json()['id']}/archivo")
+    assert descarga.headers["content-type"] == "application/octet-stream"
+    assert descarga.headers["content-disposition"].startswith("attachment;")
+
+
+def test_busqueda_de_expedientes(client: TestClient) -> None:
+    subir(client, "a.xml", factura(numero="F001-00000123"))
+    subir(client, "b.xml", factura(numero="F002-00000777", emisor="20600000003"))
+
+    def numeros(buscar: str) -> list[str]:
+        respuesta = client.get("/api/v1/expedientes", params={"buscar": buscar})
+        assert respuesta.status_code == 200
+        return sorted(f"{e['serie']}-{e['correlativo']}" for e in respuesta.json())
+
+    assert numeros("f002-00000777") == ["F002-777"]
+    assert numeros("F002-777") == ["F002-777"]
+    assert numeros("20600000003") == ["F002-777"]
+    assert numeros("proveedor") == ["F001-123", "F002-777"]
+    assert numeros("100%") == []
