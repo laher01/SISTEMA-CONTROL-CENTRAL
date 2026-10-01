@@ -1,0 +1,279 @@
+:root {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #1f2933;
+  background: #f5f7fa;
+  --verde: #2f9e44;
+  --amarillo: #e0a800;
+  --naranja: #f76707;
+  --rojo: #e03131;
+  --borde: #d9e2ec;
+  --primario: #1c4e80;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.app {
+  display: flex;
+  min-height: 100vh;
+}
+
+.menu {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--primario);
+  color: white;
+  padding: 1.25rem 0;
+}
+
+.menu h1 {
+  font-size: 1.1rem;
+  margin: 0 1.25rem 1.25rem;
+  letter-spacing: 0.04em;
+}
+
+.menu nav {
+  display: flex;
+  flex-direction: column;
+}
+
+.menu a {
+  color: #d9e8f5;
+  text-decoration: none;
+  padding: 0.6rem 1.25rem;
+}
+
+.menu a:hover,
+.menu a.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+}
+
+.contenido {
+  flex: 1;
+  padding: 1.5rem 2rem;
+  min-width: 0;
+}
+
+h2 {
+  margin-top: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+a {
+  color: var(--primario);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border: 1px solid var(--borde);
+  margin-bottom: 1rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--borde);
+  vertical-align: middle;
+}
+
+th {
+  background: #eef2f7;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.tarjetas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.tarjeta {
+  background: white;
+  border: 1px solid var(--borde);
+  border-left-width: 5px;
+  border-radius: 6px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.cifra {
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+.borde-verde {
+  border-left-color: var(--verde);
+}
+.borde-amarillo {
+  border-left-color: var(--amarillo);
+}
+.borde-naranja {
+  border-left-color: var(--naranja);
+}
+.borde-rojo {
+  border-left-color: var(--rojo);
+}
+
+.columnas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.5rem;
+}
+
+.semaforo {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: white;
+  white-space: nowrap;
+}
+.semaforo-verde {
+  background: var(--verde);
+}
+.semaforo-amarillo {
+  background: var(--amarillo);
+  color: #1f2933;
+}
+.semaforo-naranja {
+  background: var(--naranja);
+}
+.semaforo-rojo {
+  background: var(--rojo);
+}
+
+.etiqueta {
+  margin-left: 0.5rem;
+  font-size: 0.75rem;
+  background: #ffe3e3;
+  color: #c92a2a;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+.filtros,
+.formulario-linea {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.formulario-linea {
+  margin-bottom: 0;
+}
+
+select,
+input,
+button {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--borde);
+  border-radius: 4px;
+  background: white;
+}
+
+input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+button {
+  background: var(--primario);
+  color: white;
+  border-color: var(--primario);
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.zona-carga {
+  border: 2px dashed #9fb3c8;
+  border-radius: 8px;
+  padding: 2.5rem;
+  text-align: center;
+  background: white;
+  cursor: pointer;
+  margin-bottom: 1rem;
+}
+
+.zona-carga.activa {
+  border-color: var(--primario);
+  background: #e6f0fa;
+}
+
+.resumen-carga {
+  font-weight: 600;
+}
+
+.resultado-ok {
+  color: var(--verde);
+}
+.resultado-duplicado {
+  color: #b08900;
+}
+.resultado-error {
+  color: var(--rojo);
+}
+
+.ficha {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.4rem 1.5rem;
+  background: white;
+  border: 1px solid var(--borde);
+  padding: 1rem;
+}
+
+.ficha dt {
+  font-weight: 600;
+}
+
+.ficha dd {
+  margin: 0;
+}
+
+.alertas li {
+  margin-bottom: 0.35rem;
+}
+
+.paginacion {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.tenue {
+  color: #627d98;
+}
+
+.error {
+  color: var(--rojo);
+}

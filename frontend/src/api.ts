@@ -1,0 +1,100 @@
+import { useEffect, useState } from "react";
+
+const BASE = import.meta.env.VITE_API_URL ?? "";
+
+export class ErrorApi extends Error {
+  readonly status: number;
+  readonly detalle: unknown;
+
+  constructor(status: number, detalle: unknown) {
+    super(mensajeDeDetalle(status, detalle));
+    this.status = status;
+    this.detalle = detalle;
+  }
+}
+
+export function mensajeDeDetalle(status: number, detalle: unknown): string {
+  if (typeof detalle === "string") return detalle;
+  if (detalle && typeof detalle === "object" && "mensaje" in detalle) {
+    return String(detalle.mensaje);
+  }
+  if (Array.isArray(detalle) && detalle.length > 0) {
+    const primero: unknown = detalle[0];
+    if (primero && typeof primero === "object" && "msg" in primero) return String(primero.msg);
+  }
+  return `Error ${status}`;
+}
+
+async function solicitar<T>(ruta: string, init?: RequestInit): Promise<T> {
+  const respuesta = await fetch(`${BASE}${ruta}`, init);
+  const cuerpo: unknown = respuesta.headers.get("content-type")?.includes("json")
+    ? await respuesta.json()
+    : await respuesta.text();
+  if (!respuesta.ok) {
+    const detalle = cuerpo && typeof cuerpo === "object" && "detail" in cuerpo ? cuerpo.detail : cuerpo;
+    throw new ErrorApi(respuesta.status, detalle);
+  }
+  return cuerpo as T;
+}
+
+export function obtener<T>(ruta: string): Promise<T> {
+  return solicitar<T>(ruta);
+}
+
+export function enviarJson<T>(ruta: string, metodo: "POST" | "PATCH", datos?: unknown): Promise<T> {
+  return solicitar<T>(ruta, {
+    method: metodo,
+    headers: { "Content-Type": "application/json" },
+    body: datos === undefined ? undefined : JSON.stringify(datos),
+  });
+}
+
+export function enviarFormulario<T>(ruta: string, formulario: FormData): Promise<T> {
+  return solicitar<T>(ruta, { method: "POST", body: formulario });
+}
+
+export function urlArchivo(documentoId: string): string {
+  return `${BASE}/api/v1/documentos/${documentoId}/archivo`;
+}
+
+export function conParametros(ruta: string, parametros: Record<string, string | undefined>): string {
+  const busqueda = new URLSearchParams();
+  for (const [clave, valor] of Object.entries(parametros)) {
+    if (valor !== undefined && valor !== "") busqueda.set(clave, valor);
+  }
+  const texto = busqueda.toString();
+  return texto ? `${ruta}?${texto}` : ruta;
+}
+
+interface Estado<T> {
+  ruta: string;
+  version: number;
+  datos?: T;
+  error?: string;
+}
+
+export function useDatos<T>(ruta: string) {
+  const [version, setVersion] = useState(0);
+  const [estado, setEstado] = useState<Estado<T>>({ ruta: "", version: -1 });
+
+  useEffect(() => {
+    let vigente = true;
+    obtener<T>(ruta).then(
+      (datos) => vigente && setEstado({ ruta, version, datos }),
+      (error: unknown) =>
+        vigente &&
+        setEstado({ ruta, version, error: error instanceof Error ? error.message : String(error) }),
+    );
+    return () => {
+      vigente = false;
+    };
+  }, [ruta, version]);
+
+  const actual = estado.ruta === ruta;
+  return {
+    datos: actual ? estado.datos : undefined,
+    error: actual ? estado.error : undefined,
+    cargando: !actual || estado.version !== version,
+    recargar: () => setVersion((v) => v + 1),
+  };
+}
