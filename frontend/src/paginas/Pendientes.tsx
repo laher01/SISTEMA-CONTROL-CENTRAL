@@ -181,21 +181,12 @@ function Procesar({
           </details>
         )}
         {lectura.campos.length > 0 && (
-          <details>
-            <summary>Ver datos sugeridos ({lectura.campos.length})</summary>
-            <dl className="campos-extraidos">
-              {lectura.campos.map((campo) => (
-                <div key={campo.nombre}>
-                  <dt>{ETIQUETAS_CAMPOS[campo.nombre] ?? campo.nombre}</dt>
-                  <dd>
-                    <strong>{campo.valor}</strong> · {Math.round(campo.confianza * 100)} % · {campo.fuente}
-                    <small title={campo.evidencia}>Evidencia: {campo.evidencia}</small>
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            <p className="tenue">Son sugerencias y requieren confirmación antes de vincular.</p>
-          </details>
+          <ConfirmarCampos
+            documentoId={documento.id}
+            campos={lectura.campos}
+            confirmado={lectura.confirmada}
+            alConfirmar={setResultado}
+          />
         )}
         <button onClick={procesar} disabled={procesando}>
           {procesando ? "Procesando…" : "Reprocesar"}
@@ -252,6 +243,7 @@ function obtenerLectura(documento: Documento): {
   requiereOcr: boolean;
   texto: string;
   campos: CampoExtraido[];
+  confirmada: boolean;
 } | null {
   const proceso = documento.datos_extraidos?.procesamiento_documental;
   if (!proceso || typeof proceso !== "object") return null;
@@ -273,7 +265,69 @@ function obtenerLectura(documento: Documento): {
     requiereOcr: "requiere_ocr" in proceso && proceso.requiere_ocr === true,
     texto: "texto" in proceso ? String(proceso.texto) : "",
     campos: obtenerCampos(proceso),
+    confirmada: Boolean(documento.datos_extraidos?.extraccion_confirmada),
   };
+}
+
+function ConfirmarCampos({
+  documentoId,
+  campos,
+  confirmado,
+  alConfirmar,
+}: {
+  documentoId: string;
+  campos: CampoExtraido[];
+  confirmado: boolean;
+  alConfirmar: (documento: Documento) => void;
+}) {
+  const [valores, setValores] = useState<Record<string, string>>(
+    Object.fromEntries(campos.map((campo) => [campo.nombre, campo.valor])),
+  );
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState("");
+  const guardar = async () => {
+    setGuardando(true);
+    setError("");
+    try {
+      const actualizado = await enviarJson<Documento>(
+        `/api/v1/documentos/${documentoId}/extraccion-confirmada`,
+        "PUT",
+        valores,
+      );
+      alConfirmar(actualizado);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setGuardando(false);
+    }
+  };
+  return (
+    <details>
+      <summary>
+        Datos sugeridos ({campos.length}){confirmado ? " · Confirmados" : ""}
+      </summary>
+      <dl className="campos-extraidos">
+        {campos.map((campo) => (
+          <div key={campo.nombre}>
+            <dt>{ETIQUETAS_CAMPOS[campo.nombre] ?? campo.nombre}</dt>
+            <dd>
+              <input
+                aria-label={ETIQUETAS_CAMPOS[campo.nombre] ?? campo.nombre}
+                value={valores[campo.nombre] ?? ""}
+                onChange={(e) => setValores({ ...valores, [campo.nombre]: e.target.value })}
+              />
+              <span> {Math.round(campo.confianza * 100)} % · {campo.fuente}</span>
+              <small title={campo.evidencia}>Evidencia: {campo.evidencia}</small>
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <button disabled={guardando} onClick={guardar}>
+        {guardando ? "Guardando…" : confirmado ? "Actualizar confirmación" : "Confirmar campos"}
+      </button>
+      {error && <span className="error">{error}</span>}
+    </details>
+  );
 }
 
 function obtenerCampos(proceso: object): CampoExtraido[] {

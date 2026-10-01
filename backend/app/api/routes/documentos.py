@@ -10,7 +10,7 @@ from app.api.deps import AlmacenDep, HoyDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado, validar_gestor
 from app.enums import EstadoDocumento, TipoDocumento
 from app.models import Documento
-from app.schemas import DocumentoOut, DocumentoVincular, RelacionSugeridaOut
+from app.schemas import DocumentoOut, DocumentoVincular, ExtraccionConfirmar, RelacionSugeridaOut
 from app.services import auditoria
 from app.services.ingesta import (
     ArchivoSubido,
@@ -178,6 +178,30 @@ def procesar_documento(
             "motor": resultado.motor,
             "requiere_ocr": resultado.requiere_ocr,
         },
+    )
+    session.commit()
+    return documento
+
+
+@router.put("/{documento_id}/extraccion-confirmada", response_model=DocumentoOut)
+def confirmar_extraccion(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    documento_id: uuid.UUID,
+    confirmacion: ExtraccionConfirmar,
+) -> Documento:
+    documento = _documento(session, tenant_id, documento_id)
+    campos = confirmacion.model_dump(mode="json", exclude_none=True)
+    datos = dict(documento.datos_extraidos or {})
+    datos["extraccion_confirmada"] = {"version": 1, "campos": campos}
+    documento.datos_extraidos = datos
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "EXTRACCION_DOCUMENTAL_CONFIRMADA",
+        "documento",
+        documento.id,
+        {"campos": sorted(campos)},
     )
     session.commit()
     return documento

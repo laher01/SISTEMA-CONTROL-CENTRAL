@@ -250,6 +250,35 @@ def test_procesar_archivo_no_soportado_no_pierde_original(client: TestClient) ->
     assert descarga.content == b"texto simple"
 
 
+def test_confirma_campos_extraidos_con_validacion_y_auditoria(client: TestClient) -> None:
+    documento = subir(client, "voucher.pdf", b"%PDF-1.7 voucher")
+    respuesta = client.put(
+        f"/api/v1/documentos/{documento['id']}/extraccion-confirmada",
+        json={
+            "serie": "F001",
+            "correlativo": "123",
+            "ruc_emisor": "20500000002",
+            "fecha_emision": "2026-09-17",
+            "moneda": "PEN",
+            "importe_total": "2500.40",
+            "numero_operacion": "OP-908771",
+        },
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    confirmado = respuesta.json()["datos_extraidos"]["extraccion_confirmada"]
+    assert confirmado["version"] == 1
+    assert confirmado["campos"]["importe_total"] == "2500.40"
+    assert confirmado["campos"]["fecha_emision"] == "2026-09-17"
+
+    invalido = client.put(
+        f"/api/v1/documentos/{documento['id']}/extraccion-confirmada",
+        json={"ruc_emisor": "123", "importe_total": "-1"},
+    )
+    assert invalido.status_code == 422
+    vacio = client.put(f"/api/v1/documentos/{documento['id']}/extraccion-confirmada", json={})
+    assert vacio.status_code == 422
+
+
 def test_sugiere_relacion_por_evidencia_sin_vincular(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
