@@ -28,7 +28,7 @@ Una meta sin estrategia es únicamente una intención.
 
 Toda meta importante deberá tener una estrategia claramente definida.
 
-Las estrategias podrán modificarse conforme cambie el contexto del ERP.
+Las estrategias podrán modificarse conforme cambie el contexto de la plataforma.
 
 ---
 
@@ -408,7 +408,7 @@ Justificación.
 
 # Escalabilidad
 
-Permitirá crear nuevas familias de estrategias sin modificar el núcleo del ERP.
+Permitirá crear nuevas familias de estrategias sin modificar el núcleo de la plataforma.
 
 Ejemplos
 

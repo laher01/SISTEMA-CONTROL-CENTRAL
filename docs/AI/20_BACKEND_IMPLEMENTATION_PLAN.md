@@ -436,7 +436,7 @@ Refresh Token
 
 RBAC
 
-Organizaciones
+Tenants
 
 Permisos
 

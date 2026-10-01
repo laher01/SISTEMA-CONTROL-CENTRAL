@@ -32,7 +32,7 @@ Después verifica.
 
 Finalmente aprende.
 
-Solo aquello que haya sido validado podrá incorporarse al conocimiento del ERP.
+Solo aquello que haya sido validado podrá incorporarse al conocimiento de la plataforma.
 
 ---
 
@@ -166,7 +166,7 @@ Afecta toda la organización.
 
 Aprendizaje Global.
 
-Disponible para todo el ERP.
+Disponible para toda la plataforma.
 
 ---
 
@@ -360,4 +360,4 @@ Trabajará con:
 
 NEXUS no aprende por acumular información.
 
-NEXUS aprende para mejorar continuamente la calidad de sus decisiones, optimizar los procesos del ERP y aumentar el conocimiento de la organización sin comprometer la seguridad, la trazabilidad ni la integridad de los datos.
+NEXUS aprende para mejorar continuamente la calidad de sus decisiones, optimizar los procesos de la plataforma y aumentar el conocimiento de la organización sin comprometer la seguridad, la trazabilidad ni la integridad de los datos.

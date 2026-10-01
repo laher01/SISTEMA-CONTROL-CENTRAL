@@ -213,7 +213,7 @@ Ejemplos:
 
 ## 6.6 Reglas de liquidación
 
-Gobiernan comisiones y pagos ERP.
+Gobiernan comisiones y pagos operativos.
 
 Ejemplos:
 

@@ -486,7 +486,7 @@ Optimización.
 
 Entregables
 
-ERP autónomo.
+Plataforma autónoma.
 
 ---
 

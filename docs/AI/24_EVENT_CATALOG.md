@@ -99,7 +99,7 @@ Todo evento deberá contener como mínimo:
   "event_id": "uuid",
   "event_name": "DOCUMENT_UPLOADED",
   "event_version": "1.0",
-  "organization_id": "uuid",
+  "tenant_id": "uuid",
   "correlation_id": "uuid",
   "request_id": "uuid",
   "timestamp": "2026-07-15T20:30:00Z",
@@ -613,7 +613,7 @@ El sistema medirá:
 Cada evento registrará:
 
 - usuario;
-- organización;
+- tenant;
 - motor origen;
 - agente origen;
 - fecha;

@@ -165,9 +165,11 @@ Auditoría completa
 
 # Estado del Proyecto
 
-Actualmente FACT CENTRAL se encuentra en fase de definición arquitectónica y documentación técnica, donde se está diseñando la totalidad de los motores de negocio antes de iniciar el desarrollo del backend y frontend.
+La arquitectura funcional está documentada. El foco actual es construir y validar el **MVP** con documentos reales:
 
-Esta metodología busca minimizar retrabajos y garantizar una arquitectura escalable, segura y preparada para crecimiento empresarial.
+- [`docs/MVP.md`](docs/MVP.md) — alcance, criterios de éxito y lo que queda fuera.
+- [`docs/ESQUEMA_MVP.md`](docs/ESQUEMA_MVP.md) — esquema de datos único del MVP.
+- [`docs/futuro/`](docs/futuro/) — visión a largo plazo (NEXUS, agentes, infraestructura avanzada), fuera del alcance actual.
 
 ---
 

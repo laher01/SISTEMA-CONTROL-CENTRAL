@@ -8,7 +8,7 @@
 
 # 1. Objetivo
 
-Definir cómo NEXUS almacena, organiza, consulta y utiliza la memoria del ERP.
+Definir cómo NEXUS almacena, organiza, consulta y utiliza la memoria de la plataforma.
 
 La memoria permitirá que FACT CENTRAL recuerde:
 
@@ -100,7 +100,7 @@ Permitir que NEXUS responda rápidamente sin consultar todo el historial.
 
 # 6. Memoria Histórica
 
-Representa el historial oficial del ERP.
+Representa el historial oficial de la plataforma.
 
 Contendrá:
 
@@ -362,4 +362,4 @@ NEXUS debe recordar lo necesario para comprender, decidir y aprender.
 
 Pero nunca debe exponer, mezclar o utilizar información fuera de los permisos correspondientes.
 
-La memoria existe para mejorar la inteligencia del ERP sin comprometer la seguridad, la trazabilidad ni la verdad de los datos.
+La memoria existe para mejorar la inteligencia de la plataforma sin comprometer la seguridad, la trazabilidad ni la verdad de los datos.

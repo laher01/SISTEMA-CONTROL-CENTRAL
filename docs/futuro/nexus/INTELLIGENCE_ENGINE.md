@@ -8,7 +8,7 @@
 
 # 1. Objetivo
 
-Definir el funcionamiento del Motor de Inteligencia Artificial del ERP FACT CENTRAL.
+Definir el funcionamiento del Motor de Inteligencia Artificial de FACT CENTRAL.
 
 La IA será responsable de comprender, interpretar, relacionar y aprender de toda la información documental del sistema.
 
@@ -350,7 +350,7 @@ Solicitar Corrección.
 
 ---
 
-# 16. Memoria del ERP
+# 16. Memoria de la plataforma
 
 Toda decisión importante será registrada.
 
@@ -396,7 +396,7 @@ OpenAI
 
 El Motor IA deberá procesar millones de documentos.
 
-Deberá permitir incorporar nuevos modelos de IA sin modificar la arquitectura del ERP.
+Deberá permitir incorporar nuevos modelos de IA sin modificar la arquitectura de la plataforma.
 
 ---
 

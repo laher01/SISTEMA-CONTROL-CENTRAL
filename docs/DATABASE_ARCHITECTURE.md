@@ -1,3 +1,5 @@
+> **Nota:** el esquema físico vigente para el MVP está en [`docs/ESQUEMA_MVP.md`](ESQUEMA_MVP.md). Este documento describe la visión completa a largo plazo.
+
 # DATABASE_ARCHITECTURE.md
 # FACT CENTRAL
 ## Arquitectura de Base de Datos
@@ -6,7 +8,7 @@
 
 # 1. Objetivo
 
-Definir la estructura de la base de datos del ERP FACT CENTRAL.
+Definir la estructura de la base de datos de FACT CENTRAL.
 
 La base de datos será el núcleo de almacenamiento de toda la información documental, administrativa, tributaria e histórica del sistema.
 
@@ -130,7 +132,7 @@ api_tokens
 
 EXPEDIENTES
 
-Será la tabla más importante del ERP.
+Será la tabla más importante de la plataforma.
 
 Cada expediente tendrá un UUID único.
 
@@ -166,7 +168,7 @@ Fecha Actualización
 
 # 7. Tabla Documentos
 
-Todo documento del ERP será registrado aquí.
+Todo documento de la plataforma será registrado aquí.
 
 Campos
 
@@ -310,7 +312,7 @@ Valores Nuevos
 
 # 13. Tabla Configuración
 
-Parámetros generales del ERP.
+Parámetros generales de la plataforma.
 
 Porcentajes
 
@@ -490,7 +492,7 @@ SUNAT
 
 # Regla Suprema
 
-Toda la información del ERP gira alrededor del Expediente.
+Toda la información de la plataforma gira alrededor del Expediente.
 
 El Expediente es la unidad principal de almacenamiento del sistema.
 

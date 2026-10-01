@@ -1,3 +1,5 @@
+> **Nota:** el esquema físico vigente para el MVP está en [`docs/ESQUEMA_MVP.md`](../ESQUEMA_MVP.md). Este documento describe la visión completa a largo plazo.
+
 # 22_DATABASE_SCHEMA.md
 
 # FACT CENTRAL
@@ -12,7 +14,7 @@
 
 Definir la estructura oficial de PostgreSQL para FACT CENTRAL.
 
-Este documento constituye el modelo físico de datos sobre el cual se implementará el ERP.
+Este documento constituye el modelo físico de datos sobre el cual se implementará la plataforma.
 
 Toda tabla, vista, índice, función y relación deberá respetar este esquema.
 
@@ -62,7 +64,7 @@ created_by
 
 updated_by
 
-organization_id
+tenant_id
 
 status
 
@@ -114,7 +116,7 @@ tokens
 
 refresh_tokens
 
-organizaciones
+tenants
 
 ---
 

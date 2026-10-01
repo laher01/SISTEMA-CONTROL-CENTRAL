@@ -1,7 +1,7 @@
 # BUSINESS MODEL
 # FACT CENTRAL
 
-## Modelo de Negocio Oficial del ERP
+## Modelo de Negocio Oficial de la plataforma
 
 Versión 2.0
 
@@ -9,7 +9,7 @@ Versión 2.0
 
 # 1. Propósito
 
-FACT CENTRAL es un ERP inteligente orientado al control comercial,
+FACT CENTRAL es una plataforma inteligente orientado al control comercial,
 documental, fiscal y económico de las operaciones realizadas para
 EMPRESAS RECEPTORAS o CLIENTES.
 
@@ -297,7 +297,7 @@ Podrá recibir:
 - Evidencias provenientes de WhatsApp.
 - Otros documentos relacionados.
 
-Los documentos físicos, cuando existan, permanecen fuera del ERP
+Los documentos físicos, cuando existan, permanecen fuera de la plataforma
 bajo custodia de sus propietarios.
 
 FACT CENTRAL administra únicamente su representación y evidencia digital.
@@ -665,7 +665,7 @@ Los backups protegen recuperación histórica.
 
 # 26. Principios fundamentales
 
-1. El Cliente/Receptor es el centro comercial del ERP.
+1. El Cliente/Receptor es el centro comercial de la plataforma.
 
 2. El Expediente es el centro documental de una operación.
 
@@ -683,7 +683,7 @@ Los backups protegen recuperación histórica.
 
 9. La Base de Datos es la fuente de verdad estructurada.
 
-10. NEXUS analiza y recomienda sobre datos reales del ERP.
+10. NEXUS analiza y recomienda sobre datos reales de la plataforma.
 
 11. La información digital debe permanecer localizable,
     relacionada y auditable.

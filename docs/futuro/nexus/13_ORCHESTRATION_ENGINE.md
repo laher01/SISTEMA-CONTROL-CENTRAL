@@ -20,7 +20,7 @@ Es el Director General de NEXUS.
 
 # Filosofía
 
-Un ERP inteligente no debe ser una colección de módulos independientes.
+Una plataforma inteligente no debe ser una colección de módulos independientes.
 
 Debe comportarse como un único organismo.
 
@@ -268,7 +268,7 @@ mayor productividad.
 
 # Integración
 
-Trabajará con todos los motores del ERP.
+Trabajará con todos los motores de la plataforma.
 
 No existirá un componente superior al Orchestration Engine dentro de la capa operativa.
 

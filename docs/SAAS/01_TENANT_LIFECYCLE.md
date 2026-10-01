@@ -400,7 +400,7 @@ Medios posibles:
 - PayPal;
 - otros proveedores.
 
-No se deberá construir la lógica de cada medio dentro del ERP.
+No se deberá construir la lógica de cada medio dentro de la plataforma.
 
 Se utilizará una capa de pasarela intercambiable.
 

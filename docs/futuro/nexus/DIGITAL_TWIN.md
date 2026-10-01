@@ -22,7 +22,7 @@ Será un organismo vivo.
 
 # 2. Filosofía
 
-El ERP no almacena únicamente información.
+La plataforma no almacena únicamente información.
 
 Representa digitalmente la empresa.
 
@@ -256,7 +256,7 @@ El Gemelo Digital nunca estará detenido.
 
 Se actualizará mediante eventos.
 
-Cada cambio del ERP modificará inmediatamente el Gemelo Digital.
+Cada cambio de la plataforma modificará inmediatamente el Gemelo Digital.
 
 ---
 

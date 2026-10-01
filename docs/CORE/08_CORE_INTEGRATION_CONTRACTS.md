@@ -1318,7 +1318,7 @@ No deberán continuar normalmente:
 - nuevas cargas;
 - nuevas asignaciones;
 - nuevas liquidaciones;
-- nuevos pagos ERP;
+- nuevos pagos operativos;
 - nuevas operaciones comerciales.
 
 ---

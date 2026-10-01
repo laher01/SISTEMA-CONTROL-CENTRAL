@@ -34,7 +34,7 @@ Este documento establece cómo deberán distribuirse:
 * observabilidad;
 * seguridad.
 
-La infraestructura deberá poder crecer sin modificar las reglas fundamentales del ERP.
+La infraestructura deberá poder crecer sin modificar las reglas fundamentales de la plataforma.
 
 ---
 
@@ -741,7 +741,7 @@ STORAGE POOL
 AVAILABLE
 ```
 
-No deberá ser necesario modificar el ERP.
+No deberá ser necesario modificar la plataforma.
 
 ---
 
@@ -945,7 +945,7 @@ API-4
 API-5
 ```
 
-sin modificar reglas del ERP.
+sin modificar reglas de la plataforma.
 
 ---
 
@@ -1294,7 +1294,7 @@ Infrastructure Topology determina:
 
 ## Regla 6
 
-> La infraestructura crecerá agregando capacidad, no reescribiendo el ERP.
+> La infraestructura crecerá agregando capacidad, no reescribiendo la plataforma.
 
 ---
 

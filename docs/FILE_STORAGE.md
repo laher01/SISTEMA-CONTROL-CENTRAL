@@ -8,7 +8,7 @@
 
 # 1. Objetivo
 
-Definir la arquitectura física y lógica del almacenamiento documental del ERP FACT CENTRAL.
+Definir la arquitectura física y lógica del almacenamiento documental de FACT CENTRAL.
 
 El almacenamiento debe permitir:
 
@@ -29,7 +29,7 @@ FACT CENTRAL gira alrededor del Expediente.
 
 Los archivos únicamente alimentan el Expediente.
 
-Una vez procesados, pasan a formar parte de la inteligencia documental del ERP.
+Una vez procesados, pasan a formar parte de la inteligencia documental de la plataforma.
 
 ---
 
@@ -65,7 +65,7 @@ DASHBOARD
 
 # 4. Nivel 1 — Área de Ingesta
 
-Es la puerta de entrada del ERP.
+Es la puerta de entrada de la plataforma.
 
 Todo documento llega aquí.
 
@@ -220,7 +220,7 @@ Nunca será modificado.
 
 # 9. Documento Procesado
 
-El ERP podrá generar:
+La plataforma podrá generar:
 
 OCR
 
@@ -304,7 +304,7 @@ La decisión final siempre será del usuario autorizado.
 
 Todo documento deberá poder verificarse mediante HASH.
 
-Si un archivo cambia fuera del ERP, el sistema deberá detectarlo.
+Si un archivo cambia fuera de la plataforma, el sistema deberá detectarlo.
 
 ---
 
@@ -406,4 +406,4 @@ Todo archivo físico debe poder localizarse desde un Expediente.
 
 Y todo Expediente debe poder acceder inmediatamente a todos sus documentos físicos.
 
-El Archivo Maestro será la fuente oficial de conservación documental del ERP FACT CENTRAL.
+El Archivo Maestro será la fuente oficial de conservación documental de FACT CENTRAL.

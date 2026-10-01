@@ -20,7 +20,7 @@ Mientras el Decision Engine responde qué hacer, el Goal Engine responde:
 
 # Filosofía
 
-Toda acción dentro del ERP deberá contribuir al cumplimiento de uno o varios objetivos.
+Toda acción dentro de la plataforma deberá contribuir al cumplimiento de uno o varios objetivos.
 
 NEXUS no trabajará únicamente reaccionando a eventos.
 

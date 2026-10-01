@@ -32,7 +32,7 @@ Toda decisión deberá ser:
 - explicable;
 - auditable;
 - reversible cuando corresponda;
-- consistente con las reglas del ERP.
+- consistente con las reglas de la plataforma.
 
 NEXUS nunca decidirá por intuición.
 

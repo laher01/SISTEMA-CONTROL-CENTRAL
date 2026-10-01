@@ -391,4 +391,4 @@ Nada deberá ejecutarse fuera del Scheduler.
 
 Toda tarea, misión, evento o proceso deberá ser administrado por el Scheduler de NEXUS.
 
-El tiempo constituye un recurso estratégico del ERP y será administrado de forma inteligente.
+El tiempo constituye un recurso estratégico de la plataforma y será administrado de forma inteligente.

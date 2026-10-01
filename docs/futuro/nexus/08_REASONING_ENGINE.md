@@ -369,7 +369,7 @@ Modelos especializados.
 
 Algoritmos internos.
 
-Siempre combinará la IA con reglas del ERP.
+Siempre combinará la IA con reglas de la plataforma.
 
 ---
 

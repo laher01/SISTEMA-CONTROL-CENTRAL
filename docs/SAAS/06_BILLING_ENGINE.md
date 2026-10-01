@@ -43,7 +43,7 @@ El Billing Engine administrará únicamente los cobros relacionados con:
 - ajustes comerciales;
 - cargos autorizados.
 
-No administrará los pagos internos del ERP a Usuarios.
+No administrará los pagos internos de la plataforma a Usuarios.
 
 ---
 
@@ -55,7 +55,7 @@ FACT CENTRAL tendrá dos motores económicos distintos.
 
 El Administrador paga por utilizar FACT CENTRAL.
 
-## Pagos ERP
+## Pagos Operativos
 
 El Gerente ejecuta pagos o comisiones a los Usuarios del Tenant.
 
@@ -907,7 +907,7 @@ de CPE de los Tenants.
 Los comprobantes emitidos por FACT CENTRAL SaaS pertenecerán
 al módulo comercial de la plataforma.
 
-Los comprobantes que los Tenants suben al ERP pertenecen
+Los comprobantes que los Tenants suben a la plataforma pertenecen
 al módulo documental del Tenant.
 
 No se deberán mezclar.
@@ -1084,7 +1084,7 @@ Se conservará únicamente:
 # 51. Datos bancarios
 
 Las cuentas bancarias del SaaS deberán estar separadas
-de las cuentas de pago de Usuarios del ERP.
+de las cuentas de pago de Usuarios de la plataforma.
 
 Solo personal autorizado podrá administrarlas.
 
@@ -1420,7 +1420,7 @@ Superadmin podrá:
 
 # 68. Otros roles
 
-Gerente, Secretaría, Usuario y Gestor del ERP no tendrán
+Gerente, Secretaría, Usuario y Gestor de la plataforma no tendrán
 acceso al Billing SaaS, salvo permiso específico.
 
 La facturación SaaS corresponde al Administrador Propietario.
@@ -1609,7 +1609,7 @@ AUDITORÍA
 
 ## Regla Suprema 1
 
-EL BILLING SaaS ES INDEPENDIENTE DEL MÓDULO DE PAGOS DEL ERP.
+EL BILLING SaaS ES INDEPENDIENTE DEL MÓDULO DE PAGOS OPERATIVOS.
 
 ## Regla Suprema 2
 

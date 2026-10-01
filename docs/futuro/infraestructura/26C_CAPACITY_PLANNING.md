@@ -13,7 +13,7 @@
 
 # 1. Propósito
 
-Este documento define cómo FACT CENTRAL y NEXUS deberán administrar el crecimiento de usuarios, gestores, documentos, solicitudes, procesamiento, almacenamiento y recursos tecnológicos sin requerir el rediseño permanente del ERP.
+Este documento define cómo FACT CENTRAL y NEXUS deberán administrar el crecimiento de usuarios, gestores, documentos, solicitudes, procesamiento, almacenamiento y recursos tecnológicos sin requerir el rediseño permanente de la plataforma.
 
 La arquitectura deberá permitir aumentar capacidad mediante configuración, incorporación de recursos y escalamiento horizontal o vertical, manteniendo estable la lógica de negocio.
 
@@ -27,7 +27,7 @@ FACT CENTRAL deberá ser:
 
 **ELÁSTICO · DISTRIBUIDO · MEDIBLE · REDUNDANTE · ESCALABLE · RECUPERABLE**
 
-El crecimiento de carga no deberá obligar a modificar los algoritmos fundamentales del ERP.
+El crecimiento de carga no deberá obligar a modificar los algoritmos fundamentales de la plataforma.
 
 La regla será:
 
@@ -758,7 +758,7 @@ A = 50 %
 B = 50 %
 ```
 
-El movimiento físico no deberá cambiar la identidad del documento ni sus relaciones dentro del ERP.
+El movimiento físico no deberá cambiar la identidad del documento ni sus relaciones dentro de la plataforma.
 
 ---
 

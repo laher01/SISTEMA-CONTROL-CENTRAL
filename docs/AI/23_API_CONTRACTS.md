@@ -126,7 +126,7 @@ application/json
 
 X-Correlation-ID
 
-Organization-ID
+X-Tenant-ID
 
 ---
 
@@ -258,7 +258,7 @@ Roles
 
 Permisos
 
-Organización
+Tenant
 
 Propietario
 

@@ -1,3 +1,5 @@
+> **Nota:** el esquema físico vigente para el MVP está en [`docs/ESQUEMA_MVP.md`](ESQUEMA_MVP.md). Este documento describe la visión completa a largo plazo.
+
 # DATA MODEL
 # FACT CENTRAL
 ## Modelo Conceptual de Datos
@@ -8,7 +10,7 @@
 
 Definir las entidades principales de FACT CENTRAL y la forma en que se relacionan entre sí.
 
-Este documento describe el modelo conceptual del ERP antes de convertirlo en tablas de PostgreSQL.
+Este documento describe el modelo conceptual de la plataforma antes de convertirlo en tablas de PostgreSQL.
 
 ---
 
@@ -196,7 +198,7 @@ Un Receptor:
 
 ## 11. Expediente
 
-Entidad principal del ERP.
+Entidad principal de la plataforma.
 
 ### Identificación lógica
 
@@ -785,7 +787,7 @@ Siempre deberá conservar:
 
 # 39. Regla Suprema
 
-El Expediente es la entidad principal del ERP.
+El Expediente es la entidad principal de la plataforma.
 
 Toda relación, cálculo, consulta, validación, reporte e inteligencia debe poder llegar siempre al Expediente correspondiente.
 
@@ -1005,7 +1007,7 @@ Todo Documento eliminado lógicamente podrá restaurarse mientras el Administrad
 
 # 59. Regla de Modularidad
 
-Cada Motor del ERP deberá funcionar independientemente.
+Cada Motor de la plataforma deberá funcionar independientemente.
 
 Si uno falla, los demás continuarán operando.
 

@@ -1,3 +1,5 @@
+> **Estado: BORRADOR — solo índice.** Este documento aún no tiene contenido desarrollado; no debe usarse como especificación hasta completarlo.
+
 # 02_WORKFLOW_AUTOMATION_ENGINE.md
 
 # FACT CENTRAL SaaS

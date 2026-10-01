@@ -352,7 +352,7 @@ Podrá:
 - consultar auditoría de plataforma;
 - intervenir en incidencias autorizadas.
 
-No utilizará permisos operativos normales del ERP.
+No utilizará permisos operativos normales de la plataforma.
 
 No deberá:
 

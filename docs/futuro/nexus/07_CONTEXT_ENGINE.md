@@ -24,7 +24,7 @@ El Context Engine selecciona qué información es relevante para cada caso.
 
 # 2. Filosofía
 
-NEXUS no debe analizar toda la información del ERP cada vez que recibe una solicitud.
+NEXUS no debe analizar toda la información de la plataforma cada vez que recibe una solicitud.
 
 Debe utilizar únicamente el contexto necesario.
 

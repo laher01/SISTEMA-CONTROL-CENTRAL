@@ -1,20 +1,20 @@
 # CORE ARCHITECTURE
 # FACT CENTRAL
-## Núcleo de Arquitectura del ERP
+## Núcleo de Arquitectura de la plataforma
 
 ---
 
 # 1. Objetivo
 
-Definir la arquitectura central del ERP FACT CENTRAL.
+Definir la arquitectura central de FACT CENTRAL.
 
 Este documento establece los motores principales del sistema, sus responsabilidades, dependencias y la forma en que interactúan entre sí.
 
-Todo el desarrollo del ERP deberá respetar esta arquitectura.
+Todo el desarrollo de la plataforma deberá respetar esta arquitectura.
 
 ---
 
-# 2. Filosofía del ERP
+# 2. Filosofía de la plataforma
 
 FACT CENTRAL no gira alrededor de las facturas.
 
@@ -387,7 +387,7 @@ La API se comunica transversalmente con todos los motores.
 
 # 17. Reglas Fundamentales
 
-1. El Expediente es el corazón del ERP.
+1. El Expediente es el corazón de la plataforma.
 2. Ningún documento existe sin pertenecer a un expediente.
 3. Nunca se elimina el archivo original.
 4. Todo documento conserva su HASH para detectar duplicados.
@@ -402,7 +402,7 @@ La API se comunica transversalmente con todos los motores.
 
 # Arquitectura Central
 
-El Expediente es el núcleo del ERP.
+El Expediente es el núcleo de la plataforma.
 
 Todos los motores giran alrededor del expediente.
 
