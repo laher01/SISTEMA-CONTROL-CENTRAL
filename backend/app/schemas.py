@@ -87,6 +87,14 @@ class ExtraccionConfirmar(BaseModel):
         return self
 
 
+class ExpedienteAsistidoIn(BaseModel):
+    tipo_comprobante: TipoComprobante
+    razon_social_emisor: str | None = Field(default=None, min_length=1, max_length=300)
+    razon_social_receptor: str | None = Field(default=None, min_length=1, max_length=300)
+    requiere_guia: bool = True
+    gestor_id: uuid.UUID | None = None
+
+
 class AlertaOut(Orm):
     id: uuid.UUID
     expediente_id: uuid.UUID
@@ -125,6 +133,12 @@ class ExpedienteOut(Orm):
     estado: EstadoExpediente
     pendiente_aprobacion: bool
     created_at: datetime
+
+
+class ExpedienteAsistidoOut(BaseModel):
+    expediente: ExpedienteOut
+    documento: DocumentoOut
+    creado: bool
 
 
 class ExpedienteDetalle(ExpedienteOut):

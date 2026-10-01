@@ -1,4 +1,6 @@
 import uuid
+from datetime import date
+from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
@@ -8,14 +10,24 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import AlmacenDep, HoyDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado, validar_gestor
-from app.enums import EstadoDocumento, TipoDocumento
+from app.enums import EstadoDocumento, Moneda, TipoDocumento
 from app.models import Documento
-from app.schemas import DocumentoOut, DocumentoVincular, ExtraccionConfirmar, RelacionSugeridaOut
+from app.schemas import (
+    DocumentoOut,
+    DocumentoVincular,
+    ExpedienteAsistidoIn,
+    ExpedienteAsistidoOut,
+    ExpedienteOut,
+    ExtraccionConfirmar,
+    RelacionSugeridaOut,
+)
 from app.services import auditoria
+from app.services.expedientes import buscar_expediente
 from app.services.ingesta import (
     ArchivoSubido,
     DocumentoDuplicado,
     ExpedienteNoEncontrado,
+    crear_expediente,
     ingerir_documento,
     vincular_documento,
 )
@@ -205,6 +217,96 @@ def confirmar_extraccion(
     )
     session.commit()
     return documento
+
+
+@router.post("/{documento_id}/crear-expediente", response_model=ExpedienteAsistidoOut)
+def crear_expediente_asistido(
+    session: SessionDep,
+    settings: SettingsDep,
+    hoy: HoyDep,
+    tenant_id: TenantDep,
+    documento_id: uuid.UUID,
+    solicitud: ExpedienteAsistidoIn,
+) -> ExpedienteAsistidoOut:
+    """Materializa una extracción ya confirmada y vincula su documento atómicamente."""
+    documento = _documento(session, tenant_id, documento_id)
+    validar_gestor(session, tenant_id, solicitud.gestor_id)
+    campos = _campos_confirmados(documento)
+    faltantes = [
+        nombre
+        for nombre in (
+            "serie",
+            "correlativo",
+            "ruc_emisor",
+            "ruc_receptor",
+            "fecha_emision",
+            "moneda",
+            "importe_total",
+        )
+        if nombre not in campos
+    ]
+    if faltantes:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            {"mensaje": "Faltan campos confirmados", "campos": faltantes},
+        )
+
+    tipo_documento = TipoDocumento(solicitud.tipo_comprobante.value)
+    serie = str(campos["serie"])
+    correlativo = str(int(str(campos["correlativo"])))
+    emisor_ruc = str(campos["ruc_emisor"])
+    receptor_ruc = str(campos["ruc_receptor"])
+    existente = buscar_expediente(
+        session,
+        tenant_id,
+        solicitud.tipo_comprobante,
+        serie,
+        correlativo,
+        emisor_ruc,
+        receptor_ruc,
+    )
+    creado = existente is None
+    expediente = existente or crear_expediente(
+        session,
+        settings,
+        hoy,
+        tenant_id,
+        receptor=(receptor_ruc, solicitud.razon_social_receptor or receptor_ruc),
+        emisor=(emisor_ruc, solicitud.razon_social_emisor or emisor_ruc),
+        tipo_comprobante=solicitud.tipo_comprobante,
+        serie=serie,
+        correlativo=correlativo,
+        fecha_emision=date.fromisoformat(str(campos["fecha_emision"])),
+        moneda=Moneda(str(campos["moneda"])),
+        importe_total=Decimal(str(campos["importe_total"])),
+        requiere_guia=solicitud.requiere_guia,
+        gestor_id=solicitud.gestor_id,
+    )
+    if documento.expediente_id is not None and documento.expediente_id != expediente.id:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {"mensaje": "El documento ya pertenece a otro expediente"},
+        )
+    if documento.expediente_id != expediente.id or documento.tipo_documento != tipo_documento:
+        vincular_documento(session, settings, hoy, documento, expediente.id, tipo_documento)
+    session.commit()
+    return ExpedienteAsistidoOut(
+        expediente=ExpedienteOut.model_validate(expediente),
+        documento=DocumentoOut.model_validate(documento),
+        creado=creado,
+    )
+
+
+def _campos_confirmados(documento: Documento) -> dict[str, object]:
+    datos = documento.datos_extraidos or {}
+    extraccion = datos.get("extraccion_confirmada")
+    if not isinstance(extraccion, dict) or not isinstance(extraccion.get("campos"), dict):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Debe confirmar la extracción antes de crear el expediente",
+        )
+    campos = extraccion["campos"]
+    return {str(clave): valor for clave, valor in campos.items()}
 
 
 @router.get("/{documento_id}/relaciones-sugeridas", response_model=list[RelacionSugeridaOut])

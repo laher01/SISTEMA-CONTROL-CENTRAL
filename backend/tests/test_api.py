@@ -279,6 +279,61 @@ def test_confirma_campos_extraidos_con_validacion_y_auditoria(client: TestClient
     assert vacio.status_code == 422
 
 
+def test_creacion_asistida_es_idempotente_por_identidad_fiscal(client: TestClient) -> None:
+    campos = {
+        "serie": "F001",
+        "correlativo": "123",
+        "ruc_emisor": "20500000002",
+        "ruc_receptor": RECEPTOR,
+        "fecha_emision": "2026-09-17",
+        "moneda": "PEN",
+        "importe_total": "2500.40",
+    }
+    solicitud = {
+        "tipo_comprobante": "FACT",
+        "razon_social_emisor": "PROVEEDOR SAC",
+        "razon_social_receptor": "CLIENTE SAC",
+        "requiere_guia": True,
+    }
+    primero = subir(client, "factura.pdf", b"%PDF-1.7 primera recepcion")
+    sin_confirmar = client.post(
+        f"/api/v1/documentos/{primero['id']}/crear-expediente", json=solicitud
+    )
+    assert sin_confirmar.status_code == 409
+    assert (
+        client.put(
+            f"/api/v1/documentos/{primero['id']}/extraccion-confirmada", json=campos
+        ).status_code
+        == 200
+    )
+    creado = client.post(f"/api/v1/documentos/{primero['id']}/crear-expediente", json=solicitud)
+    assert creado.status_code == 200, creado.text
+    assert creado.json()["creado"] is True
+    expediente_id = creado.json()["expediente"]["id"]
+    assert creado.json()["documento"]["estado"] == "RELACIONADO"
+
+    repetido = client.post(f"/api/v1/documentos/{primero['id']}/crear-expediente", json=solicitud)
+    assert repetido.status_code == 200
+    assert repetido.json()["creado"] is False
+    assert repetido.json()["expediente"]["id"] == expediente_id
+
+    segunda_recepcion = subir(client, "foto-factura.jpg", b"\xff\xd8\xffsegunda recepcion")
+    assert (
+        client.put(
+            f"/api/v1/documentos/{segunda_recepcion['id']}/extraccion-confirmada", json=campos
+        ).status_code
+        == 200
+    )
+    asociado = client.post(
+        f"/api/v1/documentos/{segunda_recepcion['id']}/crear-expediente", json=solicitud
+    )
+    assert asociado.status_code == 200
+    assert asociado.json()["creado"] is False
+    assert asociado.json()["expediente"]["id"] == expediente_id
+    detalle = expediente(client, expediente_id)
+    assert len(detalle["documentos"]) == 2
+
+
 def test_sugiere_relacion_por_evidencia_sin_vincular(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

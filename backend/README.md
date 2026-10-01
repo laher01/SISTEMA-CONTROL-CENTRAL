@@ -37,6 +37,9 @@ Documentación interactiva: http://localhost:8000/docs
 7. `GET /api/v1/documentos/{id}/relaciones-sugeridas` compara serie-correlativo, RUC e
    importe con expedientes del mismo tenant. Retorna candidatos con puntaje y evidencias;
    nunca vincula automáticamente.
+8. `PUT /api/v1/documentos/{id}/extraccion-confirmada` valida y separa los campos aceptados.
+   `POST /api/v1/documentos/{id}/crear-expediente` crea o reutiliza el expediente fiscal de
+   forma idempotente y vincula el documento en una sola operación.
 
 ## Estados del expediente
 

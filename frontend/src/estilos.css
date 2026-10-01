@@ -291,6 +291,21 @@ button:disabled {
   white-space: nowrap;
 }
 
+.crear-expediente-asistido {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--borde);
+}
+
+.crear-expediente-asistido label {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .alertas li {
   margin-bottom: 0.35rem;
 }
