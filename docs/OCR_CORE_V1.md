@@ -52,3 +52,14 @@ PUT /api/v1/documentos/{documento_id}/extraccion-confirmada
 
 El dato validado queda separado en `datos_extraidos.extraccion_confirmada` y genera el evento de
 auditoría `EXTRACCION_DOCUMENTAL_CONFIRMADA`.
+
+## Creación asistida del expediente
+
+```http
+POST /api/v1/documentos/{documento_id}/crear-expediente
+```
+
+Este contrato solo acepta una extracción previamente confirmada. Busca primero la identidad fiscal
+`tenant + receptor + tipo + serie + correlativo + emisor`; si ya existe, reutiliza el expediente y
+vincula la nueva evidencia. Si no existe, crea uno y vincula el documento en la misma transacción.
+Repetir la operación no crea otro expediente ni duplica su efecto económico.

@@ -112,7 +112,7 @@ function FilaPendiente({
       </td>
       <td>{formatearFecha(documento.created_at)}</td>
       <td>
-        <Procesar documento={documento} alSeleccionar={setSeleccion} />
+        <Procesar documento={documento} alSeleccionar={setSeleccion} alCompletar={alVincular} />
       </td>
       <td>
         <Vincular
@@ -129,9 +129,11 @@ function FilaPendiente({
 function Procesar({
   documento,
   alSeleccionar,
+  alCompletar,
 }: {
   documento: Documento;
   alSeleccionar: (seleccion: SeleccionSugerida) => void;
+  alCompletar: () => void;
 }) {
   const [resultado, setResultado] = useState<Documento>(documento);
   const [procesando, setProcesando] = useState(false);
@@ -185,7 +187,9 @@ function Procesar({
             documentoId={documento.id}
             campos={lectura.campos}
             confirmado={lectura.confirmada}
+            tipoSugerido={lectura.tipoSugerido}
             alConfirmar={setResultado}
+            alCrear={alCompletar}
           />
         )}
         <button onClick={procesar} disabled={procesando}>
@@ -273,17 +277,28 @@ function ConfirmarCampos({
   documentoId,
   campos,
   confirmado,
+  tipoSugerido,
   alConfirmar,
+  alCrear,
 }: {
   documentoId: string;
   campos: CampoExtraido[];
   confirmado: boolean;
+  tipoSugerido?: TipoDocumento;
   alConfirmar: (documento: Documento) => void;
+  alCrear: () => void;
 }) {
   const [valores, setValores] = useState<Record<string, string>>(
     Object.fromEntries(campos.map((campo) => [campo.nombre, campo.valor])),
   );
   const [guardando, setGuardando] = useState(false);
+  const [creando, setCreando] = useState(false);
+  const [tipoComprobante, setTipoComprobante] = useState<"FACT" | "RHE">(
+    tipoSugerido === "RHE" ? "RHE" : "FACT",
+  );
+  const [razonEmisor, setRazonEmisor] = useState("");
+  const [razonReceptor, setRazonReceptor] = useState("");
+  const [requiereGuia, setRequiereGuia] = useState(tipoSugerido !== "RHE");
   const [error, setError] = useState("");
   const guardar = async () => {
     setGuardando(true);
@@ -299,6 +314,27 @@ function ConfirmarCampos({
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setGuardando(false);
+    }
+  };
+  const crearExpediente = async () => {
+    setCreando(true);
+    setError("");
+    try {
+      await enviarJson(
+        `/api/v1/documentos/${documentoId}/crear-expediente`,
+        "POST",
+        {
+          tipo_comprobante: tipoComprobante,
+          razon_social_emisor: razonEmisor.trim() || undefined,
+          razon_social_receptor: razonReceptor.trim() || undefined,
+          requiere_guia: tipoComprobante === "FACT" && requiereGuia,
+        },
+      );
+      alCrear();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCreando(false);
     }
   };
   return (
@@ -325,6 +361,45 @@ function ConfirmarCampos({
       <button disabled={guardando} onClick={guardar}>
         {guardando ? "Guardando…" : confirmado ? "Actualizar confirmación" : "Confirmar campos"}
       </button>
+      {confirmado && (
+        <div className="crear-expediente-asistido">
+          <select
+            aria-label="Tipo de comprobante"
+            value={tipoComprobante}
+            onChange={(e) => {
+              const tipo = e.target.value as "FACT" | "RHE";
+              setTipoComprobante(tipo);
+              setRequiereGuia(tipo === "FACT");
+            }}
+          >
+            <option value="FACT">Factura</option>
+            <option value="RHE">Recibo por honorarios</option>
+          </select>
+          <input
+            placeholder="Razón social emisor (opcional)"
+            value={razonEmisor}
+            onChange={(e) => setRazonEmisor(e.target.value)}
+          />
+          <input
+            placeholder="Razón social receptor (opcional)"
+            value={razonReceptor}
+            onChange={(e) => setRazonReceptor(e.target.value)}
+          />
+          {tipoComprobante === "FACT" && (
+            <label>
+              <input
+                type="checkbox"
+                checked={requiereGuia}
+                onChange={(e) => setRequiereGuia(e.target.checked)}
+              />{" "}
+              Requiere guía
+            </label>
+          )}
+          <button disabled={creando} onClick={crearExpediente}>
+            {creando ? "Creando…" : "Crear o asociar expediente"}
+          </button>
+        </div>
+      )}
       {error && <span className="error">{error}</span>}
     </details>
   );
