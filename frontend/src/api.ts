@@ -41,7 +41,11 @@ export function obtener<T>(ruta: string): Promise<T> {
   return solicitar<T>(ruta);
 }
 
-export function enviarJson<T>(ruta: string, metodo: "POST" | "PATCH", datos?: unknown): Promise<T> {
+export function enviarJson<T>(
+  ruta: string,
+  metodo: "POST" | "PUT" | "PATCH",
+  datos?: unknown,
+): Promise<T> {
   return solicitar<T>(ruta, {
     method: metodo,
     headers: { "Content-Type": "application/json" },

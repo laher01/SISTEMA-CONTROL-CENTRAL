@@ -43,3 +43,12 @@ Todo resultado incluye procedencia suficiente para diferenciar texto nativo de P
 Los campos sugeridos se guardan en
 `procesamiento_documental.extraccion_estructurada`; nunca modifican por sí solos un expediente y
 se muestran en la bandeja de pendientes para revisión humana.
+
+La confirmación explícita se registra mediante:
+
+```http
+PUT /api/v1/documentos/{documento_id}/extraccion-confirmada
+```
+
+El dato validado queda separado en `datos_extraidos.extraccion_confirmada` y genera el evento de
+auditoría `EXTRACCION_DOCUMENTAL_CONFIRMADA`.

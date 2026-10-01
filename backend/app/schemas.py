@@ -3,7 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.enums import (
     EstadoDocumento,
@@ -68,6 +68,23 @@ class DocumentoOut(Orm):
 class DocumentoVincular(BaseModel):
     expediente_id: uuid.UUID
     tipo_documento: TipoDocumento
+
+
+class ExtraccionConfirmar(BaseModel):
+    serie: str | None = Field(default=None, pattern=r"^[A-Z0-9]{4}$")
+    correlativo: str | None = Field(default=None, pattern=r"^\d{1,8}$")
+    ruc_emisor: Ruc | None = None
+    ruc_receptor: Ruc | None = None
+    fecha_emision: date | None = None
+    moneda: Moneda | None = None
+    importe_total: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    numero_operacion: str | None = Field(default=None, min_length=4, max_length=30)
+
+    @model_validator(mode="after")
+    def contiene_algun_campo(self) -> "ExtraccionConfirmar":
+        if not self.model_fields_set:
+            raise ValueError("Debe confirmar al menos un campo")
+        return self
 
 
 class AlertaOut(Orm):
