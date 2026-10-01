@@ -1,3 +1,5 @@
+> **Estado: BORRADOR — solo índice.** Este documento aún no tiene contenido desarrollado; no debe usarse como especificación hasta completarlo.
+
 # 07_SAAS_MASTER_ARCHITECTURE.md
 
 # FACT CENTRAL SaaS
@@ -24,7 +26,7 @@ Este documento integra:
 - seguridad;
 - almacenamiento;
 - procesamiento documental;
-- FACT CENTRAL ERP;
+- FACT CENTRAL;
 - NEXUS;
 - infraestructura;
 - recuperación;

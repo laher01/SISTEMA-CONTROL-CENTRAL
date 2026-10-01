@@ -1450,7 +1450,7 @@ no necesariamente significa:
 FACT CENTRAL = OFFLINE
 ```
 
-El ERP podrá continuar recibiendo documentos.
+La plataforma podrá continuar recibiendo documentos.
 
 Resultado:
 
@@ -1492,7 +1492,7 @@ ANALYTICS
 LEARNING
 ```
 
-podrán detenerse sin detener el ERP completo.
+podrán detenerse sin detener la plataforma completa.
 
 ---
 

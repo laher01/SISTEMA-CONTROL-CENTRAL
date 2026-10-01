@@ -12,7 +12,7 @@
 
 El State Engine es el componente encargado de mantener el estado actual de todo el ecosistema FACT CENTRAL.
 
-Su misión es conocer, en tiempo real, qué está ocurriendo en el ERP.
+Su misión es conocer, en tiempo real, qué está ocurriendo en la plataforma.
 
 Mientras la Memoria recuerda el pasado y el Knowledge Graph conoce las relaciones, el State Engine representa el presente.
 
@@ -347,7 +347,7 @@ Gemelo Digital.
 
 Todos los módulos deberán informar sus cambios de estado.
 
-El State Engine será la fuente oficial del estado del ERP.
+El State Engine será la fuente oficial del estado de la plataforma.
 
 ---
 
@@ -367,7 +367,7 @@ Procesos pendientes.
 
 Alertas críticas.
 
-Estado general del ERP.
+Estado general de la plataforma.
 
 ---
 

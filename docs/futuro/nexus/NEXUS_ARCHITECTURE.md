@@ -4,7 +4,7 @@
 
 ## Arquitectura de NEXUS
 
-Sistema Nervioso Central del ERP
+Sistema Nervioso Central de la plataforma
 
 ---
 
@@ -20,7 +20,7 @@ No es un Agente.
 
 No es un servicio.
 
-NEXUS es el cerebro que coordina absolutamente todo el ERP.
+NEXUS es el cerebro que coordina absolutamente toda la plataforma.
 
 Todo lo que sucede dentro del sistema pasa primero por NEXUS.
 
@@ -150,7 +150,7 @@ Controlar recursos.
 
 # 6. Motor de Eventos
 
-Todo dentro del ERP será un evento.
+Todo dentro de la plataforma será un evento.
 
 Ejemplos
 
@@ -274,7 +274,7 @@ notificará.
 
 continuará.
 
-El ERP nunca deberá detenerse.
+La plataforma nunca deberá detenerse.
 
 ---
 
@@ -376,7 +376,7 @@ Facturación.
 
 # 16. Regla Suprema
 
-NEXUS será el Sistema Nervioso Central del ERP.
+NEXUS será el Sistema Nervioso Central de la plataforma.
 
 Toda acción deberá iniciar, coordinarse o finalizar mediante NEXUS.
 

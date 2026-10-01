@@ -10,7 +10,7 @@
 
 # Objetivo
 
-El Priority Engine es el componente encargado de determinar el orden de importancia de todos los elementos del ERP.
+El Priority Engine es el componente encargado de determinar el orden de importancia de todos los elementos de la plataforma.
 
 Su misión consiste en garantizar que NEXUS utilice primero sus recursos en aquello que genera mayor valor, menor riesgo o mayor urgencia para la organización.
 
@@ -386,7 +386,7 @@ Resultado.
 
 # Escalabilidad
 
-Permitirá incorporar nuevos criterios de priorización sin modificar el núcleo del ERP.
+Permitirá incorporar nuevos criterios de priorización sin modificar el núcleo de la plataforma.
 
 ---
 

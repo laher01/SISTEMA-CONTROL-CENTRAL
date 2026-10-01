@@ -28,7 +28,7 @@ Cada módulo únicamente:
 - escucha eventos;
 - responde eventos.
 
-De esta manera el ERP permanece desacoplado.
+De esta manera la plataforma permanece desacoplada.
 
 ---
 
@@ -422,4 +422,4 @@ Nada ocurrirá directamente dentro de FACT CENTRAL.
 
 Todo ocurrirá mediante eventos coordinados por NEXUS.
 
-El Event Bus constituye el Sistema Nervioso del ERP.
+El Event Bus constituye el Sistema Nervioso de la plataforma.

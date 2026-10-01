@@ -41,7 +41,7 @@ Toda organización dentro de FACT CENTRAL deberá estar asociada a:
 - estado de pago;
 - estado operativo.
 
-El uso del ERP dependerá de la combinación:
+El uso de la plataforma dependerá de la combinación:
 
 TENANT
 +
@@ -1004,7 +1004,7 @@ FACT CENTRAL deberá registrar:
 - referencia.
 
 La facturación SaaS será independiente del módulo de pagos
-a Usuarios dentro del ERP.
+a Usuarios dentro de la plataforma.
 
 ---
 
@@ -1016,7 +1016,7 @@ Debe quedar completamente separado:
 
 El Administrador paga por usar FACT CENTRAL.
 
-## Pagos ERP
+## Pagos Operativos
 
 El Gerente paga comisiones o montos preparados a Usuarios.
 
@@ -1510,7 +1510,7 @@ LA REACTIVACIÓN CONSERVA TODO EL HISTORIAL.
 
 ## Regla Suprema 8
 
-LOS PAGOS SaaS SON INDEPENDIENTES DE LOS PAGOS DEL ERP.
+LOS PAGOS SaaS SON INDEPENDIENTES DE LOS PAGOS OPERATIVOS.
 
 ## Regla Suprema 9
 

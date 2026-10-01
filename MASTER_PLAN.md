@@ -327,87 +327,35 @@ GitHub Actions
 
 # ESTADO DEL PROYECTO
 
-Arquitectura General
+| Área | Estado |
+|---|---|
+| Visión y reglas de negocio | Documentadas |
+| Arquitectura | Documentada, pendiente de validar con implementación |
+| Alcance del MVP | Definido en `docs/MVP.md` |
+| Esquema de datos MVP | Definido en `docs/ESQUEMA_MVP.md` |
+| Backend MVP | En desarrollo |
+| Frontend | Pendiente |
+| Testing | Pendiente |
 
-100%
-
-Modelo SaaS
-
-95%
-
-Modelo Documental
-
-95%
-
-Reglas de Negocio
-
-95%
-
-Seguridad
-
-90%
-
-Infraestructura
-
-90%
-
-Backend
-
-0%
-
-Frontend
-
-0%
-
-Testing
-
-0%
+Una arquitectura solo se considera validada cuando ha sido implementada y probada con datos reales.
 
 ---
 
 # ROADMAP GENERAL
 
-FASE 1
+FASE 1 — Arquitectura y documentación: ✔
 
-Arquitectura
+FASE 2 — MVP backend (ingesta, duplicados, expedientes, alertas, dashboard API): en curso
 
-✔
+FASE 3 — Validación con documentos reales de 1–2 empresas: pendiente
 
-FASE 2
+FASE 4 — Autenticación, roles y frontend: pendiente
 
-Documentación
+FASE 5 — OCR/IA, pagos a gestores, integraciones: pendiente
 
-✔
+FASE 6 — Multi-tenant real y producción SaaS: pendiente
 
-FASE 3
-
-Backend
-
-Pendiente
-
-FASE 4
-
-Frontend
-
-Pendiente
-
-FASE 5
-
-Integraciones
-
-Pendiente
-
-FASE 6
-
-Testing
-
-Pendiente
-
-FASE 7
-
-Producción
-
-Pendiente
+FASE 7 — NEXUS y capacidades avanzadas (`docs/futuro/`): pendiente
 
 ---
 

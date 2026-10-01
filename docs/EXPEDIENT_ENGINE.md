@@ -8,7 +8,7 @@
 
 # 1. Objetivo
 
-Definir el funcionamiento del núcleo principal del ERP FACT CENTRAL.
+Definir el funcionamiento del núcleo principal de FACT CENTRAL.
 
 El Expediente es la entidad central del sistema.
 
@@ -216,7 +216,7 @@ Archivado
 
 # 9. Nivel de Completitud
 
-El ERP calculará automáticamente el porcentaje de completitud.
+La plataforma calculará automáticamente el porcentaje de completitud.
 
 Ejemplo
 
@@ -458,4 +458,4 @@ Toda consulta debe poder llegar a un Expediente.
 
 Todo cálculo debe originarse desde un Expediente.
 
-Toda inteligencia del ERP deberá construirse alrededor del Expediente.
+Toda inteligencia de la plataforma deberá construirse alrededor del Expediente.

@@ -10,7 +10,7 @@
 
 Definir la arquitectura del Sistema Multiagente de FACT CENTRAL.
 
-El ERP no utilizará un único modelo de Inteligencia Artificial.
+La plataforma no utilizará un único modelo de Inteligencia Artificial.
 
 Utilizará un conjunto de agentes especializados que colaboran entre sí para construir Expedientes inteligentes.
 
@@ -92,7 +92,7 @@ OCR      DOCUMENTAL     EXPEDIENTES    AUDITOR
 
 ## Función
 
-Es el Director General del ERP.
+Es el Director General de la plataforma.
 
 No procesa documentos.
 
@@ -178,7 +178,7 @@ Fotografía.
 
 # 7. Agente Expedientes
 
-Es el corazón del ERP.
+Es el corazón de la plataforma.
 
 Responsabilidades
 
@@ -288,7 +288,7 @@ Solo alerta.
 
 # 12. Agente Aprendizaje
 
-Es el profesor del ERP.
+Es el profesor de la plataforma.
 
 Aprende de:
 
@@ -310,7 +310,7 @@ Va construyendo una Base de Conocimiento.
 
 # 13. Base de Conocimiento
 
-Será la memoria permanente del ERP.
+Será la memoria permanente de la plataforma.
 
 Almacenará
 
@@ -330,7 +330,7 @@ Reglas.
 
 Experiencias.
 
-Mientras más años trabaje el ERP,
+Mientras más años trabaje la plataforma,
 
 más inteligente será.
 
@@ -454,4 +454,4 @@ FACT CENTRAL utiliza un Sistema Multiagente Inteligente.
 
 Cada agente es especialista en una única función.
 
-Todos colaboran para construir, validar, proteger y mejorar continuamente los Expedientes Inteligentes del ERP.
+Todos colaboran para construir, validar, proteger y mejorar continuamente los Expedientes Inteligentes de la plataforma.

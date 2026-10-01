@@ -77,7 +77,7 @@ Base de datos.
 
 PRIORIDAD 4
 
-API y operaciones del ERP.
+API y operaciones de la plataforma.
 
 PRIORIDAD 5
 
@@ -416,7 +416,7 @@ REBUILD
 ↓
 HEALTHY
 
-El proceso podrá ejecutarse en segundo plano sin detener el ERP.
+El proceso podrá ejecutarse en segundo plano sin detener la plataforma.
 
 23. Pérdida de Storage Pool completo
 

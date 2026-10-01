@@ -1,12 +1,12 @@
 # BUSINESS_RULES.md
 # FACT CENTRAL
-## Reglas de Negocio del ERP
+## Reglas de Negocio de la plataforma
 
 ---
 
 # Objetivo
 
-Este documento define las reglas funcionales del ERP FACT CENTRAL.
+Este documento define las reglas funcionales de FACT CENTRAL.
 
 Las reglas aquí establecidas tienen prioridad sobre cualquier implementación técnica.
 
@@ -425,7 +425,7 @@ Cada módulo deberá funcionar independientemente.
 
 Si un módulo falla,
 
-el ERP continuará funcionando.
+la plataforma continuará funcionando.
 
 ---
 
@@ -443,7 +443,7 @@ Toda comunicación entre módulos será mediante API.
 
 # REGLA SUPREMA
 
-El Expediente es el activo principal del ERP.
+El Expediente es el activo principal de la plataforma.
 
 Todo gira alrededor del Expediente.
 

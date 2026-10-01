@@ -4,7 +4,7 @@
 
 ## NEXUS Operating System
 
-### Sistema Operativo Inteligente del ERP
+### Sistema Operativo Inteligente de la plataforma
 
 ---
 
@@ -12,7 +12,7 @@
 
 NEXUS es el Sistema Operativo Inteligente de FACT CENTRAL.
 
-Su función es coordinar absolutamente todos los procesos del ERP.
+Su función es coordinar absolutamente todos los procesos de la plataforma.
 
 NEXUS no reemplaza los motores del sistema.
 
@@ -46,7 +46,7 @@ NEXUS representa el cerebro.
 
 # 3. Misión
 
-Administrar todo el ERP.
+Administrar toda la plataforma.
 
 Tomar decisiones.
 
@@ -199,7 +199,7 @@ qué proceso reiniciar.
 
 # 8. Workflow Engine
 
-Administrará los flujos del ERP.
+Administrará los flujos de la plataforma.
 
 Ejemplo
 
@@ -265,7 +265,7 @@ Memoria de Aprendizaje.
 
 # 11. Knowledge Base
 
-Será el conocimiento acumulado del ERP.
+Será el conocimiento acumulado de la plataforma.
 
 Empresas.
 
@@ -425,7 +425,7 @@ Cada misión podrá generar cientos de tareas internas.
 
 NEXUS no esperará órdenes.
 
-Analizará continuamente el estado del ERP.
+Analizará continuamente el estado de la plataforma.
 
 Detectará:
 
@@ -475,4 +475,4 @@ Todo proceso deberá ser coordinado por NEXUS.
 
 Ningún módulo trabajará de forma aislada.
 
-Todo el ERP funcionará como un único organismo inteligente.
+Toda la plataforma funcionará como un único organismo inteligente.

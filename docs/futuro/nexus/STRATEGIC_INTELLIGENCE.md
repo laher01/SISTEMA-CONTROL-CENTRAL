@@ -222,7 +222,7 @@ Producto vs Producto.
 
 # 13. Autoevaluación
 
-Evaluará continuamente el propio ERP.
+Evaluará continuamente la propia plataforma.
 
 ¿Qué módulos fallan?
 
@@ -238,7 +238,7 @@ Evaluará continuamente el propio ERP.
 
 Toda experiencia será almacenada.
 
-El ERP aprenderá no solamente documentos.
+La plataforma aprenderá no solamente documentos.
 
 Aprenderá cómo administrar mejor el negocio.
 

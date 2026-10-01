@@ -8,7 +8,7 @@
 
 # 1. Objetivo
 
-Definir todas las etapas por las que pasa un documento dentro del ERP FACT CENTRAL.
+Definir todas las etapas por las que pasa un documento dentro de FACT CENTRAL.
 
 Todo documento tendrá un ciclo de vida completamente trazable desde que ingresa al sistema hasta su archivado definitivo.
 
@@ -16,7 +16,7 @@ Todo documento tendrá un ciclo de vida completamente trazable desde que ingresa
 
 # 2. Filosofía
 
-Un documento nunca "aparece" dentro del ERP.
+Un documento nunca "aparece" dentro de la plataforma.
 
 Todo documento nace.
 
@@ -202,7 +202,7 @@ Otro
 
 # 9. Estado 6 - Validado
 
-Se ejecutan las reglas del ERP.
+Se ejecutan las reglas de la plataforma.
 
 Duplicados
 
@@ -382,6 +382,6 @@ Reportes
 
 # 20. Regla Suprema
 
-Todo documento debe ser completamente trazable desde el momento en que ingresa al ERP hasta su archivado definitivo.
+Todo documento debe ser completamente trazable desde el momento en que ingresa a la plataforma hasta su archivado definitivo.
 
 Nunca deberá existir un documento sin historial, sin propietario o sin Expediente (salvo que aún se encuentre en proceso de clasificación).

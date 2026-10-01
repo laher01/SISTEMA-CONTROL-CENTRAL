@@ -1,3 +1,5 @@
+> **Estado: BORRADOR — solo índice.** Este documento aún no tiene contenido desarrollado; no debe usarse como especificación hasta completarlo.
+
 09_IDEMPOTENCY_STRATEGY.md
 
 Versión 1.0

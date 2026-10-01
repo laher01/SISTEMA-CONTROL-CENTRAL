@@ -12,7 +12,7 @@
 
 El Execution Engine es el componente responsable de ejecutar los Planes de Acción generados por el Action Planner.
 
-Su misión consiste en coordinar, supervisar y verificar la ejecución de todas las acciones del ERP.
+Su misión consiste en coordinar, supervisar y verificar la ejecución de todas las acciones de la plataforma.
 
 No toma decisiones.
 

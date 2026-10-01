@@ -360,7 +360,7 @@ Todos los Agentes.
 
 # 19. Escalabilidad
 
-Permitirá agregar nuevos controles de calidad sin modificar el núcleo del ERP.
+Permitirá agregar nuevos controles de calidad sin modificar el núcleo de la plataforma.
 
 Ejemplos
 
@@ -378,4 +378,4 @@ Calidad Comercial.
 
 Nada podrá considerarse terminado hasta ser validado por el Operational Quality Engine.
 
-La calidad constituye el último filtro antes de que NEXUS aprenda y consolide el conocimiento del ERP.
+La calidad constituye el último filtro antes de que NEXUS aprenda y consolide el conocimiento de la plataforma.

@@ -392,7 +392,7 @@ Mostrará
 
 Estado general.
 
-Salud del ERP.
+Salud de la plataforma.
 
 Productividad.
 
@@ -468,7 +468,7 @@ La decisión final siempre corresponderá al responsable humano autorizado.
 
 El Executive Intelligence Engine constituye el nivel más alto de inteligencia estratégica de FACT CENTRAL.
 
-Su misión es transformar los datos operativos del ERP en conocimiento ejecutivo, permitiendo que la organización tome decisiones más rápidas, más seguras y mejor fundamentadas.
+Su misión es transformar los datos operativos de la plataforma en conocimiento ejecutivo, permitiendo que la organización tome decisiones más rápidas, más seguras y mejor fundamentadas.
 
 No administra documentos.
 

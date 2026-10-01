@@ -22,7 +22,7 @@ Los datos aislados tienen poco valor.
 
 Las relaciones entre los datos generan conocimiento.
 
-NEXUS debe comprender cómo se conectan las entidades del ERP.
+NEXUS debe comprender cómo se conectan las entidades de la plataforma.
 
 ---
 
@@ -344,7 +344,7 @@ Ejemplos
 
 # 16. Aprendizaje
 
-Cada nueva relación fortalecerá el conocimiento del ERP.
+Cada nueva relación fortalecerá el conocimiento de la plataforma.
 
 Mientras más documentos procese NEXUS,
 
