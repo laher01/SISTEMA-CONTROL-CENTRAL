@@ -1,6 +1,8 @@
+import io
 from datetime import date
 
 from fastapi.testclient import TestClient
+from pypdf import PdfWriter
 
 from tests.conftest import Reloj
 from tests.xml import RECEPTOR, factura, guia
@@ -18,6 +20,14 @@ def expediente(client: TestClient, expediente_id: object) -> dict[str, object]:
     assert respuesta.status_code == 200, respuesta.text
     datos: dict[str, object] = respuesta.json()
     return datos
+
+
+def pdf_vacio() -> bytes:
+    salida = io.BytesIO()
+    escritor = PdfWriter()
+    escritor.add_blank_page(width=100, height=100)
+    escritor.write(salida)
+    return salida.getvalue()
 
 
 def alertas_abiertas(detalle: dict[str, object]) -> set[str]:
@@ -212,3 +222,22 @@ def test_busqueda_de_expedientes(client: TestClient) -> None:
     assert numeros("20600000003") == ["F002-777"]
     assert numeros("proveedor") == ["F001-123", "F002-777"]
     assert numeros("100%") == []
+
+
+def test_procesar_pdf_conserva_resultado_verificable(client: TestClient) -> None:
+    documento = subir(client, "escaneo.pdf", pdf_vacio())
+    respuesta = client.post(f"/api/v1/documentos/{documento['id']}/procesar")
+    assert respuesta.status_code == 200, respuesta.text
+    procesamiento = respuesta.json()["datos_extraidos"]["procesamiento_documental"]
+    assert procesamiento["metodo"] == "TEXTO_PDF"
+    assert procesamiento["motor"] == "pypdf"
+    assert procesamiento["paginas"] == 1
+    assert procesamiento["requiere_ocr"] is True
+
+
+def test_procesar_archivo_no_soportado_no_pierde_original(client: TestClient) -> None:
+    documento = subir(client, "nota.txt", b"texto simple")
+    respuesta = client.post(f"/api/v1/documentos/{documento['id']}/procesar")
+    assert respuesta.status_code == 422
+    descarga = client.get(f"/api/v1/documentos/{documento['id']}/archivo")
+    assert descarga.content == b"texto simple"
