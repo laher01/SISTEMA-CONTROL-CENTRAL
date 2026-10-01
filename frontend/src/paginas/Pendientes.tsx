@@ -21,6 +21,24 @@ import {
 const POR_PAGINA = 50;
 const ESTADOS_PENDIENTES = ["PENDIENTE_CLASIFICACION", "PENDIENTE_RELACION"] as const;
 type SeleccionSugerida = { expediente: Expediente; tipo?: TipoDocumento };
+type CampoExtraido = {
+  nombre: string;
+  valor: string;
+  confianza: number;
+  fuente: string;
+  evidencia: string;
+};
+
+const ETIQUETAS_CAMPOS: Record<string, string> = {
+  serie: "Serie",
+  correlativo: "Correlativo",
+  ruc_emisor: "RUC emisor",
+  ruc_receptor: "RUC receptor",
+  fecha_emision: "Fecha de emisión",
+  moneda: "Moneda",
+  importe_total: "Importe total",
+  numero_operacion: "N.º de operación",
+};
 
 export default function Pendientes() {
   const [parametros, setParametros] = useSearchParams();
@@ -162,6 +180,23 @@ function Procesar({
             <pre className="texto-extraido">{lectura.texto}</pre>
           </details>
         )}
+        {lectura.campos.length > 0 && (
+          <details>
+            <summary>Ver datos sugeridos ({lectura.campos.length})</summary>
+            <dl className="campos-extraidos">
+              {lectura.campos.map((campo) => (
+                <div key={campo.nombre}>
+                  <dt>{ETIQUETAS_CAMPOS[campo.nombre] ?? campo.nombre}</dt>
+                  <dd>
+                    <strong>{campo.valor}</strong> · {Math.round(campo.confianza * 100)} % · {campo.fuente}
+                    <small title={campo.evidencia}>Evidencia: {campo.evidencia}</small>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            <p className="tenue">Son sugerencias y requieren confirmación antes de vincular.</p>
+          </details>
+        )}
         <button onClick={procesar} disabled={procesando}>
           {procesando ? "Procesando…" : "Reprocesar"}
         </button>
@@ -216,6 +251,7 @@ function obtenerLectura(documento: Documento): {
   tipoSugerido?: TipoDocumento;
   requiereOcr: boolean;
   texto: string;
+  campos: CampoExtraido[];
 } | null {
   const proceso = documento.datos_extraidos?.procesamiento_documental;
   if (!proceso || typeof proceso !== "object") return null;
@@ -236,7 +272,26 @@ function obtenerLectura(documento: Documento): {
     tipoSugerido: tipo,
     requiereOcr: "requiere_ocr" in proceso && proceso.requiere_ocr === true,
     texto: "texto" in proceso ? String(proceso.texto) : "",
+    campos: obtenerCampos(proceso),
   };
+}
+
+function obtenerCampos(proceso: object): CampoExtraido[] {
+  if (!("extraccion_estructurada" in proceso)) return [];
+  const extraccion = proceso.extraccion_estructurada;
+  if (!extraccion || typeof extraccion !== "object" || !("campos" in extraccion)) return [];
+  const campos = extraccion.campos;
+  if (!campos || typeof campos !== "object") return [];
+  return Object.entries(campos).flatMap(([nombre, dato]) => {
+    if (!dato || typeof dato !== "object" || !("valor" in dato)) return [];
+    return [{
+      nombre,
+      valor: String(dato.valor),
+      confianza: "confianza" in dato && typeof dato.confianza === "number" ? dato.confianza : 0,
+      fuente: "fuente" in dato ? String(dato.fuente) : "",
+      evidencia: "evidencia" in dato ? String(dato.evidencia) : "",
+    }];
+  });
 }
 
 function Vincular({

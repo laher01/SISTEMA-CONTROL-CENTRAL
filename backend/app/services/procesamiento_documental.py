@@ -12,6 +12,7 @@ from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
 from app.enums import TipoDocumento
+from app.services.extraccion_campos import extraer_campos
 
 
 class DocumentoNoProcesable(Exception):
@@ -58,6 +59,9 @@ class ResultadoProcesamiento:
             resultado["idioma"] = self.idioma
         if self.sugerencia is not None:
             resultado["clasificacion_sugerida"] = self.sugerencia.a_dict()
+        extraccion = extraer_campos(self.texto, self.metodo, self.confianza)
+        if extraccion is not None:
+            resultado["extraccion_estructurada"] = extraccion
         return resultado
 
 
