@@ -196,3 +196,19 @@ def test_descarga_de_tipos_no_seguros_como_adjunto(client: TestClient) -> None:
     descarga = client.get(f"/api/v1/documentos/{respuesta.json()['id']}/archivo")
     assert descarga.headers["content-type"] == "application/octet-stream"
     assert descarga.headers["content-disposition"].startswith("attachment;")
+
+
+def test_busqueda_de_expedientes(client: TestClient) -> None:
+    subir(client, "a.xml", factura(numero="F001-00000123"))
+    subir(client, "b.xml", factura(numero="F002-00000777", emisor="20600000003"))
+
+    def numeros(buscar: str) -> list[str]:
+        respuesta = client.get("/api/v1/expedientes", params={"buscar": buscar})
+        assert respuesta.status_code == 200
+        return sorted(f"{e['serie']}-{e['correlativo']}" for e in respuesta.json())
+
+    assert numeros("f002-00000777") == ["F002-777"]
+    assert numeros("F002-777") == ["F002-777"]
+    assert numeros("20600000003") == ["F002-777"]
+    assert numeros("proveedor") == ["F001-123", "F002-777"]
+    assert numeros("100%") == []

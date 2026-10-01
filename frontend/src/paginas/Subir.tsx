@@ -23,6 +23,8 @@ export default function Subir() {
   const [filas, setFilas] = useState<Fila[]>([]);
   const [arrastrando, setArrastrando] = useState(false);
   const entrada = useRef<HTMLInputElement>(null);
+  const cola = useRef<Fila[]>([]);
+  const activos = useRef(0);
 
   const actualizar = (clave: string, resultado: Resultado) =>
     setFilas((actuales) => actuales.map((f) => (f.clave === clave ? { ...f, resultado } : f)));
@@ -36,7 +38,7 @@ export default function Subir() {
       actualizar(fila.clave, { estado: "ok", documento });
     } catch (error) {
       const mensaje = error instanceof Error ? error.message : String(error);
-      const duplicado = error instanceof ErrorApi && error.status === 409;
+      const duplicado = error instanceof ErrorApi && esDuplicado(error);
       actualizar(fila.clave, { estado: duplicado ? "duplicado" : "error", mensaje });
     }
   };
@@ -49,11 +51,20 @@ export default function Subir() {
       resultado: { estado: "en_cola" },
     }));
     setFilas((actuales) => [...nuevas, ...actuales]);
-    const cola = [...nuevas];
-    const trabajador = async () => {
-      for (let fila = cola.shift(); fila; fila = cola.shift()) await subirUno(fila);
-    };
-    for (let i = 0; i < CONCURRENCIA; i++) void trabajador();
+    cola.current.push(...nuevas);
+    despachar();
+  };
+
+  const despachar = () => {
+    while (activos.current < CONCURRENCIA) {
+      const fila = cola.current.shift();
+      if (!fila) return;
+      activos.current += 1;
+      void subirUno(fila).finally(() => {
+        activos.current -= 1;
+        despachar();
+      });
+    }
   };
 
   const soltar = (evento: DragEvent) => {
@@ -146,4 +157,9 @@ function FilaCarga({ fila }: { fila: Fila }) {
       </td>
     </tr>
   );
+}
+
+function esDuplicado(error: ErrorApi): boolean {
+  const { detalle } = error;
+  return error.status === 409 && typeof detalle === "object" && detalle !== null && "documento_id" in detalle;
 }

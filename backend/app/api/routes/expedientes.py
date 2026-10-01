@@ -1,9 +1,11 @@
+import re
 import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import aliased
 
 from app.api.deps import HoyDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado, validar_gestor
@@ -17,6 +19,8 @@ from app.services.expedientes import (
     recalcular_expedientes,
 )
 from app.services.ingesta import crear_expediente
+
+NUMERO_RE = re.compile(r"^([a-z0-9]{4})-0*(\d+)$")
 
 router = APIRouter(prefix="/expedientes", tags=["expedientes"])
 
@@ -75,6 +79,7 @@ def listar(
     estado: EstadoExpediente | None = None,
     receptor_ruc: str | None = None,
     pendiente_aprobacion: bool | None = None,
+    buscar: Annotated[str | None, Query(max_length=100)] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[Expediente]:
@@ -88,6 +93,20 @@ def listar(
     if receptor_ruc is not None:
         consulta = consulta.join(Empresa, Expediente.receptor_id == Empresa.id).where(
             Empresa.ruc == receptor_ruc
+        )
+    if buscar and buscar.strip():
+        texto = buscar.strip().lower()
+        if numero := NUMERO_RE.match(texto):
+            texto = f"{numero.group(1)}-{int(numero.group(2))}"
+        emisor = aliased(Empresa)
+        consulta = consulta.join(emisor, Expediente.emisor_id == emisor.id).where(
+            or_(
+                func.lower(Expediente.serie + "-" + Expediente.correlativo).contains(
+                    texto, autoescape=True
+                ),
+                emisor.ruc.contains(texto, autoescape=True),
+                func.lower(emisor.razon_social).contains(texto, autoescape=True),
+            )
         )
     consulta = consulta.order_by(Expediente.fecha_emision.desc()).limit(limit).offset(offset)
     return list(session.scalars(consulta))

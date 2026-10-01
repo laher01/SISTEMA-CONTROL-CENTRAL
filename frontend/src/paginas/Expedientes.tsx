@@ -1,7 +1,7 @@
 import { Link, useSearchParams } from "react-router-dom";
 
 import { conParametros, useDatos } from "../api";
-import { Estado, Semaforo } from "../componentes";
+import { Estado, Paginacion, Semaforo } from "../componentes";
 import { ETIQUETA_ESTADO, formatearFecha, formatearMonto, numeroComprobante } from "../formato";
 import { ESTADOS_EXPEDIENTE, type Expediente } from "../tipos";
 
@@ -12,12 +12,14 @@ export default function Expedientes() {
   const estado = parametros.get("estado") ?? "";
   const pendiente = parametros.get("pendiente_aprobacion") ?? "";
   const receptor = parametros.get("receptor_ruc") ?? "";
+  const buscar = parametros.get("buscar") ?? "";
   const pagina = Number(parametros.get("pagina") ?? "0");
 
   const ruta = conParametros("/api/v1/expedientes", {
     estado,
     pendiente_aprobacion: pendiente,
     receptor_ruc: receptor.length === 11 ? receptor : undefined,
+    buscar: buscar.trim(),
     limit: String(POR_PAGINA),
     offset: String(pagina * POR_PAGINA),
   });
@@ -35,6 +37,12 @@ export default function Expedientes() {
     <>
       <h2>Expedientes</h2>
       <div className="filtros">
+        <input
+          placeholder="Buscar F001-123, RUC o proveedor"
+          value={buscar}
+          maxLength={100}
+          onChange={(e) => cambiar("buscar", e.target.value)}
+        />
         <select value={estado} onChange={(e) => cambiar("estado", e.target.value)}>
           <option value="">Todos los estados</option>
           {ESTADOS_EXPEDIENTE.map((e) => (
@@ -90,18 +98,11 @@ export default function Expedientes() {
           </tbody>
         </table>
       </Estado>
-      <div className="paginacion">
-        <button disabled={pagina === 0} onClick={() => cambiar("pagina", String(pagina - 1))}>
-          Anterior
-        </button>
-        <span>Página {pagina + 1}</span>
-        <button
-          disabled={(datos?.length ?? 0) < POR_PAGINA}
-          onClick={() => cambiar("pagina", String(pagina + 1))}
-        >
-          Siguiente
-        </button>
-      </div>
+      <Paginacion
+        pagina={pagina}
+        hayMas={(datos?.length ?? 0) === POR_PAGINA}
+        alCambiar={(p) => cambiar("pagina", String(p))}
+      />
     </>
   );
 }

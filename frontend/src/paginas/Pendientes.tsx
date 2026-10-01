@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
-import { enviarJson, urlArchivo, useDatos } from "../api";
-import { Estado } from "../componentes";
+import { conParametros, enviarJson, urlArchivo, useDatos } from "../api";
+import { Estado, Paginacion } from "../componentes";
 import {
   ETIQUETA_ESTADO_DOCUMENTO,
   ETIQUETA_TIPO_DOCUMENTO,
@@ -11,18 +12,23 @@ import {
 } from "../formato";
 import { TIPOS_DOCUMENTO, type Documento, type Expediente, type TipoDocumento } from "../tipos";
 
-export default function Pendientes() {
-  const clasificacion = useDatos<Documento[]>(
-    "/api/v1/documentos?estado=PENDIENTE_CLASIFICACION&limit=500",
-  );
-  const relacion = useDatos<Documento[]>("/api/v1/documentos?estado=PENDIENTE_RELACION&limit=500");
-  const expedientes = useDatos<Expediente[]>("/api/v1/expedientes?limit=500");
+const POR_PAGINA = 50;
+const ESTADOS_PENDIENTES = ["PENDIENTE_CLASIFICACION", "PENDIENTE_RELACION"] as const;
 
-  const documentos = [...(clasificacion.datos ?? []), ...(relacion.datos ?? [])];
-  const recargar = () => {
-    clasificacion.recargar();
-    relacion.recargar();
-  };
+export default function Pendientes() {
+  const [parametros, setParametros] = useSearchParams();
+  const estado = parametros.get("estado") === "PENDIENTE_RELACION" ? "PENDIENTE_RELACION" : "PENDIENTE_CLASIFICACION";
+  const pagina = Number(parametros.get("pagina") ?? "0");
+  const { datos, error, cargando, recargar } = useDatos<Documento[]>(
+    conParametros("/api/v1/documentos", {
+      estado,
+      limit: String(POR_PAGINA),
+      offset: String(pagina * POR_PAGINA),
+    }),
+  );
+
+  const cambiar = (siguienteEstado: string, siguientePagina: number) =>
+    setParametros({ estado: siguienteEstado, pagina: String(siguientePagina) });
 
   return (
     <>
@@ -31,54 +37,58 @@ export default function Pendientes() {
         Archivos que no se pudieron asociar solos (PDF, imágenes o guías sin factura). Indica su tipo
         y el expediente al que pertenecen.
       </p>
-      <Estado
-        cargando={clasificacion.cargando || relacion.cargando}
-        error={clasificacion.error ?? relacion.error ?? expedientes.error}
-        vacio={documentos.length === 0}
-      >
+      <div className="filtros">
+        <select value={estado} onChange={(e) => cambiar(e.target.value, 0)}>
+          {ESTADOS_PENDIENTES.map((e) => (
+            <option key={e} value={e}>
+              {ETIQUETA_ESTADO_DOCUMENTO[e]}
+            </option>
+          ))}
+        </select>
+      </div>
+      <Estado cargando={cargando} error={error} vacio={datos?.length === 0}>
         <table>
           <thead>
             <tr>
               <th>Archivo</th>
-              <th>Estado</th>
               <th>Subido</th>
               <th>Vincular</th>
             </tr>
           </thead>
           <tbody>
-            {documentos.map((d) => (
+            {datos?.map((d) => (
               <tr key={d.id}>
                 <td>
                   <a href={urlArchivo(d.id)} target="_blank" rel="noreferrer">
                     {d.nombre_original}
                   </a>
                 </td>
-                <td>{ETIQUETA_ESTADO_DOCUMENTO[d.estado]}</td>
                 <td>{formatearFecha(d.created_at)}</td>
                 <td>
-                  <Vincular documento={d} expedientes={expedientes.datos ?? []} alVincular={recargar} />
+                  <Vincular documento={d} alVincular={recargar} />
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </Estado>
+      <Paginacion
+        pagina={pagina}
+        hayMas={(datos?.length ?? 0) === POR_PAGINA}
+        alCambiar={(p) => cambiar(estado, p)}
+      />
     </>
   );
 }
 
-function Vincular({
-  documento,
-  expedientes,
-  alVincular,
-}: {
-  documento: Documento;
-  expedientes: Expediente[];
-  alVincular: () => void;
-}) {
+function Vincular({ documento, alVincular }: { documento: Documento; alVincular: () => void }) {
   const [tipo, setTipo] = useState<TipoDocumento>(documento.tipo_documento ?? "VCHR");
+  const [buscar, setBuscar] = useState("");
   const [expedienteId, setExpedienteId] = useState("");
   const [error, setError] = useState("");
+  const candidatos = useDatos<Expediente[]>(
+    conParametros("/api/v1/expedientes", { buscar: buscar.trim(), limit: "20" }),
+  );
 
   const vincular = async () => {
     setError("");
@@ -102,9 +112,20 @@ function Vincular({
           </option>
         ))}
       </select>
+      <input
+        placeholder="Buscar F001-123, RUC o proveedor"
+        value={buscar}
+        maxLength={100}
+        onChange={(e) => {
+          setBuscar(e.target.value);
+          setExpedienteId("");
+        }}
+      />
       <select value={expedienteId} onChange={(e) => setExpedienteId(e.target.value)}>
-        <option value="">Elegir expediente…</option>
-        {expedientes.map((e) => (
+        <option value="">
+          {candidatos.cargando ? "Buscando…" : `Elegir expediente (${candidatos.datos?.length ?? 0})`}
+        </option>
+        {candidatos.datos?.map((e) => (
           <option key={e.id} value={e.id}>
             {numeroComprobante(e.serie, e.correlativo)} · {e.emisor.razon_social} ·{" "}
             {formatearMonto(e.moneda, e.importe_total)}
@@ -114,7 +135,7 @@ function Vincular({
       <button disabled={!expedienteId} onClick={vincular}>
         Vincular
       </button>
-      {error && <span className="error">{error}</span>}
+      {(error || candidatos.error) && <span className="error">{error || candidatos.error}</span>}
     </div>
   );
 }

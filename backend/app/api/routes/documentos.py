@@ -1,8 +1,8 @@
 import uuid
 from typing import Annotated
-from urllib.parse import quote
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
@@ -126,19 +126,15 @@ MIME_EN_LINEA = frozenset(
 @router.get("/{documento_id}/archivo")
 def descargar_archivo(
     session: SessionDep, almacen: AlmacenDep, tenant_id: TenantDep, documento_id: uuid.UUID
-) -> Response:
+) -> FileResponse:
     documento = _documento(session, tenant_id, documento_id)
-    nombre = quote(documento.nombre_original)
     en_linea = documento.mime_type in MIME_EN_LINEA
-    return Response(
-        content=almacen.leer(documento.ruta_storage),
+    return FileResponse(
+        almacen.ruta_absoluta(documento.ruta_storage),
         media_type=documento.mime_type if en_linea else "application/octet-stream",
-        headers={
-            "Content-Disposition": f"{'inline' if en_linea else 'attachment'}; "
-            f"filename*=UTF-8''{nombre}",
-            "Content-Security-Policy": "sandbox",
-            "X-Content-Type-Options": "nosniff",
-        },
+        filename=documento.nombre_original,
+        content_disposition_type="inline" if en_linea else "attachment",
+        headers={"Content-Security-Policy": "sandbox", "X-Content-Type-Options": "nosniff"},
     )
 
 

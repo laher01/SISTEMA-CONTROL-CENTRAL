@@ -1,22 +1,31 @@
 import { Link, useSearchParams } from "react-router-dom";
 
 import { conParametros, useDatos } from "../api";
-import { Estado } from "../componentes";
+import { Estado, Paginacion } from "../componentes";
 import { ETIQUETA_ALERTA, formatearFecha } from "../formato";
 import { TIPOS_ALERTA, type Alerta } from "../tipos";
+
+const POR_PAGINA = 50;
 
 export default function Alertas() {
   const [parametros, setParametros] = useSearchParams();
   const tipo = parametros.get("tipo") ?? "";
   const resuelta = parametros.get("resuelta") ?? "false";
+  const pagina = Number(parametros.get("pagina") ?? "0");
   const { datos, error, cargando } = useDatos<Alerta[]>(
-    conParametros("/api/v1/alertas", { tipo, resuelta, limit: "500" }),
+    conParametros("/api/v1/alertas", {
+      tipo,
+      resuelta,
+      limit: String(POR_PAGINA),
+      offset: String(pagina * POR_PAGINA),
+    }),
   );
 
   const cambiar = (clave: string, valor: string) => {
     const siguiente = new URLSearchParams(parametros);
     if (valor) siguiente.set(clave, valor);
     else siguiente.delete(clave);
+    if (clave !== "pagina") siguiente.delete("pagina");
     setParametros(siguiente);
   };
 
@@ -61,6 +70,11 @@ export default function Alertas() {
           </tbody>
         </table>
       </Estado>
+      <Paginacion
+        pagina={pagina}
+        hayMas={(datos?.length ?? 0) === POR_PAGINA}
+        alCambiar={(p) => cambiar("pagina", String(p))}
+      />
     </>
   );
 }
