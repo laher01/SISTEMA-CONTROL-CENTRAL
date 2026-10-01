@@ -152,7 +152,7 @@ def procesar_documento(
     documento = _documento(session, tenant_id, documento_id)
     contenido = almacen.ruta_absoluta(documento.ruta_storage).read_bytes()
     try:
-        resultado = procesar(contenido, settings.max_extracted_chars)
+        resultado = procesar(contenido, settings.max_extracted_chars, settings.max_ocr_pdf_pages)
     except DocumentoNoProcesable as exc:
         auditoria.registrar(
             session,

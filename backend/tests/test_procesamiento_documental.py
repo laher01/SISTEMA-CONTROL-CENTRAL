@@ -8,20 +8,40 @@ from app.enums import TipoDocumento
 from app.services import procesamiento_documental as pd
 
 
-def pdf_vacio() -> bytes:
+def pdf_vacio(paginas: int = 1) -> bytes:
     salida = io.BytesIO()
     escritor = PdfWriter()
-    escritor.add_blank_page(width=100, height=100)
+    for _ in range(paginas):
+        escritor.add_blank_page(width=100, height=100)
     escritor.write(salida)
     return salida.getvalue()
 
 
-def test_pdf_sin_capa_texto_solicita_ocr() -> None:
+def test_pdf_sin_capa_texto_solicita_ocr_si_no_hay_motor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(pd.shutil, "which", lambda _: None)
     resultado = pd.procesar(pdf_vacio(), 10_000)
     assert resultado.metodo == "TEXTO_PDF"
     assert resultado.paginas == 1
     assert resultado.texto == ""
     assert resultado.requiere_ocr is True
+
+
+def test_pdf_escaneado_se_procesa_por_pagina(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pd.shutil, "which", lambda _: "/usr/bin/tesseract")
+    monkeypatch.setattr(pd, "_idioma_disponible", lambda _: "spa")
+    resultados = iter([("FACTURA ELECTRONICA F001-123", 0.91), ("TOTAL 2500.00", 0.81)])
+    monkeypatch.setattr(pd, "_ejecutar_tesseract", lambda *_: next(resultados))
+    resultado = pd.procesar(pdf_vacio(2), 10_000)
+    assert resultado.metodo == "OCR_PDF"
+    assert resultado.motor == "pdfium+tesseract"
+    assert resultado.paginas == 2
+    assert resultado.confianza == pytest.approx(0.86)
+    assert "--- Página 1 ---" in resultado.texto
+    assert "--- Página 2 ---" in resultado.texto
+    assert resultado.sugerencia is not None
+    assert resultado.sugerencia.tipo == TipoDocumento.FACT
 
 
 def test_pdf_invalido_se_rechaza() -> None:

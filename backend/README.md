@@ -65,5 +65,6 @@ Con PostgreSQL se verifica además que la migración Alembic coincide con los mo
 - La clasificación sugerida por OCR no se aplica automáticamente; PDF e imágenes se vinculan
   manualmente al expediente.
 - Los PDF con texto se leen mediante `pypdf`; las imágenes usan Tesseract si está instalado.
-  Los PDF escaneados se detectan y quedan marcados como `requiere_ocr`.
+  Los PDF escaneados se rasterizan con PDFium y se procesan página por página. El límite
+  configurable es `FC_MAX_OCR_PDF_PAGES` (50 por defecto).
 - Almacenamiento local; S3-compatible queda para una fase posterior.

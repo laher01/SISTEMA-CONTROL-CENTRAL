@@ -7,6 +7,7 @@ import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
+import pypdfium2 as pdfium
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
@@ -60,16 +61,18 @@ class ResultadoProcesamiento:
         return resultado
 
 
-def procesar(contenido: bytes, limite_caracteres: int) -> ResultadoProcesamiento:
+def procesar(
+    contenido: bytes, limite_caracteres: int, max_paginas_ocr: int = 50
+) -> ResultadoProcesamiento:
     if contenido.startswith(b"%PDF-"):
-        return _procesar_pdf(contenido, limite_caracteres)
+        return _procesar_pdf(contenido, limite_caracteres, max_paginas_ocr)
     extension = _extension_imagen(contenido)
     if extension is not None:
         return _procesar_imagen(contenido, extension, limite_caracteres)
     raise DocumentoNoProcesable("Solo se admite procesamiento de PDF, JPEG, PNG, TIFF o WEBP")
 
 
-def _procesar_pdf(contenido: bytes, limite: int) -> ResultadoProcesamiento:
+def _procesar_pdf(contenido: bytes, limite: int, max_paginas_ocr: int) -> ResultadoProcesamiento:
     try:
         lector = PdfReader(io.BytesIO(contenido), strict=False)
         if lector.is_encrypted and lector.decrypt("") == 0:
@@ -78,14 +81,75 @@ def _procesar_pdf(contenido: bytes, limite: int) -> ResultadoProcesamiento:
     except (PdfReadError, OSError, ValueError) as exc:
         raise DocumentoNoProcesable("El PDF está dañado o no tiene una estructura válida") from exc
     texto = _limitar("\n\n".join(parte for parte in partes if parte), limite)
+    if not texto:
+        return _procesar_pdf_escaneado(contenido, limite, max_paginas_ocr)
     return ResultadoProcesamiento(
         texto=texto,
         metodo="TEXTO_PDF",
         motor="pypdf",
         paginas=len(lector.pages),
         confianza=1.0 if texto else None,
-        requiere_ocr=not bool(texto),
+        requiere_ocr=False,
         sugerencia=sugerir_tipo(texto),
+    )
+
+
+def _procesar_pdf_escaneado(
+    contenido: bytes, limite: int, max_paginas_ocr: int
+) -> ResultadoProcesamiento:
+    ejecutable = shutil.which("tesseract")
+    if ejecutable is None:
+        return ResultadoProcesamiento(
+            texto="",
+            metodo="TEXTO_PDF",
+            motor="pypdf",
+            paginas=_cantidad_paginas(contenido),
+            requiere_ocr=True,
+        )
+    idioma = _idioma_disponible(ejecutable)
+    try:
+        documento = pdfium.PdfDocument(contenido)
+    except Exception as exc:
+        raise DocumentoNoProcesable("No se pudo rasterizar el PDF escaneado") from exc
+    paginas = len(documento)
+    if paginas > max_paginas_ocr:
+        documento.close()
+        raise DocumentoNoProcesable(
+            f"El PDF tiene {paginas} páginas; el máximo OCR permitido es {max_paginas_ocr}"
+        )
+    textos: list[str] = []
+    confianzas: list[float] = []
+    try:
+        with tempfile.TemporaryDirectory(prefix="fact-central-pdf-ocr-") as temporal:
+            for indice in range(paginas):
+                pagina = documento[indice]
+                bitmap = pagina.render(scale=3)
+                imagen = bitmap.to_pil()
+                entrada = Path(temporal) / f"pagina-{indice + 1}.png"
+                try:
+                    imagen.save(entrada, format="PNG")
+                finally:
+                    imagen.close()
+                    bitmap.close()
+                    pagina.close()
+                texto, confianza = _ejecutar_tesseract(ejecutable, entrada, idioma, limite)
+                if texto:
+                    textos.append(f"--- Página {indice + 1} ---\n{texto}")
+                if confianza is not None:
+                    confianzas.append(confianza)
+    finally:
+        documento.close()
+    texto_final = _limitar("\n\n".join(textos), limite)
+    confianza_final = round(sum(confianzas) / len(confianzas), 4) if confianzas else None
+    return ResultadoProcesamiento(
+        texto=texto_final,
+        metodo="OCR_PDF",
+        motor="pdfium+tesseract",
+        paginas=paginas,
+        confianza=confianza_final,
+        idioma=idioma,
+        requiere_ocr=False,
+        sugerencia=sugerir_tipo(texto_final),
     )
 
 
@@ -99,21 +163,7 @@ def _procesar_imagen(contenido: bytes, extension: str, limite: int) -> Resultado
     with tempfile.TemporaryDirectory(prefix="fact-central-ocr-") as temporal:
         entrada = Path(temporal) / f"entrada{extension}"
         entrada.write_bytes(contenido)
-        try:
-            proceso = subprocess.run(
-                [ejecutable, str(entrada), "stdout", "-l", idioma, "tsv"],
-                capture_output=True,
-                text=True,
-                timeout=120,
-                check=False,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise DocumentoNoProcesable("El OCR excedió el tiempo máximo de procesamiento") from exc
-    if proceso.returncode != 0:
-        detalle = proceso.stderr.strip().splitlines()
-        mensaje = detalle[-1][:300] if detalle else "error desconocido"
-        raise DocumentoNoProcesable(f"Tesseract no pudo procesar la imagen: {mensaje}")
-    texto, confianza = _leer_tsv(proceso.stdout, limite)
+        texto, confianza = _ejecutar_tesseract(ejecutable, entrada, idioma, limite)
     return ResultadoProcesamiento(
         texto=texto,
         metodo="OCR_IMAGEN",
@@ -123,6 +173,36 @@ def _procesar_imagen(contenido: bytes, extension: str, limite: int) -> Resultado
         idioma=idioma,
         sugerencia=sugerir_tipo(texto),
     )
+
+
+def _ejecutar_tesseract(
+    ejecutable: str, entrada: Path, idioma: str, limite: int
+) -> tuple[str, float | None]:
+    try:
+        proceso = subprocess.run(
+            [ejecutable, str(entrada), "stdout", "-l", idioma, "tsv"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise DocumentoNoProcesable("El OCR excedió el tiempo máximo de procesamiento") from exc
+    if proceso.returncode != 0:
+        detalle = proceso.stderr.strip().splitlines()
+        mensaje = detalle[-1][:300] if detalle else "error desconocido"
+        raise DocumentoNoProcesable(f"Tesseract no pudo procesar la imagen: {mensaje}")
+    return _leer_tsv(proceso.stdout, limite)
+
+
+def _cantidad_paginas(contenido: bytes) -> int:
+    try:
+        documento = pdfium.PdfDocument(contenido)
+        paginas = len(documento)
+        documento.close()
+        return paginas
+    except Exception:
+        return 0
 
 
 def _idioma_disponible(ejecutable: str) -> str:
