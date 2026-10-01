@@ -171,6 +171,17 @@ La arquitectura funcional está documentada. El foco actual es construir y valid
 - [`docs/ESQUEMA_MVP.md`](docs/ESQUEMA_MVP.md) — esquema de datos único del MVP.
 - [`docs/futuro/`](docs/futuro/) — visión a largo plazo (NEXUS, agentes, infraestructura avanzada), fuera del alcance actual.
 
+## Ejecución local del MVP
+
+Para probar FACT CENTRAL sin autenticación ni Docker:
+
+- Windows: ejecuta `iniciar-local.cmd`.
+- Linux/macOS: ejecuta `./iniciar-local.sh`.
+
+El iniciador crea una base SQLite local, conserva los documentos en
+`backend/storage_local` y abre la interfaz en `http://127.0.0.1:5173`.
+PostgreSQL continúa siendo la base oficial para despliegues y validación de producción.
+
 ---
 
 # Filosofía
