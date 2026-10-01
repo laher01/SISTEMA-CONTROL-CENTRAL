@@ -4,4 +4,6 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 storage/
+storage_local/
+fact_central_local.db
 .env
