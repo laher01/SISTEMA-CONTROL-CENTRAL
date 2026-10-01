@@ -11,6 +11,7 @@ from app.api.errores import no_encontrado, validar_gestor
 from app.enums import EstadoDocumento, TipoDocumento
 from app.models import Documento
 from app.schemas import DocumentoOut, DocumentoVincular
+from app.services import auditoria
 from app.services.ingesta import (
     ArchivoSubido,
     DocumentoDuplicado,
@@ -18,6 +19,7 @@ from app.services.ingesta import (
     ingerir_documento,
     vincular_documento,
 )
+from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 from app.services.ubl import UblInvalido
 
 router = APIRouter(prefix="/documentos", tags=["documentos"])
@@ -136,6 +138,48 @@ def descargar_archivo(
         content_disposition_type="inline" if en_linea else "attachment",
         headers={"Content-Security-Policy": "sandbox", "X-Content-Type-Options": "nosniff"},
     )
+
+
+@router.post("/{documento_id}/procesar", response_model=DocumentoOut)
+def procesar_documento(
+    session: SessionDep,
+    settings: SettingsDep,
+    almacen: AlmacenDep,
+    tenant_id: TenantDep,
+    documento_id: uuid.UUID,
+) -> Documento:
+    documento = _documento(session, tenant_id, documento_id)
+    contenido = almacen.ruta_absoluta(documento.ruta_storage).read_bytes()
+    try:
+        resultado = procesar(contenido, settings.max_extracted_chars)
+    except DocumentoNoProcesable as exc:
+        auditoria.registrar(
+            session,
+            tenant_id,
+            "PROCESAMIENTO_DOCUMENTAL_FALLIDO",
+            "documento",
+            documento.id,
+            {"motivo": str(exc)},
+        )
+        session.commit()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    datos = dict(documento.datos_extraidos or {})
+    datos["procesamiento_documental"] = resultado.a_dict()
+    documento.datos_extraidos = datos
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "PROCESAMIENTO_DOCUMENTAL_COMPLETADO",
+        "documento",
+        documento.id,
+        {
+            "metodo": resultado.metodo,
+            "motor": resultado.motor,
+            "requiere_ocr": resultado.requiere_ocr,
+        },
+    )
+    session.commit()
+    return documento
 
 
 @router.post("/{documento_id}/vincular", response_model=DocumentoOut)
