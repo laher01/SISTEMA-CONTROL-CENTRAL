@@ -1,9 +1,12 @@
 import io
 from datetime import date
 
+import pytest
 from fastapi.testclient import TestClient
 from pypdf import PdfWriter
 
+from app.api.routes import documentos as documentos_routes
+from app.services.procesamiento_documental import ResultadoProcesamiento
 from tests.conftest import Reloj
 from tests.xml import RECEPTOR, factura, guia
 
@@ -241,3 +244,31 @@ def test_procesar_archivo_no_soportado_no_pierde_original(client: TestClient) ->
     assert respuesta.status_code == 422
     descarga = client.get(f"/api/v1/documentos/{documento['id']}/archivo")
     assert descarga.content == b"texto simple"
+
+
+def test_sugiere_relacion_por_evidencia_sin_vincular(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    factura_subida = subir(client, "factura.xml", factura())
+    pendiente = subir(client, "voucher.png", b"\x89PNG\r\n\x1a\ncontenido")
+    texto = "PAGO DE F001-00000123 RUC 20500000002 CLIENTE 20100000001 TOTAL 2,500.00"
+    monkeypatch.setattr(
+        documentos_routes,
+        "procesar",
+        lambda *_: ResultadoProcesamiento(
+            texto=texto,
+            metodo="OCR_IMAGEN",
+            motor="prueba",
+            paginas=1,
+            confianza=0.95,
+        ),
+    )
+    procesado = client.post(f"/api/v1/documentos/{pendiente['id']}/procesar")
+    assert procesado.status_code == 200
+    sugerencias = client.get(f"/api/v1/documentos/{pendiente['id']}/relaciones-sugeridas").json()
+    assert len(sugerencias) == 1
+    assert sugerencias[0]["expediente"]["id"] == factura_subida["expediente_id"]
+    assert sugerencias[0]["puntaje"] == 1.0
+    assert "Comprobante F001-123" in sugerencias[0]["evidencias"]
+    detalle = expediente(client, factura_subida["expediente_id"])
+    assert all(documento["id"] != pendiente["id"] for documento in detalle["documentos"])
