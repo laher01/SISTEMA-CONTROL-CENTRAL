@@ -89,6 +89,12 @@ export interface ExpedienteDetalle extends Expediente {
   fecha_limite: string;
 }
 
+export interface RelacionSugerida {
+  expediente: Expediente;
+  puntaje: number;
+  evidencias: string[];
+}
+
 export interface DashboardResumen {
   expedientes_total: number;
   por_estado: Record<EstadoExpediente, number>;
