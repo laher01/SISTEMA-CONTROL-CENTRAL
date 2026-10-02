@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     max_upload_mb: int = 20
     max_extracted_chars: int = 200_000
     max_ocr_pdf_pages: int = 50
+    tenant_ruc: str | None = None
+    procesamiento_automatico: bool = True
+    confianza_minima_clasificacion: float = 0.80
+    confianza_minima_expediente: float = 0.75
     cors_origins: list[str] = []
 
     def hoy(self) -> date:

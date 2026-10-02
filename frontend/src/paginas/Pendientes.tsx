@@ -20,6 +20,12 @@ import {
 
 const POR_PAGINA = 50;
 const ESTADOS_PENDIENTES = ["PENDIENTE_CLASIFICACION", "PENDIENTE_RELACION"] as const;
+type ResultadoLote = {
+  considerados: number;
+  relacionados: number;
+  revision_requerida: number;
+  fallidos: number;
+};
 type SeleccionSugerida = { expediente: Expediente; tipo?: TipoDocumento };
 type CampoExtraido = {
   nombre: string;
@@ -51,6 +57,26 @@ export default function Pendientes() {
       offset: String(pagina * POR_PAGINA),
     }),
   );
+  const [procesandoLote, setProcesandoLote] = useState(false);
+  const [resultadoLote, setResultadoLote] = useState<ResultadoLote>();
+  const [errorLote, setErrorLote] = useState("");
+
+  const procesarAutomaticamente = async () => {
+    setProcesandoLote(true);
+    setErrorLote("");
+    try {
+      const resultado = await enviarJson<ResultadoLote>(
+        "/api/v1/documentos/procesar-pendientes?limit=50",
+        "POST",
+      );
+      setResultadoLote(resultado);
+      recargar();
+    } catch (e) {
+      setErrorLote(e instanceof Error ? e.message : String(e));
+    } finally {
+      setProcesandoLote(false);
+    }
+  };
 
   const cambiar = (siguienteEstado: string, siguientePagina: number) =>
     setParametros({ estado: siguienteEstado, pagina: String(siguientePagina) });
@@ -59,8 +85,8 @@ export default function Pendientes() {
     <>
       <h2>Documentos pendientes</h2>
       <p className="tenue">
-        Archivos que no se pudieron asociar solos (PDF, imágenes o guías sin factura). Indica su tipo
-        y el expediente al que pertenecen.
+        Aquí aparecen únicamente los archivos que necesitan revisión porque faltan datos o la
+        confianza automática no fue suficiente.
       </p>
       <div className="filtros">
         <select value={estado} onChange={(e) => cambiar(e.target.value, 0)}>
@@ -70,7 +96,17 @@ export default function Pendientes() {
             </option>
           ))}
         </select>
+        <button onClick={procesarAutomaticamente} disabled={procesandoLote}>
+          {procesandoLote ? "Procesando en orden…" : "Procesar pendientes automáticamente"}
+        </button>
       </div>
+      {resultadoLote && (
+        <p className="resumen-carga">
+          {resultadoLote.considerados} revisados · {resultadoLote.relacionados} relacionados ·{" "}
+          {resultadoLote.revision_requerida} requieren revisión · {resultadoLote.fallidos} fallidos
+        </p>
+      )}
+      {errorLote && <p className="error">{errorLote}</p>}
       <Estado cargando={cargando} error={error} vacio={datos?.length === 0}>
         <table>
           <thead>
@@ -140,6 +176,7 @@ function Procesar({
   const [error, setError] = useState("");
   const [relaciones, setRelaciones] = useState<RelacionSugerida[]>([]);
   const lectura = obtenerLectura(resultado);
+  const motivosAutomaticos = obtenerMotivosAutomaticos(resultado);
 
   const buscarRelaciones = async () => {
     const candidatas = await obtener<RelacionSugerida[]>(
@@ -176,6 +213,9 @@ function Procesar({
           {lectura.tipoSugerido ? ` · Sugiere ${ETIQUETA_TIPO_DOCUMENTO[lectura.tipoSugerido]}` : ""}
           {lectura.requiereOcr ? " · Requiere OCR" : ""}
         </span>
+        {motivosAutomaticos.length > 0 && (
+          <small className="error">Revisión: {motivosAutomaticos.join("; ")}</small>
+        )}
         {lectura.texto && (
           <details>
             <summary>Ver texto extraído</summary>
@@ -238,6 +278,16 @@ function Procesar({
       {error && <span className="error">{error}</span>}
     </div>
   );
+}
+
+function obtenerMotivosAutomaticos(documento: Documento): string[] {
+  const automatizacion = documento.datos_extraidos?.automatizacion_documental;
+  if (!automatizacion || typeof automatizacion !== "object" || !("motivos" in automatizacion)) {
+    return [];
+  }
+  return Array.isArray(automatizacion.motivos)
+    ? automatizacion.motivos.map((motivo) => String(motivo))
+    : [];
 }
 
 function obtenerLectura(documento: Documento): {
