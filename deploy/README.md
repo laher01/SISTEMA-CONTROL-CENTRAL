@@ -36,13 +36,15 @@ Crear el Environment `staging` en GitHub y guardar estos secretos:
 - `VPS_SSH_PRIVATE_KEY`: clave privada exclusiva para despliegue.
 - `VPS_SSH_KNOWN_HOSTS`: huella SSH verificada de la VPS.
 
-Después de guardar los secretos, crear la variable del Environment
-`ENABLE_STAGING_DEPLOY=true`. Mientras no exista, GitHub ejecutará las validaciones pero omitirá
-el acceso a la VPS, evitando despliegues incompletos.
+El despliegue automático queda habilitado por defecto: cada cambio aceptado en `main` ejecuta
+todas las pruebas y, solo si backend y frontend aprueban, GitHub continúa con el despliegue.
 
-Cada cambio aceptado en `main` ejecuta todas las pruebas. Solo si backend y frontend aprueban,
-GitHub entra por SSH, descarga `main`, crea un respaldo de PostgreSQL, reconstruye los contenedores
-y comprueba `/health`.
+Antes de conectarse, el workflow valida que todos los secretos anteriores existan. Después entra por
+SSH, descarga `main`, verifica que la VPS quede exactamente en el commit que disparó el workflow,
+crea un respaldo de PostgreSQL, reconstruye los contenedores y comprueba `/health`.
+
+El disparo manual (`workflow_dispatch`) se mantiene únicamente como contingencia para volver a
+desplegar la versión actual sin modificar código.
 
 ## Operación
 
