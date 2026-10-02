@@ -22,8 +22,8 @@ manual de revisión.
    receptor no está autorizado ("trabaja con nosotros"), el expediente queda
    pendiente de aprobación.
 5. **Expedientes**: uno por `RUC receptor + tipo + serie + correlativo + RUC
-   emisor`. Los documentos se vinculan automáticamente (XML) o manualmente
-   (PDF, imágenes, voucher, correos, WhatsApp).
+   emisor`. XML y PDF con extracción completa se vinculan automáticamente; imágenes y documentos
+   ambiguos quedan para revisión.
 6. **Estado del expediente** (semáforo de BUSINESS_RULES):
    - Principales: `FACT + GRR + VCHR` (o `RHE + VCHR`; la GRR puede marcarse
      como no requerida para servicios).
@@ -46,7 +46,8 @@ manual de revisión.
 - Infraestructura multi-nodo/multi-región → `docs/futuro/infraestructura/`.
 - Multi-tenant real, suscripciones y facturación SaaS (el esquema ya incluye
   `tenant_id`, pero el MVP opera con un solo tenant).
-- OCR e IA para PDF/imágenes (en el MVP los datos se ingresan manualmente).
+- Interpretación semántica avanzada de documentos con formatos no reconocidos; el OCR y la
+  extracción determinista de PDF/imágenes ya forman parte del flujo ejecutable.
 - Comisiones, adelantos, liquidaciones y pagos a gestores.
 - Clasificación de productos y validación del giro comercial.
 - Autenticación JWT/RBAC (siguiente paso inmediato tras validar el flujo).

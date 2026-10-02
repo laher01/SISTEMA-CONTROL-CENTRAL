@@ -1,15 +1,18 @@
 import uuid
 from datetime import date
 from decimal import Decimal
+from threading import Lock
 from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.api.deps import AlmacenDep, HoyDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado, validar_gestor
+from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, TipoDocumento
 from app.models import Documento
 from app.schemas import (
@@ -19,9 +22,16 @@ from app.schemas import (
     ExpedienteAsistidoOut,
     ExpedienteOut,
     ExtraccionConfirmar,
+    ProcesamientoLoteOut,
     RelacionSugeridaOut,
 )
 from app.services import auditoria
+from app.services.automatizacion_documental import (
+    ResultadoAutomatizacion,
+    aplicar_automaticamente,
+    guardar_procesamiento,
+    registrar_fallo,
+)
 from app.services.expedientes import buscar_expediente
 from app.services.ingesta import (
     ArchivoSubido,
@@ -34,8 +44,10 @@ from app.services.ingesta import (
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 from app.services.relaciones_documentales import sugerir_relaciones
 from app.services.ubl import UblInvalido
+from app.storage import AlmacenLocal
 
 router = APIRouter(prefix="/documentos", tags=["documentos"])
+_PROCESAMIENTO_LOCK = Lock()
 
 
 def _duplicado(documento_id: uuid.UUID) -> HTTPException:
@@ -86,6 +98,11 @@ async def subir_documento(
             expediente_id,
             gestor_id,
         )
+        if settings.procesamiento_automatico and _es_procesable(documento):
+            try:
+                _procesar_y_aplicar(session, settings, almacen, hoy, documento)
+            except DocumentoNoProcesable as exc:
+                registrar_fallo(session, documento, str(exc))
         session.commit()
     except DocumentoDuplicado as exc:
         raise _duplicado(exc.documento_id) from exc
@@ -158,41 +175,114 @@ def procesar_documento(
     session: SessionDep,
     settings: SettingsDep,
     almacen: AlmacenDep,
+    hoy: HoyDep,
     tenant_id: TenantDep,
     documento_id: uuid.UUID,
 ) -> Documento:
     documento = _documento(session, tenant_id, documento_id)
-    contenido = almacen.ruta_absoluta(documento.ruta_storage).read_bytes()
     try:
-        resultado = procesar(contenido, settings.max_extracted_chars, settings.max_ocr_pdf_pages)
+        _procesar_y_aplicar(session, settings, almacen, hoy, documento)
     except DocumentoNoProcesable as exc:
-        auditoria.registrar(
-            session,
-            tenant_id,
-            "PROCESAMIENTO_DOCUMENTAL_FALLIDO",
-            "documento",
-            documento.id,
-            {"motivo": str(exc)},
-        )
+        registrar_fallo(session, documento, str(exc))
         session.commit()
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
-    datos = dict(documento.datos_extraidos or {})
-    datos["procesamiento_documental"] = resultado.a_dict()
-    documento.datos_extraidos = datos
-    auditoria.registrar(
-        session,
-        tenant_id,
-        "PROCESAMIENTO_DOCUMENTAL_COMPLETADO",
-        "documento",
-        documento.id,
-        {
-            "metodo": resultado.metodo,
-            "motor": resultado.motor,
-            "requiere_ocr": resultado.requiere_ocr,
-        },
-    )
     session.commit()
     return documento
+
+
+@router.post("/procesar-pendientes", response_model=ProcesamientoLoteOut)
+def procesar_pendientes(
+    session: SessionDep,
+    settings: SettingsDep,
+    almacen: AlmacenDep,
+    hoy: HoyDep,
+    tenant_id: TenantDep,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    forzar: bool = False,
+) -> ProcesamientoLoteOut:
+    """Procesa secuencialmente documentos existentes para proteger VPS pequeñas."""
+    consulta = (
+        select(Documento)
+        .where(
+            Documento.tenant_id == tenant_id,
+            Documento.deleted_at.is_(None),
+            Documento.estado.in_(
+                [EstadoDocumento.PENDIENTE_CLASIFICACION, EstadoDocumento.PENDIENTE_RELACION]
+            ),
+        )
+        .order_by(Documento.created_at.asc())
+        .limit(200)
+    )
+    candidatos = list(session.scalars(consulta))
+    documentos = [
+        documento
+        for documento in candidatos
+        if forzar or not _automatizacion_ya_evaluada(documento)
+    ][:limit]
+    relacionados = revision = fallidos = 0
+    for documento in documentos:
+        try:
+            resultado = _procesar_y_aplicar(
+                session,
+                settings,
+                almacen,
+                hoy,
+                documento,
+                reutilizar=True,
+            )
+        except DocumentoNoProcesable as exc:
+            resultado = registrar_fallo(session, documento, str(exc))
+        if resultado.relacionado:
+            relacionados += 1
+        elif resultado.estado == "FALLIDO":
+            fallidos += 1
+        else:
+            revision += 1
+        session.commit()
+    return ProcesamientoLoteOut(
+        considerados=len(documentos),
+        relacionados=relacionados,
+        revision_requerida=revision,
+        fallidos=fallidos,
+    )
+
+
+def _procesar_y_aplicar(
+    session: Session,
+    settings: Settings,
+    almacen: AlmacenLocal,
+    hoy: date,
+    documento: Documento,
+    reutilizar: bool = False,
+) -> ResultadoAutomatizacion:
+    datos = documento.datos_extraidos or {}
+    existente = datos.get("procesamiento_documental")
+    if reutilizar and isinstance(existente, dict):
+        procesamiento = existente
+    else:
+        contenido = almacen.ruta_absoluta(documento.ruta_storage).read_bytes()
+        with _PROCESAMIENTO_LOCK:
+            procesamiento = procesar(
+                contenido, settings.max_extracted_chars, settings.max_ocr_pdf_pages
+            ).a_dict()
+        guardar_procesamiento(session, documento, procesamiento)
+    return aplicar_automaticamente(session, settings, hoy, documento, procesamiento)
+
+
+def _es_procesable(documento: Documento) -> bool:
+    nombre = documento.nombre_original.lower()
+    return documento.mime_type.startswith(("application/pdf", "image/")) or nombre.endswith(
+        (".pdf", ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp")
+    )
+
+
+def _automatizacion_ya_evaluada(documento: Documento) -> bool:
+    datos = documento.datos_extraidos or {}
+    automatizacion = datos.get("automatizacion_documental")
+    return isinstance(automatizacion, dict) and automatizacion.get("estado") in {
+        "REVISION_REQUERIDA",
+        "FALLIDO",
+    }
 
 
 @router.put("/{documento_id}/extraccion-confirmada", response_model=DocumentoOut)

@@ -6,8 +6,9 @@ from fastapi.testclient import TestClient
 from pypdf import PdfWriter
 
 from app.api.routes import documentos as documentos_routes
+from app.core.config import Settings
 from app.services import procesamiento_documental
-from app.services.procesamiento_documental import ResultadoProcesamiento
+from app.services.procesamiento_documental import ResultadoProcesamiento, sugerir_tipo
 from tests.conftest import Reloj
 from tests.xml import RECEPTOR, factura, guia
 
@@ -240,6 +241,108 @@ def test_procesar_pdf_conserva_resultado_verificable(
     assert procesamiento["motor"] == "pypdf"
     assert procesamiento["paginas"] == 1
     assert procesamiento["requiere_ocr"] is True
+
+
+def test_pdf_completo_crea_expediente_automaticamente(
+    client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings.tenant_ruc = RECEPTOR
+    texto = """FACTURA ELECTRÓNICA F001-00000123
+    RUC EMISOR: 20500000002 CLIENTE RUC: 20100000001
+    Fecha de emisión: 17/09/2026 Moneda: SOLES TOTAL S/ 2,500.40"""
+    monkeypatch.setattr(
+        documentos_routes,
+        "procesar",
+        lambda *_: ResultadoProcesamiento(
+            texto=texto,
+            metodo="TEXTO_PDF",
+            motor="prueba",
+            paginas=1,
+            confianza=1.0,
+            sugerencia=sugerir_tipo(texto),
+        ),
+    )
+
+    documento = subir(client, "factura.pdf", pdf_vacio())
+
+    assert documento["estado"] == "RELACIONADO"
+    assert documento["tipo_documento"] == "FACT"
+    assert documento["expediente_id"] is not None
+    datos = documento["datos_extraidos"]
+    assert datos["extraccion_confirmada"]["origen"] == "AUTOMATICA"
+    assert datos["automatizacion_documental"]["estado"] == "COMPLETADO"
+    detalle = expediente(client, documento["expediente_id"])
+    assert detalle["serie"] == "F001"
+    assert detalle["correlativo"] == "123"
+    assert detalle["receptor"]["ruc"] == RECEPTOR
+
+    segunda = subir(client, "misma-factura-otra-representacion.pdf", pdf_vacio() + b"segunda")
+    assert segunda["expediente_id"] == documento["expediente_id"]
+    assert len(expediente(client, documento["expediente_id"])["documentos"]) == 2
+
+
+def test_pdf_incompleto_queda_en_revision_con_motivo(
+    client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings.tenant_ruc = RECEPTOR
+    texto = "FACTURA ELECTRÓNICA F001-00000123"
+    monkeypatch.setattr(
+        documentos_routes,
+        "procesar",
+        lambda *_: ResultadoProcesamiento(
+            texto=texto,
+            metodo="TEXTO_PDF",
+            motor="prueba",
+            paginas=1,
+            confianza=1.0,
+            sugerencia=sugerir_tipo(texto),
+        ),
+    )
+
+    documento = subir(client, "incompleta.pdf", pdf_vacio())
+
+    assert documento["estado"] == "PENDIENTE_RELACION"
+    assert documento["expediente_id"] is None
+    automatizacion = documento["datos_extraidos"]["automatizacion_documental"]
+    assert automatizacion["estado"] == "REVISION_REQUERIDA"
+    assert "Faltan campos fiscales" in automatizacion["motivos"][0]
+
+
+def test_lote_reutiliza_extraccion_y_relaciona_documentos_existentes(
+    client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings.tenant_ruc = RECEPTOR
+    settings.procesamiento_automatico = False
+    documento = subir(client, "anterior.pdf", pdf_vacio())
+    settings.procesamiento_automatico = True
+    texto = """FACTURA ELECTRÓNICA F002-00000777
+    RUC EMISOR: 20600000003 CLIENTE RUC: 20100000001
+    Fecha de emisión: 18/09/2026 Moneda: SOLES TOTAL S/ 900.00"""
+    monkeypatch.setattr(
+        documentos_routes,
+        "procesar",
+        lambda *_: ResultadoProcesamiento(
+            texto=texto,
+            metodo="TEXTO_PDF",
+            motor="prueba",
+            paginas=1,
+            confianza=1.0,
+            sugerencia=sugerir_tipo(texto),
+        ),
+    )
+
+    respuesta = client.post("/api/v1/documentos/procesar-pendientes", params={"limit": 50})
+
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json() == {
+        "considerados": 1,
+        "relacionados": 1,
+        "revision_requerida": 0,
+        "fallidos": 0,
+    }
+    actualizado = client.get(f"/api/v1/documentos/{documento['id']}").json()
+    assert actualizado["estado"] == "RELACIONADO"
+    assert client.post("/api/v1/documentos/procesar-pendientes").json()["considerados"] == 0
 
 
 def test_procesar_archivo_no_soportado_no_pierde_original(client: TestClient) -> None:

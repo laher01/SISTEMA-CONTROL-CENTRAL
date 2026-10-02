@@ -70,6 +70,13 @@ class DocumentoVincular(BaseModel):
     tipo_documento: TipoDocumento
 
 
+class ProcesamientoLoteOut(BaseModel):
+    considerados: int
+    relacionados: int
+    revision_requerida: int
+    fallidos: int
+
+
 class ExtraccionConfirmar(BaseModel):
     serie: str | None = Field(default=None, pattern=r"^[A-Z0-9]{4}$")
     correlativo: str | None = Field(default=None, pattern=r"^\d{1,8}$")
