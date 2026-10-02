@@ -51,7 +51,8 @@ manual de revisión.
 - Comisiones, adelantos, liquidaciones y pagos a gestores.
 - Clasificación de productos y validación del giro comercial.
 - Autenticación JWT/RBAC (siguiente paso inmediato tras validar el flujo).
-- Frontend (el MVP expone API REST + documentación OpenAPI en `/docs`).
+- Experiencia visual avanzada, analítica gráfica, personalización por rol y módulos futuros de
+  productos, pagos, auditoría y reportes. El frontend operativo del MVP sí forma parte del alcance.
 
 ## Stack
 
@@ -68,7 +69,7 @@ Esquema de datos: [`ESQUEMA_MVP.md`](ESQUEMA_MVP.md).
 ## Siguientes pasos tras el MVP
 
 1. Autenticación y roles (Administrador, Secretaría, Usuario, Gestor).
-2. Frontend React con el semáforo de expedientes.
-3. OCR de PDF/imágenes.
+2. Evolucionar el frontend operativo a la experiencia visual completa descrita en el plan.
+3. Ampliar OCR y extracción para formatos no reconocidos.
 4. Comisiones y pagos a gestores.
 5. Multi-tenant real.
