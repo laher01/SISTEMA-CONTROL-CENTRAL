@@ -13,9 +13,24 @@ flock -n 9 || { echo "Ya existe otro despliegue en ejecución"; exit 1; }
 test -f "$ENV_FILE" || { echo "Falta $ENV_FILE"; exit 1; }
 mkdir -p "$BACKUP_DIR"
 
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "El repositorio de la VPS tiene cambios locales. Se cancela el despliegue para no sobrescribirlos." >&2
+  git status --short
+  exit 1
+fi
+
+previous_commit="$(git rev-parse HEAD)"
 git fetch origin main
 git checkout main
 git pull --ff-only origin main
+current_commit="$(git rev-parse HEAD)"
+
+if [ -n "${EXPECTED_COMMIT:-}" ] && [ "$current_commit" != "$EXPECTED_COMMIT" ]; then
+  echo "Commit desplegado inesperado: $current_commit; esperado: $EXPECTED_COMMIT" >&2
+  exit 1
+fi
+
+echo "Actualizando FACT CENTRAL: $previous_commit -> $current_commit"
 
 compose=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 
@@ -33,7 +48,7 @@ fi
 for _ in $(seq 1 30); do
   if curl --fail --silent --show-error http://127.0.0.1:18080/health >/dev/null; then
     "${compose[@]}" ps
-    echo "FACT CENTRAL desplegado correctamente"
+    echo "FACT CENTRAL desplegado correctamente en $current_commit"
     exit 0
   fi
   sleep 2
