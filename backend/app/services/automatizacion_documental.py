@@ -147,7 +147,10 @@ def aplicar_automaticamente(
 
     campos_confirmados = {campo: campos[campo] for campo in CAMPOS_FISCALES}
     for opcional in ("razon_social_emisor", "razon_social_receptor"):
-        if opcional in campos and confianzas.get(opcional, 0) >= settings.confianza_minima_expediente:
+        if (
+            opcional in campos
+            and confianzas.get(opcional, 0) >= settings.confianza_minima_expediente
+        ):
             campos_confirmados[opcional] = campos[opcional]
     confirmacion = {
         "version": 2,
