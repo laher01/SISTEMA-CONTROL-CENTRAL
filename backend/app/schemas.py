@@ -464,3 +464,14 @@ class PagoERPOut(Orm):
     voucher_documento_id: uuid.UUID | None
     conciliado: bool
     created_at: datetime
+
+
+class FiltroOpcion(BaseModel):
+    id: uuid.UUID
+    codigo: str
+    nombre: str
+
+
+class RegistroOpciones(BaseModel):
+    usuarios: list[FiltroOpcion]
+    gestores: list[FiltroOpcion]
