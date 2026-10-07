@@ -86,27 +86,25 @@ def actualizar(
 ) -> Gestor:
     gestor = _gestor_editable(session, tenant_id, auth, gestor_id)
 
-    if datos.usuario_id is not None:
-        if auth.rol != RolMiembro.ADMINISTRADOR:
-            if datos.usuario_id != auth.usuario_id:
+    try:
+        if datos.usuario_id is not None:
+            if auth.rol != RolMiembro.ADMINISTRADOR and datos.usuario_id != auth.usuario_id:
                 raise HTTPException(
                     status.HTTP_403_FORBIDDEN,
                     "Un Usuario no puede reasignar su Gestor a otro Usuario",
                 )
-        usuario = _usuario_valido(session, tenant_id, datos.usuario_id)
-        gestor.usuario_id = usuario.id
-    if datos.codigo is not None:
-        actualizar_login_cuenta(
-            session,
-            tenant_id,
-            datos.codigo,
-            gestor_id=gestor.id,
-        )
-        gestor.codigo = datos.codigo.strip().upper()
-    if datos.nombre is not None:
-        gestor.nombre = datos.nombre.strip()
-
-    try:
+            usuario = _usuario_valido(session, tenant_id, datos.usuario_id)
+            gestor.usuario_id = usuario.id
+        if datos.codigo is not None:
+            actualizar_login_cuenta(
+                session,
+                tenant_id,
+                datos.codigo,
+                gestor_id=gestor.id,
+            )
+            gestor.codigo = datos.codigo.strip().upper()
+        if datos.nombre is not None:
+            gestor.nombre = datos.nombre.strip()
         session.commit()
     except (IntegrityError, ValueError) as exc:
         session.rollback()
