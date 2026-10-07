@@ -125,7 +125,10 @@ def test_expediente_vencido_queda_rojo(client: TestClient, reloj: Reloj) -> None
 
     detalle = expediente(client, expediente_id)
     assert detalle["estado"] == "ROJO"
-    assert alertas_abiertas(detalle) == {"EXPEDIENTE_VENCIDO"}
+    assert alertas_abiertas(detalle) == {
+        "BANCARIZACION_SIN_VOUCHER",
+        "EXPEDIENTE_VENCIDO",
+    }
 
 
 def test_crear_expediente_manual_rhe_sin_guia(client: TestClient) -> None:
