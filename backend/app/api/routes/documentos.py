@@ -91,10 +91,25 @@ async def subir_documento(
     elif auth.rol == RolMiembro.USUARIO:
         gestor_id = None
         usuario_id = auth.usuario_id
+    elif auth.rol == RolMiembro.SECRETARIA:
+        if expediente_id is None:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Secretaría solo puede adjuntar documentos a expedientes existentes",
+            )
+        expediente_secretaria = session.get(Expediente, expediente_id)
+        if (
+            expediente_secretaria is None
+            or expediente_secretaria.tenant_id != tenant_id
+            or expediente_secretaria.deleted_at
+        ):
+            raise no_encontrado("Expediente")
+        gestor_id = expediente_secretaria.gestor_id
+        usuario_id = expediente_secretaria.usuario_id
     else:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            "Solo un Usuario o Gestor puede subir documentos",
+            "Solo Usuario, Gestor o Secretaría puede cargar documentos operativos",
         )
     if usuario_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "La sesión no tiene un Usuario propietario")
