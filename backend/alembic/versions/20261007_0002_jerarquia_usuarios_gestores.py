@@ -79,7 +79,11 @@ def downgrade() -> None:
     op.drop_column("documentos", "usuario_id")
 
     op.drop_index(op.f("ix_expedientes_usuario_id"), table_name="expedientes")
-    op.drop_constraint(op.f("fk_expedientes_usuario_id_miembros"), "expedientes", type_="foreignkey")
+    op.drop_constraint(
+        op.f("fk_expedientes_usuario_id_miembros"),
+        "expedientes",
+        type_="foreignkey",
+    )
     op.drop_column("expedientes", "usuario_id")
 
     op.drop_index(op.f("ix_gestores_usuario_id"), table_name="gestores")
