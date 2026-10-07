@@ -477,3 +477,31 @@ class FiltroOpcion(BaseModel):
 class RegistroOpciones(BaseModel):
     usuarios: list[FiltroOpcion]
     gestores: list[FiltroOpcion]
+
+
+class NexusFuente(BaseModel):
+    titulo: str
+    url: str | None = None
+    tipo: str
+
+
+class NexusChatIn(BaseModel):
+    mensaje: str = Field(min_length=1, max_length=2000)
+    ruta: str = Field(default="/", max_length=500)
+    expediente_id: uuid.UUID | None = None
+
+
+class NexusChatOut(BaseModel):
+    respuesta: str
+    accion: str
+    fuentes: list[NexusFuente] = []
+    datos: dict[str, object] = {}
+    internet_usado: bool = False
+    requiere_configuracion_externa: bool = False
+
+
+class NexusEstadoOut(BaseModel):
+    asistente_activo: bool
+    consulta_ruc_externa: bool
+    busqueda_internet: bool
+    fuente_oficial_preferida: str
