@@ -8,6 +8,7 @@ Create Date: 2026-10-07
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
@@ -83,8 +84,16 @@ def upgrade() -> None:
         sa.Column("actor_codigo", sa.String(length=100), nullable=False),
         sa.Column("actor_rol", sa.String(length=20), nullable=False),
         sa.Column("formato", sa.String(length=30), nullable=True),
-        sa.Column("resultado_original", sa.JSON(), nullable=True),
-        sa.Column("resultado_corregido", sa.JSON(), nullable=False),
+        sa.Column(
+            "resultado_original",
+            sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), "postgresql"),
+            nullable=True,
+        ),
+        sa.Column(
+            "resultado_corregido",
+            sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), "postgresql"),
+            nullable=False,
+        ),
         sa.Column("motivo", sa.String(length=500), nullable=True),
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("tenant_id", sa.Uuid(), nullable=False),
