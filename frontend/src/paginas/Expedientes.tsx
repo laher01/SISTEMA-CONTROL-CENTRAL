@@ -2,7 +2,7 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { conParametros, useDatos } from "../api";
 import { Estado, Paginacion, Semaforo } from "../componentes";
-import { ETIQUETA_ESTADO, formatearFecha, formatearMonto, numeroComprobante } from "../formato";
+import { ETIQUETA_ESTADO, formatearFecha, formatearMonto, numeroExpediente } from "../formato";
 import { ESTADOS_EXPEDIENTE, type Expediente } from "../tipos";
 
 const POR_PAGINA = 50;
@@ -38,7 +38,7 @@ export default function Expedientes() {
       <h2>Expedientes</h2>
       <div className="filtros">
         <input
-          placeholder="Buscar F001-123, RUC o proveedor"
+          placeholder="Buscar F001-123, RHE-E001-15, RUC o proveedor"
           value={buscar}
           maxLength={100}
           onChange={(e) => cambiar("buscar", e.target.value)}
@@ -83,7 +83,9 @@ export default function Expedientes() {
                 </td>
                 <td>
                   <Link to={`/expedientes/${e.id}`}>
-                    {e.tipo_comprobante} {numeroComprobante(e.serie, e.correlativo)}
+                    {e.tipo_comprobante === "RHE"
+                      ? numeroExpediente(e.tipo_comprobante, e.serie, e.correlativo)
+                      : "FACT " + numeroExpediente(e.tipo_comprobante, e.serie, e.correlativo)}
                   </Link>
                 </td>
                 <td>{formatearFecha(e.fecha_emision)}</td>
