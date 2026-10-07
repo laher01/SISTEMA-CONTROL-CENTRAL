@@ -21,6 +21,7 @@ from app.services.expedientes import (
 from app.services.ingesta import crear_expediente
 
 NUMERO_RE = re.compile(r"^([a-z0-9]{4})-0*(\d+)$")
+NUMERO_RHE_RE = re.compile(r"^rhe-([a-z0-9]{4})-0*(\d+)$")
 
 router = APIRouter(prefix="/expedientes", tags=["expedientes"])
 
@@ -102,7 +103,10 @@ def listar(
         )
     if buscar and buscar.strip():
         texto = buscar.strip().lower()
-        if numero := NUMERO_RE.match(texto):
+        if numero_rhe := NUMERO_RHE_RE.match(texto):
+            texto = f"{numero_rhe.group(1)}-{int(numero_rhe.group(2))}"
+            consulta = consulta.where(Expediente.tipo_comprobante == "RHE")
+        elif numero := NUMERO_RE.match(texto):
             texto = f"{numero.group(1)}-{int(numero.group(2))}"
         emisor = aliased(Empresa)
         consulta = consulta.join(emisor, Expediente.emisor_id == emisor.id).where(
