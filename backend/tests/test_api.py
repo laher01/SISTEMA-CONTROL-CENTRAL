@@ -697,9 +697,7 @@ def test_dashboard_desglose_agrupa_y_filtra(client: TestClient) -> None:
         "20600000003",
     }
 
-    empresa = next(
-        fila for fila in por_emisor.json()["filas"] if fila["ruc"] == "20600000003"
-    )
+    empresa = next(fila for fila in por_emisor.json()["filas"] if fila["ruc"] == "20600000003")
     assert empresa["expedientes"] == 1
     assert empresa["total_pen"] == "800.00"
 
