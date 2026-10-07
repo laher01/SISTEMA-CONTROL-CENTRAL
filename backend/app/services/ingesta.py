@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, TipoComprobante, TipoDocumento
-from app.models import Documento, Expediente
+from app.models import Documento, Expediente, Gestor
 from app.services import auditoria
 from app.services.expedientes import (
     actualizar_expediente,
@@ -68,6 +68,10 @@ def ingerir_documento(
         datos = comprobante.a_dict()
         expediente = _expediente_para_comprobante(session, tenant_id, comprobante, gestor_id)
 
+    usuario_id = _usuario_de_gestor(session, tenant_id, gestor_id)
+    if expediente is not None and usuario_id is None:
+        usuario_id = expediente.usuario_id
+
     ruta = almacen.guardar(tenant_id, sha256, archivo.contenido)
     documento = Documento(
         tenant_id=tenant_id,
@@ -81,6 +85,7 @@ def ingerir_documento(
         ruta_storage=ruta,
         datos_extraidos=datos,
         gestor_id=gestor_id,
+        usuario_id=usuario_id,
     )
     session.add(documento)
     session.flush()
@@ -109,6 +114,10 @@ def vincular_documento(
     anterior = documento.expediente
     documento.expediente_id = expediente.id
     documento.tipo_documento = tipo_documento
+    if documento.usuario_id is None:
+        documento.usuario_id = expediente.usuario_id
+    if documento.gestor_id is None:
+        documento.gestor_id = expediente.gestor_id
     documento.estado = EstadoDocumento.RELACIONADO
     auditoria.registrar(
         session,
@@ -142,6 +151,7 @@ def crear_expediente(
 ) -> Expediente:
     empresa_receptora = obtener_o_crear_empresa(session, tenant_id, *receptor)
     empresa_emisora = obtener_o_crear_empresa(session, tenant_id, *emisor)
+    usuario_id = _usuario_de_gestor(session, tenant_id, gestor_id)
     expediente = Expediente(
         tenant_id=tenant_id,
         receptor_id=empresa_receptora.id,
@@ -154,6 +164,7 @@ def crear_expediente(
         importe_total=importe_total,
         requiere_guia=requiere_guia and tipo_comprobante == TipoComprobante.FACT,
         gestor_id=gestor_id,
+        usuario_id=usuario_id,
     )
     session.add(expediente)
     session.flush()
@@ -188,6 +199,7 @@ def _expediente_para_comprobante(
         emisor = obtener_o_crear_empresa(
             session, tenant_id, comprobante.emisor.ruc, comprobante.emisor.razon_social
         )
+        usuario_id = _usuario_de_gestor(session, tenant_id, gestor_id)
         expediente = Expediente(
             tenant_id=tenant_id,
             receptor_id=receptor.id,
@@ -199,6 +211,7 @@ def _expediente_para_comprobante(
             moneda=comprobante.moneda,
             importe_total=comprobante.importe_total,
             gestor_id=gestor_id,
+            usuario_id=usuario_id,
         )
         session.add(expediente)
         session.flush()
@@ -240,3 +253,14 @@ def _estado_documento(
 
 def _str(expediente: Expediente | None) -> str | None:
     return str(expediente.id) if expediente else None
+
+
+def _usuario_de_gestor(
+    session: Session, tenant_id: uuid.UUID, gestor_id: uuid.UUID | None
+) -> uuid.UUID | None:
+    if gestor_id is None:
+        return None
+    gestor = session.get(Gestor, gestor_id)
+    if gestor is None or gestor.tenant_id != tenant_id or gestor.deleted_at is not None:
+        return None
+    return gestor.usuario_id
