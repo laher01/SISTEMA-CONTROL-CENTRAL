@@ -351,7 +351,6 @@ def _razon_social_cercana_a_ruc(texto: str, ruc: str) -> tuple[str, str] | None:
     return None
 
 
-
 def _rucs_en_texto(texto: str) -> list[str]:
     encontrados: list[str] = []
     for coincidencia in RUC_FLEXIBLE.finditer(texto):
