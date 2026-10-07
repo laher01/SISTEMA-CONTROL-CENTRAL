@@ -40,6 +40,8 @@ const ETIQUETAS_CAMPOS: Record<string, string> = {
   correlativo: "Correlativo",
   ruc_emisor: "RUC emisor",
   ruc_receptor: "RUC receptor",
+  razon_social_emisor: "Razón social emisor",
+  razon_social_receptor: "Razón social receptor",
   fecha_emision: "Fecha de emisión",
   moneda: "Moneda",
   importe_total: "Importe total",
@@ -346,8 +348,12 @@ function ConfirmarCampos({
   const [tipoComprobante, setTipoComprobante] = useState<"FACT" | "RHE">(
     tipoSugerido === "RHE" ? "RHE" : "FACT",
   );
-  const [razonEmisor, setRazonEmisor] = useState("");
-  const [razonReceptor, setRazonReceptor] = useState("");
+  const [razonEmisor, setRazonEmisor] = useState(
+    campos.find((campo) => campo.nombre === "razon_social_emisor")?.valor ?? "",
+  );
+  const [razonReceptor, setRazonReceptor] = useState(
+    campos.find((campo) => campo.nombre === "razon_social_receptor")?.valor ?? "",
+  );
   const [requiereGuia, setRequiereGuia] = useState(tipoSugerido !== "RHE");
   const [error, setError] = useState("");
   const guardar = async () => {
