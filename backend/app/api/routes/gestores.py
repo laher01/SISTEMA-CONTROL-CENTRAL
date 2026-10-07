@@ -46,7 +46,10 @@ def crear(
         session.commit()
     except (IntegrityError, ValueError) as exc:
         session.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "El código/login de gestor ya existe") from exc
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "El código/login de gestor ya existe",
+        ) from exc
     return AltaGestorOut(
         gestor=GestorOut.model_validate(gestor),
         credencial=CredencialTemporalOut(login=gestor.codigo, clave_temporal=temporal),
@@ -139,7 +142,10 @@ def _usuario_objetivo(auth: OperativeAuthDep, solicitado: uuid.UUID) -> uuid.UUI
         return solicitado
     if auth.rol == RolMiembro.USUARIO and auth.usuario_id is not None:
         return auth.usuario_id
-    raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Administración o Usuario puede crear Gestores")
+    raise HTTPException(
+        status.HTTP_403_FORBIDDEN,
+        "Solo Administración o Usuario puede crear Gestores",
+    )
 
 
 def _usuario_valido(session: SessionDep, tenant_id: uuid.UUID, usuario_id: uuid.UUID) -> Miembro:
