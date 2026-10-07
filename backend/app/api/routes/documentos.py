@@ -123,6 +123,8 @@ def listar_documentos(
     estado: EstadoDocumento | None = None,
     tipo_documento: TipoDocumento | None = None,
     expediente_id: uuid.UUID | None = None,
+    usuario_id: uuid.UUID | None = None,
+    gestor_id: uuid.UUID | None = None,
     emisor_ruc: Annotated[str | None, Query(min_length=11, max_length=11)] = None,
     receptor_ruc: Annotated[str | None, Query(min_length=11, max_length=11)] = None,
     fecha_desde: date | None = None,
@@ -139,6 +141,10 @@ def listar_documentos(
         consulta = consulta.where(Documento.tipo_documento == tipo_documento)
     if expediente_id is not None:
         consulta = consulta.where(Documento.expediente_id == expediente_id)
+    if usuario_id is not None:
+        consulta = consulta.where(Documento.usuario_id == usuario_id)
+    if gestor_id is not None:
+        consulta = consulta.where(Documento.gestor_id == gestor_id)
     if fecha_desde is not None:
         consulta = consulta.where(func.date(Documento.created_at) >= fecha_desde)
     if fecha_hasta is not None:
@@ -284,7 +290,7 @@ def procesar_pendientes(
                 almacen,
                 hoy,
                 documento,
-                reutilizar=True,
+                reutilizar=not forzar,
             )
         except DocumentoNoProcesable as exc:
             resultado = registrar_fallo(session, documento, str(exc))
