@@ -661,3 +661,56 @@ def test_reprocesar_partes_repara_empresas_de_documento_relacionado(
     detalle = expediente(client, documento["expediente_id"])
     assert detalle["emisor"]["razon_social"] == "PESQUERA ACTUALIZADA S.A.C."
     assert detalle["receptor"]["razon_social"] == "CLIENTE ACTUALIZADO S.A.C."
+
+
+def test_dashboard_desglose_agrupa_y_filtra(client: TestClient) -> None:
+    subir(
+        client,
+        "septiembre.xml",
+        factura(numero="F001-00001001", fecha="2026-09-10", importe="1200.00"),
+    )
+    subir(
+        client,
+        "octubre.xml",
+        factura(
+            numero="F002-00001002",
+            fecha="2026-10-02",
+            importe="800.00",
+            emisor="20600000003",
+        ),
+    )
+
+    por_mes = client.get(
+        "/api/v1/dashboard/desglose",
+        params={"agrupar_por": "mes", "orden": "asc"},
+    )
+    assert por_mes.status_code == 200, por_mes.text
+    assert [fila["clave"] for fila in por_mes.json()["filas"]] == ["2026-09", "2026-10"]
+
+    por_emisor = client.get(
+        "/api/v1/dashboard/desglose",
+        params={"agrupar_por": "emisor", "orden": "desc"},
+    )
+    assert por_emisor.status_code == 200, por_emisor.text
+    assert {fila["ruc"] for fila in por_emisor.json()["filas"]} == {
+        "20500000002",
+        "20600000003",
+    }
+
+    empresa = next(
+        fila for fila in por_emisor.json()["filas"] if fila["ruc"] == "20600000003"
+    )
+    assert empresa["expedientes"] == 1
+    assert empresa["total_pen"] == "800.00"
+
+    octubre = client.get(
+        "/api/v1/dashboard/desglose",
+        params={
+            "agrupar_por": "dia",
+            "fecha_desde": "2026-10-01",
+            "fecha_hasta": "2026-10-31",
+        },
+    )
+    assert octubre.status_code == 200, octubre.text
+    assert len(octubre.json()["filas"]) == 1
+    assert octubre.json()["filas"][0]["clave"] == "2026-10-02"
