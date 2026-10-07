@@ -422,19 +422,23 @@ def _parsear_facturalaya(
 
     # Facturalaya suele incluir "NOMBRE - RUC" en el encabezado.
     for linea in lineas:
-        if ruc_emisor in re.sub(r"\D", "", linea):
-            patron = r"[-–—]?\s*" + re.escape(ruc_emisor) + r"\s*$"
-            candidato = re.sub(patron, "", linea).strip(" -:")
-            if _razon_social_valida(candidato):
-                _poner_campo(
-                    campos,
-                    "razon_social_emisor",
-                    candidato,
-                    min(0.96, 0.94 * factor),
-                    linea,
-                    fuente,
-                )
-                break
+        if ruc_emisor not in re.sub(r"\D", "", linea):
+            continue
+        normal = _sin_tildes(linea).upper().strip()
+        if re.match(r"^R\.?U\.?C\.?(?:\s|:)", normal):
+            continue
+        patron = r"[-–—]?\s*" + re.escape(ruc_emisor) + r"\s*$"
+        candidato = re.sub(patron, "", linea).strip(" -:")
+        if _razon_social_valida(candidato):
+            _poner_campo(
+                campos,
+                "razon_social_emisor",
+                candidato,
+                min(0.96, 0.94 * factor),
+                linea,
+                fuente,
+            )
+            break
 
     receptor = _bloque_despues_de_etiqueta(
         lineas,
