@@ -93,6 +93,12 @@ class DocumentoOut(Orm):
     mime_type: str
     tamano_bytes: int
     datos_extraidos: dict[str, object] | None
+    formato_origen: str | None
+    fecha_emision: date | None = None
+    serie: str | None = None
+    correlativo: str | None = None
+    moneda: Moneda | None = None
+    importe_total: Decimal | None = None
     gestor_id: uuid.UUID | None
     usuario_id: uuid.UUID | None
     created_at: datetime
