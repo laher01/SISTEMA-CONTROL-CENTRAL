@@ -57,8 +57,8 @@ export function enviarFormulario<T>(ruta: string, formulario: FormData): Promise
   return solicitar<T>(ruta, { method: "POST", body: formulario });
 }
 
-export function eliminar(ruta: string): Promise<void> {
-  return solicitar<void>(ruta, { method: "DELETE" });
+export function eliminar(ruta: string): Promise<unknown> {
+  return solicitar<unknown>(ruta, { method: "DELETE" });
 }
 
 export function urlArchivo(documentoId: string): string {
