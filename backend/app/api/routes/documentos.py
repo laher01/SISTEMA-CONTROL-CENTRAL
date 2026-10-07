@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, selectinload
 
@@ -265,13 +265,29 @@ def procesar_pendientes(
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     forzar: bool = False,
     sin_expediente: bool = False,
+    completar_partes: bool = False,
 ) -> ProcesamientoLoteOut:
     """Procesa secuencialmente documentos existentes para proteger VPS pequeñas."""
     consulta = select(Documento).where(
         Documento.tenant_id == tenant_id,
         Documento.deleted_at.is_(None),
     )
-    if sin_expediente:
+    if completar_partes:
+        emisor_empresa = aliased(Empresa)
+        receptor_empresa = aliased(Empresa)
+        consulta = (
+            consulta.outerjoin(Expediente, Documento.expediente_id == Expediente.id)
+            .outerjoin(emisor_empresa, Expediente.emisor_id == emisor_empresa.id)
+            .outerjoin(receptor_empresa, Expediente.receptor_id == receptor_empresa.id)
+            .where(
+                or_(
+                    Documento.expediente_id.is_(None),
+                    emisor_empresa.razon_social == emisor_empresa.ruc,
+                    receptor_empresa.razon_social == receptor_empresa.ruc,
+                )
+            )
+        )
+    elif sin_expediente:
         consulta = consulta.where(Documento.expediente_id.is_(None))
     else:
         consulta = consulta.where(
