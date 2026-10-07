@@ -27,6 +27,11 @@ def crear(
     datos: MiembroIn,
 ) -> AltaMiembroOut:
     _solo_admin(auth.rol)
+    if datos.rol == RolMiembro.SUPERADMIN and auth.rol != RolMiembro.SUPERADMIN:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Solo SUPERADMIN puede crear otro SUPERADMIN",
+        )
     miembro = Miembro(
         tenant_id=tenant_id,
         codigo=datos.codigo.strip().upper(),
@@ -95,6 +100,17 @@ def actualizar(
     miembro = session.get(Miembro, miembro_id)
     if miembro is None or miembro.tenant_id != tenant_id or miembro.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Miembro no encontrado")
+    if (
+        auth.rol != RolMiembro.SUPERADMIN
+        and (
+            miembro.rol == RolMiembro.SUPERADMIN
+            or datos.rol == RolMiembro.SUPERADMIN
+        )
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Solo SUPERADMIN puede modificar cuentas SUPERADMIN",
+        )
 
     quedaria_usuario = datos.rol is None or datos.rol == RolMiembro.USUARIO
     quedaria_activo = datos.activo is None or datos.activo
@@ -148,6 +164,11 @@ def restablecer_acceso(
     miembro = session.get(Miembro, miembro_id)
     if miembro is None or miembro.tenant_id != tenant_id or miembro.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Miembro no encontrado")
+    if miembro.rol == RolMiembro.SUPERADMIN and auth.rol != RolMiembro.SUPERADMIN:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Solo SUPERADMIN puede restablecer otro SUPERADMIN",
+        )
     try:
         _, temporal = crear_o_restablecer_cuenta(
             session,
