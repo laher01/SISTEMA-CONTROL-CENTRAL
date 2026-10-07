@@ -175,3 +175,29 @@ export interface ComprasProveedorFila {
   expedientes: number;
   importe_total: string;
 }
+
+
+export interface SesionActual {
+  rol: RolMiembro | "GESTOR";
+  codigo: string;
+  nombre: string;
+  miembro_id: string | null;
+  gestor_id: string | null;
+  usuario_id: string | null;
+  cambio_clave_obligatorio: boolean;
+}
+
+export interface CredencialTemporal {
+  login: string;
+  clave_temporal: string;
+}
+
+export interface AltaMiembro {
+  miembro: Miembro;
+  credencial: CredencialTemporal;
+}
+
+export interface AltaGestor {
+  gestor: Gestor;
+  credencial: CredencialTemporal;
+}
