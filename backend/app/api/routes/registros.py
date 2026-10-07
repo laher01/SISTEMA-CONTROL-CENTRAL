@@ -11,7 +11,7 @@ from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.enums import Moneda, RolMiembro, TipoDocumento
 from app.models import Empresa, Expediente, Gestor, Miembro
 from app.schemas import FiltroOpcion, RegistroFila, RegistroOpciones, RegistroResumen
-from app.services.expedientes import documentos_principales
+from app.services.expedientes import documentos_faltantes, documentos_principales, tipos_presentes
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 
 router = APIRouter(prefix="/registros", tags=["registros"])
@@ -190,6 +190,8 @@ def listar(
         receptor_nombre,
     ) in session.execute(filas_query):
         requeridos = documentos_principales(expediente, settings)
+        presentes = [TipoDocumento(t) for t in tipos_presentes(expediente)]
+        faltantes = documentos_faltantes(expediente, settings)
         opcionales = list(_OPCIONALES_BASE)
         for tipo in (TipoDocumento.GRR, TipoDocumento.VCHR):
             if tipo not in requeridos and tipo not in opcionales:
@@ -220,6 +222,8 @@ def listar(
                 moneda=expediente.moneda,
                 importe_total=expediente.importe_total,
                 documentos_requeridos=requeridos,
+                documentos_presentes=presentes,
+                documentos_faltantes=faltantes,
                 documentos_opcionales=opcionales,
                 puede_eliminar=puede_eliminar,
             )
