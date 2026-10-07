@@ -329,3 +329,26 @@ export interface RegistroOpciones {
   usuarios: FiltroOpcion[];
   gestores: FiltroOpcion[];
 }
+
+
+export interface NexusFuente {
+  titulo: string;
+  url: string | null;
+  tipo: string;
+}
+
+export interface NexusRespuesta {
+  respuesta: string;
+  accion: string;
+  fuentes: NexusFuente[];
+  datos: Record<string, unknown>;
+  internet_usado: boolean;
+  requiere_configuracion_externa: boolean;
+}
+
+export interface NexusEstado {
+  asistente_activo: boolean;
+  consulta_ruc_externa: boolean;
+  busqueda_internet: boolean;
+  fuente_oficial_preferida: string;
+}
