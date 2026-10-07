@@ -3,7 +3,11 @@ from fastapi.testclient import TestClient
 from tests.conftest import AuthPrueba
 
 
-def configuracion_payload(*, registro_publico: bool, requiere_aprobacion: bool = True) -> dict[str, object]:
+def configuracion_payload(
+    *,
+    registro_publico: bool,
+    requiere_aprobacion: bool = True,
+) -> dict[str, object]:
     return {
         "registro_publico": registro_publico,
         "requiere_aprobacion": requiere_aprobacion,
