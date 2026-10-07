@@ -1,3 +1,4 @@
+import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -8,7 +9,7 @@ PERMISO_ELIMINAR_REGISTROS = "ELIMINAR_REGISTROS"
 
 def permiso_habilitado(
     session: Session,
-    tenant_id,
+    tenant_id: uuid.UUID,
     rol: str,
     permiso: str,
 ) -> bool:
