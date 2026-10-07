@@ -14,7 +14,7 @@ def permiso_habilitado(
     rol: str,
     permiso: str,
 ) -> bool:
-    if permiso == PERMISO_ELIMINAR_REGISTROS and rol in ("ADMINISTRADOR", "GESTOR"):
+    if permiso == PERMISO_ELIMINAR_REGISTROS and rol in ("SUPERADMIN", "ADMINISTRADOR", "GESTOR"):
         return True
     configurado = session.scalar(
         select(PermisoConfigurado).where(
