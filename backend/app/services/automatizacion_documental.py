@@ -355,11 +355,7 @@ def _completar_rucs(
     # ese orden solo cuando no existe ninguna asignación previa y no hay un tercer
     # RUC que vuelva ambigua la decisión. La confianza queda limitada para que el
     # umbral configurable siga teniendo la última palabra.
-    if (
-        "ruc_emisor" not in campos
-        and "ruc_receptor" not in campos
-        and len(candidatos_unicos) == 2
-    ):
+    if "ruc_emisor" not in campos and "ruc_receptor" not in campos and len(candidatos_unicos) == 2:
         ordenados = list(candidatos_unicos.items())
         (ruc_emisor, confianza_emisor), (ruc_receptor, confianza_receptor) = ordenados
         campos["ruc_emisor"] = ruc_emisor
