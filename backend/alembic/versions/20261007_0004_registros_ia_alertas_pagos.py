@@ -436,9 +436,7 @@ def upgrade() -> None:
             "periodo_desde",
             "periodo_hasta",
             "moneda",
-            name=op.f(
-                "uq_pagos_erp_tenant_id_usuario_id_periodo_desde_periodo_hasta_moneda"
-            ),
+            name=op.f("uq_pagos_erp_tenant_id_usuario_id_periodo_desde_periodo_hasta_moneda"),
         ),
     )
     op.create_index(op.f("ix_pagos_erp_estado"), "pagos_erp", ["estado"], unique=False)
