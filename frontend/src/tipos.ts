@@ -74,6 +74,12 @@ export interface Documento {
   mime_type: string;
   tamano_bytes: number;
   datos_extraidos: Record<string, unknown> | null;
+  formato_origen: string | null;
+  fecha_emision: string | null;
+  serie: string | null;
+  correlativo: string | null;
+  moneda: Moneda | null;
+  importe_total: string | null;
   gestor_id: string | null;
   usuario_id: string | null;
   created_at: string;
@@ -200,4 +206,112 @@ export interface AltaMiembro {
 export interface AltaGestor {
   gestor: Gestor;
   credencial: CredencialTemporal;
+}
+
+
+export interface RegistroFila {
+  expediente_id: string;
+  estado: EstadoExpediente;
+  usuario_id: string | null;
+  usuario_codigo: string | null;
+  usuario_nombre: string | null;
+  gestor_id: string | null;
+  gestor_codigo: string | null;
+  gestor_nombre: string | null;
+  fecha_emision: string;
+  tipo_comprobante: TipoComprobante;
+  serie: string;
+  correlativo: string;
+  emisor_ruc: string;
+  emisor_razon_social: string;
+  receptor_ruc: string;
+  receptor_razon_social: string;
+  moneda: Moneda;
+  importe_total: string;
+  documentos_requeridos: TipoDocumento[];
+  documentos_opcionales: TipoDocumento[];
+  puede_eliminar: boolean;
+}
+
+export interface RegistroResumen {
+  filas: RegistroFila[];
+  total_registros: number;
+  total_pen: string;
+  total_usd: string;
+}
+
+export interface AlertaManual {
+  id: string;
+  expediente_id: string | null;
+  creado_por_codigo: string;
+  creado_por_rol: string;
+  destinatario_usuario_id: string | null;
+  destinatario_gestor_id: string | null;
+  para_administracion: boolean;
+  asunto: string;
+  mensaje: string;
+  resuelta: boolean;
+  created_at: string;
+  resuelta_at: string | null;
+}
+
+export interface PermisoConfigurado {
+  id: string;
+  rol: string;
+  permiso: string;
+  habilitado: boolean;
+}
+
+export interface PlanLiquidacion {
+  id: string;
+  usuario_id: string;
+  nombre: string;
+  porcentaje: string;
+  vigencia_desde: string;
+  vigencia_hasta: string | null;
+  activo: boolean;
+}
+
+export interface CuentaPagoERP {
+  id: string;
+  usuario_id: string;
+  titular: string;
+  banco: string;
+  tipo_cuenta: string;
+  moneda: Moneda;
+  numero_cuenta: string | null;
+  cci: string | null;
+  porcentaje_distribucion: string;
+  activa: boolean;
+}
+
+export interface AdelantoERP {
+  id: string;
+  usuario_id: string;
+  fecha: string;
+  moneda: Moneda;
+  monto: string;
+  descripcion: string | null;
+  aplicado: boolean;
+}
+
+export interface PagoERP {
+  id: string;
+  usuario_id: string;
+  plan_id: string | null;
+  periodo_desde: string;
+  periodo_hasta: string;
+  moneda: Moneda;
+  produccion_total: string;
+  porcentaje: string;
+  bruto: string;
+  adelantos: string;
+  ajustes: string;
+  saldo: string;
+  estado: string;
+  fecha_programada: string | null;
+  fecha_pago: string | null;
+  voucher_documento_id: string | null;
+  conciliado: boolean;
+  created_at: string;
 }
