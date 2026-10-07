@@ -102,9 +102,9 @@ def extraer_campos(
     ):
         encontrado = _razon_social_cercana_a_etiqueta(texto, etiquetas)
         if encontrado:
-            campos[nombre] = CampoExtraido(
-                encontrado, min(0.9, 0.86 * factor), encontrado
-            ).a_dict(fuente)
+            campos[nombre] = CampoExtraido(encontrado, min(0.9, 0.86 * factor), encontrado).a_dict(
+                fuente
+            )
 
     fecha_match = FECHA_ETIQUETADA.search(texto) or FECHA.search(texto)
     if fecha_match and (fecha := _normalizar_fecha(fecha_match.group(1))):
