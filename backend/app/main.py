@@ -1,7 +1,16 @@
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import alertas, dashboard, documentos, empresas, expedientes, gestores
+from app.api.routes import (
+    alertas,
+    dashboard,
+    documentos,
+    empresas,
+    expedientes,
+    gestores,
+    miembros,
+    produccion,
+)
 from app.core.config import get_settings
 
 app = FastAPI(
@@ -20,7 +29,16 @@ if cors_origins:
     )
 
 api = APIRouter(prefix="/api/v1")
-for modulo in (documentos, expedientes, empresas, gestores, alertas, dashboard):
+for modulo in (
+    documentos,
+    expedientes,
+    empresas,
+    miembros,
+    gestores,
+    alertas,
+    dashboard,
+    produccion,
+):
     api.include_router(modulo.router)
 app.include_router(api)
 
