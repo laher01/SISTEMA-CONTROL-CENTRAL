@@ -515,6 +515,12 @@ class ConfiguracionAccesoOut(Orm):
     requiere_email_verificado: bool
     proveedor_email_configurado: bool
     acceso_cloudflare_activo: bool
+    duracion_sesion_horas: int
+    intentos_fallidos_max: int
+    bloqueo_minutos: int
+    clave_min_longitud: int
+    clave_requiere_letra: bool
+    clave_requiere_numero: bool
 
 
 class ConfiguracionAccesoIn(BaseModel):
@@ -523,6 +529,12 @@ class ConfiguracionAccesoIn(BaseModel):
     solo_correos_autorizados: bool
     requiere_email_verificado: bool
     acceso_cloudflare_activo: bool
+    duracion_sesion_horas: int = Field(ge=1, le=168)
+    intentos_fallidos_max: int = Field(ge=1, le=20)
+    bloqueo_minutos: int = Field(ge=1, le=1440)
+    clave_min_longitud: int = Field(ge=8, le=128)
+    clave_requiere_letra: bool
+    clave_requiere_numero: bool
 
 
 class CorreoAutorizadoIn(BaseModel):
@@ -558,3 +570,32 @@ class SolicitudAccesoOut(Orm):
     rol_asignado: str | None
     created_at: datetime
     resuelta_at: datetime | None
+
+
+class CuentaAccesoAdminOut(Orm):
+    id: uuid.UUID
+    login: str
+    email: str | None
+    email_verificado: bool
+    activo: bool
+    cambio_clave_obligatorio: bool
+    intentos_fallidos: int
+    bloqueado_hasta: datetime | None
+    ultimo_acceso: datetime | None
+    miembro_id: uuid.UUID | None
+    gestor_id: uuid.UUID | None
+
+
+class CuentaAccesoAdminActualizar(BaseModel):
+    activo: bool | None = None
+    email_verificado: bool | None = None
+
+
+class SesionAccesoAdminOut(BaseModel):
+    id: uuid.UUID
+    cuenta_id: uuid.UUID
+    login: str
+    rol_activo: str
+    expira_at: datetime
+    ultima_actividad: datetime
+    revocada_at: datetime | None
