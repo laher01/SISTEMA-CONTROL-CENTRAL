@@ -64,7 +64,12 @@ def upgrade() -> None:
         sa.Column("token_hash", sa.String(length=64), nullable=False),
         sa.Column("rol_activo", sa.String(length=20), nullable=False),
         sa.Column("expira_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("ultima_actividad", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "ultima_actividad",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.Column("revocada_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("tenant_id", sa.Uuid(), nullable=False),
@@ -75,7 +80,9 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(
-            ["cuenta_id"], ["cuentas_acceso.id"], name=op.f("fk_sesiones_acceso_cuenta_id_cuentas_acceso")
+            ["cuenta_id"],
+            ["cuentas_acceso.id"],
+            name=op.f("fk_sesiones_acceso_cuenta_id_cuentas_acceso"),
         ),
         sa.ForeignKeyConstraint(
             ["tenant_id"], ["tenants.id"], name=op.f("fk_sesiones_acceso_tenant_id_tenants")
@@ -83,10 +90,18 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id", name=op.f("pk_sesiones_acceso")),
         sa.UniqueConstraint("token_hash", name=op.f("uq_sesiones_acceso_token_hash")),
     )
-    op.create_index(op.f("ix_sesiones_acceso_cuenta_id"), "sesiones_acceso", ["cuenta_id"], unique=False)
-    op.create_index(op.f("ix_sesiones_acceso_rol_activo"), "sesiones_acceso", ["rol_activo"], unique=False)
-    op.create_index(op.f("ix_sesiones_acceso_token_hash"), "sesiones_acceso", ["token_hash"], unique=True)
-    op.create_index(op.f("ix_sesiones_acceso_tenant_id"), "sesiones_acceso", ["tenant_id"], unique=False)
+    op.create_index(
+        op.f("ix_sesiones_acceso_cuenta_id"), "sesiones_acceso", ["cuenta_id"], unique=False
+    )
+    op.create_index(
+        op.f("ix_sesiones_acceso_rol_activo"), "sesiones_acceso", ["rol_activo"], unique=False
+    )
+    op.create_index(
+        op.f("ix_sesiones_acceso_token_hash"), "sesiones_acceso", ["token_hash"], unique=True
+    )
+    op.create_index(
+        op.f("ix_sesiones_acceso_tenant_id"), "sesiones_acceso", ["tenant_id"], unique=False
+    )
 
 
 def downgrade() -> None:
