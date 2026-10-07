@@ -6,8 +6,8 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import SessionDep, TenantDep
 from app.enums import RolMiembro
-from app.models import Miembro
-from app.schemas import MiembroIn, MiembroOut
+from app.models import Gestor, Miembro
+from app.schemas import MiembroActualizar, MiembroIn, MiembroOut
 
 router = APIRouter(prefix="/miembros", tags=["miembros"])
 
@@ -56,3 +56,47 @@ def usuario_operativo(session: SessionDep, tenant_id: uuid.UUID, usuario_id: uui
     ):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Usuario operativo inválido")
     return usuario
+
+
+@router.patch("/{miembro_id}", response_model=MiembroOut)
+def actualizar(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    miembro_id: uuid.UUID,
+    datos: MiembroActualizar,
+) -> Miembro:
+    miembro = session.get(Miembro, miembro_id)
+    if miembro is None or miembro.tenant_id != tenant_id or miembro.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Miembro no encontrado")
+
+    quedaria_usuario = datos.rol is None or datos.rol == RolMiembro.USUARIO
+    quedaria_activo = datos.activo is None or datos.activo
+    if miembro.rol == RolMiembro.USUARIO and (not quedaria_usuario or not quedaria_activo):
+        tiene_gestores = session.scalar(
+            select(Gestor.id).where(
+                Gestor.tenant_id == tenant_id,
+                Gestor.usuario_id == miembro.id,
+                Gestor.deleted_at.is_(None),
+            )
+        )
+        if tiene_gestores is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Reasigne los gestores antes de cambiar el rol o desactivar al Usuario",
+            )
+
+    if datos.codigo is not None:
+        miembro.codigo = datos.codigo.strip().upper()
+    if datos.nombre is not None:
+        miembro.nombre = datos.nombre.strip()
+    if datos.rol is not None:
+        miembro.rol = datos.rol
+    if datos.activo is not None:
+        miembro.activo = datos.activo
+
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "El código del miembro ya existe") from exc
+    return miembro

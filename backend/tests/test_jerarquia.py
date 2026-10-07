@@ -101,3 +101,37 @@ def test_rhe_se_busca_con_prefijo_rhe(client: TestClient) -> None:
     busqueda = client.get("/api/v1/expedientes", params={"buscar": "RHE-E001-15"})
     assert busqueda.status_code == 200, busqueda.text
     assert [item["id"] for item in busqueda.json()] == [creado["id"]]
+
+
+def test_editar_usuario(client: TestClient) -> None:
+    usuario, _ = crear_usuario_y_gestor(client)
+    respuesta = client.patch(
+        f"/api/v1/miembros/{usuario['id']}",
+        json={"codigo": "WILL02", "nombre": "Willy Actualizado", "rol": "USUARIO"},
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    actualizado = respuesta.json()
+    assert actualizado["codigo"] == "WILL02"
+    assert actualizado["nombre"] == "Willy Actualizado"
+
+
+def test_editar_y_reasignar_gestor(client: TestClient) -> None:
+    _, gestor = crear_usuario_y_gestor(client)
+    otro = client.post(
+        "/api/v1/miembros",
+        json={"codigo": "JOSE01", "nombre": "José Carlos", "rol": "USUARIO"},
+    ).json()
+
+    respuesta = client.patch(
+        f"/api/v1/gestores/{gestor['id']}",
+        json={
+            "codigo": "GES99",
+            "nombre": "Gestor Actualizado",
+            "usuario_id": otro["id"],
+        },
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    actualizado = respuesta.json()
+    assert actualizado["codigo"] == "GES99"
+    assert actualizado["nombre"] == "Gestor Actualizado"
+    assert actualizado["usuario_id"] == otro["id"]
