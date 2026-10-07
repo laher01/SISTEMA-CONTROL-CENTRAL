@@ -349,6 +349,24 @@ def _completar_rucs(
         if len(otros) == 1:
             campos["ruc_emisor"], confianzas["ruc_emisor"] = otros[0]
 
+    # Fallback conservador para facturas cuyo PDF contiene exactamente dos RUC,
+    # pero la capa de texto perdió las etiquetas EMISOR/RECEPTOR. En comprobantes
+    # peruanos el bloque del emisor precede normalmente al del adquirente; se usa
+    # ese orden solo cuando no existe ninguna asignación previa y no hay un tercer
+    # RUC que vuelva ambigua la decisión. La confianza queda limitada para que el
+    # umbral configurable siga teniendo la última palabra.
+    if (
+        "ruc_emisor" not in campos
+        and "ruc_receptor" not in campos
+        and len(candidatos_unicos) == 2
+    ):
+        ordenados = list(candidatos_unicos.items())
+        (ruc_emisor, confianza_emisor), (ruc_receptor, confianza_receptor) = ordenados
+        campos["ruc_emisor"] = ruc_emisor
+        campos["ruc_receptor"] = ruc_receptor
+        confianzas["ruc_emisor"] = min(0.82, confianza_emisor)
+        confianzas["ruc_receptor"] = min(0.82, confianza_receptor)
+
 
 def _revision(documento: Documento, motivos: list[str]) -> ResultadoAutomatizacion:
     unicos = tuple(dict.fromkeys(motivos or ["El documento requiere revisión manual"]))
