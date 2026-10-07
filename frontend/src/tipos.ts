@@ -362,6 +362,12 @@ export interface ConfiguracionAcceso {
   requiere_email_verificado: boolean;
   proveedor_email_configurado: boolean;
   acceso_cloudflare_activo: boolean;
+  duracion_sesion_horas: number;
+  intentos_fallidos_max: number;
+  bloqueo_minutos: number;
+  clave_min_longitud: number;
+  clave_requiere_letra: boolean;
+  clave_requiere_numero: boolean;
 }
 
 export interface CorreoAutorizado {
@@ -381,4 +387,29 @@ export interface SolicitudAcceso {
   rol_asignado: string | null;
   created_at: string;
   resuelta_at: string | null;
+}
+
+
+export interface CuentaAccesoAdmin {
+  id: string;
+  login: string;
+  email: string | null;
+  email_verificado: boolean;
+  activo: boolean;
+  cambio_clave_obligatorio: boolean;
+  intentos_fallidos: number;
+  bloqueado_hasta: string | null;
+  ultimo_acceso: string | null;
+  miembro_id: string | null;
+  gestor_id: string | null;
+}
+
+export interface SesionAccesoAdmin {
+  id: string;
+  cuenta_id: string;
+  login: string;
+  rol_activo: string;
+  expira_at: string;
+  ultima_actividad: string;
+  revocada_at: string | null;
 }
