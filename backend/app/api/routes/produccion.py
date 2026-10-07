@@ -13,9 +13,7 @@ router = APIRouter(prefix="/produccion", tags=["produccion"])
 
 
 @router.get("/resumen", response_model=ProduccionResumen)
-def resumen(
-    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
-) -> ProduccionResumen:
+def resumen(session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep) -> ProduccionResumen:
     _validar_acceso_produccion(auth.rol)
     consulta = (
         select(
