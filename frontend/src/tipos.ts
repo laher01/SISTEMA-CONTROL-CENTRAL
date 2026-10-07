@@ -229,6 +229,8 @@ export interface RegistroFila {
   moneda: Moneda;
   importe_total: string;
   documentos_requeridos: TipoDocumento[];
+  documentos_presentes: TipoDocumento[];
+  documentos_faltantes: TipoDocumento[];
   documentos_opcionales: TipoDocumento[];
   puede_eliminar: boolean;
 }
