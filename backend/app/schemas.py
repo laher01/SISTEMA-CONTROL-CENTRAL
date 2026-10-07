@@ -319,6 +319,8 @@ class RegistroFila(BaseModel):
     moneda: Moneda
     importe_total: Decimal
     documentos_requeridos: list[TipoDocumento]
+    documentos_presentes: list[TipoDocumento]
+    documentos_faltantes: list[TipoDocumento]
     documentos_opcionales: list[TipoDocumento]
     puede_eliminar: bool
 
