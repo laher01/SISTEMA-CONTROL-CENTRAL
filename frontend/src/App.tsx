@@ -24,54 +24,54 @@ const MENU: { a: string; texto: string; roles: RolSesion[] }[] = [
   {
     a: "/",
     texto: "Dashboard",
-    roles: ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"],
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"],
   },
   { a: "/subir", texto: "Subir documentos", roles: ["USUARIO", "GESTOR"] },
   {
     a: "/registros",
     texto: "Registros",
-    roles: ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"],
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"],
   },
   {
     a: "/documentos",
     texto: "Documentos",
-    roles: ["ADMINISTRADOR", "SECRETARIA", "USUARIO", "GESTOR"],
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA", "USUARIO", "GESTOR"],
   },
   {
     a: "/expedientes",
     texto: "Expedientes",
-    roles: ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"],
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"],
   },
   {
     a: "/pendientes",
     texto: "Pendientes",
-    roles: ["ADMINISTRADOR", "SECRETARIA", "USUARIO", "GESTOR"],
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA", "USUARIO", "GESTOR"],
   },
   {
     a: "/alertas",
     texto: "Alertas",
-    roles: ["ADMINISTRADOR", "SECRETARIA", "USUARIO", "GESTOR"],
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA", "USUARIO", "GESTOR"],
   },
   {
     a: "/empresas",
     texto: "Empresas",
-    roles: ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO"],
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO"],
   },
-  { a: "/organizacion", texto: "Organización", roles: ["ADMINISTRADOR", "USUARIO"] },
+  { a: "/organizacion", texto: "Organización", roles: ["SUPERADMIN", "ADMINISTRADOR", "USUARIO"] },
   {
     a: "/produccion",
     texto: "Producción",
-    roles: ["ADMINISTRADOR", "GERENTE", "USUARIO", "GESTOR"],
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "USUARIO", "GESTOR"],
   },
   {
     a: "/pagos",
     texto: "Pagos",
-    roles: ["ADMINISTRADOR", "GERENTE"],
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE"],
   },
   {
     a: "/configuracion",
     texto: "Configuración",
-    roles: ["ADMINISTRADOR"],
+    roles: ["SUPERADMIN", "ADMINISTRADOR"],
   },
 ];
 
@@ -126,7 +126,7 @@ export default function App() {
           <Route path="/organizacion" element={<Organizacion sesion={sesion} />} />
           <Route path="/produccion" element={<Produccion />} />
           <Route path="/pagos" element={<Pagos sesion={sesion} />} />
-          <Route path="/configuracion" element={<Configuracion />} />
+          <Route path="/configuracion" element={<Configuracion sesion={sesion} />} />
           <Route path="*" element={<p>Página no encontrada.</p>} />
         </Routes>
       </main>
