@@ -111,7 +111,10 @@ def actualizar(
         session.commit()
     except (IntegrityError, ValueError) as exc:
         session.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "El código/login de gestor ya existe") from exc
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "El código/login de gestor ya existe",
+        ) from exc
     return gestor
 
 
