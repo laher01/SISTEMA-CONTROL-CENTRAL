@@ -315,3 +315,15 @@ export interface PagoERP {
   conciliado: boolean;
   created_at: string;
 }
+
+
+export interface FiltroOpcion {
+  id: string;
+  codigo: string;
+  nombre: string;
+}
+
+export interface RegistroOpciones {
+  usuarios: FiltroOpcion[];
+  gestores: FiltroOpcion[];
+}
