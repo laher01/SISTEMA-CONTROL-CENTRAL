@@ -132,11 +132,9 @@ def desglose(
     acumulado: dict[str, DashboardDesgloseFila] = {}
     for expediente in expedientes:
         if agrupar_por == "usuario":
-            miembro = (
-                usuarios.get(expediente.usuario_id)
-                if expediente.usuario_id is not None
-                else None
-            )
+            miembro = None
+            if expediente.usuario_id is not None:
+                miembro = usuarios.get(expediente.usuario_id)
             clave = str(expediente.usuario_id or "sin-usuario")
             etiqueta = (
                 f"{miembro.codigo} · {miembro.nombre}"
