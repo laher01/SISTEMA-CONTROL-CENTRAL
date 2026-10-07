@@ -1,3 +1,4 @@
+import uuid
 from datetime import date
 from decimal import Decimal
 
@@ -19,6 +20,7 @@ from app.schemas import (
     AdelantoERPOut,
     CuentaPagoERPIn,
     CuentaPagoERPOut,
+    FiltroOpcion,
     PagoERPActualizarIn,
     PagoERPOut,
     PagoERPProgramarIn,
@@ -48,6 +50,28 @@ def _usuario_valido(session: SessionDep, tenant_id, usuario_id):
     ):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Usuario inválido")
     return usuario
+
+
+@router.get("/usuarios", response_model=list[FiltroOpcion])
+def usuarios_pago(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> list[FiltroOpcion]:
+    _validar_acceso(auth.rol)
+    return [
+        FiltroOpcion(id=u.id, codigo=u.codigo, nombre=u.nombre)
+        for u in session.scalars(
+            select(Miembro)
+            .where(
+                Miembro.tenant_id == tenant_id,
+                Miembro.rol == RolMiembro.USUARIO,
+                Miembro.activo.is_(True),
+                Miembro.deleted_at.is_(None),
+            )
+            .order_by(Miembro.codigo)
+        )
+    ]
 
 
 @router.post("/planes", response_model=PlanLiquidacionOut, status_code=status.HTTP_201_CREATED)
@@ -305,7 +329,7 @@ def actualizar_pago(
     session: SessionDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
-    pago_id,
+    pago_id: uuid.UUID,
     datos: PagoERPActualizarIn,
 ) -> PagoERP:
     _validar_acceso(auth.rol)
