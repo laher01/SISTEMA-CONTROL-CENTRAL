@@ -45,6 +45,7 @@ from app.services.ingesta import (
     ingerir_documento,
     vincular_documento,
 )
+from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 from app.services.relaciones_documentales import sugerir_relaciones
 from app.services.ubl import UblInvalido
@@ -249,6 +250,16 @@ def eliminar_documento(
 ) -> None:
     documento = _documento(session, tenant_id, documento_id)
     _validar_ambito_documento(auth, documento)
+    if not permiso_habilitado(
+        session,
+        tenant_id,
+        auth.rol,
+        PERMISO_ELIMINAR_REGISTROS,
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "No tiene permiso para eliminar registros",
+        )
     expediente = documento.expediente
     documento.deleted_at = ahora()
     auditoria.registrar(
