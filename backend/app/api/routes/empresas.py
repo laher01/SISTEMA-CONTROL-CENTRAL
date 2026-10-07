@@ -55,7 +55,7 @@ def actualizar(
     empresa_id: uuid.UUID,
     datos: EmpresaActualizar,
 ) -> Empresa:
-    if auth.rol not in (RolMiembro.ADMINISTRADOR, RolMiembro.SECRETARIA):
+    if auth.rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.SECRETARIA):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "No tiene permiso para modificar Empresas")
     empresa = session.get(Empresa, empresa_id)
     if empresa is None or empresa.tenant_id != tenant_id or empresa.deleted_at:
