@@ -1,6 +1,11 @@
 export type Moneda = "PEN" | "USD";
 export type EstadoExpediente = "VERDE" | "AMARILLO" | "NARANJA" | "ROJO";
 export type EstadoDocumento = "PENDIENTE_CLASIFICACION" | "PENDIENTE_RELACION" | "RELACIONADO";
+export const ESTADOS_DOCUMENTO: EstadoDocumento[] = [
+  "PENDIENTE_CLASIFICACION",
+  "PENDIENTE_RELACION",
+  "RELACIONADO",
+];
 export type TipoAlerta =
   | "BANCARIZACION_SIN_VOUCHER"
   | "RETENCION_PENDIENTE"

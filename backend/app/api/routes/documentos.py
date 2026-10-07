@@ -6,15 +6,15 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.api.deps import AlmacenDep, HoyDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado, validar_gestor
 from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, TipoDocumento
-from app.models import Documento
+from app.models import Documento, Empresa, Expediente, ahora
 from app.schemas import (
     DocumentoOut,
     DocumentoVincular,
@@ -32,7 +32,7 @@ from app.services.automatizacion_documental import (
     guardar_procesamiento,
     registrar_fallo,
 )
-from app.services.expedientes import buscar_expediente
+from app.services.expedientes import actualizar_expediente, buscar_expediente
 from app.services.ingesta import (
     ArchivoSubido,
     DocumentoDuplicado,
@@ -121,7 +121,12 @@ def listar_documentos(
     session: SessionDep,
     tenant_id: TenantDep,
     estado: EstadoDocumento | None = None,
+    tipo_documento: TipoDocumento | None = None,
     expediente_id: uuid.UUID | None = None,
+    emisor_ruc: Annotated[str | None, Query(min_length=11, max_length=11)] = None,
+    receptor_ruc: Annotated[str | None, Query(min_length=11, max_length=11)] = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[Documento]:
@@ -130,8 +135,28 @@ def listar_documentos(
     )
     if estado is not None:
         consulta = consulta.where(Documento.estado == estado)
+    if tipo_documento is not None:
+        consulta = consulta.where(Documento.tipo_documento == tipo_documento)
     if expediente_id is not None:
         consulta = consulta.where(Documento.expediente_id == expediente_id)
+    if fecha_desde is not None:
+        consulta = consulta.where(func.date(Documento.created_at) >= fecha_desde)
+    if fecha_hasta is not None:
+        consulta = consulta.where(func.date(Documento.created_at) <= fecha_hasta)
+
+    if emisor_ruc is not None or receptor_ruc is not None:
+        consulta = consulta.join(Expediente, Documento.expediente_id == Expediente.id)
+        if emisor_ruc is not None:
+            emisor = aliased(Empresa)
+            consulta = consulta.join(emisor, Expediente.emisor_id == emisor.id).where(
+                emisor.ruc == emisor_ruc
+            )
+        if receptor_ruc is not None:
+            receptor = aliased(Empresa)
+            consulta = consulta.join(receptor, Expediente.receptor_id == receptor.id).where(
+                receptor.ruc == receptor_ruc
+            )
+
     consulta = consulta.order_by(Documento.created_at.desc()).limit(limit).offset(offset)
     return list(session.scalars(consulta))
 
@@ -148,6 +173,35 @@ def obtener_documento(
     session: SessionDep, tenant_id: TenantDep, documento_id: uuid.UUID
 ) -> Documento:
     return _documento(session, tenant_id, documento_id)
+
+
+@router.delete("/{documento_id}", status_code=status.HTTP_204_NO_CONTENT)
+def eliminar_documento(
+    session: SessionDep,
+    settings: SettingsDep,
+    hoy: HoyDep,
+    tenant_id: TenantDep,
+    documento_id: uuid.UUID,
+) -> None:
+    documento = _documento(session, tenant_id, documento_id)
+    expediente = documento.expediente
+    documento.deleted_at = ahora()
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "DOCUMENTO_ELIMINADO",
+        "documento",
+        documento.id,
+        {
+            "nombre_original": documento.nombre_original,
+            "sha256": documento.sha256,
+            "expediente_id": str(documento.expediente_id) if documento.expediente_id else None,
+            "tipo_documento": documento.tipo_documento,
+        },
+    )
+    if expediente is not None:
+        actualizar_expediente(session, expediente, hoy, settings)
+    session.commit()
 
 
 MIME_EN_LINEA = frozenset(

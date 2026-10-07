@@ -335,3 +335,114 @@ button:disabled {
   border-radius: 0.4rem;
   padding: 0.75rem;
 }
+
+
+.encabezado-pagina {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.encabezado-pagina h2,
+.encabezado-pagina p {
+  margin-bottom: 0.35rem;
+}
+
+.boton-enlace {
+  display: inline-block;
+  padding: 0.45rem 0.7rem;
+  border-radius: 4px;
+  background: var(--primario);
+  color: white;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.filtros-documentos {
+  align-items: end;
+}
+
+.filtro-fecha {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.82rem;
+  color: #52606d;
+}
+
+button.secundario {
+  background: white;
+  color: var(--primario);
+}
+
+button.peligro {
+  background: white;
+  color: var(--rojo);
+  border-color: #f3b3b3;
+}
+
+.acciones-documento {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.estado-documento {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #eef2f7;
+  color: #334e68;
+}
+
+.estado-pendiente_clasificacion {
+  background: #fff3bf;
+  color: #7a5d00;
+}
+
+.estado-pendiente_relacion {
+  background: #ffe8cc;
+  color: #a03f00;
+}
+
+.estado-relacionado {
+  background: #d3f9d8;
+  color: #237032;
+}
+
+.tabla-responsive {
+  overflow-x: auto;
+}
+
+.bloque {
+  display: block;
+  margin-top: 0.25rem;
+}
+
+@media (max-width: 760px) {
+  .app {
+    display: block;
+  }
+
+  .menu {
+    width: 100%;
+  }
+
+  .menu nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .contenido {
+    padding: 1rem;
+  }
+
+  .encabezado-pagina {
+    flex-direction: column;
+  }
+}
