@@ -78,6 +78,8 @@ def listar(
     tenant_id: TenantDep,
     estado: EstadoExpediente | None = None,
     receptor_ruc: str | None = None,
+    usuario_id: uuid.UUID | None = None,
+    gestor_id: uuid.UUID | None = None,
     pendiente_aprobacion: bool | None = None,
     buscar: Annotated[str | None, Query(max_length=100)] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
@@ -90,6 +92,10 @@ def listar(
         consulta = consulta.where(Expediente.estado == estado)
     if pendiente_aprobacion is not None:
         consulta = consulta.where(Expediente.pendiente_aprobacion == pendiente_aprobacion)
+    if usuario_id is not None:
+        consulta = consulta.where(Expediente.usuario_id == usuario_id)
+    if gestor_id is not None:
+        consulta = consulta.where(Expediente.gestor_id == gestor_id)
     if receptor_ruc is not None:
         consulta = consulta.join(Empresa, Expediente.receptor_id == Empresa.id).where(
             Empresa.ruc == receptor_ruc
@@ -133,6 +139,6 @@ def detalle(
         **base.model_dump(),
         documentos=[d for d in expediente.documentos if d.deleted_at is None],
         alertas=expediente.alertas,
-        faltantes=documentos_faltantes(expediente),
+        faltantes=documentos_faltantes(expediente, settings),
         fecha_limite=fecha_limite(expediente.fecha_emision, settings.dia_limite_expediente),
     )
