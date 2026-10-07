@@ -277,7 +277,6 @@ class AlertaManual(ConId, ConTenant, ConCreacion, Base):
     resuelta_at: Mapped[datetime | None]
 
 
-
 class ConfiguracionAcceso(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "configuracion_acceso"
     __table_args__ = (UniqueConstraint("tenant_id"),)
