@@ -221,3 +221,38 @@ def test_correccion_aprende_perfil_por_ruc_y_formato(
     campos = extraccion["campos"]
     assert isinstance(campos, dict)
     assert campos["razon_social_emisor"]["valor"] == "EMPRESA CORRECTA S.A.C."
+
+
+def test_completa_dos_ruc_por_orden_cuando_no_hay_etiquetas() -> None:
+    from app.services.automatizacion_documental import _completar_rucs
+
+    campos: dict[str, str] = {}
+    confianzas: dict[str, float] = {}
+    candidatos = [
+        ("20500000002", 0.90),
+        ("20100000001", 0.90),
+    ]
+
+    _completar_rucs(campos, confianzas, candidatos, None)
+
+    assert campos["ruc_emisor"] == "20500000002"
+    assert campos["ruc_receptor"] == "20100000001"
+    assert confianzas["ruc_emisor"] == 0.82
+    assert confianzas["ruc_receptor"] == 0.82
+
+
+def test_no_infiere_ruc_por_orden_si_hay_mas_de_dos_candidatos() -> None:
+    from app.services.automatizacion_documental import _completar_rucs
+
+    campos: dict[str, str] = {}
+    confianzas: dict[str, float] = {}
+    candidatos = [
+        ("20500000002", 0.90),
+        ("20100000001", 0.90),
+        ("20600000003", 0.90),
+    ]
+
+    _completar_rucs(campos, confianzas, candidatos, None)
+
+    assert "ruc_emisor" not in campos
+    assert "ruc_receptor" not in campos
