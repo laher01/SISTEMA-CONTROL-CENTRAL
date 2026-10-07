@@ -216,6 +216,20 @@ class DashboardResumen(BaseModel):
     documentos_pendientes: dict[EstadoDocumento, int]
 
 
+class DashboardDesgloseFila(BaseModel):
+    clave: str
+    etiqueta: str
+    ruc: str | None = None
+    expedientes: int
+    total_pen: Decimal
+    total_usd: Decimal
+
+
+class DashboardDesglose(BaseModel):
+    agrupar_por: str
+    filas: list[DashboardDesgloseFila]
+
+
 class ProduccionFila(BaseModel):
     usuario_id: uuid.UUID | None
     usuario_codigo: str

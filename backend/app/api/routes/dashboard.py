@@ -1,12 +1,16 @@
+import uuid
+from datetime import date
 from decimal import Decimal
+from typing import Literal
 
 from fastapi import APIRouter
 from sqlalchemy import case, func, select
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import SessionDep, SettingsDep, TenantDep
 from app.enums import EstadoDocumento, EstadoExpediente, Moneda, TipoAlerta
-from app.models import Alerta, Documento, Expediente
-from app.schemas import DashboardResumen, MontosMoneda
+from app.models import Alerta, Documento, Expediente, Miembro
+from app.schemas import DashboardDesglose, DashboardDesgloseFila, DashboardResumen, MontosMoneda
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -78,3 +82,110 @@ def resumen(session: SessionDep, settings: SettingsDep, tenant_id: TenantDep) ->
         alertas_abiertas=alertas,
         documentos_pendientes=pendientes,
     )
+
+
+@router.get("/desglose", response_model=DashboardDesglose)
+def desglose(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    agrupar_por: Literal["usuario", "emisor", "receptor", "dia", "mes", "anio"] = "usuario",
+    orden: Literal["asc", "desc"] = "desc",
+    usuario_id: uuid.UUID | None = None,
+    emisor_id: uuid.UUID | None = None,
+    receptor_id: uuid.UUID | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+) -> DashboardDesglose:
+    consulta = (
+        select(Expediente)
+        .options(
+            selectinload(Expediente.emisor),
+            selectinload(Expediente.receptor),
+        )
+        .where(
+            Expediente.tenant_id == tenant_id,
+            Expediente.deleted_at.is_(None),
+        )
+    )
+    if usuario_id is not None:
+        consulta = consulta.where(Expediente.usuario_id == usuario_id)
+    if emisor_id is not None:
+        consulta = consulta.where(Expediente.emisor_id == emisor_id)
+    if receptor_id is not None:
+        consulta = consulta.where(Expediente.receptor_id == receptor_id)
+    if fecha_desde is not None:
+        consulta = consulta.where(Expediente.fecha_emision >= fecha_desde)
+    if fecha_hasta is not None:
+        consulta = consulta.where(Expediente.fecha_emision <= fecha_hasta)
+
+    expedientes = list(session.scalars(consulta))
+    usuarios = {
+        miembro.id: miembro
+        for miembro in session.scalars(
+            select(Miembro).where(
+                Miembro.tenant_id == tenant_id,
+                Miembro.deleted_at.is_(None),
+            )
+        )
+    }
+
+    acumulado: dict[str, DashboardDesgloseFila] = {}
+    for expediente in expedientes:
+        if agrupar_por == "usuario":
+            miembro = None
+            if expediente.usuario_id is not None:
+                miembro = usuarios.get(expediente.usuario_id)
+            clave = str(expediente.usuario_id or "sin-usuario")
+            etiqueta = (
+                f"{miembro.codigo} · {miembro.nombre}"
+                if miembro is not None
+                else "Sin usuario asignado"
+            )
+            ruc = None
+        elif agrupar_por == "emisor":
+            clave = str(expediente.emisor_id)
+            etiqueta = expediente.emisor.razon_social
+            ruc = expediente.emisor.ruc
+        elif agrupar_por == "receptor":
+            clave = str(expediente.receptor_id)
+            etiqueta = expediente.receptor.razon_social
+            ruc = expediente.receptor.ruc
+        else:
+            fecha = expediente.fecha_emision
+            if agrupar_por == "dia":
+                clave = fecha.isoformat()
+                etiqueta = fecha.strftime("%d/%m/%Y")
+            elif agrupar_por == "mes":
+                clave = fecha.strftime("%Y-%m")
+                etiqueta = fecha.strftime("%m/%Y")
+            else:
+                clave = str(fecha.year)
+                etiqueta = str(fecha.year)
+            ruc = None
+
+        fila = acumulado.get(clave)
+        if fila is None:
+            fila = DashboardDesgloseFila(
+                clave=clave,
+                etiqueta=etiqueta,
+                ruc=ruc,
+                expedientes=0,
+                total_pen=Decimal("0"),
+                total_usd=Decimal("0"),
+            )
+            acumulado[clave] = fila
+        fila.expedientes += 1
+        if expediente.moneda == Moneda.PEN:
+            fila.total_pen += expediente.importe_total
+        elif expediente.moneda == Moneda.USD:
+            fila.total_usd += expediente.importe_total
+
+    filas = list(acumulado.values())
+    if agrupar_por in {"dia", "mes", "anio"}:
+        filas.sort(key=lambda fila: fila.clave, reverse=orden == "desc")
+    else:
+        filas.sort(
+            key=lambda fila: (fila.expedientes, fila.etiqueta.casefold()),
+            reverse=orden == "desc",
+        )
+    return DashboardDesglose(agrupar_por=agrupar_por, filas=filas)

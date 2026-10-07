@@ -130,6 +130,23 @@ export interface DashboardResumen {
 }
 
 
+export type AgrupacionDashboard = "usuario" | "emisor" | "receptor" | "dia" | "mes" | "anio";
+
+export interface DashboardDesgloseFila {
+  clave: string;
+  etiqueta: string;
+  ruc: string | null;
+  expedientes: number;
+  total_pen: string;
+  total_usd: string;
+}
+
+export interface DashboardDesglose {
+  agrupar_por: AgrupacionDashboard;
+  filas: DashboardDesgloseFila[];
+}
+
+
 export interface ProduccionFila {
   usuario_id: string | null;
   usuario_codigo: string;
