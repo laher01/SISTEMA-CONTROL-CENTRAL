@@ -143,3 +143,16 @@ export interface ProduccionFila {
 export interface ProduccionResumen {
   filas: ProduccionFila[];
 }
+
+
+export interface ComprasProveedorFila {
+  usuario_codigo: string;
+  gestor_codigo: string;
+  emisor_ruc: string;
+  emisor_razon_social: string;
+  receptor_ruc: string;
+  receptor_razon_social: string;
+  moneda: Moneda;
+  expedientes: number;
+  importe_total: string;
+}
