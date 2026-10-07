@@ -21,7 +21,7 @@ def crear(
     auth: OperativeAuthDep,
     datos: AlertaManualIn,
 ) -> AlertaManual:
-    if auth.rol not in (RolMiembro.SECRETARIA, RolMiembro.ADMINISTRADOR):
+    if auth.rol not in (RolMiembro.SECRETARIA, RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "Solo Secretaría o Administración puede emitir alertas manuales",
@@ -130,7 +130,7 @@ def resolver(
 
 
 def _validar_destinatario(auth: OperativeAuthDep, alerta: AlertaManual) -> None:
-    if auth.rol in (RolMiembro.ADMINISTRADOR, RolMiembro.SECRETARIA):
+    if auth.rol in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.SECRETARIA):
         return
     if auth.rol == RolMiembro.USUARIO and alerta.destinatario_usuario_id == auth.usuario_id:
         return
