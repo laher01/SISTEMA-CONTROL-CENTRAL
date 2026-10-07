@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from sqlalchemy import func, or_, select
 
@@ -29,6 +31,9 @@ def login(
     if tenant is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Credenciales inválidas")
 
+    config = session.scalar(
+        select(ConfiguracionAcceso).where(ConfiguracionAcceso.tenant_id == tenant.id)
+    )
     cuenta = session.scalar(
         select(CuentaAcceso).where(
             CuentaAcceso.tenant_id == tenant.id,
@@ -40,14 +45,39 @@ def login(
             CuentaAcceso.activo.is_(True),
         )
     )
-    if cuenta is None or not verificar_clave(datos.clave, cuenta.password_hash):
+    if cuenta is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Credenciales inválidas")
 
+    ahora = datetime.now(UTC)
+    if cuenta.bloqueado_hasta is not None and cuenta.bloqueado_hasta > ahora:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "Acceso temporalmente bloqueado por intentos fallidos",
+        )
+
+    if not verificar_clave(datos.clave, cuenta.password_hash):
+        cuenta.intentos_fallidos += 1
+        max_intentos = config.intentos_fallidos_max if config else 5
+        if cuenta.intentos_fallidos >= max_intentos:
+            minutos = config.bloqueo_minutos if config else 15
+            cuenta.bloqueado_hasta = ahora + timedelta(minutes=minutos)
+        session.commit()
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Credenciales inválidas")
+
+    if config and config.requiere_email_verificado and not cuenta.email_verificado:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "La cuenta requiere un correo verificado",
+        )
+
+    cuenta.intentos_fallidos = 0
+    cuenta.bloqueado_hasta = None
     rol = _rol_de_cuenta(session, cuenta)
     if rol is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "La cuenta no tiene un rol activo")
 
-    sesion, token = crear_sesion(session, cuenta, rol, settings.session_hours)
+    horas_sesion = config.duracion_sesion_horas if config else settings.session_hours
+    sesion, token = crear_sesion(session, cuenta, rol, horas_sesion)
     auditoria.registrar(
         session,
         cuenta.tenant_id,
@@ -63,7 +93,7 @@ def login(
         httponly=True,
         secure=True,
         samesite="strict",
-        max_age=settings.session_hours * 3600,
+        max_age=horas_sesion * 3600,
         path="/",
     )
     return _salida_sesion(session, cuenta, rol)
@@ -172,10 +202,16 @@ def cambiar_clave(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "La clave actual no es correcta")
     if datos.clave_actual == datos.clave_nueva:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "La nueva clave debe ser diferente")
-    if not _clave_valida(datos.clave_nueva):
+    config = session.scalar(
+        select(ConfiguracionAcceso).where(
+            ConfiguracionAcceso.tenant_id == contexto.tenant_id
+        )
+    )
+    if not _clave_valida(datos.clave_nueva, config):
+        minimo = config.clave_min_longitud if config else 10
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "La nueva clave debe tener al menos 10 caracteres, una letra y un número",
+            f"La nueva clave no cumple la política de seguridad (mínimo {minimo} caracteres)",
         )
     cuenta.password_hash = hash_clave(datos.clave_nueva)
     cuenta.cambio_clave_obligatorio = False
@@ -257,5 +293,14 @@ def _salida_sesion(session: SessionDep, cuenta: CuentaAcceso, rol: str) -> Sesio
     )
 
 
-def _clave_valida(clave: str) -> bool:
-    return len(clave) >= 10 and any(c.isalpha() for c in clave) and any(c.isdigit() for c in clave)
+def _clave_valida(clave: str, config: ConfiguracionAcceso | None = None) -> bool:
+    minimo = config.clave_min_longitud if config else 10
+    requiere_letra = config.clave_requiere_letra if config else True
+    requiere_numero = config.clave_requiere_numero if config else True
+    if len(clave) < minimo:
+        return False
+    if requiere_letra and not any(c.isalpha() for c in clave):
+        return False
+    if requiere_numero and not any(c.isdigit() for c in clave):
+        return False
+    return True
