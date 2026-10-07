@@ -161,11 +161,13 @@ def extraer_campos(
             for ruc in rucs
         ]
 
+    formato = detectar_formato_documental(texto)
     es_rhe = _es_rhe(texto)
     if es_rhe:
         _extraer_partes_rhe(texto, rucs, campos, fuente, factor)
     else:
         _extraer_rucs_etiquetados(texto, campos, fuente, factor)
+        _aplicar_parser_especializado(texto, formato, rucs, campos, fuente, factor)
 
     _extraer_razones_vinculadas_a_ruc(texto, campos, fuente, factor)
 
@@ -198,12 +200,282 @@ def extraer_campos(
         return None
     resultado: dict[str, object] = {
         "version": 3,
-        "formato_documental": detectar_formato_documental(texto),
+        "formato_documental": formato,
         "campos": campos,
     }
     if candidatos:
         resultado["candidatos"] = candidatos
     return resultado
+
+
+
+def _aplicar_parser_especializado(
+    texto: str,
+    formato: str,
+    rucs: list[str],
+    campos: dict[str, dict[str, object]],
+    fuente: str,
+    factor: float,
+) -> None:
+    """Completa partes usando estructuras conocidas sin anular la trazabilidad."""
+    if formato == "SUNAT_FACTURA":
+        _parsear_factura_sunat(texto, rucs, campos, fuente, factor)
+    elif formato == "OSE_FACTURALAYA":
+        _parsear_facturalaya(texto, rucs, campos, fuente, factor)
+    elif formato == "OSE_FACTUHOST":
+        _parsear_factuhost(texto, rucs, campos, fuente, factor)
+    elif formato == "OSE_EFACT":
+        _parsear_efact(texto, rucs, campos, fuente, factor)
+
+
+def _poner_campo(
+    campos: dict[str, dict[str, object]],
+    nombre: str,
+    valor: str,
+    confianza: float,
+    evidencia: str,
+    fuente: str,
+) -> None:
+    if valor:
+        campos[nombre] = CampoExtraido(valor, confianza, evidencia).a_dict(fuente)
+
+
+def _lineas_limpias(texto: str) -> list[str]:
+    return [" ".join(linea.split()).strip(" :\t") for linea in texto.splitlines()]
+
+
+def _indice_linea(lineas: list[str], patron: str) -> int | None:
+    regex = re.compile(patron, re.IGNORECASE)
+    for indice, linea in enumerate(lineas):
+        if regex.search(_sin_tildes(linea)):
+            return indice
+    return None
+
+
+def _razon_emisor_encabezado(lineas: list[str], limite: int) -> tuple[str, str] | None:
+    candidatos: list[str] = []
+    for linea in lineas[:limite]:
+        if not linea:
+            continue
+        normal = _sin_tildes(linea).upper()
+        if any(
+            token in normal
+            for token in (
+                "FACTURA ELECTRONICA",
+                "RUC:",
+                "R.U.C.",
+                "RUC ",
+                "TEL:",
+                "TELEFONO",
+                "EMAIL:",
+                "WWW.",
+                "HTTP",
+            )
+        ):
+            continue
+        if _parece_direccion(linea):
+            if candidatos:
+                break
+            continue
+        if _razon_social_valida(linea):
+            candidatos.append(linea)
+        elif candidatos:
+            break
+    if not candidatos:
+        return None
+
+    # Preferir la última línea con forma societaria; si no existe, la primera
+    # razón válida del encabezado (personas naturales también emiten factura).
+    societarias = [
+        x
+        for x in candidatos
+        if re.search(r"\b(?:E\.?I\.?R\.?L\.?|S\.?A\.?C\.?|S\.?R\.?L\.?|S\.?A\.?)\b", x, re.I)
+    ]
+    valor = societarias[-1] if societarias else candidatos[0]
+    return valor[:300], " ".join(candidatos)[:300]
+
+
+def _bloque_despues_de_etiqueta(
+    lineas: list[str],
+    etiqueta: str,
+    *,
+    detener: tuple[str, ...],
+    max_lineas: int = 4,
+) -> tuple[str, str] | None:
+    etiqueta_norm = _sin_tildes(etiqueta).upper()
+    for i, linea in enumerate(lineas):
+        normal = _sin_tildes(linea).upper()
+        pos = normal.find(etiqueta_norm)
+        if pos < 0:
+            continue
+        partes: list[str] = []
+        resto = linea[pos + len(etiqueta) :].strip(" :-\t")
+        if resto:
+            partes.append(resto)
+        for siguiente in lineas[i + 1 : i + 1 + max_lineas]:
+            norm_sig = _sin_tildes(siguiente).upper()
+            if any(norm_sig.startswith(_sin_tildes(fin).upper()) for fin in detener):
+                break
+            if siguiente:
+                partes.append(siguiente)
+        valor = " ".join(partes).strip()
+        valor = _recortar_razon(valor, quitar_etiqueta=False)
+        if _razon_social_valida(valor):
+            return valor[:300], " ".join(lineas[i : i + 1 + max_lineas])[:300]
+    return None
+
+
+def _parsear_factura_sunat(
+    texto: str,
+    rucs: list[str],
+    campos: dict[str, dict[str, object]],
+    fuente: str,
+    factor: float,
+) -> None:
+    if len(rucs) < 2:
+        return
+    lineas = _lineas_limpias(texto)
+    indice_factura = _indice_linea(lineas, r"FACTURA\s+ELECTRONICA")
+    if indice_factura is None:
+        return
+
+    ruc_emisor, ruc_receptor = rucs[0], rucs[1]
+    _poner_campo(
+        campos,
+        "ruc_emisor",
+        ruc_emisor,
+        min(0.96, 0.94 * factor),
+        _contexto(texto, ruc_emisor),
+        fuente,
+    )
+    _poner_campo(
+        campos,
+        "ruc_receptor",
+        ruc_receptor,
+        min(0.96, 0.94 * factor),
+        _contexto(texto, ruc_receptor),
+        fuente,
+    )
+
+    emisor = _razon_emisor_encabezado(lineas, indice_factura)
+    if emisor:
+        _poner_campo(
+            campos,
+            "razon_social_emisor",
+            emisor[0],
+            min(0.97, 0.95 * factor),
+            emisor[1],
+            fuente,
+        )
+
+    receptor = _bloque_despues_de_etiqueta(
+        lineas,
+        "SEÑOR(ES)",
+        detener=("RUC", "DIRECCION DEL CLIENTE", "TIPO DE MONEDA", "OBSERVACION"),
+        max_lineas=4,
+    )
+    if receptor:
+        _poner_campo(
+            campos,
+            "razon_social_receptor",
+            receptor[0],
+            min(0.97, 0.95 * factor),
+            receptor[1],
+            fuente,
+        )
+
+
+def _parsear_facturalaya(
+    texto: str,
+    rucs: list[str],
+    campos: dict[str, dict[str, object]],
+    fuente: str,
+    factor: float,
+) -> None:
+    if len(rucs) < 2:
+        return
+    lineas = _lineas_limpias(texto)
+    ruc_emisor, ruc_receptor = rucs[0], rucs[1]
+    _poner_campo(campos, "ruc_emisor", ruc_emisor, min(0.95, 0.93 * factor), _contexto(texto, ruc_emisor), fuente)
+    _poner_campo(campos, "ruc_receptor", ruc_receptor, min(0.95, 0.93 * factor), _contexto(texto, ruc_receptor), fuente)
+
+    # Facturalaya suele incluir "NOMBRE - RUC" en el encabezado.
+    for linea in lineas:
+        if ruc_emisor in re.sub(r"\D", "", linea):
+            candidato = re.sub(r"[-–—]?\s*" + re.escape(ruc_emisor) + r"\s*$", "", linea).strip(" -:")
+            if _razon_social_valida(candidato):
+                _poner_campo(campos, "razon_social_emisor", candidato, min(0.96, 0.94 * factor), linea, fuente)
+                break
+
+    receptor = _bloque_despues_de_etiqueta(
+        lineas,
+        "RAZÓN SOCIAL",
+        detener=("R.U.C", "RUC", "DIRECCION", "DIRECCIÓN", "FORMA DE PAGO"),
+        max_lineas=3,
+    )
+    if receptor:
+        _poner_campo(campos, "razon_social_receptor", receptor[0], min(0.97, 0.95 * factor), receptor[1], fuente)
+
+
+def _parsear_factuhost(
+    texto: str,
+    rucs: list[str],
+    campos: dict[str, dict[str, object]],
+    fuente: str,
+    factor: float,
+) -> None:
+    if len(rucs) < 2:
+        return
+    lineas = _lineas_limpias(texto)
+    ruc_emisor, ruc_receptor = rucs[0], rucs[1]
+    _poner_campo(campos, "ruc_emisor", ruc_emisor, min(0.96, 0.94 * factor), _contexto(texto, ruc_emisor), fuente)
+    _poner_campo(campos, "ruc_receptor", ruc_receptor, min(0.96, 0.94 * factor), _contexto(texto, ruc_receptor), fuente)
+
+    indice_ruc = next((i for i, linea in enumerate(lineas) if ruc_emisor in re.sub(r"\D", "", linea)), None)
+    if indice_ruc is not None:
+        emisor = _razon_emisor_encabezado(lineas, indice_ruc)
+        if emisor:
+            _poner_campo(campos, "razon_social_emisor", emisor[0], min(0.97, 0.95 * factor), emisor[1], fuente)
+
+    receptor = _bloque_despues_de_etiqueta(
+        lineas,
+        "CLIENTE",
+        detener=("RUC", "DIRECCION", "DIRECCIÓN", "MONEDA", "FECHA"),
+        max_lineas=3,
+    )
+    if receptor:
+        _poner_campo(campos, "razon_social_receptor", receptor[0], min(0.97, 0.95 * factor), receptor[1], fuente)
+
+
+def _parsear_efact(
+    texto: str,
+    rucs: list[str],
+    campos: dict[str, dict[str, object]],
+    fuente: str,
+    factor: float,
+) -> None:
+    if len(rucs) < 2:
+        return
+    lineas = _lineas_limpias(texto)
+    ruc_emisor, ruc_receptor = rucs[0], rucs[1]
+    _poner_campo(campos, "ruc_emisor", ruc_emisor, min(0.95, 0.93 * factor), _contexto(texto, ruc_emisor), fuente)
+    _poner_campo(campos, "ruc_receptor", ruc_receptor, min(0.95, 0.93 * factor), _contexto(texto, ruc_receptor), fuente)
+
+    indice_ruc = next((i for i, linea in enumerate(lineas) if ruc_emisor in re.sub(r"\D", "", linea)), None)
+    if indice_ruc is not None:
+        for linea in lineas[indice_ruc + 1 : indice_ruc + 5]:
+            if _razon_social_valida(linea):
+                _poner_campo(campos, "razon_social_emisor", linea, min(0.94, 0.92 * factor), linea, fuente)
+                break
+
+    receptor = _bloque_despues_de_etiqueta(
+        lineas,
+        "CLIENTE",
+        detener=("RUC", "DIRECCION", "DIRECCIÓN", "CIUDAD", "FECHA"),
+        max_lineas=4,
+    )
+    if receptor:
+        _poner_campo(campos, "razon_social_receptor", receptor[0], min(0.95, 0.93 * factor), receptor[1], fuente)
 
 
 def _extraer_rucs_etiquetados(
@@ -501,15 +773,25 @@ def detectar_formato_documental(texto: str) -> str:
     normalizado = _sin_tildes(texto).upper()
     if "RECIBO POR HONORARIOS" in normalizado:
         return "RHE_SUNAT"
+    if "FACTURALAYA" in normalizado:
+        return "OSE_FACTURALAYA"
+    if "FACTUHOST" in normalizado:
+        return "OSE_FACTUHOST"
+    if "EFACT" in normalizado or "WWW.EFACT.PE" in normalizado:
+        return "OSE_EFACT"
     if "OSE" in normalizado or any(
-        marca in normalizado
-        for marca in ("FACTURALAYA", "NUBEFACT", "EFACT", "BIZLINK", "DIGIFLOW")
+        marca in normalizado for marca in ("NUBEFACT", "BIZLINK", "DIGIFLOW")
     ):
         return "OSE"
     if "PSE" in normalizado or "PROVEEDOR DE SERVICIOS ELECTRONICOS" in normalizado:
         return "PSE"
     if "TICKET" in normalizado or "BOLETA DE VENTA" in normalizado:
         return "TICKET"
+    if (
+        "GENERADA EN EL SISTEMA DE SUNAT" in normalizado
+        or ("SENOR(ES)" in normalizado and "DIRECCION DEL CLIENTE" in normalizado)
+    ):
+        return "SUNAT_FACTURA"
     if "SUNAT" in normalizado or re.search(r"\bE\d{3}\s*[-–—]", normalizado):
         return "SUNAT"
     if "FACTURA ELECTRONICA" in normalizado or "FACTURA DE VENTA" in normalizado:
