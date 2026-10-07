@@ -10,7 +10,7 @@ from sqlalchemy.orm import aliased
 from app.api.deps import HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado
 from app.enums import EstadoExpediente, RolMiembro
-from app.models import Empresa, Expediente
+from app.models import Empresa, Expediente, ahora
 from app.schemas import ExpedienteDetalle, ExpedienteIn, ExpedienteOut, Recalculo
 from app.services.expedientes import (
     buscar_expediente,
@@ -18,7 +18,9 @@ from app.services.expedientes import (
     fecha_limite,
     recalcular_expedientes,
 )
+from app.services import auditoria
 from app.services.ingesta import crear_expediente
+from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 
 NUMERO_RE = re.compile(r"^([a-z0-9]{4})-0*(\d+)$")
 NUMERO_RHE_RE = re.compile(r"^rhe-([a-z0-9]{4})-0*(\d+)$")
@@ -180,3 +182,44 @@ def detalle(
         faltantes=documentos_faltantes(expediente, settings),
         fecha_limite=fecha_limite(expediente.fecha_emision, settings.dia_limite_expediente),
     )
+
+
+@router.delete("/{expediente_id}", status_code=status.HTTP_204_NO_CONTENT)
+def eliminar(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    expediente_id: uuid.UUID,
+) -> None:
+    expediente = session.get(Expediente, expediente_id)
+    if expediente is None or expediente.tenant_id != tenant_id or expediente.deleted_at:
+        raise no_encontrado("Expediente")
+    if auth.rol == "GESTOR" and expediente.gestor_id != auth.gestor_id:
+        raise no_encontrado("Expediente")
+    if auth.rol == RolMiembro.USUARIO and expediente.usuario_id != auth.usuario_id:
+        raise no_encontrado("Expediente")
+    if not permiso_habilitado(
+        session,
+        tenant_id,
+        auth.rol,
+        PERMISO_ELIMINAR_REGISTROS,
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "No tiene permiso para eliminar registros",
+        )
+
+    expediente.deleted_at = ahora()
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "EXPEDIENTE_ELIMINADO",
+        "expediente",
+        expediente.id,
+        {
+            "tipo": expediente.tipo_comprobante,
+            "serie": expediente.serie,
+            "correlativo": expediente.correlativo,
+        },
+    )
+    session.commit()
