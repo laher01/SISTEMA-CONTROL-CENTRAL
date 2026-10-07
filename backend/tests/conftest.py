@@ -30,6 +30,19 @@ class AuthPrueba:
     def __init__(self, contexto: ContextoAcceso) -> None:
         self.contexto = contexto
 
+    def como_superadmin(self) -> None:
+        self.contexto = ContextoAcceso(
+            cuenta_id=self.contexto.cuenta_id,
+            tenant_id=self.contexto.tenant_id,
+            rol="SUPERADMIN",
+            miembro_id=self.contexto.miembro_id,
+            gestor_id=None,
+            usuario_id=None,
+            codigo="ADMIN01",
+            nombre="Superadministrador de pruebas",
+            cambio_clave_obligatorio=False,
+        )
+
     def como_admin(self) -> None:
         self.contexto = ContextoAcceso(
             cuenta_id=self.contexto.cuenta_id,
