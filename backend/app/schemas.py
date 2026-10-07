@@ -55,6 +55,13 @@ class MiembroOut(Orm):
     activo: bool
 
 
+class MiembroActualizar(BaseModel):
+    codigo: str | None = Field(default=None, min_length=1, max_length=50)
+    nombre: str | None = Field(default=None, min_length=1, max_length=200)
+    rol: RolMiembro | None = None
+    activo: bool | None = None
+
+
 class GestorIn(BaseModel):
     codigo: str = Field(min_length=1, max_length=50)
     nombre: str = Field(min_length=1, max_length=200)
@@ -66,6 +73,12 @@ class GestorOut(Orm):
     codigo: str
     nombre: str
     usuario_id: uuid.UUID | None
+
+
+class GestorActualizar(BaseModel):
+    codigo: str | None = Field(default=None, min_length=1, max_length=50)
+    nombre: str | None = Field(default=None, min_length=1, max_length=200)
+    usuario_id: uuid.UUID | None = None
 
 
 class DocumentoOut(Orm):
