@@ -149,3 +149,45 @@ def revocar_sesion(session: Session, token: str) -> None:
     sesion = session.scalar(select(SesionAcceso).where(SesionAcceso.token_hash == token_hash))
     if sesion is not None and sesion.revocada_at is None:
         sesion.revocada_at = datetime.now(UTC)
+
+
+def crear_o_restablecer_cuenta(
+    session: Session,
+    tenant_id: uuid.UUID,
+    login: str,
+    *,
+    miembro_id: uuid.UUID | None = None,
+    gestor_id: uuid.UUID | None = None,
+) -> tuple[CuentaAcceso, str]:
+    login_normalizado = login.strip().upper()
+    cuenta = session.scalar(
+        select(CuentaAcceso).where(
+            CuentaAcceso.tenant_id == tenant_id,
+            CuentaAcceso.login == login_normalizado,
+            CuentaAcceso.deleted_at.is_(None),
+        )
+    )
+    temporal = clave_temporal()
+    if cuenta is None:
+        cuenta = CuentaAcceso(
+            tenant_id=tenant_id,
+            login=login_normalizado,
+            password_hash=hash_clave(temporal),
+            miembro_id=miembro_id,
+            gestor_id=gestor_id,
+            activo=True,
+            cambio_clave_obligatorio=True,
+        )
+        session.add(cuenta)
+    else:
+        if miembro_id is not None and cuenta.miembro_id not in (None, miembro_id):
+            raise ValueError("El login ya pertenece a otra cuenta")
+        if gestor_id is not None and cuenta.gestor_id not in (None, gestor_id):
+            raise ValueError("El login ya pertenece a otra cuenta")
+        cuenta.miembro_id = miembro_id
+        cuenta.gestor_id = gestor_id
+        cuenta.password_hash = hash_clave(temporal)
+        cuenta.activo = True
+        cuenta.cambio_clave_obligatorio = True
+    session.flush()
+    return cuenta, temporal
