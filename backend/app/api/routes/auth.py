@@ -301,6 +301,4 @@ def _clave_valida(clave: str, config: ConfiguracionAcceso | None = None) -> bool
         return False
     if requiere_letra and not any(c.isalpha() for c in clave):
         return False
-    if requiere_numero and not any(c.isdigit() for c in clave):
-        return False
-    return True
+    return not requiere_numero or any(c.isdigit() for c in clave)
