@@ -107,6 +107,28 @@ NO_RAZON = (
     "EMAIL",
     "PAGINA",
     "SUNAT",
+    "INFORMACION",
+    "INFORMACIÓN",
+    "OBSERVACION",
+    "OBSERVACIÓN",
+    "REFERENCIA",
+    "DETALLE",
+    "DESCRIPCION",
+    "DESCRIPCIÓN",
+    "AVENIDA",
+    "AV.",
+    "JR.",
+    "JIRON",
+    "CALLE",
+    "CARRETERA",
+    "MZ.",
+    "MANZANA",
+    "LOTE",
+    "URB.",
+    "URBANIZACION",
+    "DISTRITO",
+    "PROVINCIA",
+    "DEPARTAMENTO",
 )
 
 
@@ -143,8 +165,7 @@ def extraer_campos(
     else:
         _extraer_rucs_etiquetados(texto, campos, fuente, factor)
 
-    _extraer_razones_etiquetadas(texto, campos, fuente, factor)
-    _completar_razones_por_ruc(texto, campos, fuente, factor)
+    _extraer_razones_vinculadas_a_ruc(texto, campos, fuente, factor)
 
     fecha_match = FECHA_ETIQUETADA.search(texto) or FECHA.search(texto)
     if fecha_match and (fecha := _normalizar_fecha(fecha_match.group(1))):
@@ -239,50 +260,117 @@ def _extraer_partes_rhe(
             rucs[1], min(0.88, 0.84 * factor), _contexto(texto, rucs[1])
         ).a_dict(fuente)
 
-    nombre_receptor = _razon_social_cercana_a_etiqueta(texto, ETIQUETAS_RHE_NOMBRE_RECEPTOR)
-    if nombre_receptor:
-        campos["razon_social_receptor"] = CampoExtraido(
-            nombre_receptor, min(0.92, 0.9 * factor), nombre_receptor
-        ).a_dict(fuente)
-
-
-def _extraer_razones_etiquetadas(
-    texto: str,
-    campos: dict[str, dict[str, object]],
-    fuente: str,
-    factor: float,
-) -> None:
-    for nombre, etiquetas in (
-        ("razon_social_emisor", ETIQUETAS_EMISOR),
-        ("razon_social_receptor", ETIQUETAS_RECEPTOR),
-    ):
-        if nombre in campos:
-            continue
-        encontrado = _razon_social_cercana_a_etiqueta(texto, etiquetas)
-        if encontrado:
-            campos[nombre] = CampoExtraido(encontrado, min(0.9, 0.86 * factor), encontrado).a_dict(
-                fuente
-            )
-
-
-def _completar_razones_por_ruc(
-    texto: str,
-    campos: dict[str, dict[str, object]],
-    fuente: str,
-    factor: float,
-) -> None:
-    for nombre_razon, nombre_ruc in (
-        ("razon_social_emisor", "ruc_emisor"),
-        ("razon_social_receptor", "ruc_receptor"),
-    ):
-        if nombre_razon in campos or nombre_ruc not in campos:
-            continue
-        ruc = str(campos[nombre_ruc]["valor"])
-        encontrado = _razon_social_cercana_a_ruc(texto, ruc)
-        if encontrado:
-            campos[nombre_razon] = CampoExtraido(
-                encontrado, min(0.86, 0.82 * factor), encontrado
+    if receptor:
+        nombre_receptor = _razon_social_etiquetada_para_ruc(
+            texto,
+            receptor,
+            ETIQUETAS_RHE_NOMBRE_RECEPTOR,
+        )
+        if nombre_receptor:
+            valor, evidencia = nombre_receptor
+            campos["razon_social_receptor"] = CampoExtraido(
+                valor,
+                min(0.97, 0.95 * factor),
+                evidencia,
             ).a_dict(fuente)
+
+
+def _extraer_razones_vinculadas_a_ruc(
+    texto: str,
+    campos: dict[str, dict[str, object]],
+    fuente: str,
+    factor: float,
+) -> None:
+    for nombre_razon, nombre_ruc, etiquetas, permitir_linea_anterior in (
+        ("razon_social_emisor", "ruc_emisor", ETIQUETAS_EMISOR, True),
+        ("razon_social_receptor", "ruc_receptor", ETIQUETAS_RECEPTOR, False),
+    ):
+        if nombre_razon in campos:
+            continue
+        dato_ruc = campos.get(nombre_ruc)
+        if not dato_ruc:
+            continue
+        ruc = str(dato_ruc["valor"])
+
+        etiquetada = _razon_social_etiquetada_para_ruc(texto, ruc, etiquetas)
+        if etiquetada:
+            valor, evidencia = etiquetada
+            campos[nombre_razon] = CampoExtraido(
+                valor,
+                min(0.97, 0.95 * factor),
+                evidencia,
+            ).a_dict(fuente)
+            continue
+
+        cercana = _razon_social_cercana_a_ruc(
+            texto,
+            ruc,
+            permitir_linea_anterior=permitir_linea_anterior,
+        )
+        if cercana:
+            valor, evidencia = cercana
+            campos[nombre_razon] = CampoExtraido(
+                valor,
+                min(0.90, 0.88 * factor),
+                evidencia,
+            ).a_dict(fuente)
+
+
+def _razon_social_etiquetada_para_ruc(
+    texto: str,
+    ruc: str,
+    etiquetas: tuple[str, ...],
+) -> tuple[str, str] | None:
+    lineas = texto.splitlines()
+    normalizadas = [_sin_tildes(linea).upper() for linea in lineas]
+    for indice, linea_norm in enumerate(normalizadas):
+        for etiqueta in etiquetas:
+            etiqueta_norm = _sin_tildes(etiqueta).upper()
+            pos = linea_norm.find(etiqueta_norm)
+            if pos < 0:
+                continue
+
+            fin = min(len(lineas), indice + 2)
+            bloque = "\n".join(lineas[indice:fin])
+            if ruc not in re.sub(r"[\s.\-]", "", bloque):
+                continue
+
+            original = lineas[indice]
+            prefijo = linea_norm[max(0, pos - 8) : pos]
+            if "RUC" in prefijo:
+                continue
+            resto = original[pos + len(etiqueta) :].strip(" :-\t")
+            candidato = _recortar_razon(resto, quitar_etiqueta=False)
+            if not candidato and indice + 1 < fin:
+                candidato = _recortar_razon(lineas[indice + 1], quitar_etiqueta=False)
+            if _razon_social_valida(candidato):
+                return candidato[:300], " ".join(bloque.split())[:300]
+    return None
+
+
+def _razon_social_cercana_a_ruc(
+    texto: str,
+    ruc: str,
+    *,
+    permitir_linea_anterior: bool,
+) -> tuple[str, str] | None:
+    lineas = texto.splitlines()
+    for indice, linea in enumerate(lineas):
+        linea_compacta = re.sub(r"[\s.\-]", "", linea)
+        if ruc not in linea_compacta:
+            continue
+
+        antes = re.split(r"\bRUC\b", linea, maxsplit=1, flags=re.IGNORECASE)[0]
+        antes = _recortar_razon(antes)
+        if _razon_social_valida(antes):
+            return antes[:300], " ".join(linea.split())[:300]
+
+        if permitir_linea_anterior and indice > 0:
+            candidato = _recortar_razon(lineas[indice - 1])
+            if _razon_social_valida(candidato) and not _parece_direccion(candidato):
+                evidencia = " ".join(lineas[indice - 1 : indice + 1]).strip()
+                return candidato[:300], evidencia[:300]
+    return None
 
 
 def _rucs_en_texto(texto: str) -> list[str]:
@@ -311,52 +399,6 @@ def _ruc_cercano_a_etiqueta(texto: str, etiquetas: tuple[str, ...]) -> str | Non
         rucs = _rucs_en_texto(fragmento)
         if rucs:
             return rucs[0]
-    return None
-
-
-def _razon_social_cercana_a_etiqueta(texto: str, etiquetas: tuple[str, ...]) -> str | None:
-    lineas = texto.splitlines()
-    normalizadas = [_sin_tildes(linea).upper() for linea in lineas]
-    for indice, linea_norm in enumerate(normalizadas):
-        for etiqueta in etiquetas:
-            etiqueta_norm = _sin_tildes(etiqueta).upper()
-            pos = linea_norm.find(etiqueta_norm)
-            if pos < 0:
-                continue
-            original = lineas[indice]
-            candidato = original[pos + len(etiqueta) :].strip(" :-\t")
-            candidato = _recortar_razon(candidato, quitar_etiqueta=False)
-            if not candidato and indice + 1 < len(lineas):
-                candidato = _recortar_razon(lineas[indice + 1], quitar_etiqueta=False)
-            if _razon_social_valida(candidato):
-                return candidato[:300]
-    return None
-
-
-def _razon_social_cercana_a_ruc(texto: str, ruc: str) -> str | None:
-    lineas = texto.splitlines()
-    for indice, linea in enumerate(lineas):
-        if ruc not in re.sub(r"[\s.\-]", "", linea):
-            continue
-
-        antes = re.split(r"\bRUC\b", linea, maxsplit=1, flags=re.IGNORECASE)[0]
-        antes = _recortar_razon(antes)
-        if _razon_social_valida(antes):
-            return antes[:300]
-
-        for distancia in (1, 2, 3):
-            previo = indice - distancia
-            if previo >= 0:
-                candidato = _recortar_razon(lineas[previo])
-                if _razon_social_valida(candidato):
-                    return candidato[:300]
-
-        for distancia in (1, 2):
-            siguiente = indice + distancia
-            if siguiente < len(lineas):
-                candidato = _recortar_razon(lineas[siguiente])
-                if _razon_social_valida(candidato):
-                    return candidato[:300]
     return None
 
 
@@ -392,7 +434,32 @@ def _razon_social_valida(valor: str) -> bool:
         normalizado == invalido or normalizado.startswith(f"{invalido} ") for invalido in NO_RAZON
     ):
         return False
+    if _parece_direccion(valor):
+        return False
     return not ("HTTP://" in normalizado or "HTTPS://" in normalizado or "WWW." in normalizado)
+
+
+def _parece_direccion(valor: str) -> bool:
+    normalizado = _sin_tildes(valor).upper()
+    indicadores = (
+        "DIRECCION",
+        "DOMICILIO",
+        "AVENIDA",
+        " AV.",
+        "JR.",
+        "JIRON",
+        "CALLE",
+        "CARRETERA",
+        " MZ",
+        "MANZANA",
+        "LOTE",
+        "URB.",
+        "URBANIZACION",
+        "DISTRITO",
+        "PROVINCIA",
+        "DEPARTAMENTO",
+    )
+    return any(indicador in normalizado for indicador in indicadores)
 
 
 def _es_rhe(texto: str) -> bool:

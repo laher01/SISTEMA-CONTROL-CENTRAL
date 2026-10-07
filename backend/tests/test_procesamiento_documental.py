@@ -171,3 +171,36 @@ def test_extrae_razon_social_junto_al_ruc_sin_etiqueta_proveedor() -> None:
     assert isinstance(campos, dict)
     assert campos["ruc_receptor"]["valor"] == "20600612876"
     assert campos["razon_social_receptor"]["valor"] == "COMERCIAL DEL MAR S.A.C."
+
+
+def test_no_confunde_direccion_con_razon_social_del_emisor() -> None:
+    texto = """FACTURA ELECTRÓNICA F001-00000123
+    PESQUERA CORRECTA S.A.C.
+    DIRECCIÓN: AV. INDUSTRIAL 123 PAITA
+    RUC EMISOR: 20500000002
+    CLIENTE: NEXOMAR NEGOCIOS E.I.R.L. RUC RECEPTOR: 20100000001
+    FECHA DE EMISIÓN: 17/09/2026
+    TOTAL: S/ 500.00"""
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    campos = resultado["campos"]
+    assert isinstance(campos, dict)
+    assert campos["ruc_emisor"]["valor"] == "20500000002"
+    assert "razon_social_emisor" not in campos
+    assert campos["razon_social_receptor"]["valor"] == "NEXOMAR NEGOCIOS E.I.R.L."
+
+
+def test_razon_social_receptor_debe_estar_vinculada_al_mismo_ruc() -> None:
+    texto = """FACTURA ELECTRÓNICA F001-00000123
+    PROVEEDOR: PESQUERA DEL PACIFICO S.A.C. RUC EMISOR: 20500000002
+    CLIENTE: EMPRESA AJENA S.A.C. RUC: 20999999999
+    INFORMACIÓN ADICIONAL
+    RUC RECEPTOR: 20100000001
+    FECHA DE EMISIÓN: 17/09/2026
+    TOTAL: S/ 500.00"""
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    campos = resultado["campos"]
+    assert isinstance(campos, dict)
+    assert campos["ruc_receptor"]["valor"] == "20100000001"
+    assert "razon_social_receptor" not in campos
