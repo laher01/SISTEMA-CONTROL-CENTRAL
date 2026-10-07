@@ -562,3 +562,101 @@ def test_recalcular_corrige_expedientes_historicos_menores_al_umbral(
     assert detalle["requiere_guia"] is False
     assert detalle["faltantes"] == []
     assert detalle["estado"] == "VERDE"
+
+def test_rhe_pdf_crea_expediente_automaticamente_con_partes(
+    client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings.tenant_ruc = RECEPTOR
+    texto = f"""RECIBO POR HONORARIOS ELECTRÓNICO
+    JUAN PEREZ LOPEZ
+    RUC: 10456789012
+    E001-00000038
+    RECIBÍ DE: CLIENTE SAC
+    IDENTIFICADO CON RUC NÚMERO: {RECEPTOR}
+    FECHA DE EMISIÓN: 02/10/2026
+    TOTAL POR HONORARIOS: S/ 350.00"""
+    monkeypatch.setattr(
+        documentos_routes,
+        "procesar",
+        lambda *_: ResultadoProcesamiento(
+            texto=texto,
+            metodo="TEXTO_PDF",
+            motor="prueba",
+            paginas=1,
+            confianza=1.0,
+            sugerencia=sugerir_tipo(texto),
+        ),
+    )
+
+    documento = subir(client, "rhe.pdf", pdf_vacio())
+
+    assert documento["estado"] == "RELACIONADO"
+    assert documento["tipo_documento"] == "RHE"
+    assert documento["expediente_id"] is not None
+    detalle = expediente(client, documento["expediente_id"])
+    assert detalle["tipo_comprobante"] == "RHE"
+    assert detalle["requiere_guia"] is False
+    assert detalle["emisor"]["ruc"] == "10456789012"
+    assert detalle["emisor"]["razon_social"] == "JUAN PEREZ LOPEZ"
+    assert detalle["receptor"]["ruc"] == RECEPTOR
+    assert detalle["receptor"]["razon_social"] == "CLIENTE SAC"
+
+
+def test_listado_documentos_incluye_partes_del_expediente(client: TestClient) -> None:
+    documento = subir(client, "factura.xml", factura())
+    respuesta = client.get("/api/v1/documentos", params={"tipo_documento": "FACT"})
+    assert respuesta.status_code == 200
+    fila = next(d for d in respuesta.json() if d["id"] == documento["id"])
+    assert fila["emisor"]["ruc"] == "20500000002"
+    assert fila["emisor"]["razon_social"] == "PROVEEDOR SAC"
+    assert fila["receptor"]["ruc"] == RECEPTOR
+    assert fila["receptor"]["razon_social"] == "CLIENTE SAC"
+
+
+def test_reprocesar_partes_repara_empresas_de_documento_relacionado(
+    client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings.tenant_ruc = RECEPTOR
+    texto_inicial = """FACTURA ELECTRÓNICA F009-00000021
+    RUC EMISOR: 20611111111 CLIENTE RUC: 20100000001
+    Fecha de emisión: 20/09/2026 Moneda: SOLES TOTAL S/ 700.00"""
+    monkeypatch.setattr(
+        documentos_routes,
+        "procesar",
+        lambda *_: ResultadoProcesamiento(
+            texto=texto_inicial,
+            metodo="TEXTO_PDF",
+            motor="prueba",
+            paginas=1,
+            confianza=1.0,
+            sugerencia=sugerir_tipo(texto_inicial),
+        ),
+    )
+    documento = subir(client, "factura-sin-nombres.pdf", pdf_vacio())
+    assert documento["estado"] == "RELACIONADO"
+
+    texto_actualizado = """FACTURA ELECTRÓNICA F009-00000021
+    PROVEEDOR: PESQUERA ACTUALIZADA S.A.C. RUC EMISOR: 20611111111
+    CLIENTE: CLIENTE ACTUALIZADO S.A.C. RUC: 20100000001
+    Fecha de emisión: 20/09/2026 Moneda: SOLES TOTAL S/ 700.00"""
+    monkeypatch.setattr(
+        documentos_routes,
+        "procesar",
+        lambda *_: ResultadoProcesamiento(
+            texto=texto_actualizado,
+            metodo="TEXTO_PDF",
+            motor="prueba",
+            paginas=1,
+            confianza=1.0,
+            sugerencia=sugerir_tipo(texto_actualizado),
+        ),
+    )
+
+    respuesta = client.post(
+        "/api/v1/documentos/procesar-pendientes",
+        params={"limit": 100, "forzar": True, "completar_partes": True},
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    detalle = expediente(client, documento["expediente_id"])
+    assert detalle["emisor"]["razon_social"] == "PESQUERA ACTUALIZADA S.A.C."
+    assert detalle["receptor"]["razon_social"] == "CLIENTE ACTUALIZADO S.A.C."
