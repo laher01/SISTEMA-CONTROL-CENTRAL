@@ -256,3 +256,38 @@ class ComprasProveedorFila(BaseModel):
     moneda: Moneda
     expedientes: int
     importe_total: Decimal
+
+
+class LoginIn(BaseModel):
+    login: str = Field(min_length=1, max_length=100)
+    clave: str = Field(min_length=8, max_length=200)
+
+
+class SesionOut(BaseModel):
+    rol: str
+    codigo: str
+    nombre: str
+    miembro_id: uuid.UUID | None
+    gestor_id: uuid.UUID | None
+    usuario_id: uuid.UUID | None
+    cambio_clave_obligatorio: bool
+
+
+class CambioClaveIn(BaseModel):
+    clave_actual: str = Field(min_length=8, max_length=200)
+    clave_nueva: str = Field(min_length=10, max_length=200)
+
+
+class CredencialTemporalOut(BaseModel):
+    login: str
+    clave_temporal: str
+
+
+class AltaMiembroOut(BaseModel):
+    miembro: MiembroOut
+    credencial: CredencialTemporalOut
+
+
+class AltaGestorOut(BaseModel):
+    gestor: GestorOut
+    credencial: CredencialTemporalOut
