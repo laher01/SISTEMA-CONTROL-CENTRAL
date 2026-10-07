@@ -160,13 +160,35 @@ def crear_o_restablecer_cuenta(
     gestor_id: uuid.UUID | None = None,
 ) -> tuple[CuentaAcceso, str]:
     login_normalizado = login.strip().upper()
-    cuenta = session.scalar(
+
+    cuenta: CuentaAcceso | None = None
+    if miembro_id is not None:
+        cuenta = session.scalar(
+            select(CuentaAcceso).where(
+                CuentaAcceso.tenant_id == tenant_id,
+                CuentaAcceso.miembro_id == miembro_id,
+                CuentaAcceso.deleted_at.is_(None),
+            )
+        )
+    elif gestor_id is not None:
+        cuenta = session.scalar(
+            select(CuentaAcceso).where(
+                CuentaAcceso.tenant_id == tenant_id,
+                CuentaAcceso.gestor_id == gestor_id,
+                CuentaAcceso.deleted_at.is_(None),
+            )
+        )
+
+    conflicto = session.scalar(
         select(CuentaAcceso).where(
             CuentaAcceso.tenant_id == tenant_id,
             CuentaAcceso.login == login_normalizado,
             CuentaAcceso.deleted_at.is_(None),
         )
     )
+    if conflicto is not None and (cuenta is None or conflicto.id != cuenta.id):
+        raise ValueError("El login ya pertenece a otra cuenta")
+
     temporal = clave_temporal()
     if cuenta is None:
         cuenta = CuentaAcceso(
@@ -180,10 +202,7 @@ def crear_o_restablecer_cuenta(
         )
         session.add(cuenta)
     else:
-        if miembro_id is not None and cuenta.miembro_id not in (None, miembro_id):
-            raise ValueError("El login ya pertenece a otra cuenta")
-        if gestor_id is not None and cuenta.gestor_id not in (None, gestor_id):
-            raise ValueError("El login ya pertenece a otra cuenta")
+        cuenta.login = login_normalizado
         cuenta.miembro_id = miembro_id
         cuenta.gestor_id = gestor_id
         cuenta.password_hash = hash_clave(temporal)
@@ -191,3 +210,41 @@ def crear_o_restablecer_cuenta(
         cuenta.cambio_clave_obligatorio = True
     session.flush()
     return cuenta, temporal
+
+
+def actualizar_login_cuenta(
+    session: Session,
+    tenant_id: uuid.UUID,
+    nuevo_login: str,
+    *,
+    miembro_id: uuid.UUID | None = None,
+    gestor_id: uuid.UUID | None = None,
+) -> None:
+    consulta = select(CuentaAcceso).where(
+        CuentaAcceso.tenant_id == tenant_id,
+        CuentaAcceso.deleted_at.is_(None),
+    )
+    if miembro_id is not None:
+        consulta = consulta.where(CuentaAcceso.miembro_id == miembro_id)
+    elif gestor_id is not None:
+        consulta = consulta.where(CuentaAcceso.gestor_id == gestor_id)
+    else:
+        return
+
+    cuenta = session.scalar(consulta)
+    if cuenta is None:
+        return
+
+    login_normalizado = nuevo_login.strip().upper()
+    conflicto = session.scalar(
+        select(CuentaAcceso).where(
+            CuentaAcceso.tenant_id == tenant_id,
+            CuentaAcceso.login == login_normalizado,
+            CuentaAcceso.id != cuenta.id,
+            CuentaAcceso.deleted_at.is_(None),
+        )
+    )
+    if conflicto is not None:
+        raise ValueError("El login ya pertenece a otra cuenta")
+    cuenta.login = login_normalizado
+    session.flush()
