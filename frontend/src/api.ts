@@ -57,6 +57,10 @@ export function enviarFormulario<T>(ruta: string, formulario: FormData): Promise
   return solicitar<T>(ruta, { method: "POST", body: formulario });
 }
 
+export function eliminar(ruta: string): Promise<void> {
+  return solicitar<void>(ruta, { method: "DELETE" });
+}
+
 export function urlArchivo(documentoId: string): string {
   return `${BASE}/api/v1/documentos/${documentoId}/archivo`;
 }
