@@ -65,6 +65,8 @@ export interface Gestor {
 export interface Documento {
   id: string;
   expediente_id: string | null;
+  emisor?: Empresa | null;
+  receptor?: Empresa | null;
   tipo_documento: TipoDocumento | null;
   estado: EstadoDocumento;
   sha256: string;

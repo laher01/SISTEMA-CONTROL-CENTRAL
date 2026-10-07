@@ -49,12 +49,12 @@ export default function Documentos() {
   const [resultadoLote, setResultadoLote] = useState<ResultadoLote>();
   const [errorLote, setErrorLote] = useState("");
 
-  const reprocesarSinExpediente = async () => {
+  const reprocesarYCompletar = async () => {
     setReprocesando(true);
     setErrorLote("");
     try {
       const resultado = await enviarJson<ResultadoLote>(
-        "/api/v1/documentos/procesar-pendientes?limit=100&forzar=true&sin_expediente=true",
+        "/api/v1/documentos/procesar-pendientes?limit=100&forzar=true&completar_partes=true",
         "POST",
       );
       setResultadoLote(resultado);
@@ -86,8 +86,8 @@ export default function Documentos() {
           </p>
         </div>
         <div className="acciones-documento">
-          <button onClick={reprocesarSinExpediente} disabled={reprocesando}>
-            {reprocesando ? "Reprocesando…" : "Reprocesar todos sin expediente"}
+          <button onClick={reprocesarYCompletar} disabled={reprocesando}>
+            {reprocesando ? "Reprocesando…" : "Reprocesar y completar datos"}
           </button>
           <Link className="boton-enlace" to="/subir">Subir documentos</Link>
         </div>
@@ -258,9 +258,7 @@ function FilaDocumento({
       </td>
       <td>
         <div className="acciones-documento">
-          {documento.estado !== "RELACIONADO" && (
-            <button disabled={ocupado} onClick={reprocesar}>Reprocesar</button>
-          )}
+          <button disabled={ocupado} onClick={reprocesar}>Reprocesar</button>
           <button className="peligro" disabled={ocupado} onClick={retirar}>Eliminar</button>
         </div>
       </td>
@@ -331,18 +329,28 @@ function resumenPartes(documento: Documento): {
   return {
     emisor: {
       razonSocial:
+        (documento.emisor?.razon_social !== documento.emisor?.ruc
+          ? documento.emisor?.razon_social
+          : undefined) ||
         emisorXml.razonSocial ||
+        leerValorCampo(camposConfirmados, "razon_social_emisor") ||
         leerValorCampo(campos, "razon_social_emisor"),
       ruc:
+        documento.emisor?.ruc ||
         emisorXml.ruc ||
         leerValorCampo(camposConfirmados, "ruc_emisor") ||
         leerValorCampo(campos, "ruc_emisor"),
     },
     receptor: {
       razonSocial:
+        (documento.receptor?.razon_social !== documento.receptor?.ruc
+          ? documento.receptor?.razon_social
+          : undefined) ||
         receptorXml.razonSocial ||
+        leerValorCampo(camposConfirmados, "razon_social_receptor") ||
         leerValorCampo(campos, "razon_social_receptor"),
       ruc:
+        documento.receptor?.ruc ||
         receptorXml.ruc ||
         leerValorCampo(camposConfirmados, "ruc_receptor") ||
         leerValorCampo(campos, "ruc_receptor"),

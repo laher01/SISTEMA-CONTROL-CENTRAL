@@ -131,3 +131,43 @@ def test_extrae_razones_sociales_de_factura() -> None:
     assert isinstance(campos, dict)
     assert campos["razon_social_emisor"]["valor"] == "PESQUERA DEL PACIFICO S.A.C."
     assert campos["razon_social_receptor"]["valor"] == "NEXOMAR NEGOCIOS E.I.R.L."
+
+
+def test_extrae_partes_y_campos_de_recibo_por_honorarios() -> None:
+    texto = """RECIBO POR HONORARIOS ELECTRÓNICO
+    JUAN PEREZ LOPEZ
+    RUC: 10456789012
+    E001-00000038
+    RECIBÍ DE: NEXOMAR NEGOCIOS E.I.R.L.
+    IDENTIFICADO CON RUC NÚMERO: 20100000001
+    FECHA DE EMISIÓN: 02/10/2026
+    TOTAL POR HONORARIOS: S/ 350.00"""
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    campos = resultado["campos"]
+    assert isinstance(campos, dict)
+    assert campos["serie"]["valor"] == "E001"
+    assert campos["correlativo"]["valor"] == "38"
+    assert campos["ruc_emisor"]["valor"] == "10456789012"
+    assert campos["ruc_receptor"]["valor"] == "20100000001"
+    assert campos["razon_social_emisor"]["valor"] == "JUAN PEREZ LOPEZ"
+    assert campos["razon_social_receptor"]["valor"] == "NEXOMAR NEGOCIOS E.I.R.L."
+    assert campos["fecha_emision"]["valor"] == "2026-10-02"
+    assert campos["moneda"]["valor"] == "PEN"
+    assert campos["importe_total"]["valor"] == "350.00"
+
+
+def test_extrae_razon_social_junto_al_ruc_sin_etiqueta_proveedor() -> None:
+    texto = """PESQUERA YATARUMI S.A.C.
+    RUC: 20492560601
+    FACTURA ELECTRÓNICA E001-00003321
+    CLIENTE: COMERCIAL DEL MAR S.A.C.
+    RUC RECEPTOR: 20600612876
+    FECHA DE EMISIÓN: 02/10/2026
+    TOTAL: S/ 1,250.00"""
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    campos = resultado["campos"]
+    assert isinstance(campos, dict)
+    assert campos["ruc_receptor"]["valor"] == "20600612876"
+    assert campos["razon_social_receptor"]["valor"] == "COMERCIAL DEL MAR S.A.C."

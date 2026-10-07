@@ -29,6 +29,7 @@ class CampoExtraido:
 
 REFERENCIA = re.compile(r"\b([A-Z0-9]{4})\s*[-–—]\s*0*(\d{1,8})\b", re.IGNORECASE)
 RUC = re.compile(r"(?<!\d)(\d{11})(?!\d)")
+RUC_FLEXIBLE = re.compile(r"(?<!\d)((?:\d[\s.\-]?){10}\d)(?!\d)")
 FECHA_ETIQUETADA = re.compile(
     r"(?:FECHA(?:\s+DE)?\s+(?:EMISION|EMISI[ÓO]N)|EMITIDO\s+EL)\s*[:\-]?\s*"
     r"(\d{1,2}[/-]\d{1,2}[/-]\d{4}|\d{4}-\d{2}-\d{2})",
@@ -36,7 +37,8 @@ FECHA_ETIQUETADA = re.compile(
 )
 FECHA = re.compile(r"\b(\d{1,2}[/-]\d{1,2}[/-]\d{4}|\d{4}-\d{2}-\d{2})\b")
 TOTAL = re.compile(
-    r"(?:IMPORTE\s+TOTAL|TOTAL\s+(?:A\s+PAGAR|PAGADO)|TOTAL)\s*[:=]?\s*"
+    r"(?:IMPORTE\s+TOTAL|IMPORTE\s+NETO|MONTO\s+(?:TOTAL|NETO)|"
+    r"TOTAL\s+(?:A\s+PAGAR|PAGADO|POR\s+HONORARIOS|HONORARIOS)|TOTAL)\s*[:=]?\s*"
     r"(?:S/\.?|US\$|USD|PEN|\$)?\s*([0-9][0-9.,\s]{0,18})",
     re.IGNORECASE,
 )
@@ -44,6 +46,67 @@ OPERACION = re.compile(
     r"(?:N(?:RO|ÚMERO|UMERO)?\.?\s*(?:DE\s*)?|C[ÓO]DIGO\s+(?:DE\s*)?)"
     r"(?:OPERACI[ÓO]N|TRANSACCI[ÓO]N)\s*[:#-]?\s*([A-Z0-9-]{4,30})",
     re.IGNORECASE,
+)
+
+ETIQUETAS_EMISOR = (
+    "RAZÓN SOCIAL EMISOR",
+    "RAZON SOCIAL EMISOR",
+    "PROVEEDOR",
+    "EMISOR",
+)
+ETIQUETAS_RECEPTOR = (
+    "RAZÓN SOCIAL RECEPTOR",
+    "RAZON SOCIAL RECEPTOR",
+    "CLIENTE",
+    "ADQUIRIENTE",
+    "SEÑOR(ES)",
+    "SEÑORES",
+    "SENORES",
+)
+ETIQUETAS_RUC_EMISOR = (
+    "RUC EMISOR",
+    "RUC DEL EMISOR",
+    "RUC PROVEEDOR",
+    "PROVEEDOR",
+)
+ETIQUETAS_RUC_RECEPTOR = (
+    "RUC RECEPTOR",
+    "RUC DEL RECEPTOR",
+    "RUC CLIENTE",
+    "CLIENTE",
+    "ADQUIRIENTE",
+)
+ETIQUETAS_RHE_RECEPTOR = (
+    "IDENTIFICADO CON RUC",
+    "IDENTIFICADA CON RUC",
+    "RUC DEL USUARIO",
+    "RUC DEL CLIENTE",
+    "RUC DEL RECEPTOR",
+)
+ETIQUETAS_RHE_NOMBRE_RECEPTOR = (
+    "RECIBÍ DE",
+    "RECIBI DE",
+    "RECIBIDO DE",
+)
+
+NO_RAZON = (
+    "FACTURA",
+    "BOLETA",
+    "RECIBO POR HONORARIOS",
+    "GUIA DE REMISION",
+    "RUC",
+    "FECHA DE EMISION",
+    "DIRECCION",
+    "DOMICILIO",
+    "MONEDA",
+    "TOTAL",
+    "IMPORTE",
+    "TELEFONO",
+    "CELULAR",
+    "CORREO",
+    "EMAIL",
+    "PAGINA",
+    "SUNAT",
 )
 
 
@@ -66,45 +129,22 @@ def extraer_campos(
             str(int(referencia.group(2))), min(0.98, 0.96 * factor), evidencia
         ).a_dict(fuente)
 
-    rucs = list(dict.fromkeys(RUC.findall(texto)))
+    rucs = _rucs_en_texto(texto)
     candidatos: dict[str, list[dict[str, object]]] = {}
     if rucs:
         candidatos["ruc"] = [
             CampoExtraido(ruc, min(0.95, 0.9 * factor), _contexto(texto, ruc)).a_dict(fuente)
             for ruc in rucs
         ]
-        for nombre, etiquetas in (
-            ("ruc_emisor", ("RUC EMISOR", "PROVEEDOR", "SEÑOR(ES)")),
-            ("ruc_receptor", ("RUC RECEPTOR", "CLIENTE", "ADQUIRIENTE")),
-        ):
-            encontrado = _ruc_cercano_a_etiqueta(texto, etiquetas)
-            if encontrado:
-                campos[nombre] = CampoExtraido(
-                    encontrado, min(0.92, 0.88 * factor), _contexto(texto, encontrado)
-                ).a_dict(fuente)
 
-    for nombre, etiquetas_razon in (
-        (
-            "razon_social_emisor",
-            ("RAZÓN SOCIAL EMISOR", "RAZON SOCIAL EMISOR", "PROVEEDOR", "EMISOR"),
-        ),
-        (
-            "razon_social_receptor",
-            (
-                "RAZÓN SOCIAL RECEPTOR",
-                "RAZON SOCIAL RECEPTOR",
-                "CLIENTE",
-                "ADQUIRIENTE",
-                "SEÑOR(ES)",
-                "SENORES",
-            ),
-        ),
-    ):
-        encontrado = _razon_social_cercana_a_etiqueta(texto, etiquetas_razon)
-        if encontrado:
-            campos[nombre] = CampoExtraido(encontrado, min(0.9, 0.86 * factor), encontrado).a_dict(
-                fuente
-            )
+    es_rhe = _es_rhe(texto)
+    if es_rhe:
+        _extraer_partes_rhe(texto, rucs, campos, fuente, factor)
+    else:
+        _extraer_rucs_etiquetados(texto, campos, fuente, factor)
+
+    _extraer_razones_etiquetadas(texto, campos, fuente, factor)
+    _completar_razones_por_ruc(texto, campos, fuente, factor)
 
     fecha_match = FECHA_ETIQUETADA.search(texto) or FECHA.search(texto)
     if fecha_match and (fecha := _normalizar_fecha(fecha_match.group(1))):
@@ -133,10 +173,125 @@ def extraer_campos(
 
     if not campos and not candidatos:
         return None
-    resultado: dict[str, object] = {"version": 1, "campos": campos}
+    resultado: dict[str, object] = {"version": 2, "campos": campos}
     if candidatos:
         resultado["candidatos"] = candidatos
     return resultado
+
+
+def _extraer_rucs_etiquetados(
+    texto: str,
+    campos: dict[str, dict[str, object]],
+    fuente: str,
+    factor: float,
+) -> None:
+    for nombre, etiquetas in (
+        ("ruc_emisor", ETIQUETAS_RUC_EMISOR),
+        ("ruc_receptor", ETIQUETAS_RUC_RECEPTOR),
+    ):
+        encontrado = _ruc_cercano_a_etiqueta(texto, etiquetas)
+        if encontrado:
+            campos[nombre] = CampoExtraido(
+                encontrado, min(0.92, 0.88 * factor), _contexto(texto, encontrado)
+            ).a_dict(fuente)
+
+
+def _extraer_partes_rhe(
+    texto: str,
+    rucs: list[str],
+    campos: dict[str, dict[str, object]],
+    fuente: str,
+    factor: float,
+) -> None:
+    receptor = _ruc_cercano_a_etiqueta(texto, ETIQUETAS_RHE_RECEPTOR)
+    if receptor is None:
+        receptor = _ruc_cercano_a_etiqueta(texto, ETIQUETAS_RUC_RECEPTOR)
+    if receptor:
+        campos["ruc_receptor"] = CampoExtraido(
+            receptor, min(0.95, 0.92 * factor), _contexto(texto, receptor)
+        ).a_dict(fuente)
+
+    emisor = _ruc_cercano_a_etiqueta(texto, ETIQUETAS_RUC_EMISOR)
+    if emisor:
+        campos["ruc_emisor"] = CampoExtraido(
+            emisor, min(0.95, 0.92 * factor), _contexto(texto, emisor)
+        ).a_dict(fuente)
+
+    if receptor and "ruc_emisor" not in campos:
+        otros = [ruc for ruc in rucs if ruc != receptor]
+        if len(otros) == 1:
+            campos["ruc_emisor"] = CampoExtraido(
+                otros[0], min(0.9, 0.86 * factor), _contexto(texto, otros[0])
+            ).a_dict(fuente)
+
+    if emisor and "ruc_receptor" not in campos:
+        otros = [ruc for ruc in rucs if ruc != emisor]
+        if len(otros) == 1:
+            campos["ruc_receptor"] = CampoExtraido(
+                otros[0], min(0.9, 0.86 * factor), _contexto(texto, otros[0])
+            ).a_dict(fuente)
+
+    if "ruc_emisor" not in campos and "ruc_receptor" not in campos and len(rucs) == 2:
+        campos["ruc_emisor"] = CampoExtraido(
+            rucs[0], min(0.88, 0.84 * factor), _contexto(texto, rucs[0])
+        ).a_dict(fuente)
+        campos["ruc_receptor"] = CampoExtraido(
+            rucs[1], min(0.88, 0.84 * factor), _contexto(texto, rucs[1])
+        ).a_dict(fuente)
+
+    nombre_receptor = _razon_social_cercana_a_etiqueta(texto, ETIQUETAS_RHE_NOMBRE_RECEPTOR)
+    if nombre_receptor:
+        campos["razon_social_receptor"] = CampoExtraido(
+            nombre_receptor, min(0.92, 0.9 * factor), nombre_receptor
+        ).a_dict(fuente)
+
+
+def _extraer_razones_etiquetadas(
+    texto: str,
+    campos: dict[str, dict[str, object]],
+    fuente: str,
+    factor: float,
+) -> None:
+    for nombre, etiquetas in (
+        ("razon_social_emisor", ETIQUETAS_EMISOR),
+        ("razon_social_receptor", ETIQUETAS_RECEPTOR),
+    ):
+        if nombre in campos:
+            continue
+        encontrado = _razon_social_cercana_a_etiqueta(texto, etiquetas)
+        if encontrado:
+            campos[nombre] = CampoExtraido(encontrado, min(0.9, 0.86 * factor), encontrado).a_dict(
+                fuente
+            )
+
+
+def _completar_razones_por_ruc(
+    texto: str,
+    campos: dict[str, dict[str, object]],
+    fuente: str,
+    factor: float,
+) -> None:
+    for nombre_razon, nombre_ruc in (
+        ("razon_social_emisor", "ruc_emisor"),
+        ("razon_social_receptor", "ruc_receptor"),
+    ):
+        if nombre_razon in campos or nombre_ruc not in campos:
+            continue
+        ruc = str(campos[nombre_ruc]["valor"])
+        encontrado = _razon_social_cercana_a_ruc(texto, ruc)
+        if encontrado:
+            campos[nombre_razon] = CampoExtraido(
+                encontrado, min(0.86, 0.82 * factor), encontrado
+            ).a_dict(fuente)
+
+
+def _rucs_en_texto(texto: str) -> list[str]:
+    encontrados: list[str] = []
+    for coincidencia in RUC_FLEXIBLE.finditer(texto):
+        ruc = re.sub(r"\D", "", coincidencia.group(1))
+        if len(ruc) == 11 and ruc.startswith(("10", "20")) and ruc not in encontrados:
+            encontrados.append(ruc)
+    return encontrados
 
 
 def _contexto(texto: str, valor: str, radio: int = 45) -> str:
@@ -150,8 +305,12 @@ def _ruc_cercano_a_etiqueta(texto: str, etiquetas: tuple[str, ...]) -> str | Non
     normalizado = _sin_tildes(texto).upper()
     for etiqueta in etiquetas:
         indice = normalizado.find(_sin_tildes(etiqueta).upper())
-        if indice >= 0 and (coincidencia := RUC.search(texto[indice : indice + 180])):
-            return coincidencia.group(1)
+        if indice < 0:
+            continue
+        fragmento = texto[indice : indice + 240]
+        rucs = _rucs_en_texto(fragmento)
+        if rucs:
+            return rucs[0]
     return None
 
 
@@ -166,30 +325,79 @@ def _razon_social_cercana_a_etiqueta(texto: str, etiquetas: tuple[str, ...]) -> 
                 continue
             original = lineas[indice]
             candidato = original[pos + len(etiqueta) :].strip(" :-\t")
-            candidato = re.split(r"\bRUC\b\s*[:\-]?", candidato, maxsplit=1, flags=re.IGNORECASE)[0]
-            candidato = re.split(
-                r"\b(?:DIRECCI[ÓO]N|DOMICILIO|FECHA|MONEDA|TOTAL)\b\s*[:\-]?",
-                candidato,
-                maxsplit=1,
-                flags=re.IGNORECASE,
-            )[0]
-            candidato = " ".join(candidato.split()).strip(" -:;,")
+            candidato = _recortar_razon(candidato, quitar_etiqueta=False)
             if not candidato and indice + 1 < len(lineas):
-                candidato = " ".join(lineas[indice + 1].split()).strip(" -:;,")
+                candidato = _recortar_razon(lineas[indice + 1], quitar_etiqueta=False)
             if _razon_social_valida(candidato):
                 return candidato[:300]
     return None
 
 
+def _razon_social_cercana_a_ruc(texto: str, ruc: str) -> str | None:
+    lineas = texto.splitlines()
+    for indice, linea in enumerate(lineas):
+        if ruc not in re.sub(r"[\s.\-]", "", linea):
+            continue
+
+        antes = re.split(r"\bRUC\b", linea, maxsplit=1, flags=re.IGNORECASE)[0]
+        antes = _recortar_razon(antes)
+        if _razon_social_valida(antes):
+            return antes[:300]
+
+        for distancia in (1, 2, 3):
+            previo = indice - distancia
+            if previo >= 0:
+                candidato = _recortar_razon(lineas[previo])
+                if _razon_social_valida(candidato):
+                    return candidato[:300]
+
+        for distancia in (1, 2):
+            siguiente = indice + distancia
+            if siguiente < len(lineas):
+                candidato = _recortar_razon(lineas[siguiente])
+                if _razon_social_valida(candidato):
+                    return candidato[:300]
+    return None
+
+
+def _recortar_razon(valor: str, quitar_etiqueta: bool = True) -> str:
+    candidato = " ".join(valor.split()).strip(" -:;,")
+    candidato = re.split(
+        r"\b(?:RUC|IDENTIFICAD[OA]\s+CON\s+RUC|DIRECCI[ÓO]N|DOMICILIO|FECHA|"
+        r"MONEDA|TOTAL|POR\s+CONCEPTO|LA\s+SUMA)\b\s*[:\-]?",
+        candidato,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0]
+    if quitar_etiqueta:
+        candidato = re.sub(
+            r"^(?:RAZ[ÓO]N\s+SOCIAL|PROVEEDOR|EMISOR|CLIENTE|ADQUIRIENTE|"
+            r"SEÑOR\(ES\)|SEÑORES|SENORES|RECIB[IÍ]\s+DE|RECIBIDO\s+DE)\s*[:\-]?\s*",
+            "",
+            candidato,
+            flags=re.IGNORECASE,
+        )
+    return " ".join(candidato.split()).strip(" -:;,")
+
+
 def _razon_social_valida(valor: str) -> bool:
     if len(valor) < 3 or len(valor) > 300:
         return False
-    if re.fullmatch(r"\d{11}", valor):
+    if re.fullmatch(r"\d{11}", valor) or re.match(r"^\d{11}\b", valor):
         return False
     if not re.search(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]", valor):
         return False
-    invalidados = {"FACTURA", "FACTURA ELECTRONICA", "BOLETA", "RUC"}
-    return _sin_tildes(valor).upper() not in invalidados
+    normalizado = _sin_tildes(valor).upper().strip()
+    if any(
+        normalizado == invalido or normalizado.startswith(f"{invalido} ") for invalido in NO_RAZON
+    ):
+        return False
+    return not ("HTTP://" in normalizado or "HTTPS://" in normalizado or "WWW." in normalizado)
+
+
+def _es_rhe(texto: str) -> bool:
+    normalizado = _sin_tildes(texto).upper()
+    return "RECIBO POR HONORARIOS" in normalizado
 
 
 def _normalizar_fecha(valor: str) -> str | None:

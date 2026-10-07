@@ -152,6 +152,14 @@ class Documento(ConId, ConTenant, ConCreacion, Base):
 
     expediente: Mapped[Expediente | None] = relationship(back_populates="documentos")
 
+    @property
+    def emisor(self) -> Empresa | None:
+        return self.expediente.emisor if self.expediente is not None else None
+
+    @property
+    def receptor(self) -> Empresa | None:
+        return self.expediente.receptor if self.expediente is not None else None
+
 
 class Alerta(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "alertas"

@@ -6,9 +6,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.api.deps import AlmacenDep, HoyDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado, validar_gestor
@@ -132,8 +132,13 @@ def listar_documentos(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[Documento]:
-    consulta = select(Documento).where(
-        Documento.tenant_id == tenant_id, Documento.deleted_at.is_(None)
+    consulta = (
+        select(Documento)
+        .options(
+            selectinload(Documento.expediente).selectinload(Expediente.emisor),
+            selectinload(Documento.expediente).selectinload(Expediente.receptor),
+        )
+        .where(Documento.tenant_id == tenant_id, Documento.deleted_at.is_(None))
     )
     if estado is not None:
         consulta = consulta.where(Documento.estado == estado)
@@ -260,13 +265,29 @@ def procesar_pendientes(
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     forzar: bool = False,
     sin_expediente: bool = False,
+    completar_partes: bool = False,
 ) -> ProcesamientoLoteOut:
     """Procesa secuencialmente documentos existentes para proteger VPS pequeñas."""
     consulta = select(Documento).where(
         Documento.tenant_id == tenant_id,
         Documento.deleted_at.is_(None),
     )
-    if sin_expediente:
+    if completar_partes:
+        emisor_empresa = aliased(Empresa)
+        receptor_empresa = aliased(Empresa)
+        consulta = (
+            consulta.outerjoin(Expediente, Documento.expediente_id == Expediente.id)
+            .outerjoin(emisor_empresa, Expediente.emisor_id == emisor_empresa.id)
+            .outerjoin(receptor_empresa, Expediente.receptor_id == receptor_empresa.id)
+            .where(
+                or_(
+                    Documento.expediente_id.is_(None),
+                    emisor_empresa.razon_social == emisor_empresa.ruc,
+                    receptor_empresa.razon_social == receptor_empresa.ruc,
+                )
+            )
+        )
+    elif sin_expediente:
         consulta = consulta.where(Documento.expediente_id.is_(None))
     else:
         consulta = consulta.where(
@@ -419,13 +440,23 @@ def crear_expediente_asistido(
         receptor_ruc,
     )
     creado = existente is None
+    razon_receptor = (
+        solicitud.razon_social_receptor
+        or str(campos.get("razon_social_receptor", "")).strip()
+        or receptor_ruc
+    )
+    razon_emisor = (
+        solicitud.razon_social_emisor
+        or str(campos.get("razon_social_emisor", "")).strip()
+        or emisor_ruc
+    )
     expediente = existente or crear_expediente(
         session,
         settings,
         hoy,
         tenant_id,
-        receptor=(receptor_ruc, solicitud.razon_social_receptor or receptor_ruc),
-        emisor=(emisor_ruc, solicitud.razon_social_emisor or emisor_ruc),
+        receptor=(receptor_ruc, razon_receptor),
+        emisor=(emisor_ruc, razon_emisor),
         tipo_comprobante=solicitud.tipo_comprobante,
         serie=serie,
         correlativo=correlativo,
