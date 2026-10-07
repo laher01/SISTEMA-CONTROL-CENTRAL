@@ -112,22 +112,21 @@ def actualizar(
                 "Reasigne los gestores antes de cambiar el rol o desactivar al Usuario",
             )
 
-    if datos.codigo is not None:
-        actualizar_login_cuenta(
-            session,
-            tenant_id,
-            datos.codigo,
-            miembro_id=miembro.id,
-        )
-        miembro.codigo = datos.codigo.strip().upper()
-    if datos.nombre is not None:
-        miembro.nombre = datos.nombre.strip()
-    if datos.rol is not None:
-        miembro.rol = datos.rol
-    if datos.activo is not None:
-        miembro.activo = datos.activo
-
     try:
+        if datos.codigo is not None:
+            actualizar_login_cuenta(
+                session,
+                tenant_id,
+                datos.codigo,
+                miembro_id=miembro.id,
+            )
+            miembro.codigo = datos.codigo.strip().upper()
+        if datos.nombre is not None:
+            miembro.nombre = datos.nombre.strip()
+        if datos.rol is not None:
+            miembro.rol = datos.rol
+        if datos.activo is not None:
+            miembro.activo = datos.activo
         session.commit()
     except (IntegrityError, ValueError) as exc:
         session.rollback()
