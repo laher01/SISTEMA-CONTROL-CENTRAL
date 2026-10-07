@@ -99,7 +99,6 @@ def login(
     return _salida_sesion(session, cuenta, rol)
 
 
-
 @router.get("/acceso-publico")
 def acceso_publico(
     session: SessionDep,
@@ -203,9 +202,7 @@ def cambiar_clave(
     if datos.clave_actual == datos.clave_nueva:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "La nueva clave debe ser diferente")
     config = session.scalar(
-        select(ConfiguracionAcceso).where(
-            ConfiguracionAcceso.tenant_id == contexto.tenant_id
-        )
+        select(ConfiguracionAcceso).where(ConfiguracionAcceso.tenant_id == contexto.tenant_id)
     )
     if not _clave_valida(datos.clave_nueva, config):
         minimo = config.clave_min_longitud if config else 10
