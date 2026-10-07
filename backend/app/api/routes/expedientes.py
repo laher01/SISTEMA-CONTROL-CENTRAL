@@ -149,7 +149,7 @@ def recalcular(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> Recalculo:
-    if auth.rol not in (RolMiembro.ADMINISTRADOR, RolMiembro.SECRETARIA):
+    if auth.rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.SECRETARIA):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "No tiene permiso para recalcular expedientes",
