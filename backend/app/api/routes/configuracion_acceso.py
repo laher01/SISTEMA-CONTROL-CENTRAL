@@ -10,7 +10,6 @@ from app.enums import RolMiembro
 from app.models import (
     ConfiguracionAcceso,
     CorreoAutorizado,
-    CuentaAcceso,
     Miembro,
     SolicitudAcceso,
 )
@@ -19,7 +18,6 @@ from app.schemas import (
     ConfiguracionAccesoOut,
     CorreoAutorizadoIn,
     CorreoAutorizadoOut,
-    CredencialTemporalOut,
     SolicitudAccesoOut,
     SolicitudAccesoResolverIn,
 )
