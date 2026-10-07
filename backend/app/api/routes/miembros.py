@@ -100,12 +100,8 @@ def actualizar(
     miembro = session.get(Miembro, miembro_id)
     if miembro is None or miembro.tenant_id != tenant_id or miembro.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Miembro no encontrado")
-    if (
-        auth.rol != RolMiembro.SUPERADMIN
-        and (
-            miembro.rol == RolMiembro.SUPERADMIN
-            or datos.rol == RolMiembro.SUPERADMIN
-        )
+    if auth.rol != RolMiembro.SUPERADMIN and (
+        miembro.rol == RolMiembro.SUPERADMIN or datos.rol == RolMiembro.SUPERADMIN
     ):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
