@@ -83,13 +83,7 @@ def test_no_permite_solicitud_con_correo_no_autorizado(
     auth_prueba.como_superadmin()
     config = client.put(
         "/api/v1/configuracion/acceso",
-        json={
-            "registro_publico": True,
-            "requiere_aprobacion": True,
-            "solo_correos_autorizados": True,
-            "requiere_email_verificado": False,
-            "acceso_cloudflare_activo": True,
-        },
+        json=configuracion_payload(registro_publico=True),
     )
     assert config.status_code == 200, config.text
 
