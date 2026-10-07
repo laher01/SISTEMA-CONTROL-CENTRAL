@@ -14,7 +14,7 @@ from app.schemas import (
     GestorIn,
     GestorOut,
 )
-from app.security import crear_o_restablecer_cuenta
+from app.security import actualizar_login_cuenta, crear_o_restablecer_cuenta
 
 router = APIRouter(prefix="/gestores", tags=["gestores"])
 
@@ -96,15 +96,21 @@ def actualizar(
         usuario = _usuario_valido(session, tenant_id, datos.usuario_id)
         gestor.usuario_id = usuario.id
     if datos.codigo is not None:
+        actualizar_login_cuenta(
+            session,
+            tenant_id,
+            datos.codigo,
+            gestor_id=gestor.id,
+        )
         gestor.codigo = datos.codigo.strip().upper()
     if datos.nombre is not None:
         gestor.nombre = datos.nombre.strip()
 
     try:
         session.commit()
-    except IntegrityError as exc:
+    except (IntegrityError, ValueError) as exc:
         session.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "El código de gestor ya existe") from exc
+        raise HTTPException(status.HTTP_409_CONFLICT, "El código/login de gestor ya existe") from exc
     return gestor
 
 
