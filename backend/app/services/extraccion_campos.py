@@ -289,7 +289,7 @@ def _rucs_en_texto(texto: str) -> list[str]:
     encontrados: list[str] = []
     for coincidencia in RUC_FLEXIBLE.finditer(texto):
         ruc = re.sub(r"\D", "", coincidencia.group(1))
-        if len(ruc) == 11 and ruc not in encontrados:
+        if len(ruc) == 11 and ruc.startswith(("10", "20")) and ruc not in encontrados:
             encontrados.append(ruc)
     return encontrados
 
@@ -382,7 +382,7 @@ def _recortar_razon(valor: str) -> str:
 def _razon_social_valida(valor: str) -> bool:
     if len(valor) < 3 or len(valor) > 300:
         return False
-    if re.fullmatch(r"\d{11}", valor):
+    if re.fullmatch(r"\d{11}", valor) or re.match(r"^\d{11}\b", valor):
         return False
     if not re.search(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]", valor):
         return False
