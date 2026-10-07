@@ -463,3 +463,35 @@ def test_sugiere_relacion_por_evidencia_sin_vincular(
     assert "Comprobante F001-123" in sugerencias[0]["evidencias"]
     detalle = expediente(client, factura_subida["expediente_id"])
     assert all(documento["id"] != pendiente["id"] for documento in detalle["documentos"])
+
+
+def test_documentos_filtran_por_tipo_y_emisor(client: TestClient) -> None:
+    primero = subir(client, "f1.xml", factura())
+    subir(client, "f2.xml", factura(numero="F002-00000777", emisor="20600000003"))
+
+    por_tipo = client.get("/api/v1/documentos", params={"tipo_documento": "FACT"})
+    assert por_tipo.status_code == 200
+    assert len(por_tipo.json()) == 2
+
+    por_emisor = client.get("/api/v1/documentos", params={"emisor_ruc": "20600000003"})
+    assert por_emisor.status_code == 200
+    ids = {documento["id"] for documento in por_emisor.json()}
+    assert primero["id"] not in ids
+    assert len(ids) == 1
+
+    futuro = client.get("/api/v1/documentos", params={"fecha_desde": "2099-01-01"})
+    assert futuro.status_code == 200
+    assert futuro.json() == []
+
+
+def test_eliminar_documento_es_logico_y_deja_de_listarlo(client: TestClient) -> None:
+    documento = subir(client, "eliminar.pdf", b"%PDF-1.7 documento temporal")
+    documento_id = documento["id"]
+
+    respuesta = client.delete(f"/api/v1/documentos/{documento_id}")
+    assert respuesta.status_code == 204
+
+    assert client.get(f"/api/v1/documentos/{documento_id}").status_code == 404
+    listado = client.get("/api/v1/documentos")
+    assert listado.status_code == 200
+    assert all(d["id"] != documento_id for d in listado.json())
