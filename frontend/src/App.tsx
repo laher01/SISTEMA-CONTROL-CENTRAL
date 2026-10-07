@@ -2,6 +2,7 @@ import { NavLink, Route, Routes } from "react-router-dom";
 
 import Alertas from "./paginas/Alertas";
 import Dashboard from "./paginas/Dashboard";
+import Documentos from "./paginas/Documentos";
 import Empresas from "./paginas/Empresas";
 import ExpedienteDetalle from "./paginas/ExpedienteDetalle";
 import Expedientes from "./paginas/Expedientes";
@@ -11,6 +12,7 @@ import Subir from "./paginas/Subir";
 const MENU = [
   { a: "/", texto: "Dashboard" },
   { a: "/subir", texto: "Subir documentos" },
+  { a: "/documentos", texto: "Documentos" },
   { a: "/expedientes", texto: "Expedientes" },
   { a: "/pendientes", texto: "Pendientes" },
   { a: "/alertas", texto: "Alertas" },
@@ -34,6 +36,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/subir" element={<Subir />} />
+          <Route path="/documentos" element={<Documentos />} />
           <Route path="/expedientes" element={<Expedientes />} />
           <Route path="/expedientes/:id" element={<ExpedienteDetalle />} />
           <Route path="/pendientes" element={<Pendientes />} />
