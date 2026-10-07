@@ -74,13 +74,29 @@ class Empresa(ConId, ConTenant, ConCreacion, Base):
     deleted_at: Mapped[datetime | None]
 
 
+class Miembro(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "miembros"
+    __table_args__ = (UniqueConstraint("tenant_id", "codigo"),)
+
+    codigo: Mapped[str] = mapped_column(String(50))
+    nombre: Mapped[str] = mapped_column(String(200))
+    rol: Mapped[str] = mapped_column(String(20), index=True)
+    activo: Mapped[bool] = mapped_column(default=True, server_default="true")
+    deleted_at: Mapped[datetime | None]
+
+    gestores: Mapped[list["Gestor"]] = relationship(back_populates="usuario")
+
+
 class Gestor(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "gestores"
     __table_args__ = (UniqueConstraint("tenant_id", "codigo"),)
 
     codigo: Mapped[str] = mapped_column(String(50))
     nombre: Mapped[str] = mapped_column(String(200))
+    usuario_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
     deleted_at: Mapped[datetime | None]
+
+    usuario: Mapped[Miembro | None] = relationship(back_populates="gestores")
 
 
 class Expediente(ConId, ConTenant, ConCreacion, Base):
@@ -101,6 +117,7 @@ class Expediente(ConId, ConTenant, ConCreacion, Base):
     importe_total: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     requiere_guia: Mapped[bool] = mapped_column(default=True, server_default="true")
     gestor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"), index=True)
+    usuario_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
     estado: Mapped[str] = mapped_column(String(10), default=EstadoExpediente.NARANJA, index=True)
     pendiente_aprobacion: Mapped[bool] = mapped_column(default=False, server_default="false")
     updated_at: Mapped[datetime] = mapped_column(
@@ -130,6 +147,7 @@ class Documento(ConId, ConTenant, ConCreacion, Base):
     ruta_storage: Mapped[str] = mapped_column(String(500))
     datos_extraidos: Mapped[JsonDict | None]
     gestor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"), index=True)
+    usuario_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
     deleted_at: Mapped[datetime | None]
 
     expediente: Mapped[Expediente | None] = relationship(back_populates="documentos")
