@@ -260,9 +260,9 @@ def _extraer_razones_etiquetadas(
             continue
         encontrado = _razon_social_cercana_a_etiqueta(texto, etiquetas)
         if encontrado:
-            campos[nombre] = CampoExtraido(
-                encontrado, min(0.9, 0.86 * factor), encontrado
-            ).a_dict(fuente)
+            campos[nombre] = CampoExtraido(encontrado, min(0.9, 0.86 * factor), encontrado).a_dict(
+                fuente
+            )
 
 
 def _completar_razones_por_ruc(
@@ -388,8 +388,7 @@ def _razon_social_valida(valor: str) -> bool:
         return False
     normalizado = _sin_tildes(valor).upper().strip()
     if any(
-        normalizado == invalido or normalizado.startswith(f"{invalido} ")
-        for invalido in NO_RAZON
+        normalizado == invalido or normalizado.startswith(f"{invalido} ") for invalido in NO_RAZON
     ):
         return False
     return not ("HTTP://" in normalizado or "HTTPS://" in normalizado or "WWW." in normalizado)
