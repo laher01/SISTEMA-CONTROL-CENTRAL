@@ -27,7 +27,6 @@ _OPCIONALES_BASE = [
 
 
 
-
 @router.get("/opciones", response_model=RegistroOpciones)
 def opciones(
     session: SessionDep,
@@ -166,10 +165,14 @@ def listar(
         )
     ).one()
 
-    filas_query = consulta.order_by(
-        Expediente.fecha_emision.desc(),
-        Expediente.created_at.desc(),
-    ).limit(limit).offset(offset)
+    filas_query = (
+        consulta.order_by(
+            Expediente.fecha_emision.desc(),
+            Expediente.created_at.desc(),
+        )
+        .limit(limit)
+        .offset(offset)
+    )
 
     puede_eliminar_rol = permiso_habilitado(
         session,
