@@ -77,12 +77,8 @@ def actualizar(
             status.HTTP_409_CONFLICT,
             "No puede exigir correo verificado hasta configurar un proveedor de email",
         )
-    if (
-        not datos.requiere_aprobacion
-        and (
-            not config_actual.proveedor_email_configurado
-            or not datos.requiere_email_verificado
-        )
+    if not datos.requiere_aprobacion and (
+        not config_actual.proveedor_email_configurado or not datos.requiere_email_verificado
     ):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
