@@ -258,9 +258,7 @@ function FilaDocumento({
       </td>
       <td>
         <div className="acciones-documento">
-          {documento.estado !== "RELACIONADO" && (
-            <button disabled={ocupado} onClick={reprocesar}>Reprocesar</button>
-          )}
+          <button disabled={ocupado} onClick={reprocesar}>Reprocesar</button>
           <button className="peligro" disabled={ocupado} onClick={retirar}>Eliminar</button>
         </div>
       </td>
@@ -331,18 +329,24 @@ function resumenPartes(documento: Documento): {
   return {
     emisor: {
       razonSocial:
+        documento.emisor?.razon_social ||
         emisorXml.razonSocial ||
+        leerValorCampo(camposConfirmados, "razon_social_emisor") ||
         leerValorCampo(campos, "razon_social_emisor"),
       ruc:
+        documento.emisor?.ruc ||
         emisorXml.ruc ||
         leerValorCampo(camposConfirmados, "ruc_emisor") ||
         leerValorCampo(campos, "ruc_emisor"),
     },
     receptor: {
       razonSocial:
+        documento.receptor?.razon_social ||
         receptorXml.razonSocial ||
+        leerValorCampo(camposConfirmados, "razon_social_receptor") ||
         leerValorCampo(campos, "razon_social_receptor"),
       ruc:
+        documento.receptor?.ruc ||
         receptorXml.ruc ||
         leerValorCampo(camposConfirmados, "ruc_receptor") ||
         leerValorCampo(campos, "ruc_receptor"),
