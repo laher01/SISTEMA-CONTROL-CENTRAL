@@ -252,9 +252,7 @@ def programar_pago(
         )
     )
     produccion_total = Decimal(produccion or 0)
-    bruto = (produccion_total * Decimal(plan.porcentaje) / Decimal("100")).quantize(
-        Decimal("0.01")
-    )
+    bruto = (produccion_total * Decimal(plan.porcentaje) / Decimal("100")).quantize(Decimal("0.01"))
 
     adelantos = list(
         session.scalars(
