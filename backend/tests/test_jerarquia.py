@@ -100,9 +100,7 @@ def test_factura_menor_al_umbral_no_exige_voucher_ni_guia(
     assert "GRR" not in detalle["faltantes"]
 
 
-def test_rhe_se_busca_con_prefijo_rhe(
-    client: TestClient, auth_prueba: AuthPrueba
-) -> None:
+def test_rhe_se_busca_con_prefijo_rhe(client: TestClient, auth_prueba: AuthPrueba) -> None:
     usuario, gestor = crear_usuario_y_gestor(client, auth_prueba)
     auth_prueba.como_gestor(
         uuid.UUID(str(gestor["id"])),
@@ -143,9 +141,7 @@ def test_editar_usuario(client: TestClient, auth_prueba: AuthPrueba) -> None:
     assert actualizado["nombre"] == "Willy Actualizado"
 
 
-def test_editar_y_reasignar_gestor(
-    client: TestClient, auth_prueba: AuthPrueba
-) -> None:
+def test_editar_y_reasignar_gestor(client: TestClient, auth_prueba: AuthPrueba) -> None:
     _, gestor = crear_usuario_y_gestor(client, auth_prueba)
     otro = client.post(
         "/api/v1/miembros",
