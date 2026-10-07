@@ -64,11 +64,12 @@ def buscar_expediente(
     return session.scalars(consulta).first()
 
 
-def documentos_principales(expediente: Expediente) -> list[TipoDocumento]:
+def documentos_principales(expediente: Expediente, settings: Settings) -> list[TipoDocumento]:
     requeridos = [TipoDocumento(expediente.tipo_comprobante)]
     if expediente.tipo_comprobante == TipoComprobante.FACT and expediente.requiere_guia:
         requeridos.append(TipoDocumento.GRR)
-    requeridos.append(TipoDocumento.VCHR)
+    if requiere_bancarizacion(expediente.moneda, expediente.importe_total, settings):
+        requeridos.append(TipoDocumento.VCHR)
     return requeridos
 
 
@@ -80,9 +81,9 @@ def tipos_presentes(expediente: Expediente) -> set[str]:
     }
 
 
-def documentos_faltantes(expediente: Expediente) -> list[TipoDocumento]:
+def documentos_faltantes(expediente: Expediente, settings: Settings) -> list[TipoDocumento]:
     presentes = tipos_presentes(expediente)
-    faltantes = [t for t in documentos_principales(expediente) if t not in presentes]
+    faltantes = [t for t in documentos_principales(expediente, settings) if t not in presentes]
     if expediente.receptor.agente_retencion and TipoDocumento.RET not in presentes:
         faltantes.append(TipoDocumento.RET)
     return faltantes
@@ -102,7 +103,9 @@ def requiere_bancarizacion(moneda: str, importe: Decimal, settings: Settings) ->
 
 def calcular_estado(expediente: Expediente, hoy: date, settings: Settings) -> EstadoExpediente:
     presentes = tipos_presentes(expediente)
-    falta_principal = any(t not in presentes for t in documentos_principales(expediente))
+    falta_principal = any(
+        t not in presentes for t in documentos_principales(expediente, settings)
+    )
     if falta_principal:
         if hoy > fecha_limite(expediente.fecha_emision, settings.dia_limite_expediente):
             return EstadoExpediente.ROJO
