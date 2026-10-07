@@ -300,9 +300,7 @@ class CuentaPagoERP(ConId, ConTenant, ConCreacion, Base):
     moneda: Mapped[str] = mapped_column(String(3))
     numero_cuenta: Mapped[str | None] = mapped_column(String(80))
     cci: Mapped[str | None] = mapped_column(String(40))
-    porcentaje_distribucion: Mapped[Decimal] = mapped_column(
-        Numeric(7, 4), default=Decimal("100")
-    )
+    porcentaje_distribucion: Mapped[Decimal] = mapped_column(Numeric(7, 4), default=Decimal("100"))
     activa: Mapped[bool] = mapped_column(default=True, server_default="true")
 
 
