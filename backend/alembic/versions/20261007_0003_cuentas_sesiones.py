@@ -88,7 +88,6 @@ def upgrade() -> None:
             ["tenant_id"], ["tenants.id"], name=op.f("fk_sesiones_acceso_tenant_id_tenants")
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_sesiones_acceso")),
-        sa.UniqueConstraint("token_hash", name=op.f("uq_sesiones_acceso_token_hash")),
     )
     op.create_index(
         op.f("ix_sesiones_acceso_cuenta_id"), "sesiones_acceso", ["cuenta_id"], unique=False
