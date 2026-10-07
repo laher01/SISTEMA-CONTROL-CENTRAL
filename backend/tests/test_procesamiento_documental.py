@@ -235,7 +235,7 @@ Esta es una representación impresa de la factura electrónica, generada en el S
 
 
 def test_parser_facturalaya_extrae_emisor_y_receptor() -> None:
-    texto = '''"MULTINEGOCIOS JIRETH"
+    texto = """"MULTINEGOCIOS JIRETH"
 R.U.C.: 20602413498
 NEXOMAR NEGOCIOS EIRL - 20602413498
 FACTURA ELECTRÓNICA
@@ -246,7 +246,7 @@ R.U.C. 20614966174
 Dirección: MZA. W LOTE. 05
 Forma de pago: EFECTIVO
 Total: S/ 305.20
-Emitido por: facturalaya.com'''
+Emitido por: facturalaya.com"""
     resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
     assert resultado is not None
     assert resultado["formato_documental"] == "OSE_FACTURALAYA"
@@ -308,6 +308,5 @@ Representación impresa de la factura electrónica, consulte en www.efact.pe"""
     assert campos["ruc_receptor"]["valor"] == "20524049245"
     assert campos["razon_social_emisor"]["valor"] == "NEXOMAR NEGOCIOS E.I.R.L."
     assert (
-        campos["razon_social_receptor"]["valor"]
-        == "CORPORACION LATINOAMERICANO EL NORTE E.I.R.L."
+        campos["razon_social_receptor"]["valor"] == "CORPORACION LATINOAMERICANO EL NORTE E.I.R.L."
     )
