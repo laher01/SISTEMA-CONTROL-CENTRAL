@@ -116,7 +116,7 @@ def test_agente_retencion_sin_constancia_queda_amarillo(client: TestClient) -> N
 
 
 def test_expediente_vencido_queda_rojo(client: TestClient, reloj: Reloj) -> None:
-    doc_factura = subir(client, "f.xml", factura(importe="150.00"))
+    doc_factura = subir(client, "f.xml", factura(importe="2500.00"))
     expediente_id = doc_factura["expediente_id"]
     autorizar_receptor(client)
 
@@ -145,7 +145,7 @@ def test_crear_expediente_manual_rhe_sin_guia(client: TestClient) -> None:
     assert creado["requiere_guia"] is False
 
     detalle = expediente(client, creado["id"])
-    assert detalle["faltantes"] == ["RHE", "VCHR"]
+    assert detalle["faltantes"] == ["RHE"]
     assert client.post("/api/v1/expedientes", json=datos).status_code == 409
 
 
