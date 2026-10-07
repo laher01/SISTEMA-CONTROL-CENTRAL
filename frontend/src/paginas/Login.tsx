@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 
-import { enviarJson } from "../api";
+import { enviarJson, useDatos } from "../api";
 import type { SesionActual } from "../tipos";
 
 export function Login({ alIngresar }: { alIngresar: () => void }) {
@@ -13,6 +13,9 @@ export function Login({ alIngresar }: { alIngresar: () => void }) {
   const [nombre, setNombre] = useState("");
   const [codigo, setCodigo] = useState("");
   const [mensajeSolicitud, setMensajeSolicitud] = useState("");
+  const { datos: accesoPublico } = useDatos<{ registro_publico: boolean }>(
+    "/api/v1/auth/acceso-publico",
+  );
 
   const ingresar = async (e: FormEvent) => {
     e.preventDefault();
@@ -55,10 +58,10 @@ export function Login({ alIngresar }: { alIngresar: () => void }) {
         <p className="tenue">Ingresa con la cuenta asignada por Administración.</p>
         <form onSubmit={ingresar} className="login-formulario">
           <label>
-            Usuario
+            Usuario o correo
             <input
               value={login}
-              onChange={(e) => setLogin(e.target.value.toUpperCase())}
+              onChange={(e) => setLogin(e.target.value)}
               autoComplete="username"
               required
             />
@@ -79,11 +82,17 @@ export function Login({ alIngresar }: { alIngresar: () => void }) {
           {error && <p className="error">{error}</p>}
         </form>
 
-        <button type="button" className="enlace-boton" onClick={() => setSolicitar((v) => !v)}>
-          {solicitar ? "Volver al inicio de sesión" : "Solicitar acceso"}
-        </button>
+        {accesoPublico?.registro_publico && (
+          <button
+            type="button"
+            className="enlace-boton"
+            onClick={() => setSolicitar((v) => !v)}
+          >
+            {solicitar ? "Volver al inicio de sesión" : "Solicitar acceso"}
+          </button>
+        )}
 
-        {solicitar && (
+        {accesoPublico?.registro_publico && solicitar && (
           <form onSubmit={enviarSolicitud} className="login-formulario">
             <h3>Solicitar acceso</h3>
             <input
