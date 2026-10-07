@@ -65,14 +65,24 @@ def actualizar(
     auth: OperativeAuthDep,
 ) -> ConfiguracionAcceso:
     _solo_superadmin(auth.rol)
-    if datos.requiere_email_verificado:
-        config_actual = _configuracion(session, tenant_id)
-        if not config_actual.proveedor_email_configurado:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                "No puede exigir correo verificado hasta configurar un proveedor de email",
-            )
-    config = _configuracion(session, tenant_id)
+    config_actual = _configuracion(session, tenant_id)
+    if datos.requiere_email_verificado and not config_actual.proveedor_email_configurado:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "No puede exigir correo verificado hasta configurar un proveedor de email",
+        )
+    if (
+        not datos.requiere_aprobacion
+        and (
+            not config_actual.proveedor_email_configurado
+            or not datos.requiere_email_verificado
+        )
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "No puede desactivar la aprobación sin proveedor de email y correo verificado",
+        )
+    config = config_actual
     config.registro_publico = datos.registro_publico
     config.requiere_aprobacion = datos.requiere_aprobacion
     config.solo_correos_autorizados = datos.solo_correos_autorizados
