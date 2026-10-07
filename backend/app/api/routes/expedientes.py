@@ -148,7 +148,10 @@ def recalcular(
     auth: OperativeAuthDep,
 ) -> Recalculo:
     if auth.rol not in (RolMiembro.ADMINISTRADOR, RolMiembro.SECRETARIA):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "No tiene permiso para recalcular expedientes")
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "No tiene permiso para recalcular expedientes",
+        )
     actualizados = recalcular_expedientes(session, tenant_id, hoy, settings)
     session.commit()
     return Recalculo(actualizados=actualizados)
