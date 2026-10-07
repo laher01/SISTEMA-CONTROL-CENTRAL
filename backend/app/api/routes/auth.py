@@ -70,6 +70,20 @@ def login(
 
 
 
+@router.get("/acceso-publico")
+def acceso_publico(
+    session: SessionDep,
+    settings: SettingsDep,
+) -> dict[str, bool]:
+    tenant = session.scalar(select(Tenant).where(Tenant.nombre == settings.tenant_default))
+    if tenant is None:
+        return {"registro_publico": False}
+    config = session.scalar(
+        select(ConfiguracionAcceso).where(ConfiguracionAcceso.tenant_id == tenant.id)
+    )
+    return {"registro_publico": bool(config and config.registro_publico)}
+
+
 @router.post(
     "/solicitar-acceso",
     response_model=SolicitudAccesoOut,
