@@ -9,10 +9,10 @@ from app.enums import (
     EstadoDocumento,
     EstadoExpediente,
     Moneda,
+    RolMiembro,
     TipoAlerta,
     TipoComprobante,
     TipoDocumento,
-    RolMiembro,
 )
 
 Ruc = Annotated[str, Field(pattern=r"^\d{11}$")]
