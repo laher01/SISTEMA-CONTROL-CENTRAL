@@ -29,7 +29,13 @@ TENANT → USUARIO → GESTOR → DOCUMENTO → EXPEDIENTE
 - El Administrador crea o invita miembros del Tenant.
 - Los miembros pueden tener rol ADMINISTRADOR, GERENTE, SECRETARIA o USUARIO.
 - Los Gestores se crean vinculados obligatoriamente a un miembro con rol USUARIO.
-- Al seleccionar un Gestor durante la carga, el sistema deriva automáticamente el Usuario propietario.
+- El Administrador puede crear Gestores para cualquier Usuario.
+- Un Usuario puede crear y administrar únicamente sus propios Gestores.
+- Cada alta de Usuario o Gestor genera una credencial temporal; la contraseña se almacena únicamente como hash y debe cambiarse en el primer inicio de sesión.
+- La propiedad documental no se elige manualmente durante la carga. El Backend la deriva de la sesión autenticada.
+- Si inicia sesión un Gestor, cada documento recibe automáticamente su gestor_id y el usuario_id de su Usuario propietario.
+- Si inicia sesión un Usuario, cada documento recibe automáticamente su usuario_id y no se atribuye a un Gestor salvo una operación posterior autorizada.
+- El cliente no puede cambiar el propietario enviando usuario_id o gestor_id en la petición.
 
 ## Expedientes RHE
 
@@ -67,3 +73,23 @@ El sistema debe poder acumular por:
 - importe total.
 
 Este modelo permite rastrear quién originó cada documento, a qué Usuario pertenece la operación y cuánto volumen de compra se gestiona por cada participante.
+
+
+## Sesión y origen de la información
+
+La sesión activa es la fuente de verdad para determinar quién origina una operación.
+
+GESTOR AUTENTICADO
+→ Gestor de sesión
+→ Usuario propietario del Gestor
+→ Documento
+→ Expediente
+
+USUARIO AUTENTICADO
+→ Usuario de sesión
+→ Documento
+→ Expediente
+
+El Administrador administra altas y estructura. No carga documentos mientras opera con rol ADMINISTRADOR.
+
+Las credenciales temporales son un mecanismo operativo de alta inicial. El modelo SaaS completo mantiene como objetivo invitaciones, verificación de canales y MFA conforme al documento de identidad y acceso.
