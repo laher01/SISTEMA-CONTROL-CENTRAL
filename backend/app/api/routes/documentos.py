@@ -2,7 +2,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 from threading import Lock
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
-from app.api.errores import no_encontrado, validar_gestor
+from app.api.errores import no_encontrado
 from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, RolMiembro, TipoDocumento
 from app.models import Documento, Empresa, Expediente, ahora
@@ -214,7 +214,7 @@ def _validar_ambito_expediente(auth: OperativeAuthDep, expediente: Expediente) -
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Expediente no encontrado")
 
 
-def _aplicar_ambito_documentos(consulta: object, auth: OperativeAuthDep) -> object:
+def _aplicar_ambito_documentos(consulta: Any, auth: OperativeAuthDep) -> Any:
     if auth.rol == "GESTOR":
         return consulta.where(Documento.gestor_id == auth.gestor_id)
     if auth.rol == RolMiembro.USUARIO:
