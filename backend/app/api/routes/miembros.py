@@ -130,7 +130,10 @@ def actualizar(
         session.commit()
     except (IntegrityError, ValueError) as exc:
         session.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "El código/login del miembro ya existe") from exc
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "El código/login del miembro ya existe",
+        ) from exc
     return miembro
 
 
@@ -161,4 +164,7 @@ def restablecer_acceso(
 
 def _solo_admin(rol: str) -> None:
     if rol != RolMiembro.ADMINISTRADOR:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Administración puede realizar esta acción")
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Solo Administración puede realizar esta acción",
+        )
