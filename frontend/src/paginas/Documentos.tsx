@@ -17,6 +17,12 @@ import {
 } from "../tipos";
 
 const POR_PAGINA = 50;
+type ResultadoLote = {
+  considerados: number;
+  relacionados: number;
+  revision_requerida: number;
+  fallidos: number;
+};
 
 export default function Documentos() {
   const [parametros, setParametros] = useSearchParams();
@@ -39,6 +45,26 @@ export default function Documentos() {
     offset: String(pagina * POR_PAGINA),
   });
   const { datos, error, cargando, recargar } = useDatos<Documento[]>(ruta);
+  const [reprocesando, setReprocesando] = useState(false);
+  const [resultadoLote, setResultadoLote] = useState<ResultadoLote>();
+  const [errorLote, setErrorLote] = useState("");
+
+  const reprocesarSinExpediente = async () => {
+    setReprocesando(true);
+    setErrorLote("");
+    try {
+      const resultado = await enviarJson<ResultadoLote>(
+        "/api/v1/documentos/procesar-pendientes?limit=100&forzar=true&sin_expediente=true",
+        "POST",
+      );
+      setResultadoLote(resultado);
+      recargar();
+    } catch (e) {
+      setErrorLote(e instanceof Error ? e.message : String(e));
+    } finally {
+      setReprocesando(false);
+    }
+  };
 
   const cambiar = (clave: string, valor: string) => {
     const siguiente = new URLSearchParams(parametros);
@@ -59,8 +85,21 @@ export default function Documentos() {
             Bandeja central para revisar, filtrar, reprocesar y retirar documentos sin perder trazabilidad.
           </p>
         </div>
-        <Link className="boton-enlace" to="/subir">Subir documentos</Link>
+        <div className="acciones-documento">
+          <button onClick={reprocesarSinExpediente} disabled={reprocesando}>
+            {reprocesando ? "Reprocesando…" : "Reprocesar todos sin expediente"}
+          </button>
+          <Link className="boton-enlace" to="/subir">Subir documentos</Link>
+        </div>
       </div>
+
+      {resultadoLote && (
+        <p className="resumen-carga">
+          {resultadoLote.considerados} revisados · {resultadoLote.relacionados} relacionados ·{" "}
+          {resultadoLote.revision_requerida} requieren revisión · {resultadoLote.fallidos} fallidos
+        </p>
+      )}
+      {errorLote && <p className="error">{errorLote}</p>}
 
       <div className="filtros filtros-documentos">
         <select value={estado} onChange={(e) => cambiar("estado", e.target.value)}>

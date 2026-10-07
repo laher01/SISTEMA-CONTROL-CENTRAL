@@ -118,3 +118,16 @@ def test_extrae_voucher_ocr_sin_confundir_miles_y_decimales() -> None:
 def test_fecha_imposible_no_se_publica() -> None:
     resultado = extraer_campos("FECHA DE EMISIÓN: 31/02/2026", "OCR_PDF", 0.9)
     assert resultado is None
+
+
+def test_extrae_razones_sociales_de_factura() -> None:
+    texto = """FACTURA ELECTRÓNICA F001-00000123
+    PROVEEDOR: PESQUERA DEL PACIFICO S.A.C. RUC: 20500000002
+    CLIENTE: NEXOMAR NEGOCIOS E.I.R.L. RUC: 20100000001
+    Fecha de emisión: 17/09/2026 Moneda: SOLES TOTAL S/ 2,500.40"""
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    campos = resultado["campos"]
+    assert isinstance(campos, dict)
+    assert campos["razon_social_emisor"]["valor"] == "PESQUERA DEL PACIFICO S.A.C."
+    assert campos["razon_social_receptor"]["valor"] == "NEXOMAR NEGOCIOS E.I.R.L."

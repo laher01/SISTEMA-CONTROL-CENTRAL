@@ -83,6 +83,29 @@ def extraer_campos(
                     encontrado, min(0.92, 0.88 * factor), _contexto(texto, encontrado)
                 ).a_dict(fuente)
 
+    for nombre, etiquetas_razon in (
+        (
+            "razon_social_emisor",
+            ("RAZÓN SOCIAL EMISOR", "RAZON SOCIAL EMISOR", "PROVEEDOR", "EMISOR"),
+        ),
+        (
+            "razon_social_receptor",
+            (
+                "RAZÓN SOCIAL RECEPTOR",
+                "RAZON SOCIAL RECEPTOR",
+                "CLIENTE",
+                "ADQUIRIENTE",
+                "SEÑOR(ES)",
+                "SENORES",
+            ),
+        ),
+    ):
+        encontrado = _razon_social_cercana_a_etiqueta(texto, etiquetas_razon)
+        if encontrado:
+            campos[nombre] = CampoExtraido(encontrado, min(0.9, 0.86 * factor), encontrado).a_dict(
+                fuente
+            )
+
     fecha_match = FECHA_ETIQUETADA.search(texto) or FECHA.search(texto)
     if fecha_match and (fecha := _normalizar_fecha(fecha_match.group(1))):
         base = 0.94 if FECHA_ETIQUETADA.match(fecha_match.group(0)) else 0.78
@@ -130,6 +153,43 @@ def _ruc_cercano_a_etiqueta(texto: str, etiquetas: tuple[str, ...]) -> str | Non
         if indice >= 0 and (coincidencia := RUC.search(texto[indice : indice + 180])):
             return coincidencia.group(1)
     return None
+
+
+def _razon_social_cercana_a_etiqueta(texto: str, etiquetas: tuple[str, ...]) -> str | None:
+    lineas = texto.splitlines()
+    normalizadas = [_sin_tildes(linea).upper() for linea in lineas]
+    for indice, linea_norm in enumerate(normalizadas):
+        for etiqueta in etiquetas:
+            etiqueta_norm = _sin_tildes(etiqueta).upper()
+            pos = linea_norm.find(etiqueta_norm)
+            if pos < 0:
+                continue
+            original = lineas[indice]
+            candidato = original[pos + len(etiqueta) :].strip(" :-\t")
+            candidato = re.split(r"\bRUC\b\s*[:\-]?", candidato, maxsplit=1, flags=re.IGNORECASE)[0]
+            candidato = re.split(
+                r"\b(?:DIRECCI[ÓO]N|DOMICILIO|FECHA|MONEDA|TOTAL)\b\s*[:\-]?",
+                candidato,
+                maxsplit=1,
+                flags=re.IGNORECASE,
+            )[0]
+            candidato = " ".join(candidato.split()).strip(" -:;,")
+            if not candidato and indice + 1 < len(lineas):
+                candidato = " ".join(lineas[indice + 1].split()).strip(" -:;,")
+            if _razon_social_valida(candidato):
+                return candidato[:300]
+    return None
+
+
+def _razon_social_valida(valor: str) -> bool:
+    if len(valor) < 3 or len(valor) > 300:
+        return False
+    if re.fullmatch(r"\d{11}", valor):
+        return False
+    if not re.search(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]", valor):
+        return False
+    invalidados = {"FACTURA", "FACTURA ELECTRONICA", "BOLETA", "RUC"}
+    return _sin_tildes(valor).upper() not in invalidados
 
 
 def _normalizar_fecha(valor: str) -> str | None:

@@ -495,3 +495,41 @@ def test_eliminar_documento_es_logico_y_deja_de_listarlo(client: TestClient) -> 
     listado = client.get("/api/v1/documentos")
     assert listado.status_code == 200
     assert all(d["id"] != documento_id for d in listado.json())
+
+
+def test_reprocesamiento_masivo_repara_razones_sociales(
+    client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings.tenant_ruc = RECEPTOR
+    settings.procesamiento_automatico = False
+    documento = subir(client, "factura-anterior.pdf", pdf_vacio())
+    settings.procesamiento_automatico = True
+    texto = """FACTURA ELECTRÓNICA F003-00000888
+    PROVEEDOR: PESQUERA DEL PACIFICO S.A.C. RUC EMISOR: 20600000003
+    CLIENTE: NEXOMAR NEGOCIOS E.I.R.L. RUC: 20100000001
+    Fecha de emisión: 19/09/2026 Moneda: SOLES TOTAL S/ 1,250.00"""
+    monkeypatch.setattr(
+        documentos_routes,
+        "procesar",
+        lambda *_: ResultadoProcesamiento(
+            texto=texto,
+            metodo="TEXTO_PDF",
+            motor="prueba",
+            paginas=1,
+            confianza=1.0,
+            sugerencia=sugerir_tipo(texto),
+        ),
+    )
+
+    respuesta = client.post(
+        "/api/v1/documentos/procesar-pendientes",
+        params={"limit": 100, "forzar": True, "sin_expediente": True},
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["relacionados"] == 1
+
+    actualizado = client.get(f"/api/v1/documentos/{documento['id']}").json()
+    assert actualizado["estado"] == "RELACIONADO"
+    detalle = expediente(client, actualizado["expediente_id"])
+    assert detalle["emisor"]["razon_social"] == "PESQUERA DEL PACIFICO S.A.C."
+    assert detalle["receptor"]["razon_social"] == "NEXOMAR NEGOCIOS E.I.R.L."

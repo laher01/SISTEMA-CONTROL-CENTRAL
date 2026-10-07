@@ -16,7 +16,7 @@ from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, TipoComprobante, TipoDocumento
 from app.models import Documento
 from app.services import auditoria
-from app.services.expedientes import buscar_expediente
+from app.services.expedientes import buscar_expediente, obtener_o_crear_empresa
 from app.services.ingesta import crear_expediente, vincular_documento
 
 CAMPOS_FISCALES = (
@@ -165,6 +165,11 @@ def aplicar_automaticamente(
         },
     )
 
+    razon_emisor = campos.get("razon_social_emisor", emisor_ruc).strip() or emisor_ruc
+    razon_receptor = campos.get("razon_social_receptor", receptor_ruc).strip() or receptor_ruc
+    obtener_o_crear_empresa(session, documento.tenant_id, emisor_ruc, razon_emisor)
+    obtener_o_crear_empresa(session, documento.tenant_id, receptor_ruc, razon_receptor)
+
     expediente = buscar_expediente(
         session,
         documento.tenant_id,
@@ -181,8 +186,8 @@ def aplicar_automaticamente(
             settings,
             hoy,
             documento.tenant_id,
-            receptor=(receptor_ruc, receptor_ruc),
-            emisor=(emisor_ruc, emisor_ruc),
+            receptor=(receptor_ruc, razon_receptor),
+            emisor=(emisor_ruc, razon_emisor),
             tipo_comprobante=tipo_comprobante,
             serie=serie,
             correlativo=correlativo,

@@ -253,20 +253,22 @@ def procesar_pendientes(
     tenant_id: TenantDep,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     forzar: bool = False,
+    sin_expediente: bool = False,
 ) -> ProcesamientoLoteOut:
     """Procesa secuencialmente documentos existentes para proteger VPS pequeñas."""
-    consulta = (
-        select(Documento)
-        .where(
-            Documento.tenant_id == tenant_id,
-            Documento.deleted_at.is_(None),
+    consulta = select(Documento).where(
+        Documento.tenant_id == tenant_id,
+        Documento.deleted_at.is_(None),
+    )
+    if sin_expediente:
+        consulta = consulta.where(Documento.expediente_id.is_(None))
+    else:
+        consulta = consulta.where(
             Documento.estado.in_(
                 [EstadoDocumento.PENDIENTE_CLASIFICACION, EstadoDocumento.PENDIENTE_RELACION]
-            ),
+            )
         )
-        .order_by(Documento.created_at.asc())
-        .limit(200)
-    )
+    consulta = consulta.order_by(Documento.created_at.asc()).limit(200)
     candidatos = list(session.scalars(consulta))
     documentos = [
         documento
