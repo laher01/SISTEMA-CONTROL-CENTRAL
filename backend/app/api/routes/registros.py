@@ -1,7 +1,7 @@
 import uuid
 from datetime import date
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import case, func, select
@@ -93,8 +93,8 @@ def listar(
 
     usuario = aliased(Miembro)
     gestor = aliased(Gestor)
-    emisor = aliased(Empresa)
-    receptor = aliased(Empresa)
+    emisor_empresa = aliased(Empresa)
+    receptor_empresa = aliased(Empresa)
 
     consulta = (
         select(
@@ -103,15 +103,15 @@ def listar(
             usuario.nombre,
             gestor.codigo,
             gestor.nombre,
-            emisor.ruc,
-            emisor.razon_social,
-            receptor.ruc,
-            receptor.razon_social,
+            emisor_empresa.ruc,
+            emisor_empresa.razon_social,
+            receptor_empresa.ruc,
+            receptor_empresa.razon_social,
         )
         .outerjoin(usuario, Expediente.usuario_id == usuario.id)
         .outerjoin(gestor, Expediente.gestor_id == gestor.id)
-        .join(emisor, Expediente.emisor_id == emisor.id)
-        .join(receptor, Expediente.receptor_id == receptor.id)
+        .join(emisor_empresa, Expediente.emisor_id == emisor_empresa.id)
+        .join(receptor_empresa, Expediente.receptor_id == receptor_empresa.id)
         .where(
             Expediente.tenant_id == tenant_id,
             Expediente.deleted_at.is_(None),
@@ -130,14 +130,14 @@ def listar(
     if emisor and emisor.strip():
         texto_emisor = emisor.strip().lower()
         consulta = consulta.where(
-            (func.lower(emisor.ruc).contains(texto_emisor, autoescape=True))
-            | (func.lower(emisor.razon_social).contains(texto_emisor, autoescape=True))
+            (func.lower(emisor_empresa.ruc).contains(texto_emisor, autoescape=True))
+            | (func.lower(emisor_empresa.razon_social).contains(texto_emisor, autoescape=True))
         )
     if receptor and receptor.strip():
         texto_receptor = receptor.strip().lower()
         consulta = consulta.where(
-            (func.lower(receptor.ruc).contains(texto_receptor, autoescape=True))
-            | (func.lower(receptor.razon_social).contains(texto_receptor, autoescape=True))
+            (func.lower(receptor_empresa.ruc).contains(texto_receptor, autoescape=True))
+            | (func.lower(receptor_empresa.razon_social).contains(texto_receptor, autoescape=True))
         )
     if fecha_desde:
         consulta = consulta.where(Expediente.fecha_emision >= fecha_desde)
@@ -240,7 +240,7 @@ def listar(
     )
 
 
-def _aplicar_ambito(consulta, auth: OperativeAuthDep):
+def _aplicar_ambito(consulta: Any, auth: OperativeAuthDep) -> Any:
     if auth.rol == "GESTOR":
         return consulta.where(Expediente.gestor_id == auth.gestor_id)
     if auth.rol == RolMiembro.USUARIO:
