@@ -143,7 +143,7 @@ def test_detecta_ose_y_descarta_direccion_como_razon_social() -> None:
     TOTAL: S/ 807.01"""
     resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
     assert resultado is not None
-    assert resultado["formato_documental"] == "OSE"
+    assert resultado["formato_documental"] == "OSE_FACTURALAYA"
     campos = resultado["campos"]
     assert isinstance(campos, dict)
     assert campos["ruc_emisor"]["valor"] == "20538820050"
