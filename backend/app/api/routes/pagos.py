@@ -32,7 +32,7 @@ router = APIRouter(prefix="/pagos", tags=["pagos"])
 
 
 def _validar_acceso(rol: str) -> None:
-    if rol not in (RolMiembro.ADMINISTRADOR, RolMiembro.GERENTE):
+    if rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.GERENTE):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "Pagos ERP está disponible solo para Administración y Gerencia",
