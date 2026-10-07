@@ -12,6 +12,7 @@ export type TipoAlerta =
   | "RECEPTOR_NO_AUTORIZADO"
   | "EXPEDIENTE_VENCIDO";
 export type TipoComprobante = "FACT" | "RHE";
+export type RolMiembro = "ADMINISTRADOR" | "GERENTE" | "SECRETARIA" | "USUARIO";
 
 export const TIPOS_DOCUMENTO = [
   "FACT",
@@ -46,6 +47,21 @@ export interface Empresa {
   agente_retencion: boolean;
 }
 
+export interface Miembro {
+  id: string;
+  codigo: string;
+  nombre: string;
+  rol: RolMiembro;
+  activo: boolean;
+}
+
+export interface Gestor {
+  id: string;
+  codigo: string;
+  nombre: string;
+  usuario_id: string | null;
+}
+
 export interface Documento {
   id: string;
   expediente_id: string | null;
@@ -57,6 +73,7 @@ export interface Documento {
   tamano_bytes: number;
   datos_extraidos: Record<string, unknown> | null;
   gestor_id: string | null;
+  usuario_id: string | null;
   created_at: string;
 }
 
@@ -82,6 +99,7 @@ export interface Expediente {
   importe_total: string;
   requiere_guia: boolean;
   gestor_id: string | null;
+  usuario_id: string | null;
   estado: EstadoExpediente;
   pendiente_aprobacion: boolean;
   created_at: string;
@@ -107,4 +125,34 @@ export interface DashboardResumen {
   montos: { moneda: Moneda; bancarizable: string; no_bancarizable: string }[];
   alertas_abiertas: Record<TipoAlerta, number>;
   documentos_pendientes: Partial<Record<EstadoDocumento, number>>;
+}
+
+
+export interface ProduccionFila {
+  usuario_id: string | null;
+  usuario_codigo: string;
+  usuario_nombre: string;
+  gestor_id: string | null;
+  gestor_codigo: string;
+  gestor_nombre: string;
+  moneda: Moneda;
+  expedientes: number;
+  importe_total: string;
+}
+
+export interface ProduccionResumen {
+  filas: ProduccionFila[];
+}
+
+
+export interface ComprasProveedorFila {
+  usuario_codigo: string;
+  gestor_codigo: string;
+  emisor_ruc: string;
+  emisor_razon_social: string;
+  receptor_ruc: string;
+  receptor_razon_social: string;
+  moneda: Moneda;
+  expedientes: number;
+  importe_total: string;
 }

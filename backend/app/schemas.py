@@ -9,6 +9,7 @@ from app.enums import (
     EstadoDocumento,
     EstadoExpediente,
     Moneda,
+    RolMiembro,
     TipoAlerta,
     TipoComprobante,
     TipoDocumento,
@@ -40,15 +41,31 @@ class EmpresaActualizar(BaseModel):
     agente_retencion: bool | None = None
 
 
+class MiembroIn(BaseModel):
+    codigo: str = Field(min_length=1, max_length=50)
+    nombre: str = Field(min_length=1, max_length=200)
+    rol: RolMiembro
+
+
+class MiembroOut(Orm):
+    id: uuid.UUID
+    codigo: str
+    nombre: str
+    rol: RolMiembro
+    activo: bool
+
+
 class GestorIn(BaseModel):
     codigo: str = Field(min_length=1, max_length=50)
     nombre: str = Field(min_length=1, max_length=200)
+    usuario_id: uuid.UUID
 
 
 class GestorOut(Orm):
     id: uuid.UUID
     codigo: str
     nombre: str
+    usuario_id: uuid.UUID | None
 
 
 class DocumentoOut(Orm):
@@ -62,6 +79,7 @@ class DocumentoOut(Orm):
     tamano_bytes: int
     datos_extraidos: dict[str, object] | None
     gestor_id: uuid.UUID | None
+    usuario_id: uuid.UUID | None
     created_at: datetime
 
 
@@ -137,6 +155,7 @@ class ExpedienteOut(Orm):
     importe_total: Decimal
     requiere_guia: bool
     gestor_id: uuid.UUID | None
+    usuario_id: uuid.UUID | None
     estado: EstadoExpediente
     pendiente_aprobacion: bool
     created_at: datetime
@@ -178,3 +197,31 @@ class DashboardResumen(BaseModel):
     montos: list[MontosMoneda]
     alertas_abiertas: dict[TipoAlerta, int]
     documentos_pendientes: dict[EstadoDocumento, int]
+
+
+class ProduccionFila(BaseModel):
+    usuario_id: uuid.UUID | None
+    usuario_codigo: str
+    usuario_nombre: str
+    gestor_id: uuid.UUID | None
+    gestor_codigo: str
+    gestor_nombre: str
+    moneda: Moneda
+    expedientes: int
+    importe_total: Decimal
+
+
+class ProduccionResumen(BaseModel):
+    filas: list[ProduccionFila]
+
+
+class ComprasProveedorFila(BaseModel):
+    usuario_codigo: str
+    gestor_codigo: str
+    emisor_ruc: str
+    emisor_razon_social: str
+    receptor_ruc: str
+    receptor_razon_social: str
+    moneda: Moneda
+    expedientes: int
+    importe_total: Decimal

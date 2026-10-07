@@ -21,6 +21,7 @@ from app.services.expedientes import (
 from app.services.ingesta import crear_expediente
 
 NUMERO_RE = re.compile(r"^([a-z0-9]{4})-0*(\d+)$")
+NUMERO_RHE_RE = re.compile(r"^rhe-([a-z0-9]{4})-0*(\d+)$")
 
 router = APIRouter(prefix="/expedientes", tags=["expedientes"])
 
@@ -78,6 +79,8 @@ def listar(
     tenant_id: TenantDep,
     estado: EstadoExpediente | None = None,
     receptor_ruc: str | None = None,
+    usuario_id: uuid.UUID | None = None,
+    gestor_id: uuid.UUID | None = None,
     pendiente_aprobacion: bool | None = None,
     buscar: Annotated[str | None, Query(max_length=100)] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
@@ -90,13 +93,20 @@ def listar(
         consulta = consulta.where(Expediente.estado == estado)
     if pendiente_aprobacion is not None:
         consulta = consulta.where(Expediente.pendiente_aprobacion == pendiente_aprobacion)
+    if usuario_id is not None:
+        consulta = consulta.where(Expediente.usuario_id == usuario_id)
+    if gestor_id is not None:
+        consulta = consulta.where(Expediente.gestor_id == gestor_id)
     if receptor_ruc is not None:
         consulta = consulta.join(Empresa, Expediente.receptor_id == Empresa.id).where(
             Empresa.ruc == receptor_ruc
         )
     if buscar and buscar.strip():
         texto = buscar.strip().lower()
-        if numero := NUMERO_RE.match(texto):
+        if numero_rhe := NUMERO_RHE_RE.match(texto):
+            texto = f"{numero_rhe.group(1)}-{int(numero_rhe.group(2))}"
+            consulta = consulta.where(Expediente.tipo_comprobante == "RHE")
+        elif numero := NUMERO_RE.match(texto):
             texto = f"{numero.group(1)}-{int(numero.group(2))}"
         emisor = aliased(Empresa)
         consulta = consulta.join(emisor, Expediente.emisor_id == emisor.id).where(
@@ -133,6 +143,6 @@ def detalle(
         **base.model_dump(),
         documentos=[d for d in expediente.documentos if d.deleted_at is None],
         alertas=expediente.alertas,
-        faltantes=documentos_faltantes(expediente),
+        faltantes=documentos_faltantes(expediente, settings),
         fecha_limite=fecha_limite(expediente.fecha_emision, settings.dia_limite_expediente),
     )
