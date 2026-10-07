@@ -90,7 +90,10 @@ class Miembro(ConId, ConTenant, ConCreacion, Base):
 
 class CuentaAcceso(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "cuentas_acceso"
-    __table_args__ = (UniqueConstraint("tenant_id", "login"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "login"),
+        UniqueConstraint("tenant_id", "email"),
+    )
 
     login: Mapped[str] = mapped_column(String(100))
     email: Mapped[str | None] = mapped_column(String(320), index=True)
