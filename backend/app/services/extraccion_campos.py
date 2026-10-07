@@ -387,11 +387,12 @@ def _razon_social_valida(valor: str) -> bool:
     if not re.search(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]", valor):
         return False
     normalizado = _sin_tildes(valor).upper().strip()
-    if any(normalizado == invalido or normalizado.startswith(f"{invalido} ") for invalido in NO_RAZON):
+    if any(
+        normalizado == invalido or normalizado.startswith(f"{invalido} ")
+        for invalido in NO_RAZON
+    ):
         return False
-    if "HTTP://" in normalizado or "HTTPS://" in normalizado or "WWW." in normalizado:
-        return False
-    return True
+    return not ("HTTP://" in normalizado or "HTTPS://" in normalizado or "WWW." in normalizado)
 
 
 def _es_rhe(texto: str) -> bool:
