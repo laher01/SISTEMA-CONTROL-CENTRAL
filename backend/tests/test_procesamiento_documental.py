@@ -307,4 +307,7 @@ Representación impresa de la factura electrónica, consulte en www.efact.pe"""
     assert campos["ruc_emisor"]["valor"] == "20602413498"
     assert campos["ruc_receptor"]["valor"] == "20524049245"
     assert campos["razon_social_emisor"]["valor"] == "NEXOMAR NEGOCIOS E.I.R.L."
-    assert campos["razon_social_receptor"]["valor"] == "CORPORACION LATINOAMERICANO EL NORTE E.I.R.L."
+    assert (
+        campos["razon_social_receptor"]["valor"]
+        == "CORPORACION LATINOAMERICANO EL NORTE E.I.R.L."
+    )
