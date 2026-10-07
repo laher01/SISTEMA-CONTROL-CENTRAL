@@ -103,6 +103,8 @@ class CuentaAcceso(ConId, ConTenant, ConCreacion, Base):
     gestor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"), index=True)
     activo: Mapped[bool] = mapped_column(default=True, server_default="true")
     cambio_clave_obligatorio: Mapped[bool] = mapped_column(default=True, server_default="true")
+    intentos_fallidos: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    bloqueado_hasta: Mapped[datetime | None]
     ultimo_acceso: Mapped[datetime | None]
     deleted_at: Mapped[datetime | None]
 
@@ -287,6 +289,12 @@ class ConfiguracionAcceso(ConId, ConTenant, ConCreacion, Base):
     requiere_email_verificado: Mapped[bool] = mapped_column(default=False, server_default="false")
     proveedor_email_configurado: Mapped[bool] = mapped_column(default=False, server_default="false")
     acceso_cloudflare_activo: Mapped[bool] = mapped_column(default=True, server_default="true")
+    duracion_sesion_horas: Mapped[int] = mapped_column(Integer, default=12, server_default="12")
+    intentos_fallidos_max: Mapped[int] = mapped_column(Integer, default=5, server_default="5")
+    bloqueo_minutos: Mapped[int] = mapped_column(Integer, default=15, server_default="15")
+    clave_min_longitud: Mapped[int] = mapped_column(Integer, default=10, server_default="10")
+    clave_requiere_letra: Mapped[bool] = mapped_column(default=True, server_default="true")
+    clave_requiere_numero: Mapped[bool] = mapped_column(default=True, server_default="true")
     updated_at: Mapped[datetime] = mapped_column(
         default=ahora, onupdate=ahora, server_default=func.now()
     )
