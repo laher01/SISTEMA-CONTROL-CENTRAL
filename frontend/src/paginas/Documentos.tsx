@@ -151,6 +151,8 @@ export default function Documentos() {
                 <th>Tipo</th>
                 <th>Subido</th>
                 <th>Lectura</th>
+                <th>Emisor</th>
+                <th>Receptor</th>
                 <th>Expediente</th>
                 <th>Acciones</th>
               </tr>
@@ -183,6 +185,7 @@ function FilaDocumento({
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState("");
   const lectura = resumenLectura(documento);
+  const partes = resumenPartes(documento);
 
   const reprocesar = async () => {
     setOcupado(true);
@@ -241,6 +244,12 @@ function FilaDocumento({
         )}
       </td>
       <td>
+        <ParteDocumento razonSocial={partes.emisor.razonSocial} ruc={partes.emisor.ruc} />
+      </td>
+      <td>
+        <ParteDocumento razonSocial={partes.receptor.razonSocial} ruc={partes.receptor.ruc} />
+      </td>
+      <td>
         {documento.expediente_id ? (
           <Link to={`/expedientes/${documento.expediente_id}`}>Ver expediente</Link>
         ) : (
@@ -272,4 +281,95 @@ function resumenLectura(documento: Documento): { texto: string; detalle: string 
       : "";
   const motor = "motor" in proceso ? String(proceso.motor) : "";
   return { texto: `${metodo}${confianza}`, detalle: motor };
+}
+
+
+function ParteDocumento({
+  razonSocial,
+  ruc,
+}: {
+  razonSocial?: string;
+  ruc?: string;
+}) {
+  if (!razonSocial && !ruc) return <span className="tenue">Sin identificar</span>;
+  return (
+    <div>
+      <strong>{razonSocial || "Razón social no extraída"}</strong>
+      {ruc && <small className="bloque tenue">RUC {ruc}</small>}
+    </div>
+  );
+}
+
+function resumenPartes(documento: Documento): {
+  emisor: { razonSocial?: string; ruc?: string };
+  receptor: { razonSocial?: string; ruc?: string };
+} {
+  const datos = documento.datos_extraidos;
+  if (!datos || typeof datos !== "object") {
+    return { emisor: {}, receptor: {} };
+  }
+
+  const emisorXml = leerParteDirecta(datos.emisor);
+  const receptorXml = leerParteDirecta(datos.receptor);
+
+  const proceso = datos.procesamiento_documental;
+  const extraccion =
+    proceso && typeof proceso === "object" && "extraccion_estructurada" in proceso
+      ? proceso.extraccion_estructurada
+      : undefined;
+  const campos =
+    extraccion && typeof extraccion === "object" && "campos" in extraccion
+      ? extraccion.campos
+      : undefined;
+
+  const confirmada = datos.extraccion_confirmada;
+  const camposConfirmados =
+    confirmada && typeof confirmada === "object" && "campos" in confirmada
+      ? confirmada.campos
+      : undefined;
+
+  return {
+    emisor: {
+      razonSocial:
+        emisorXml.razonSocial ||
+        leerValorCampo(campos, "razon_social_emisor"),
+      ruc:
+        emisorXml.ruc ||
+        leerValorCampo(camposConfirmados, "ruc_emisor") ||
+        leerValorCampo(campos, "ruc_emisor"),
+    },
+    receptor: {
+      razonSocial:
+        receptorXml.razonSocial ||
+        leerValorCampo(campos, "razon_social_receptor"),
+      ruc:
+        receptorXml.ruc ||
+        leerValorCampo(camposConfirmados, "ruc_receptor") ||
+        leerValorCampo(campos, "ruc_receptor"),
+    },
+  };
+}
+
+function leerParteDirecta(valor: unknown): { razonSocial?: string; ruc?: string } {
+  if (!valor || typeof valor !== "object") return {};
+  const parte = valor as Record<string, unknown>;
+  return {
+    razonSocial:
+      typeof parte.razon_social === "string" && parte.razon_social.trim()
+        ? parte.razon_social.trim()
+        : undefined,
+    ruc:
+      typeof parte.ruc === "string" && parte.ruc.trim()
+        ? parte.ruc.trim()
+        : undefined,
+  };
+}
+
+function leerValorCampo(campos: unknown, nombre: string): string | undefined {
+  if (!campos || typeof campos !== "object") return undefined;
+  const campo = (campos as Record<string, unknown>)[nombre];
+  if (typeof campo === "string") return campo.trim() || undefined;
+  if (!campo || typeof campo !== "object") return undefined;
+  const valor = (campo as Record<string, unknown>).valor;
+  return typeof valor === "string" && valor.trim() ? valor.trim() : undefined;
 }
