@@ -424,13 +424,23 @@ def crear_expediente_asistido(
         receptor_ruc,
     )
     creado = existente is None
+    razon_receptor = (
+        solicitud.razon_social_receptor
+        or str(campos.get("razon_social_receptor", "")).strip()
+        or receptor_ruc
+    )
+    razon_emisor = (
+        solicitud.razon_social_emisor
+        or str(campos.get("razon_social_emisor", "")).strip()
+        or emisor_ruc
+    )
     expediente = existente or crear_expediente(
         session,
         settings,
         hoy,
         tenant_id,
-        receptor=(receptor_ruc, solicitud.razon_social_receptor or receptor_ruc),
-        emisor=(emisor_ruc, solicitud.razon_social_emisor or emisor_ruc),
+        receptor=(receptor_ruc, razon_receptor),
+        emisor=(emisor_ruc, razon_emisor),
         tipo_comprobante=solicitud.tipo_comprobante,
         serie=serie,
         correlativo=correlativo,
