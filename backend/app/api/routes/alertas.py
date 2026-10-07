@@ -3,9 +3,10 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 from sqlalchemy import select
 
-from app.api.deps import SessionDep, TenantDep
+from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import TipoAlerta
-from app.models import Alerta
+from app.enums import RolMiembro
+from app.models import Alerta, Expediente
 from app.schemas import AlertaOut
 
 router = APIRouter(prefix="/alertas", tags=["alertas"])
@@ -15,12 +16,21 @@ router = APIRouter(prefix="/alertas", tags=["alertas"])
 def listar(
     session: SessionDep,
     tenant_id: TenantDep,
+    auth: OperativeAuthDep,
     resuelta: bool = False,
     tipo: TipoAlerta | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[Alerta]:
     consulta = select(Alerta).where(Alerta.tenant_id == tenant_id, Alerta.resuelta == resuelta)
+    if auth.rol == "GESTOR":
+        consulta = consulta.join(Expediente, Alerta.expediente_id == Expediente.id).where(
+            Expediente.gestor_id == auth.gestor_id
+        )
+    elif auth.rol == RolMiembro.USUARIO:
+        consulta = consulta.join(Expediente, Alerta.expediente_id == Expediente.id).where(
+            Expediente.usuario_id == auth.usuario_id
+        )
     if tipo is not None:
         consulta = consulta.where(Alerta.tipo == tipo)
     consulta = consulta.order_by(Alerta.created_at.desc()).limit(limit).offset(offset)
