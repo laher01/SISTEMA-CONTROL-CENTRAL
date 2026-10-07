@@ -132,8 +132,13 @@ def listar_documentos(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[Documento]:
-    consulta = select(Documento).where(
-        Documento.tenant_id == tenant_id, Documento.deleted_at.is_(None)
+    consulta = (
+        select(Documento)
+        .options(
+            selectinload(Documento.expediente).selectinload(Expediente.emisor),
+            selectinload(Documento.expediente).selectinload(Expediente.receptor),
+        )
+        .where(Documento.tenant_id == tenant_id, Documento.deleted_at.is_(None))
     )
     if estado is not None:
         consulta = consulta.where(Documento.estado == estado)
