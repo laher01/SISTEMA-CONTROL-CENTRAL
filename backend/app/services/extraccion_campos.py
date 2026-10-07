@@ -429,6 +429,10 @@ def _recortar_razon(valor: str, quitar_etiqueta: bool = True) -> str:
     return " ".join(candidato.split()).strip(" -:;,")
 
 
+def razon_social_confiable(valor: str) -> bool:
+    return _razon_social_valida(valor)
+
+
 def _razon_social_valida(valor: str) -> bool:
     if len(valor) < 3 or len(valor) > 300:
         return False
