@@ -4,9 +4,12 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 from pypdf import PdfWriter
+from sqlalchemy import Engine
+from sqlalchemy.orm import sessionmaker
 
 from app.api.routes import documentos as documentos_routes
 from app.core.config import Settings
+from app.models import Expediente
 from app.services import procesamiento_documental
 from app.services.procesamiento_documental import ResultadoProcesamiento, sugerir_tipo
 from tests.conftest import Reloj
@@ -536,3 +539,26 @@ def test_reprocesamiento_masivo_repara_razones_sociales(
     detalle = expediente(client, actualizado["expediente_id"])
     assert detalle["emisor"]["razon_social"] == "PESQUERA DEL PACIFICO S.A.C."
     assert detalle["receptor"]["razon_social"] == "NEXOMAR NEGOCIOS E.I.R.L."
+
+
+def test_recalcular_corrige_expedientes_historicos_menores_al_umbral(
+    client: TestClient, engine: Engine
+) -> None:
+    documento = subir(client, "historica.xml", factura(importe="950.00"))
+    expediente_id = documento["expediente_id"]
+    autorizar_receptor(client)
+
+    with sessionmaker(engine, expire_on_commit=False)() as session:
+        historico = session.get(Expediente, expediente_id)
+        assert historico is not None
+        historico.requiere_guia = True
+        historico.estado = "NARANJA"
+        session.commit()
+
+    respuesta = client.post("/api/v1/expedientes/recalcular")
+    assert respuesta.status_code == 200, respuesta.text
+
+    detalle = expediente(client, expediente_id)
+    assert detalle["requiere_guia"] is False
+    assert detalle["faltantes"] == []
+    assert detalle["estado"] == "VERDE"
