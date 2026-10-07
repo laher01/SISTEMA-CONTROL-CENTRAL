@@ -2,7 +2,15 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from sqlalchemy import func, or_, select
 
 from app.api.deps import AuthDep, SessionDep, SettingsDep
-from app.models import ConfiguracionAcceso, CorreoAutorizado, CuentaAcceso, Gestor, Miembro, SolicitudAcceso, Tenant
+from app.models import (
+    ConfiguracionAcceso,
+    CorreoAutorizado,
+    CuentaAcceso,
+    Gestor,
+    Miembro,
+    SolicitudAcceso,
+    Tenant,
+)
 from app.schemas import CambioClaveIn, LoginIn, SesionOut, SolicitudAccesoIn, SolicitudAccesoOut
 from app.security import crear_sesion, hash_clave, revocar_sesion, verificar_clave
 from app.services import auditoria
@@ -62,7 +70,11 @@ def login(
 
 
 
-@router.post("/solicitar-acceso", response_model=SolicitudAccesoOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/solicitar-acceso",
+    response_model=SolicitudAccesoOut,
+    status_code=status.HTTP_201_CREATED,
+)
 def solicitar_acceso(
     datos: SolicitudAccesoIn,
     session: SessionDep,
