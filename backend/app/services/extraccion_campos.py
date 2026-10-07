@@ -111,6 +111,8 @@ NO_RAZON = (
     "SUNAT",
     "INFORMACION",
     "INFORMACIÓN",
+    "REPRESENTACION IMPRESA",
+    "REPRESENTACIÓN IMPRESA",
     "OBSERVACION",
     "OBSERVACIÓN",
     "REFERENCIA",
@@ -292,6 +294,12 @@ def _razon_emisor_encabezado(lineas: list[str], limite: int) -> tuple[str, str] 
         if re.search(r"\b(?:E\.?I\.?R\.?L\.?|S\.?A\.?C\.?|S\.?R\.?L\.?|S\.?A\.?)\b", x, re.I)
     ]
     valor = societarias[-1] if societarias else candidatos[0]
+    if (
+        re.fullmatch(r"(?:E\.?I\.?R\.?L\.?|S\.?A\.?C\.?|S\.?R\.?L\.?|S\.?A\.?)", valor, re.I)
+        and len(candidatos) >= 2
+    ):
+        anterior = candidatos[candidatos.index(valor) - 1]
+        valor = f"{anterior} {valor}"
     return valor[:300], " ".join(candidatos)[:300]
 
 
@@ -463,10 +471,20 @@ def _parsear_efact(
 
     indice_ruc = next((i for i, linea in enumerate(lineas) if ruc_emisor in re.sub(r"\D", "", linea)), None)
     if indice_ruc is not None:
-        for linea in lineas[indice_ruc + 1 : indice_ruc + 5]:
-            if _razon_social_valida(linea):
-                _poner_campo(campos, "razon_social_emisor", linea, min(0.94, 0.92 * factor), linea, fuente)
-                break
+        candidatos = [
+            linea
+            for linea in lineas[indice_ruc + 1 : indice_ruc + 6]
+            if _razon_social_valida(linea)
+            and not re.match(r"^(?:NRO\.?|F\d{3}\b)", _sin_tildes(linea), re.I)
+        ]
+        preferidos = [
+            linea
+            for linea in candidatos
+            if re.search(r"\b(?:E\.?I\.?R\.?L\.?|S\.?A\.?C\.?|S\.?R\.?L\.?|S\.?A\.?)\b", linea, re.I)
+        ]
+        if preferidos or candidatos:
+            razon = (preferidos or candidatos)[0]
+            _poner_campo(campos, "razon_social_emisor", razon, min(0.94, 0.92 * factor), razon, fuente)
 
     receptor = _bloque_despues_de_etiqueta(
         lineas,
