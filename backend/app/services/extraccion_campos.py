@@ -84,8 +84,21 @@ def extraer_campos(
                 ).a_dict(fuente)
 
     for nombre, etiquetas in (
-        ("razon_social_emisor", ("RAZÓN SOCIAL EMISOR", "RAZON SOCIAL EMISOR", "PROVEEDOR", "EMISOR")),
-        ("razon_social_receptor", ("RAZÓN SOCIAL RECEPTOR", "RAZON SOCIAL RECEPTOR", "CLIENTE", "ADQUIRIENTE", "SEÑOR(ES)", "SENORES")),
+        (
+            "razon_social_emisor",
+            ("RAZÓN SOCIAL EMISOR", "RAZON SOCIAL EMISOR", "PROVEEDOR", "EMISOR"),
+        ),
+        (
+            "razon_social_receptor",
+            (
+                "RAZÓN SOCIAL RECEPTOR",
+                "RAZON SOCIAL RECEPTOR",
+                "CLIENTE",
+                "ADQUIRIENTE",
+                "SEÑOR(ES)",
+                "SENORES",
+            ),
+        ),
     ):
         encontrado = _razon_social_cercana_a_etiqueta(texto, etiquetas)
         if encontrado:
