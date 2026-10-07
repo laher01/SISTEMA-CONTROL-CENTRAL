@@ -297,9 +297,11 @@ def procesar_documento(
     almacen: AlmacenDep,
     hoy: HoyDep,
     tenant_id: TenantDep,
+    auth: OperativeAuthDep,
     documento_id: uuid.UUID,
 ) -> Documento:
     documento = _documento(session, tenant_id, documento_id)
+    _validar_ambito_documento(auth, documento)
     try:
         _procesar_y_aplicar(session, settings, almacen, hoy, documento)
     except DocumentoNoProcesable as exc:
@@ -317,6 +319,7 @@ def procesar_pendientes(
     almacen: AlmacenDep,
     hoy: HoyDep,
     tenant_id: TenantDep,
+    auth: OperativeAuthDep,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     forzar: bool = False,
     sin_expediente: bool = False,
@@ -327,6 +330,7 @@ def procesar_pendientes(
         Documento.tenant_id == tenant_id,
         Documento.deleted_at.is_(None),
     )
+    consulta = _aplicar_ambito_documentos(consulta, auth)
     if completar_partes:
         emisor_empresa = aliased(Empresa)
         receptor_empresa = aliased(Empresa)
@@ -427,10 +431,12 @@ def _automatizacion_ya_evaluada(documento: Documento) -> bool:
 def confirmar_extraccion(
     session: SessionDep,
     tenant_id: TenantDep,
+    auth: OperativeAuthDep,
     documento_id: uuid.UUID,
     confirmacion: ExtraccionConfirmar,
 ) -> Documento:
     documento = _documento(session, tenant_id, documento_id)
+    _validar_ambito_documento(auth, documento)
     campos = confirmacion.model_dump(mode="json", exclude_none=True)
     datos = dict(documento.datos_extraidos or {})
     datos["extraccion_confirmada"] = {"version": 1, "campos": campos}
@@ -453,13 +459,14 @@ def crear_expediente_asistido(
     settings: SettingsDep,
     hoy: HoyDep,
     tenant_id: TenantDep,
+    auth: OperativeAuthDep,
     documento_id: uuid.UUID,
     solicitud: ExpedienteAsistidoIn,
 ) -> ExpedienteAsistidoOut:
     """Materializa una extracción ya confirmada y vincula su documento atómicamente."""
     documento = _documento(session, tenant_id, documento_id)
-    gestor_id = solicitud.gestor_id or documento.gestor_id
-    validar_gestor(session, tenant_id, gestor_id)
+    _validar_ambito_documento(auth, documento)
+    gestor_id = documento.gestor_id
     campos = _campos_confirmados(documento)
     faltantes = [
         nombre
@@ -520,6 +527,7 @@ def crear_expediente_asistido(
         importe_total=Decimal(str(campos["importe_total"])),
         requiere_guia=solicitud.requiere_guia,
         gestor_id=gestor_id,
+        usuario_id=documento.usuario_id,
     )
     if documento.expediente_id is not None and documento.expediente_id != expediente.id:
         raise HTTPException(
@@ -550,9 +558,18 @@ def _campos_confirmados(documento: Documento) -> dict[str, object]:
 
 @router.get("/{documento_id}/relaciones-sugeridas", response_model=list[RelacionSugeridaOut])
 def relaciones_sugeridas(
-    session: SessionDep, tenant_id: TenantDep, documento_id: uuid.UUID
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    documento_id: uuid.UUID,
 ) -> list[RelacionSugeridaOut]:
     documento = _documento(session, tenant_id, documento_id)
+    _validar_ambito_documento(auth, documento)
+    sugerencias = sugerir_relaciones(session, documento)
+    if auth.rol == "GESTOR":
+        sugerencias = [s for s in sugerencias if s.expediente.gestor_id == auth.gestor_id]
+    elif auth.rol == RolMiembro.USUARIO:
+        sugerencias = [s for s in sugerencias if s.expediente.usuario_id == auth.usuario_id]
     return [
         RelacionSugeridaOut(
             expediente=sugerencia.expediente,
@@ -569,10 +586,16 @@ def vincular(
     settings: SettingsDep,
     hoy: HoyDep,
     tenant_id: TenantDep,
+    auth: OperativeAuthDep,
     documento_id: uuid.UUID,
     datos: DocumentoVincular,
 ) -> Documento:
     documento = _documento(session, tenant_id, documento_id)
+    _validar_ambito_documento(auth, documento)
+    expediente = session.get(Expediente, datos.expediente_id)
+    if expediente is None or expediente.tenant_id != tenant_id or expediente.deleted_at:
+        raise no_encontrado("Expediente")
+    _validar_ambito_expediente(auth, expediente)
     try:
         vincular_documento(
             session, settings, hoy, documento, datos.expediente_id, datos.tipo_documento
