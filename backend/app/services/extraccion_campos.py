@@ -325,9 +325,9 @@ def _razon_social_cercana_a_etiqueta(texto: str, etiquetas: tuple[str, ...]) -> 
                 continue
             original = lineas[indice]
             candidato = original[pos + len(etiqueta) :].strip(" :-\t")
-            candidato = _recortar_razon(candidato)
+            candidato = _recortar_razon(candidato, quitar_etiqueta=False)
             if not candidato and indice + 1 < len(lineas):
-                candidato = _recortar_razon(lineas[indice + 1])
+                candidato = _recortar_razon(lineas[indice + 1], quitar_etiqueta=False)
             if _razon_social_valida(candidato):
                 return candidato[:300]
     return None
@@ -360,7 +360,7 @@ def _razon_social_cercana_a_ruc(texto: str, ruc: str) -> str | None:
     return None
 
 
-def _recortar_razon(valor: str) -> str:
+def _recortar_razon(valor: str, quitar_etiqueta: bool = True) -> str:
     candidato = " ".join(valor.split()).strip(" -:;,")
     candidato = re.split(
         r"\b(?:RUC|IDENTIFICAD[OA]\s+CON\s+RUC|DIRECCI[ÓO]N|DOMICILIO|FECHA|"
@@ -369,13 +369,14 @@ def _recortar_razon(valor: str) -> str:
         maxsplit=1,
         flags=re.IGNORECASE,
     )[0]
-    candidato = re.sub(
-        r"^(?:RAZ[ÓO]N\s+SOCIAL|PROVEEDOR|EMISOR|CLIENTE|ADQUIRIENTE|"
-        r"SEÑOR\(ES\)|SEÑORES|SENORES|RECIB[IÍ]\s+DE|RECIBIDO\s+DE)\s*[:\-]?\s*",
-        "",
-        candidato,
-        flags=re.IGNORECASE,
-    )
+    if quitar_etiqueta:
+        candidato = re.sub(
+            r"^(?:RAZ[ÓO]N\s+SOCIAL|PROVEEDOR|EMISOR|CLIENTE|ADQUIRIENTE|"
+            r"SEÑOR\(ES\)|SEÑORES|SENORES|RECIB[IÍ]\s+DE|RECIBIDO\s+DE)\s*[:\-]?\s*",
+            "",
+            candidato,
+            flags=re.IGNORECASE,
+        )
     return " ".join(candidato.split()).strip(" -:;,")
 
 
