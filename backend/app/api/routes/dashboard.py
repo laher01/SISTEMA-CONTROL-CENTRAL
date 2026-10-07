@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import SessionDep, SettingsDep, TenantDep
 from app.enums import EstadoDocumento, EstadoExpediente, Moneda, TipoAlerta
-from app.models import Alerta, Documento, Empresa, Expediente, Miembro
+from app.models import Alerta, Documento, Expediente, Miembro
 from app.schemas import DashboardDesglose, DashboardDesgloseFila, DashboardResumen, MontosMoneda
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
