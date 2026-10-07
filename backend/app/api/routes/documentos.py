@@ -382,7 +382,8 @@ def crear_expediente_asistido(
 ) -> ExpedienteAsistidoOut:
     """Materializa una extracción ya confirmada y vincula su documento atómicamente."""
     documento = _documento(session, tenant_id, documento_id)
-    validar_gestor(session, tenant_id, solicitud.gestor_id)
+    gestor_id = solicitud.gestor_id or documento.gestor_id
+    validar_gestor(session, tenant_id, gestor_id)
     campos = _campos_confirmados(documento)
     faltantes = [
         nombre
@@ -432,7 +433,7 @@ def crear_expediente_asistido(
         moneda=Moneda(str(campos["moneda"])),
         importe_total=Decimal(str(campos["importe_total"])),
         requiere_guia=solicitud.requiere_guia,
-        gestor_id=solicitud.gestor_id,
+        gestor_id=gestor_id,
     )
     if documento.expediente_id is not None and documento.expediente_id != expediente.id:
         raise HTTPException(
