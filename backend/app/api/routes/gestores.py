@@ -91,7 +91,10 @@ def actualizar(
 
     try:
         if datos.usuario_id is not None:
-            if auth.rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR) and datos.usuario_id != auth.usuario_id:
+            if (
+                auth.rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR)
+                and datos.usuario_id != auth.usuario_id
+            ):
                 raise HTTPException(
                     status.HTTP_403_FORBIDDEN,
                     "Un Usuario no puede reasignar su Gestor a otro Usuario",
