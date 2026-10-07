@@ -87,9 +87,7 @@ def resumen(
     elif auth.rol == RolMiembro.USUARIO:
         documentos_scope.append(Documento.usuario_id == auth.usuario_id)
     for estado, total in session.execute(
-        select(Documento.estado, func.count())
-        .where(*documentos_scope)
-        .group_by(Documento.estado)
+        select(Documento.estado, func.count()).where(*documentos_scope).group_by(Documento.estado)
     ):
         pendientes[EstadoDocumento(estado)] = total
 
