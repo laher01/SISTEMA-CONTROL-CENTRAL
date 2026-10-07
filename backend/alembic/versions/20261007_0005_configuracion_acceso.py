@@ -176,8 +176,12 @@ def upgrade() -> None:
         unique=False,
     )
 
-    # Conserva acceso al sistema tras introducir SUPERADMIN.
-    op.execute("UPDATE miembros SET rol = 'SUPERADMIN' WHERE rol = 'ADMINISTRADOR'")
+    # Promueve únicamente la cuenta administrativa principal existente.
+    # El resto de administradores conserva su rol operativo.
+    op.execute(
+        "UPDATE miembros SET rol = 'SUPERADMIN' "
+        "WHERE rol = 'ADMINISTRADOR' AND codigo = 'ADMIN01'"
+    )
 
 
 def downgrade() -> None:
