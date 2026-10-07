@@ -7,8 +7,8 @@ from fastapi import APIRouter
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import SessionDep, SettingsDep, TenantDep
-from app.enums import EstadoDocumento, EstadoExpediente, Moneda, TipoAlerta
+from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
+from app.enums import EstadoDocumento, EstadoExpediente, Moneda, RolMiembro, TipoAlerta
 from app.models import Alerta, Documento, Expediente, Miembro
 from app.schemas import DashboardDesglose, DashboardDesgloseFila, DashboardResumen, MontosMoneda
 
@@ -16,8 +16,20 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
 @router.get("/resumen", response_model=DashboardResumen)
-def resumen(session: SessionDep, settings: SettingsDep, tenant_id: TenantDep) -> DashboardResumen:
-    vigentes = (Expediente.tenant_id == tenant_id, Expediente.deleted_at.is_(None))
+def resumen(
+    session: SessionDep,
+    settings: SettingsDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> DashboardResumen:
+    vigentes: list[object] = [
+        Expediente.tenant_id == tenant_id,
+        Expediente.deleted_at.is_(None),
+    ]
+    if auth.rol == "GESTOR":
+        vigentes.append(Expediente.gestor_id == auth.gestor_id)
+    elif auth.rol == RolMiembro.USUARIO:
+        vigentes.append(Expediente.usuario_id == auth.usuario_id)
 
     por_estado = {e: 0 for e in EstadoExpediente}
     for estado, total in session.execute(
@@ -52,24 +64,31 @@ def resumen(session: SessionDep, settings: SettingsDep, tenant_id: TenantDep) ->
         )
 
     alertas = {t: 0 for t in TipoAlerta}
-    for tipo, total in session.execute(
+    alertas_query = (
         select(Alerta.tipo, func.count())
-        .where(Alerta.tenant_id == tenant_id, Alerta.resuelta.is_(False))
+        .join(Expediente, Alerta.expediente_id == Expediente.id)
+        .where(Alerta.tenant_id == tenant_id, Alerta.resuelta.is_(False), *vigentes)
         .group_by(Alerta.tipo)
-    ):
+    )
+    for tipo, total in session.execute(alertas_query):
         alertas[TipoAlerta(tipo)] = total
 
     pendientes = {
         EstadoDocumento.PENDIENTE_CLASIFICACION: 0,
         EstadoDocumento.PENDIENTE_RELACION: 0,
     }
+    documentos_scope: list[object] = [
+        Documento.tenant_id == tenant_id,
+        Documento.deleted_at.is_(None),
+        Documento.estado.in_(list(pendientes)),
+    ]
+    if auth.rol == "GESTOR":
+        documentos_scope.append(Documento.gestor_id == auth.gestor_id)
+    elif auth.rol == RolMiembro.USUARIO:
+        documentos_scope.append(Documento.usuario_id == auth.usuario_id)
     for estado, total in session.execute(
         select(Documento.estado, func.count())
-        .where(
-            Documento.tenant_id == tenant_id,
-            Documento.deleted_at.is_(None),
-            Documento.estado.in_(list(pendientes)),
-        )
+        .where(*documentos_scope)
         .group_by(Documento.estado)
     ):
         pendientes[EstadoDocumento(estado)] = total
@@ -88,6 +107,7 @@ def resumen(session: SessionDep, settings: SettingsDep, tenant_id: TenantDep) ->
 def desglose(
     session: SessionDep,
     tenant_id: TenantDep,
+    auth: OperativeAuthDep,
     agrupar_por: Literal["usuario", "emisor", "receptor", "dia", "mes", "anio"] = "usuario",
     orden: Literal["asc", "desc"] = "desc",
     usuario_id: uuid.UUID | None = None,
@@ -107,7 +127,11 @@ def desglose(
             Expediente.deleted_at.is_(None),
         )
     )
-    if usuario_id is not None:
+    if auth.rol == "GESTOR":
+        consulta = consulta.where(Expediente.gestor_id == auth.gestor_id)
+    elif auth.rol == RolMiembro.USUARIO:
+        consulta = consulta.where(Expediente.usuario_id == auth.usuario_id)
+    elif usuario_id is not None:
         consulta = consulta.where(Expediente.usuario_id == usuario_id)
     if emisor_id is not None:
         consulta = consulta.where(Expediente.emisor_id == emisor_id)
