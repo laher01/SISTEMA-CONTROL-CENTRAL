@@ -1,12 +1,11 @@
 import uuid
-from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, select
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
-from app.enums import Moneda, RolMiembro
+from app.enums import RolMiembro
 from app.models import (
     AdelantoERP,
     CuentaPagoERP,
