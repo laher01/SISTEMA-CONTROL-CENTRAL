@@ -49,12 +49,12 @@ export default function Documentos() {
   const [resultadoLote, setResultadoLote] = useState<ResultadoLote>();
   const [errorLote, setErrorLote] = useState("");
 
-  const reprocesarSinExpediente = async () => {
+  const reprocesarYCompletar = async () => {
     setReprocesando(true);
     setErrorLote("");
     try {
       const resultado = await enviarJson<ResultadoLote>(
-        "/api/v1/documentos/procesar-pendientes?limit=100&forzar=true&sin_expediente=true",
+        "/api/v1/documentos/procesar-pendientes?limit=100&forzar=true&completar_partes=true",
         "POST",
       );
       setResultadoLote(resultado);
@@ -86,8 +86,8 @@ export default function Documentos() {
           </p>
         </div>
         <div className="acciones-documento">
-          <button onClick={reprocesarSinExpediente} disabled={reprocesando}>
-            {reprocesando ? "Reprocesando…" : "Reprocesar todos sin expediente"}
+          <button onClick={reprocesarYCompletar} disabled={reprocesando}>
+            {reprocesando ? "Reprocesando…" : "Reprocesar y completar datos"}
           </button>
           <Link className="boton-enlace" to="/subir">Subir documentos</Link>
         </div>
