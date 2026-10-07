@@ -330,7 +330,7 @@ def _razon_social_etiquetada_para_ruc(
             if pos < 0:
                 continue
 
-            fin = min(len(lineas), indice + 3)
+            fin = min(len(lineas), indice + 2)
             bloque = "\n".join(lineas[indice:fin])
             if ruc not in re.sub(r"[\s.\-]", "", bloque):
                 continue
