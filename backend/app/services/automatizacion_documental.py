@@ -17,6 +17,7 @@ from app.enums import EstadoDocumento, Moneda, TipoComprobante, TipoDocumento
 from app.models import Documento
 from app.services import auditoria
 from app.services.expedientes import buscar_expediente, obtener_o_crear_empresa
+from app.services.extraccion_campos import razon_social_confiable
 from app.services.ingesta import crear_expediente, vincular_documento
 
 CAMPOS_FISCALES = (
@@ -150,6 +151,7 @@ def aplicar_automaticamente(
         if (
             opcional in campos
             and confianzas.get(opcional, 0) >= settings.confianza_minima_expediente
+            and razon_social_confiable(campos[opcional])
         ):
             campos_confirmados[opcional] = campos[opcional]
     confirmacion = {
@@ -173,8 +175,12 @@ def aplicar_automaticamente(
         },
     )
 
-    razon_emisor = campos.get("razon_social_emisor", emisor_ruc).strip() or emisor_ruc
-    razon_receptor = campos.get("razon_social_receptor", receptor_ruc).strip() or receptor_ruc
+    razon_emisor = campos.get("razon_social_emisor", "").strip()
+    if not razon_social_confiable(razon_emisor):
+        razon_emisor = emisor_ruc
+    razon_receptor = campos.get("razon_social_receptor", "").strip()
+    if not razon_social_confiable(razon_receptor):
+        razon_receptor = receptor_ruc
     obtener_o_crear_empresa(session, documento.tenant_id, emisor_ruc, razon_emisor)
     obtener_o_crear_empresa(session, documento.tenant_id, receptor_ruc, razon_receptor)
 
@@ -235,7 +241,11 @@ def _reparar_partes_vinculadas(
         ("razon_social_receptor", "ruc_receptor", expediente.receptor),
     ):
         razon = campos.get(nombre, "").strip()
-        if not razon or confianzas.get(nombre, 0) < settings.confianza_minima_expediente:
+        if (
+            not razon
+            or not razon_social_confiable(razon)
+            or confianzas.get(nombre, 0) < settings.confianza_minima_expediente
+        ):
             continue
         ruc_extraido = campos.get(ruc_campo)
         if ruc_extraido and ruc_extraido != empresa.ruc:
