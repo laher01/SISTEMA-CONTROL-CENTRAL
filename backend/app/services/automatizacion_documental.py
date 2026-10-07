@@ -239,12 +239,17 @@ def _reparar_partes_vinculadas(
         ruc_extraido = campos.get(ruc_campo)
         if ruc_extraido and ruc_extraido != empresa.ruc:
             continue
-        obtener_o_crear_empresa(
-            session,
-            documento.tenant_id,
-            empresa.ruc,
-            razon,
-        )
+        razon_actual = empresa.razon_social.strip()
+        if razon_actual == empresa.ruc or razon_actual.startswith(empresa.ruc):
+            empresa.razon_social = razon[:300]
+            session.flush()
+        else:
+            obtener_o_crear_empresa(
+                session,
+                documento.tenant_id,
+                empresa.ruc,
+                razon,
+            )
 
 
 def _clasificacion(sugerencia: object) -> tuple[TipoDocumento | None, float]:
