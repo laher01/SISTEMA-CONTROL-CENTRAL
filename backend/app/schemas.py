@@ -84,6 +84,8 @@ class GestorActualizar(BaseModel):
 class DocumentoOut(Orm):
     id: uuid.UUID
     expediente_id: uuid.UUID | None
+    emisor: EmpresaOut | None = None
+    receptor: EmpresaOut | None = None
     tipo_documento: TipoDocumento | None
     estado: EstadoDocumento
     sha256: str
@@ -113,6 +115,8 @@ class ExtraccionConfirmar(BaseModel):
     correlativo: str | None = Field(default=None, pattern=r"^\d{1,8}$")
     ruc_emisor: Ruc | None = None
     ruc_receptor: Ruc | None = None
+    razon_social_emisor: str | None = Field(default=None, min_length=1, max_length=300)
+    razon_social_receptor: str | None = Field(default=None, min_length=1, max_length=300)
     fecha_emision: date | None = None
     moneda: Moneda | None = None
     importe_total: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
