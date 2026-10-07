@@ -85,6 +85,7 @@ def aplicar_automaticamente(
     procesamiento: dict[str, object],
 ) -> ResultadoAutomatizacion:
     if documento.expediente_id is not None:
+        _reparar_partes_vinculadas(session, settings, documento, procesamiento)
         resultado = ResultadoAutomatizacion(
             "COMPLETADO", relacionado=True, expediente_id=documento.expediente_id
         )
@@ -144,11 +145,15 @@ def aplicar_automaticamente(
     except (KeyError, ValueError, InvalidOperation) as exc:
         return _revision(documento, [f"Los campos fiscales no tienen un formato válido: {exc}"])
 
+    campos_confirmados = {campo: campos[campo] for campo in CAMPOS_FISCALES}
+    for opcional in ("razon_social_emisor", "razon_social_receptor"):
+        if opcional in campos and confianzas.get(opcional, 0) >= settings.confianza_minima_expediente:
+            campos_confirmados[opcional] = campos[opcional]
     confirmacion = {
-        "version": 1,
+        "version": 2,
         "origen": "AUTOMATICA",
         "confianza_minima": min(confianzas[campo] for campo in CAMPOS_FISCALES),
-        "campos": {campo: campos[campo] for campo in CAMPOS_FISCALES},
+        "campos": campos_confirmados,
     }
     datos = dict(documento.datos_extraidos or {})
     datos["extraccion_confirmada"] = confirmacion
@@ -208,6 +213,35 @@ def aplicar_automaticamente(
         {"expediente_id": str(expediente.id), "expediente_creado": creado},
     )
     return ResultadoAutomatizacion("COMPLETADO", relacionado=True, expediente_id=expediente.id)
+
+
+def _reparar_partes_vinculadas(
+    session: Session,
+    settings: Settings,
+    documento: Documento,
+    procesamiento: dict[str, object],
+) -> None:
+    expediente = documento.expediente
+    if expediente is None:
+        return
+    extraccion = procesamiento.get("extraccion_estructurada")
+    campos, confianzas, _ = _leer_extraccion(extraccion)
+    for nombre, ruc_campo, empresa in (
+        ("razon_social_emisor", "ruc_emisor", expediente.emisor),
+        ("razon_social_receptor", "ruc_receptor", expediente.receptor),
+    ):
+        razon = campos.get(nombre, "").strip()
+        if not razon or confianzas.get(nombre, 0) < settings.confianza_minima_expediente:
+            continue
+        ruc_extraido = campos.get(ruc_campo)
+        if ruc_extraido and ruc_extraido != empresa.ruc:
+            continue
+        obtener_o_crear_empresa(
+            session,
+            documento.tenant_id,
+            empresa.ruc,
+            razon,
+        )
 
 
 def _clasificacion(sugerencia: object) -> tuple[TipoDocumento | None, float]:
