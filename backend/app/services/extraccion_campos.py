@@ -56,6 +56,8 @@ ETIQUETAS_EMISOR = (
 )
 ETIQUETAS_RECEPTOR = (
     "RAZÓN SOCIAL RECEPTOR",
+    "RAZÓN SOCIAL",
+    "RAZON SOCIAL",
     "RAZON SOCIAL RECEPTOR",
     "CLIENTE",
     "ADQUIRIENTE",
@@ -194,7 +196,11 @@ def extraer_campos(
 
     if not campos and not candidatos:
         return None
-    resultado: dict[str, object] = {"version": 2, "campos": campos}
+    resultado: dict[str, object] = {
+        "version": 3,
+        "formato_documental": detectar_formato_documental(texto),
+        "campos": campos,
+    }
     if candidatos:
         resultado["candidatos"] = candidatos
     return resultado
@@ -361,6 +367,7 @@ def _razon_social_cercana_a_ruc(
             continue
 
         antes = re.split(r"\bRUC\b", linea, maxsplit=1, flags=re.IGNORECASE)[0]
+        antes = re.sub(r"[-–—:]?\s*" + re.escape(ruc) + r"\s*$", "", antes).strip()
         antes = _recortar_razon(antes)
         if _razon_social_valida(antes):
             return antes[:300], " ".join(linea.split())[:300]
@@ -422,6 +429,10 @@ def _recortar_razon(valor: str, quitar_etiqueta: bool = True) -> str:
     return " ".join(candidato.split()).strip(" -:;,")
 
 
+def razon_social_confiable(valor: str) -> bool:
+    return _razon_social_valida(valor)
+
+
 def _razon_social_valida(valor: str) -> bool:
     if len(valor) < 3 or len(valor) > 300:
         return False
@@ -450,16 +461,60 @@ def _parece_direccion(valor: str) -> bool:
         "JIRON",
         "CALLE",
         "CARRETERA",
+        " PUESTO ",
+        "PUESTO ",
+        "PSTO",
         " MZ",
+        "MZA",
         "MANZANA",
-        "LOTE",
+        " LOTE",
+        " LT ",
         "URB.",
         "URBANIZACION",
         "DISTRITO",
         "PROVINCIA",
         "DEPARTAMENTO",
+        "SECTOR",
+        "AA.HH",
+        "A.H.",
+        "ASENTAMIENTO",
+        " NRO.",
+        " NRO ",
+        " KM ",
+        " S/N",
     )
-    return any(indicador in normalizado for indicador in indicadores)
+    if any(indicador in f" {normalizado} " for indicador in indicadores):
+        return True
+    tokens = normalizado.split()
+    numeros = sum(any(c.isdigit() for c in token) for token in tokens)
+    return (
+        len(tokens) >= 3
+        and numeros >= 2
+        and not re.search(
+            r"\b(?:SAC|S\.A\.C\.|EIRL|E\.I\.R\.L\.|SRL|S\.R\.L\.|SA|S\.A\.)\b",
+            normalizado,
+        )
+    )
+
+
+def detectar_formato_documental(texto: str) -> str:
+    normalizado = _sin_tildes(texto).upper()
+    if "RECIBO POR HONORARIOS" in normalizado:
+        return "RHE_SUNAT"
+    if "OSE" in normalizado or any(
+        marca in normalizado
+        for marca in ("FACTURALAYA", "NUBEFACT", "EFACT", "BIZLINK", "DIGIFLOW")
+    ):
+        return "OSE"
+    if "PSE" in normalizado or "PROVEEDOR DE SERVICIOS ELECTRONICOS" in normalizado:
+        return "PSE"
+    if "TICKET" in normalizado or "BOLETA DE VENTA" in normalizado:
+        return "TICKET"
+    if "SUNAT" in normalizado or re.search(r"\bE\d{3}\s*[-–—]", normalizado):
+        return "SUNAT"
+    if "FACTURA ELECTRONICA" in normalizado or "FACTURA DE VENTA" in normalizado:
+        return "FACTURA_GENERICA"
+    return "DESCONOCIDO"
 
 
 def _es_rhe(texto: str) -> bool:

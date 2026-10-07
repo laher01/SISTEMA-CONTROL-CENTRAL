@@ -4,13 +4,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import (
     alertas,
     auth,
+    configuracion,
     dashboard,
     documentos,
     empresas,
     expedientes,
     gestores,
+    mensajes_alerta,
     miembros,
+    pagos,
     produccion,
+    registros,
 )
 from app.core.config import get_settings
 
@@ -35,12 +39,16 @@ api.include_router(auth.router)
 for modulo in (
     documentos,
     expedientes,
+    registros,
     empresas,
     miembros,
     gestores,
     alertas,
+    mensajes_alerta,
     dashboard,
     produccion,
+    pagos,
+    configuracion,
 ):
     api.include_router(modulo.router)
 app.include_router(api)

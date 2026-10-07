@@ -390,7 +390,7 @@ def test_confirma_campos_extraidos_con_validacion_y_auditoria(client: TestClient
     )
     assert respuesta.status_code == 200, respuesta.text
     confirmado = respuesta.json()["datos_extraidos"]["extraccion_confirmada"]
-    assert confirmado["version"] == 1
+    assert confirmado["version"] == 2
     assert confirmado["campos"]["importe_total"] == "2500.40"
     assert confirmado["campos"]["fecha_emision"] == "2026-09-17"
 
@@ -505,8 +505,12 @@ def test_documentos_filtran_por_tipo_y_emisor(client: TestClient) -> None:
     assert futuro.json() == []
 
 
-def test_eliminar_documento_es_logico_y_deja_de_listarlo(client: TestClient) -> None:
+def test_eliminar_documento_es_logico_y_deja_de_listarlo(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
     documento = subir(client, "eliminar.pdf", b"%PDF-1.7 documento temporal")
+    auth_prueba.como_admin()
     documento_id = documento["id"]
 
     respuesta = client.delete(f"/api/v1/documentos/{documento_id}")

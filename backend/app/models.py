@@ -8,6 +8,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Integer,
     MetaData,
     Numeric,
     String,
@@ -171,11 +172,32 @@ class Documento(ConId, ConTenant, ConCreacion, Base):
     tamano_bytes: Mapped[int] = mapped_column(BigInteger)
     ruta_storage: Mapped[str] = mapped_column(String(500))
     datos_extraidos: Mapped[JsonDict | None]
+    formato_origen: Mapped[str | None] = mapped_column(String(30), index=True)
     gestor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"), index=True)
     usuario_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
     deleted_at: Mapped[datetime | None]
 
     expediente: Mapped[Expediente | None] = relationship(back_populates="documentos")
+
+    @property
+    def fecha_emision(self) -> date | None:
+        return self.expediente.fecha_emision if self.expediente is not None else None
+
+    @property
+    def serie(self) -> str | None:
+        return self.expediente.serie if self.expediente is not None else None
+
+    @property
+    def correlativo(self) -> str | None:
+        return self.expediente.correlativo if self.expediente is not None else None
+
+    @property
+    def moneda(self) -> str | None:
+        return self.expediente.moneda if self.expediente is not None else None
+
+    @property
+    def importe_total(self) -> Decimal | None:
+        return self.expediente.importe_total if self.expediente is not None else None
 
     @property
     def emisor(self) -> Empresa | None:
@@ -197,6 +219,134 @@ class Alerta(ConId, ConTenant, ConCreacion, Base):
     resuelta_at: Mapped[datetime | None]
 
     expediente: Mapped[Expediente] = relationship(back_populates="alertas")
+
+
+class PerfilExtraccion(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "perfiles_extraccion"
+    __table_args__ = (UniqueConstraint("tenant_id", "ruc", "tipo_parte", "formato"),)
+
+    ruc: Mapped[str] = mapped_column(String(11), index=True)
+    tipo_parte: Mapped[str] = mapped_column(String(10))
+    formato: Mapped[str] = mapped_column(String(30), index=True)
+    razon_social: Mapped[str] = mapped_column(String(300))
+    confianza: Mapped[Decimal] = mapped_column(Numeric(5, 4), default=Decimal("0.95"))
+    usos: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    activo: Mapped[bool] = mapped_column(default=True, server_default="true")
+    updated_at: Mapped[datetime] = mapped_column(
+        default=ahora, onupdate=ahora, server_default=func.now()
+    )
+
+
+class CorreccionIA(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "correcciones_ia"
+
+    documento_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documentos.id"), index=True)
+    actor_codigo: Mapped[str] = mapped_column(String(100))
+    actor_rol: Mapped[str] = mapped_column(String(20))
+    formato: Mapped[str | None] = mapped_column(String(30), index=True)
+    resultado_original: Mapped[JsonDict | None]
+    resultado_corregido: Mapped[JsonDict]
+    motivo: Mapped[str | None] = mapped_column(String(500))
+
+
+class AlertaManual(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "alertas_manuales"
+
+    expediente_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("expedientes.id"), index=True
+    )
+    creado_por_codigo: Mapped[str] = mapped_column(String(100))
+    creado_por_rol: Mapped[str] = mapped_column(String(20))
+    destinatario_usuario_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("miembros.id"), index=True
+    )
+    destinatario_gestor_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("gestores.id"), index=True
+    )
+    para_administracion: Mapped[bool] = mapped_column(default=True, server_default="true")
+    asunto: Mapped[str] = mapped_column(String(200))
+    mensaje: Mapped[str] = mapped_column(String(1000))
+    resuelta: Mapped[bool] = mapped_column(default=False, server_default="false", index=True)
+    resuelta_at: Mapped[datetime | None]
+
+
+class PermisoConfigurado(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "permisos_configurados"
+    __table_args__ = (UniqueConstraint("tenant_id", "rol", "permiso"),)
+
+    rol: Mapped[str] = mapped_column(String(20), index=True)
+    permiso: Mapped[str] = mapped_column(String(80), index=True)
+    habilitado: Mapped[bool] = mapped_column(default=False, server_default="false")
+
+
+class PlanLiquidacion(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "planes_liquidacion"
+
+    usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    nombre: Mapped[str] = mapped_column(String(120))
+    porcentaje: Mapped[Decimal] = mapped_column(Numeric(7, 4))
+    vigencia_desde: Mapped[date] = mapped_column(Date)
+    vigencia_hasta: Mapped[date | None] = mapped_column(Date)
+    activo: Mapped[bool] = mapped_column(default=True, server_default="true")
+
+
+class CuentaPagoERP(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "cuentas_pago_erp"
+
+    usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    titular: Mapped[str] = mapped_column(String(200))
+    banco: Mapped[str] = mapped_column(String(120))
+    tipo_cuenta: Mapped[str] = mapped_column(String(50))
+    moneda: Mapped[str] = mapped_column(String(3))
+    numero_cuenta: Mapped[str | None] = mapped_column(String(80))
+    cci: Mapped[str | None] = mapped_column(String(40))
+    porcentaje_distribucion: Mapped[Decimal] = mapped_column(Numeric(7, 4), default=Decimal("100"))
+    activa: Mapped[bool] = mapped_column(default=True, server_default="true")
+
+
+class AdelantoERP(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "adelantos_erp"
+
+    usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    fecha: Mapped[date] = mapped_column(Date)
+    moneda: Mapped[str] = mapped_column(String(3))
+    monto: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    descripcion: Mapped[str | None] = mapped_column(String(500))
+    aplicado: Mapped[bool] = mapped_column(default=False, server_default="false")
+
+
+class PagoERP(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "pagos_erp"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "usuario_id",
+            "periodo_desde",
+            "periodo_hasta",
+            "moneda",
+        ),
+    )
+
+    usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    plan_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("planes_liquidacion.id"), index=True
+    )
+    periodo_desde: Mapped[date] = mapped_column(Date)
+    periodo_hasta: Mapped[date] = mapped_column(Date)
+    moneda: Mapped[str] = mapped_column(String(3))
+    produccion_total: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    porcentaje: Mapped[Decimal] = mapped_column(Numeric(7, 4))
+    bruto: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    adelantos: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))
+    ajustes: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))
+    saldo: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    estado: Mapped[str] = mapped_column(String(20), default="PROGRAMADO", index=True)
+    fecha_programada: Mapped[date | None] = mapped_column(Date)
+    fecha_pago: Mapped[date | None] = mapped_column(Date)
+    voucher_documento_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("documentos.id"), index=True
+    )
+    conciliado: Mapped[bool] = mapped_column(default=False, server_default="false")
 
 
 class Auditoria(ConId, ConTenant, ConCreacion, Base):

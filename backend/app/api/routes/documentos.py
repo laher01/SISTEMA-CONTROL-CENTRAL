@@ -26,6 +26,10 @@ from app.schemas import (
     RelacionSugeridaOut,
 )
 from app.services import auditoria
+from app.services.aprendizaje_documental import (
+    aplicar_perfiles_aprendidos,
+    registrar_correccion_y_aprender,
+)
 from app.services.automatizacion_documental import (
     ResultadoAutomatizacion,
     aplicar_automaticamente,
@@ -41,6 +45,7 @@ from app.services.ingesta import (
     ingerir_documento,
     vincular_documento,
 )
+from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 from app.services.relaciones_documentales import sugerir_relaciones
 from app.services.ubl import UblInvalido
@@ -86,10 +91,25 @@ async def subir_documento(
     elif auth.rol == RolMiembro.USUARIO:
         gestor_id = None
         usuario_id = auth.usuario_id
+    elif auth.rol == RolMiembro.SECRETARIA:
+        if expediente_id is None:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Secretaría solo puede adjuntar documentos a expedientes existentes",
+            )
+        expediente_secretaria = session.get(Expediente, expediente_id)
+        if (
+            expediente_secretaria is None
+            or expediente_secretaria.tenant_id != tenant_id
+            or expediente_secretaria.deleted_at
+        ):
+            raise no_encontrado("Expediente")
+        gestor_id = expediente_secretaria.gestor_id
+        usuario_id = expediente_secretaria.usuario_id
     else:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            "Solo un Usuario o Gestor puede subir documentos",
+            "Solo Usuario, Gestor o Secretaría puede cargar documentos operativos",
         )
     if usuario_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "La sesión no tiene un Usuario propietario")
@@ -98,6 +118,9 @@ async def subir_documento(
         if expediente is None or expediente.tenant_id != tenant_id or expediente.deleted_at:
             raise no_encontrado("Expediente")
         _validar_ambito_expediente(auth, expediente)
+        # Los adjuntos heredan siempre la propiedad del expediente.
+        usuario_id = expediente.usuario_id
+        gestor_id = expediente.gestor_id
 
     subido = ArchivoSubido(
         nombre=archivo.filename or "sin_nombre",
@@ -245,6 +268,16 @@ def eliminar_documento(
 ) -> None:
     documento = _documento(session, tenant_id, documento_id)
     _validar_ambito_documento(auth, documento)
+    if not permiso_habilitado(
+        session,
+        tenant_id,
+        auth.rol,
+        PERMISO_ELIMINAR_REGISTROS,
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "No tiene permiso para eliminar registros",
+        )
     expediente = documento.expediente
     documento.deleted_at = ahora()
     auditoria.registrar(
@@ -407,6 +440,7 @@ def _procesar_y_aplicar(
             procesamiento = procesar(
                 contenido, settings.max_extracted_chars, settings.max_ocr_pdf_pages
             ).a_dict()
+        aplicar_perfiles_aprendidos(session, documento, procesamiento)
         guardar_procesamiento(session, documento, procesamiento)
     return aplicar_automaticamente(session, settings, hoy, documento, procesamiento)
 
@@ -439,8 +473,16 @@ def confirmar_extraccion(
     _validar_ambito_documento(auth, documento)
     campos = confirmacion.model_dump(mode="json", exclude_none=True)
     datos = dict(documento.datos_extraidos or {})
-    datos["extraccion_confirmada"] = {"version": 1, "campos": campos}
+    datos["extraccion_confirmada"] = {"version": 2, "campos": campos}
     documento.datos_extraidos = datos
+    registrar_correccion_y_aprender(
+        session,
+        documento,
+        auth.codigo,
+        auth.rol,
+        campos,
+        motivo="Corrección o confirmación humana",
+    )
     auditoria.registrar(
         session,
         tenant_id,

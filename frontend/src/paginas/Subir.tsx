@@ -2,7 +2,7 @@ import { useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router-dom";
 
 import { ErrorApi, enviarFormulario } from "../api";
-import { ETIQUETA_TIPO_DOCUMENTO } from "../formato";
+import { ETIQUETA_TIPO_DOCUMENTO, formatearFecha, formatearMonto } from "../formato";
 import type { Documento, SesionActual } from "../tipos";
 
 // La VPS de pruebas tiene 1 GB de RAM. El procesamiento secuencial evita que
@@ -74,7 +74,21 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
     agregar(evento.dataTransfer.files);
   };
 
-  const conteo = (estado: Resultado["estado"]) => filas.filter((f) => f.resultado.estado === estado).length;
+  const conteo = (estado: Resultado["estado"]) =>
+    filas.filter((f) => f.resultado.estado === estado).length;
+
+  const totales = filas.reduce(
+    (acumulado, fila) => {
+      if (fila.resultado.estado !== "ok") return acumulado;
+      const documento = fila.resultado.documento;
+      if (!documento.importe_total || !documento.moneda) return acumulado;
+      const valor = Number(documento.importe_total);
+      if (documento.moneda === "USD") acumulado.usd += valor;
+      else acumulado.pen += valor;
+      return acumulado;
+    },
+    { pen: 0, usd: 0 },
+  );
 
   return (
     <>
@@ -119,16 +133,27 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
 
       {filas.length > 0 && (
         <>
-          <p className="resumen-carga">
-            {conteo("ok")} subidos · {conteo("duplicado")} duplicados · {conteo("error")} con error ·{" "}
-            {conteo("en_cola") + conteo("subiendo")} en proceso
-          </p>
+          <div className="resumen-lote">
+            <p className="resumen-carga">
+              {conteo("ok")} subidos · {conteo("duplicado")} duplicados · {conteo("error")} con error ·{" "}
+              {conteo("en_cola") + conteo("subiendo")} en proceso
+            </p>
+            <strong>Total del lote: {formatearMonto("PEN", String(totales.pen))}</strong>
+            {totales.usd > 0 && (
+              <strong> · {formatearMonto("USD", String(totales.usd))}</strong>
+            )}
+          </div>
           <table>
             <thead>
               <tr>
                 <th>Archivo</th>
                 <th>Resultado</th>
                 <th>Tipo</th>
+                <th>Fecha</th>
+                <th>Correlativo</th>
+                <th>Emisor</th>
+                <th>Receptor</th>
+                <th className="num">Monto</th>
                 <th>Expediente</th>
               </tr>
             </thead>
@@ -158,6 +183,29 @@ function FilaCarga({ fila }: { fila: Fila }) {
         {(resultado.estado === "duplicado" || resultado.estado === "error") && resultado.mensaje}
       </td>
       <td>{documento?.tipo_documento ? ETIQUETA_TIPO_DOCUMENTO[documento.tipo_documento] : ""}</td>
+      <td>{documento?.fecha_emision ? formatearFecha(documento.fecha_emision) : ""}</td>
+      <td>{documento?.serie && documento?.correlativo ? documento.serie + "-" + documento.correlativo : ""}</td>
+      <td>
+        {documento?.emisor ? (
+          <>
+            <strong>{documento.emisor.razon_social}</strong>
+            <small className="bloque tenue">RUC {documento.emisor.ruc}</small>
+          </>
+        ) : null}
+      </td>
+      <td>
+        {documento?.receptor ? (
+          <>
+            <strong>{documento.receptor.razon_social}</strong>
+            <small className="bloque tenue">RUC {documento.receptor.ruc}</small>
+          </>
+        ) : null}
+      </td>
+      <td className="num">
+        {documento?.moneda && documento?.importe_total
+          ? formatearMonto(documento.moneda, documento.importe_total)
+          : ""}
+      </td>
       <td>
         {documento?.expediente_id ? (
           <Link to={`/expedientes/${documento.expediente_id}`}>Ver expediente</Link>
