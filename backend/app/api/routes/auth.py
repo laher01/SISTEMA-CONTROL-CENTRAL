@@ -1,5 +1,3 @@
-from datetime import UTC, datetime
-
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from sqlalchemy import select
 
@@ -7,6 +5,7 @@ from app.api.deps import AuthDep, SessionDep, SettingsDep
 from app.models import CuentaAcceso, Gestor, Miembro, Tenant
 from app.schemas import CambioClaveIn, LoginIn, SesionOut
 from app.security import crear_sesion, hash_clave, revocar_sesion, verificar_clave
+from app.services import auditoria
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -37,7 +36,15 @@ def login(
     if rol is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "La cuenta no tiene un rol activo")
 
-    _, token = crear_sesion(session, cuenta, rol, settings.session_hours)
+    sesion, token = crear_sesion(session, cuenta, rol, settings.session_hours)
+    auditoria.registrar(
+        session,
+        cuenta.tenant_id,
+        "SESION_INICIADA",
+        "sesion",
+        sesion.id,
+        {"cuenta_id": str(cuenta.id), "rol": rol},
+    )
     session.commit()
     response.set_cookie(
         key=settings.session_cookie_name,
@@ -82,6 +89,14 @@ def cambiar_clave(
         )
     cuenta.password_hash = hash_clave(datos.clave_nueva)
     cuenta.cambio_clave_obligatorio = False
+    auditoria.registrar(
+        session,
+        cuenta.tenant_id,
+        "CLAVE_CAMBIADA",
+        "cuenta_acceso",
+        cuenta.id,
+        {"cambio_obligatorio": contexto.cambio_clave_obligatorio},
+    )
     session.commit()
     return SesionOut(
         rol=contexto.rol,
