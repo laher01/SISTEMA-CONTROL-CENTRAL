@@ -6,7 +6,12 @@ from tests.xml import EMISOR, factura
 def _subir(client: TestClient, numero: str, importe: str = "1500.00") -> dict[str, object]:
     respuesta = client.post(
         "/api/v1/documentos",
-        files={"archivo": (numero + ".xml", factura(numero=numero, importe=importe))},
+        files={
+            "archivo": (
+                numero + ".xml",
+                factura(numero=numero, importe=importe, fecha="2026-10-01"),
+            )
+        },
     )
     assert respuesta.status_code == 201, respuesta.text
     return respuesta.json()
