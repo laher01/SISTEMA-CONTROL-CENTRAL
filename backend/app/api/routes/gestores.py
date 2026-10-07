@@ -63,7 +63,7 @@ def listar(
     auth: OperativeAuthDep,
     usuario_id: uuid.UUID | None = None,
 ) -> list[Gestor]:
-    if auth.rol not in (RolMiembro.ADMINISTRADOR, RolMiembro.USUARIO):
+    if auth.rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.USUARIO):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "No tiene permiso para consultar Gestores")
 
     consulta = select(Gestor).where(
@@ -91,7 +91,7 @@ def actualizar(
 
     try:
         if datos.usuario_id is not None:
-            if auth.rol != RolMiembro.ADMINISTRADOR and datos.usuario_id != auth.usuario_id:
+            if auth.rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR) and datos.usuario_id != auth.usuario_id:
                 raise HTTPException(
                     status.HTTP_403_FORBIDDEN,
                     "Un Usuario no puede reasignar su Gestor a otro Usuario",
@@ -141,7 +141,7 @@ def restablecer_acceso(
 
 
 def _usuario_objetivo(auth: OperativeAuthDep, solicitado: uuid.UUID) -> uuid.UUID:
-    if auth.rol == RolMiembro.ADMINISTRADOR:
+    if auth.rol in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR):
         return solicitado
     if auth.rol == RolMiembro.USUARIO and auth.usuario_id is not None:
         return auth.usuario_id
@@ -173,7 +173,7 @@ def _gestor_editable(
     gestor = session.get(Gestor, gestor_id)
     if gestor is None or gestor.tenant_id != tenant_id or gestor.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Gestor no encontrado")
-    if auth.rol == RolMiembro.ADMINISTRADOR:
+    if auth.rol in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR):
         return gestor
     if auth.rol == RolMiembro.USUARIO and gestor.usuario_id == auth.usuario_id:
         return gestor
