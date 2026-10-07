@@ -1,6 +1,7 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 
 import { enviarJson, useDatos } from "./api";
+import NexusFlotante from "./componentes/NexusFlotante";
 import Alertas from "./paginas/Alertas";
 import Configuracion from "./paginas/Configuracion";
 import Dashboard from "./paginas/Dashboard";
@@ -129,6 +130,7 @@ export default function App() {
           <Route path="*" element={<p>Página no encontrada.</p>} />
         </Routes>
       </main>
+      <NexusFlotante sesion={sesion} />
     </div>
   );
 }
