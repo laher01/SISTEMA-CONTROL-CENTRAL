@@ -103,9 +103,7 @@ def requiere_bancarizacion(moneda: str, importe: Decimal, settings: Settings) ->
 
 def calcular_estado(expediente: Expediente, hoy: date, settings: Settings) -> EstadoExpediente:
     presentes = tipos_presentes(expediente)
-    falta_principal = any(
-        t not in presentes for t in documentos_principales(expediente, settings)
-    )
+    falta_principal = any(t not in presentes for t in documentos_principales(expediente, settings))
     if falta_principal:
         if hoy > fecha_limite(expediente.fecha_emision, settings.dia_limite_expediente):
             return EstadoExpediente.ROJO
