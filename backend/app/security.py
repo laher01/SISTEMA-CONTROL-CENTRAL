@@ -213,6 +213,8 @@ def crear_o_restablecer_cuenta(
         cuenta.password_hash = hash_clave(temporal)
         cuenta.activo = True
         cuenta.cambio_clave_obligatorio = True
+        cuenta.intentos_fallidos = 0
+        cuenta.bloqueado_hasta = None
     session.flush()
     return cuenta, temporal
 
