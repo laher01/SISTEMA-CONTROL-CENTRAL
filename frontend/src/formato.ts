@@ -1,4 +1,11 @@
-import type { EstadoDocumento, EstadoExpediente, Moneda, TipoAlerta, TipoDocumento } from "./tipos";
+import type {
+  EstadoDocumento,
+  EstadoExpediente,
+  Moneda,
+  TipoAlerta,
+  TipoComprobante,
+  TipoDocumento,
+} from "./tipos";
 
 const SIMBOLO: Record<Moneda, string> = { PEN: "S/", USD: "US$" };
 
@@ -24,6 +31,15 @@ export function formatearTamano(bytes: number): string {
 
 export function numeroComprobante(serie: string, correlativo: string): string {
   return `${serie}-${correlativo}`;
+}
+
+export function numeroExpediente(
+  tipo: TipoComprobante,
+  serie: string,
+  correlativo: string,
+): string {
+  const numero = numeroComprobante(serie, correlativo);
+  return tipo === "RHE" ? `RHE-${numero}` : numero;
 }
 
 export const ETIQUETA_ESTADO: Record<EstadoExpediente, string> = {
