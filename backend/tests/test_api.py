@@ -563,6 +563,7 @@ def test_recalcular_corrige_expedientes_historicos_menores_al_umbral(
     assert detalle["faltantes"] == []
     assert detalle["estado"] == "VERDE"
 
+
 def test_rhe_pdf_crea_expediente_automaticamente_con_partes(
     client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
