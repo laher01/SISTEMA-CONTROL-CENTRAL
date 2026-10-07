@@ -4,8 +4,7 @@ from fastapi import APIRouter, Query
 from sqlalchemy import select
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
-from app.enums import TipoAlerta
-from app.enums import RolMiembro
+from app.enums import RolMiembro, TipoAlerta
 from app.models import Alerta, Expediente
 from app.schemas import AlertaOut
 
