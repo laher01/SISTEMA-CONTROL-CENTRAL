@@ -381,33 +381,6 @@ def _ruc_cercano_a_etiqueta(texto: str, etiquetas: tuple[str, ...]) -> str | Non
     return None
 
 
-def _razon_social_cercana_a_ruc(texto: str, ruc: str) -> str | None:
-    lineas = texto.splitlines()
-    for indice, linea in enumerate(lineas):
-        if ruc not in re.sub(r"[\s.\-]", "", linea):
-            continue
-
-        antes = re.split(r"\bRUC\b", linea, maxsplit=1, flags=re.IGNORECASE)[0]
-        antes = _recortar_razon(antes)
-        if _razon_social_valida(antes):
-            return antes[:300]
-
-        for distancia in (1, 2, 3):
-            previo = indice - distancia
-            if previo >= 0:
-                candidato = _recortar_razon(lineas[previo])
-                if _razon_social_valida(candidato):
-                    return candidato[:300]
-
-        for distancia in (1, 2):
-            siguiente = indice + distancia
-            if siguiente < len(lineas):
-                candidato = _recortar_razon(lineas[siguiente])
-                if _razon_social_valida(candidato):
-                    return candidato[:300]
-    return None
-
-
 def _recortar_razon(valor: str, quitar_etiqueta: bool = True) -> str:
     candidato = " ".join(valor.split()).strip(" -:;,")
     candidato = re.split(
