@@ -119,7 +119,11 @@ def listar(
     )
 
     consulta = _aplicar_ambito(consulta, auth)
-    if usuario_id is not None and auth.rol in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.SECRETARIA):
+    if usuario_id is not None and auth.rol in (
+        RolMiembro.SUPERADMIN,
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.SECRETARIA,
+    ):
         consulta = consulta.where(Expediente.usuario_id == usuario_id)
     if gestor_id is not None and auth.rol in (
         RolMiembro.SUPERADMIN,
