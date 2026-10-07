@@ -66,9 +66,16 @@ def buscar_expediente(
 
 def documentos_principales(expediente: Expediente, settings: Settings) -> list[TipoDocumento]:
     requeridos = [TipoDocumento(expediente.tipo_comprobante)]
-    if expediente.tipo_comprobante == TipoComprobante.FACT and expediente.requiere_guia:
+    supera_umbral = requiere_bancarizacion(
+        expediente.moneda, expediente.importe_total, settings
+    )
+    if (
+        expediente.tipo_comprobante == TipoComprobante.FACT
+        and expediente.requiere_guia
+        and supera_umbral
+    ):
         requeridos.append(TipoDocumento.GRR)
-    if requiere_bancarizacion(expediente.moneda, expediente.importe_total, settings):
+    if supera_umbral:
         requeridos.append(TipoDocumento.VCHR)
     return requeridos
 
@@ -147,6 +154,11 @@ def actualizar_expediente(
 ) -> None:
     session.flush()
     session.refresh(expediente, ["documentos", "alertas", "receptor"])
+    if (
+        expediente.tipo_comprobante == TipoComprobante.FACT
+        and not requiere_bancarizacion(expediente.moneda, expediente.importe_total, settings)
+    ):
+        expediente.requiere_guia = False
     estado = calcular_estado(expediente, hoy, settings)
     expediente.estado = estado
     expediente.pendiente_aprobacion = not expediente.receptor.autorizada
