@@ -23,6 +23,11 @@ def upgrade() -> None:
         sa.Column("email_verificado", sa.Boolean(), server_default="false", nullable=False),
     )
     op.create_index(op.f("ix_cuentas_acceso_email"), "cuentas_acceso", ["email"], unique=False)
+    op.create_unique_constraint(
+        op.f("uq_cuentas_acceso_tenant_id_email"),
+        "cuentas_acceso",
+        ["tenant_id", "email"],
+    )
 
     op.create_table(
         "configuracion_acceso",
@@ -164,6 +169,11 @@ def downgrade() -> None:
     op.execute("UPDATE miembros SET rol = 'ADMINISTRADOR' WHERE rol = 'SUPERADMIN'")
     for table in ("solicitudes_acceso", "correos_autorizados", "configuracion_acceso"):
         op.drop_table(table)
+    op.drop_constraint(
+        op.f("uq_cuentas_acceso_tenant_id_email"),
+        "cuentas_acceso",
+        type_="unique",
+    )
     op.drop_index(op.f("ix_cuentas_acceso_email"), table_name="cuentas_acceso")
     op.drop_column("cuentas_acceso", "email_verificado")
     op.drop_column("cuentas_acceso", "email")
