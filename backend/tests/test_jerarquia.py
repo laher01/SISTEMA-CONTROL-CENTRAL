@@ -1,15 +1,21 @@
+import uuid
+
 from fastapi.testclient import TestClient
 
+from tests.conftest import AuthPrueba
 from tests.xml import RECEPTOR, factura
 
 
-def crear_usuario_y_gestor(client: TestClient) -> tuple[dict[str, object], dict[str, object]]:
+def crear_usuario_y_gestor(
+    client: TestClient, auth: AuthPrueba
+) -> tuple[dict[str, object], dict[str, object]]:
+    auth.como_admin()
     usuario_resp = client.post(
         "/api/v1/miembros",
         json={"codigo": "WILL01", "nombre": "Willy", "rol": "USUARIO"},
     )
     assert usuario_resp.status_code == 201, usuario_resp.text
-    usuario = usuario_resp.json()
+    usuario = usuario_resp.json()["miembro"]
 
     gestor_resp = client.post(
         "/api/v1/gestores",
@@ -20,16 +26,23 @@ def crear_usuario_y_gestor(client: TestClient) -> tuple[dict[str, object], dict[
         },
     )
     assert gestor_resp.status_code == 201, gestor_resp.text
-    return usuario, gestor_resp.json()
+    gestor = gestor_resp.json()["gestor"]
+    return usuario, gestor
 
 
-def test_gestor_pertenece_a_usuario_y_propaga_propiedad(client: TestClient) -> None:
-    usuario, gestor = crear_usuario_y_gestor(client)
+def test_gestor_pertenece_a_usuario_y_propaga_propiedad(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    usuario, gestor = crear_usuario_y_gestor(client, auth_prueba)
+    auth_prueba.como_gestor(
+        uuid.UUID(str(gestor["id"])),
+        uuid.UUID(str(usuario["id"])),
+        str(gestor["codigo"]),
+    )
 
     respuesta = client.post(
         "/api/v1/documentos",
         files={"archivo": ("f.xml", factura())},
-        data={"gestor_id": gestor["id"]},
     )
     assert respuesta.status_code == 201, respuesta.text
     documento = respuesta.json()
@@ -50,11 +63,14 @@ def test_gestor_pertenece_a_usuario_y_propaga_propiedad(client: TestClient) -> N
     assert filas[0]["expedientes"] == 1
 
 
-def test_gestor_solo_puede_pertenecer_a_rol_usuario(client: TestClient) -> None:
+def test_gestor_solo_puede_pertenecer_a_rol_usuario(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    auth_prueba.como_admin()
     gerente = client.post(
         "/api/v1/miembros",
         json={"codigo": "GER01", "nombre": "Gerencia", "rol": "GERENTE"},
-    ).json()
+    ).json()["miembro"]
 
     respuesta = client.post(
         "/api/v1/gestores",
@@ -63,12 +79,17 @@ def test_gestor_solo_puede_pertenecer_a_rol_usuario(client: TestClient) -> None:
     assert respuesta.status_code == 422
 
 
-def test_factura_menor_al_umbral_no_exige_voucher_ni_guia(client: TestClient) -> None:
-    _, gestor = crear_usuario_y_gestor(client)
+def test_factura_menor_al_umbral_no_exige_voucher_ni_guia(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    usuario, gestor = crear_usuario_y_gestor(client, auth_prueba)
+    auth_prueba.como_gestor(
+        uuid.UUID(str(gestor["id"])),
+        uuid.UUID(str(usuario["id"])),
+    )
     respuesta = client.post(
         "/api/v1/documentos",
         files={"archivo": ("menor.xml", factura(importe="1500.00"))},
-        data={"gestor_id": gestor["id"]},
     )
     assert respuesta.status_code == 201, respuesta.text
     documento = respuesta.json()
@@ -79,8 +100,14 @@ def test_factura_menor_al_umbral_no_exige_voucher_ni_guia(client: TestClient) ->
     assert "GRR" not in detalle["faltantes"]
 
 
-def test_rhe_se_busca_con_prefijo_rhe(client: TestClient) -> None:
-    usuario, gestor = crear_usuario_y_gestor(client)
+def test_rhe_se_busca_con_prefijo_rhe(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    usuario, gestor = crear_usuario_y_gestor(client, auth_prueba)
+    auth_prueba.como_gestor(
+        uuid.UUID(str(gestor["id"])),
+        uuid.UUID(str(usuario["id"])),
+    )
     respuesta = client.post(
         "/api/v1/expedientes",
         json={
@@ -91,20 +118,21 @@ def test_rhe_se_busca_con_prefijo_rhe(client: TestClient) -> None:
             "correlativo": "15",
             "fecha_emision": "2026-09-05",
             "importe_total": "1200.00",
-            "gestor_id": gestor["id"],
+            "gestor_id": "00000000-0000-0000-0000-000000000000",
         },
     )
     assert respuesta.status_code == 201, respuesta.text
     creado = respuesta.json()
     assert creado["usuario_id"] == usuario["id"]
+    assert creado["gestor_id"] == gestor["id"]
 
     busqueda = client.get("/api/v1/expedientes", params={"buscar": "RHE-E001-15"})
     assert busqueda.status_code == 200, busqueda.text
     assert [item["id"] for item in busqueda.json()] == [creado["id"]]
 
 
-def test_editar_usuario(client: TestClient) -> None:
-    usuario, _ = crear_usuario_y_gestor(client)
+def test_editar_usuario(client: TestClient, auth_prueba: AuthPrueba) -> None:
+    usuario, _ = crear_usuario_y_gestor(client, auth_prueba)
     respuesta = client.patch(
         f"/api/v1/miembros/{usuario['id']}",
         json={"codigo": "WILL02", "nombre": "Willy Actualizado", "rol": "USUARIO"},
@@ -115,12 +143,14 @@ def test_editar_usuario(client: TestClient) -> None:
     assert actualizado["nombre"] == "Willy Actualizado"
 
 
-def test_editar_y_reasignar_gestor(client: TestClient) -> None:
-    _, gestor = crear_usuario_y_gestor(client)
+def test_editar_y_reasignar_gestor(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    _, gestor = crear_usuario_y_gestor(client, auth_prueba)
     otro = client.post(
         "/api/v1/miembros",
         json={"codigo": "JOSE01", "nombre": "José Carlos", "rol": "USUARIO"},
-    ).json()
+    ).json()["miembro"]
 
     respuesta = client.patch(
         f"/api/v1/gestores/{gestor['id']}",
