@@ -6,7 +6,6 @@ import uuid
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -199,7 +198,11 @@ def _responder_ruc(
     return NexusChatOut(
         respuesta=(
             f"RUC {ruc}: "
-            + (f"en FACT CENTRAL figura como {local}." if local else "no está registrado localmente.")
+            + (
+                f"en FACT CENTRAL figura como {local}."
+                if local
+                else "no está registrado localmente."
+            )
             + " La consulta externa de RUC todavía no tiene proveedor configurado."
         ),
         accion="VERIFICAR_RUC",
