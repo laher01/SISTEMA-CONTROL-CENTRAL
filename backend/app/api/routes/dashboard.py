@@ -6,6 +6,7 @@ from typing import Literal
 from fastapi import APIRouter
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.enums import EstadoDocumento, EstadoExpediente, Moneda, RolMiembro, TipoAlerta
@@ -22,7 +23,7 @@ def resumen(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> DashboardResumen:
-    vigentes: list[object] = [
+    vigentes: list[ColumnElement[bool]] = [
         Expediente.tenant_id == tenant_id,
         Expediente.deleted_at.is_(None),
     ]
@@ -77,7 +78,7 @@ def resumen(
         EstadoDocumento.PENDIENTE_CLASIFICACION: 0,
         EstadoDocumento.PENDIENTE_RELACION: 0,
     }
-    documentos_scope: list[object] = [
+    documentos_scope: list[ColumnElement[bool]] = [
         Documento.tenant_id == tenant_id,
         Documento.deleted_at.is_(None),
         Documento.estado.in_(list(pendientes)),
