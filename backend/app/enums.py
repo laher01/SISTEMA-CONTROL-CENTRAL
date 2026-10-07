@@ -48,6 +48,7 @@ class TipoAlerta(StrEnum):
 
 
 class RolMiembro(StrEnum):
+    SUPERADMIN = "SUPERADMIN"
     ADMINISTRADOR = "ADMINISTRADOR"
     GERENTE = "GERENTE"
     SECRETARIA = "SECRETARIA"
