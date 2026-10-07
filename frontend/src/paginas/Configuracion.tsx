@@ -4,8 +4,10 @@ import { eliminar, enviarJson, useDatos } from "../api";
 import type {
   ConfiguracionAcceso as ConfiguracionAccesoTipo,
   CorreoAutorizado,
+  CuentaAccesoAdmin,
   PermisoConfigurado,
   RolMiembro,
+  SesionAccesoAdmin,
   SesionActual,
   SolicitudAcceso,
 } from "../tipos";
@@ -98,6 +100,14 @@ function ConfiguracionAccesoPanel() {
     datos: solicitudes,
     recargar: recargarSolicitudes,
   } = useDatos<SolicitudAcceso[]>("/api/v1/configuracion/acceso/solicitudes");
+  const {
+    datos: cuentas,
+    recargar: recargarCuentas,
+  } = useDatos<CuentaAccesoAdmin[]>("/api/v1/configuracion/acceso/cuentas");
+  const {
+    datos: sesiones,
+    recargar: recargarSesiones,
+  } = useDatos<SesionAccesoAdmin[]>("/api/v1/configuracion/acceso/sesiones");
 
   const [email, setEmail] = useState("");
   const [rol, setRol] = useState<RolMiembro>("USUARIO");
@@ -116,6 +126,16 @@ function ConfiguracionAccesoPanel() {
           cambios.requiere_email_verificado ?? config.requiere_email_verificado,
         acceso_cloudflare_activo:
           cambios.acceso_cloudflare_activo ?? config.acceso_cloudflare_activo,
+        duracion_sesion_horas:
+          cambios.duracion_sesion_horas ?? config.duracion_sesion_horas,
+        intentos_fallidos_max:
+          cambios.intentos_fallidos_max ?? config.intentos_fallidos_max,
+        bloqueo_minutos: cambios.bloqueo_minutos ?? config.bloqueo_minutos,
+        clave_min_longitud: cambios.clave_min_longitud ?? config.clave_min_longitud,
+        clave_requiere_letra:
+          cambios.clave_requiere_letra ?? config.clave_requiere_letra,
+        clave_requiere_numero:
+          cambios.clave_requiere_numero ?? config.clave_requiere_numero,
       });
       recargar();
     } catch (err) {
@@ -184,6 +204,70 @@ function ConfiguracionAccesoPanel() {
             />
             Exigir correo verificado
           </label>
+          <div className="acciones">
+            <label>
+              Sesión (horas)
+              <input
+                type="number"
+                min={1}
+                max={168}
+                value={config.duracion_sesion_horas}
+                onChange={(e) =>
+                  void guardar({ duracion_sesion_horas: Number(e.target.value) })
+                }
+              />
+            </label>
+            <label>
+              Intentos fallidos
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={config.intentos_fallidos_max}
+                onChange={(e) =>
+                  void guardar({ intentos_fallidos_max: Number(e.target.value) })
+                }
+              />
+            </label>
+            <label>
+              Bloqueo (minutos)
+              <input
+                type="number"
+                min={1}
+                max={1440}
+                value={config.bloqueo_minutos}
+                onChange={(e) => void guardar({ bloqueo_minutos: Number(e.target.value) })}
+              />
+            </label>
+            <label>
+              Longitud mínima de clave
+              <input
+                type="number"
+                min={8}
+                max={128}
+                value={config.clave_min_longitud}
+                onChange={(e) =>
+                  void guardar({ clave_min_longitud: Number(e.target.value) })
+                }
+              />
+            </label>
+          </div>
+          <label>
+            <input
+              type="checkbox"
+              checked={config.clave_requiere_letra}
+              onChange={(e) => void guardar({ clave_requiere_letra: e.target.checked })}
+            />
+            La clave debe incluir letras
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={config.clave_requiere_numero}
+              onChange={(e) => void guardar({ clave_requiere_numero: e.target.checked })}
+            />
+            La clave debe incluir números
+          </label>
           <p className="tenue">
             Proveedor de email: {config.proveedor_email_configurado ? "configurado" : "pendiente"} ·
             Cloudflare Access: {config.acceso_cloudflare_activo ? "activo" : "desactivado"}
@@ -248,7 +332,7 @@ function ConfiguracionAccesoPanel() {
                         const respuesta = await enviarJson<Record<string, unknown>>(
                           `/api/v1/configuracion/acceso/solicitudes/${solicitud.id}/resolver`,
                           "POST",
-                          { aprobar: true, rol: "USUARIO" },
+                          { aprobar: true, rol: null },
                         );
                         if (respuesta.clave_temporal) {
                           setMensaje(`Cuenta creada. Clave temporal: ${String(respuesta.clave_temporal)}`);
@@ -256,7 +340,7 @@ function ConfiguracionAccesoPanel() {
                         recargarSolicitudes();
                       }}
                     >
-                      Aprobar como Usuario
+                      Aprobar según autorización
                     </button>
                     <button
                       onClick={async () => {
@@ -271,6 +355,86 @@ function ConfiguracionAccesoPanel() {
                       Rechazar
                     </button>
                   </>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <h4>Cuentas de acceso</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Login</th><th>Correo</th><th>Activo</th><th>Bloqueo</th><th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(cuentas ?? []).map((cuenta) => (
+            <tr key={cuenta.id}>
+              <td>{cuenta.login}</td>
+              <td>{cuenta.email ?? "—"}</td>
+              <td>{cuenta.activo ? "Sí" : "No"}</td>
+              <td>
+                {cuenta.bloqueado_hasta
+                  ? new Date(cuenta.bloqueado_hasta).toLocaleString()
+                  : "—"}
+              </td>
+              <td>
+                <button
+                  onClick={async () => {
+                    await enviarJson<CuentaAccesoAdmin>(
+                      `/api/v1/configuracion/acceso/cuentas/${cuenta.id}`,
+                      "PATCH",
+                      { activo: !cuenta.activo },
+                    );
+                    recargarCuentas();
+                  }}
+                >
+                  {cuenta.activo ? "Desactivar" : "Activar"}
+                </button>
+                <button
+                  onClick={async () => {
+                    const respuesta = await enviarJson<{ clave_temporal: string }>(
+                      `/api/v1/configuracion/acceso/cuentas/${cuenta.id}/restablecer-clave`,
+                      "POST",
+                    );
+                    setMensaje(
+                      `Clave temporal para ${cuenta.login}: ${respuesta.clave_temporal}`,
+                    );
+                    recargarCuentas();
+                  }}
+                >
+                  Restablecer clave
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <h4>Sesiones</h4>
+      <table>
+        <thead>
+          <tr><th>Login</th><th>Rol</th><th>Última actividad</th><th>Estado</th><th></th></tr>
+        </thead>
+        <tbody>
+          {(sesiones ?? []).map((sesion) => (
+            <tr key={sesion.id}>
+              <td>{sesion.login}</td>
+              <td>{sesion.rol_activo}</td>
+              <td>{new Date(sesion.ultima_actividad).toLocaleString()}</td>
+              <td>{sesion.revocada_at ? "Revocada" : "Activa"}</td>
+              <td>
+                {!sesion.revocada_at && (
+                  <button
+                    onClick={async () => {
+                      await eliminar(`/api/v1/configuracion/acceso/sesiones/${sesion.id}`);
+                      recargarSesiones();
+                    }}
+                  >
+                    Cerrar sesión
+                  </button>
                 )}
               </td>
             </tr>
