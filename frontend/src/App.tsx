@@ -2,6 +2,7 @@ import { NavLink, Route, Routes } from "react-router-dom";
 
 import { enviarJson, useDatos } from "./api";
 import Alertas from "./paginas/Alertas";
+import Configuracion from "./paginas/Configuracion";
 import Dashboard from "./paginas/Dashboard";
 import Documentos from "./paginas/Documentos";
 import Empresas from "./paginas/Empresas";
@@ -9,8 +10,10 @@ import ExpedienteDetalle from "./paginas/ExpedienteDetalle";
 import Expedientes from "./paginas/Expedientes";
 import { CambiarClave, Login } from "./paginas/Login";
 import Organizacion from "./paginas/Organizacion";
+import Pagos from "./paginas/Pagos";
 import Pendientes from "./paginas/Pendientes";
 import Produccion from "./paginas/Produccion";
+import Registros from "./paginas/Registros";
 import Subir from "./paginas/Subir";
 import type { SesionActual } from "./tipos";
 
@@ -23,6 +26,11 @@ const MENU: { a: string; texto: string; roles: RolSesion[] }[] = [
     roles: ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"],
   },
   { a: "/subir", texto: "Subir documentos", roles: ["USUARIO", "GESTOR"] },
+  {
+    a: "/registros",
+    texto: "Registros",
+    roles: ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"],
+  },
   {
     a: "/documentos",
     texto: "Documentos",
@@ -53,6 +61,16 @@ const MENU: { a: string; texto: string; roles: RolSesion[] }[] = [
     a: "/produccion",
     texto: "Producción",
     roles: ["ADMINISTRADOR", "GERENTE", "USUARIO", "GESTOR"],
+  },
+  {
+    a: "/pagos",
+    texto: "Pagos",
+    roles: ["ADMINISTRADOR", "GERENTE"],
+  },
+  {
+    a: "/configuracion",
+    texto: "Configuración",
+    roles: ["ADMINISTRADOR"],
   },
 ];
 
@@ -97,14 +115,17 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/subir" element={<Subir sesion={sesion} />} />
+          <Route path="/registros" element={<Registros sesion={sesion} />} />
           <Route path="/documentos" element={<Documentos />} />
           <Route path="/expedientes" element={<Expedientes />} />
           <Route path="/expedientes/:id" element={<ExpedienteDetalle />} />
           <Route path="/pendientes" element={<Pendientes />} />
-          <Route path="/alertas" element={<Alertas />} />
+          <Route path="/alertas" element={<Alertas sesion={sesion} />} />
           <Route path="/empresas" element={<Empresas />} />
           <Route path="/organizacion" element={<Organizacion sesion={sesion} />} />
           <Route path="/produccion" element={<Produccion />} />
+          <Route path="/pagos" element={<Pagos sesion={sesion} />} />
+          <Route path="/configuracion" element={<Configuracion />} />
           <Route path="*" element={<p>Página no encontrada.</p>} />
         </Routes>
       </main>
