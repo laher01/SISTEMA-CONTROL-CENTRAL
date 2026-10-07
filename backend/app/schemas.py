@@ -505,3 +505,56 @@ class NexusEstadoOut(BaseModel):
     consulta_ruc_externa: bool
     busqueda_internet: bool
     fuente_oficial_preferida: str
+
+
+class ConfiguracionAccesoOut(Orm):
+    id: uuid.UUID
+    registro_publico: bool
+    requiere_aprobacion: bool
+    solo_correos_autorizados: bool
+    requiere_email_verificado: bool
+    proveedor_email_configurado: bool
+    acceso_cloudflare_activo: bool
+
+
+class ConfiguracionAccesoIn(BaseModel):
+    registro_publico: bool
+    requiere_aprobacion: bool
+    solo_correos_autorizados: bool
+    requiere_email_verificado: bool
+    acceso_cloudflare_activo: bool
+
+
+class CorreoAutorizadoIn(BaseModel):
+    email: str = Field(min_length=5, max_length=320)
+    rol_sugerido: RolMiembro | None = None
+
+
+class CorreoAutorizadoOut(Orm):
+    id: uuid.UUID
+    email: str
+    rol_sugerido: str | None
+    activo: bool
+    created_at: datetime
+
+
+class SolicitudAccesoIn(BaseModel):
+    email: str = Field(min_length=5, max_length=320)
+    nombre: str = Field(min_length=2, max_length=200)
+    codigo_solicitado: str = Field(min_length=2, max_length=50)
+
+
+class SolicitudAccesoResolverIn(BaseModel):
+    aprobar: bool
+    rol: RolMiembro | None = None
+
+
+class SolicitudAccesoOut(Orm):
+    id: uuid.UUID
+    email: str
+    nombre: str
+    codigo_solicitado: str
+    estado: str
+    rol_asignado: str | None
+    created_at: datetime
+    resuelta_at: datetime | None
