@@ -93,6 +93,8 @@ class CuentaAcceso(ConId, ConTenant, ConCreacion, Base):
     __table_args__ = (UniqueConstraint("tenant_id", "login"),)
 
     login: Mapped[str] = mapped_column(String(100))
+    email: Mapped[str | None] = mapped_column(String(320), index=True)
+    email_verificado: Mapped[bool] = mapped_column(default=False, server_default="false")
     password_hash: Mapped[str] = mapped_column(String(500))
     miembro_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
     gestor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"), index=True)
@@ -267,6 +269,44 @@ class AlertaManual(ConId, ConTenant, ConCreacion, Base):
     asunto: Mapped[str] = mapped_column(String(200))
     mensaje: Mapped[str] = mapped_column(String(1000))
     resuelta: Mapped[bool] = mapped_column(default=False, server_default="false", index=True)
+    resuelta_at: Mapped[datetime | None]
+
+
+
+
+class ConfiguracionAcceso(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "configuracion_acceso"
+    __table_args__ = (UniqueConstraint("tenant_id"),)
+
+    registro_publico: Mapped[bool] = mapped_column(default=False, server_default="false")
+    requiere_aprobacion: Mapped[bool] = mapped_column(default=True, server_default="true")
+    solo_correos_autorizados: Mapped[bool] = mapped_column(default=True, server_default="true")
+    requiere_email_verificado: Mapped[bool] = mapped_column(default=False, server_default="false")
+    proveedor_email_configurado: Mapped[bool] = mapped_column(default=False, server_default="false")
+    acceso_cloudflare_activo: Mapped[bool] = mapped_column(default=True, server_default="true")
+    updated_at: Mapped[datetime] = mapped_column(
+        default=ahora, onupdate=ahora, server_default=func.now()
+    )
+
+
+class CorreoAutorizado(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "correos_autorizados"
+    __table_args__ = (UniqueConstraint("tenant_id", "email"),)
+
+    email: Mapped[str] = mapped_column(String(320), index=True)
+    rol_sugerido: Mapped[str | None] = mapped_column(String(20))
+    activo: Mapped[bool] = mapped_column(default=True, server_default="true")
+
+
+class SolicitudAcceso(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "solicitudes_acceso"
+    __table_args__ = (UniqueConstraint("tenant_id", "email"),)
+
+    email: Mapped[str] = mapped_column(String(320), index=True)
+    nombre: Mapped[str] = mapped_column(String(200))
+    codigo_solicitado: Mapped[str] = mapped_column(String(50))
+    estado: Mapped[str] = mapped_column(String(30), default="PENDIENTE", index=True)
+    rol_asignado: Mapped[str | None] = mapped_column(String(20))
     resuelta_at: Mapped[datetime | None]
 
 
