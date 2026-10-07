@@ -204,3 +204,107 @@ def test_razon_social_receptor_debe_estar_vinculada_al_mismo_ruc() -> None:
     assert isinstance(campos, dict)
     assert campos["ruc_receptor"]["valor"] == "20100000001"
     assert "razon_social_receptor" not in campos
+
+
+def test_parser_sunat_extrae_razones_sociales_multilinea() -> None:
+    texto = """MEGAIMPORT R & A E.I.R.L.
+AV. BELAUNDE OESTE 500 SEC. 201
+COMAS - LIMA - LIMA
+FACTURA ELECTRONICA
+RUC: 20615898598
+E001-39
+Fecha de Emisión : 20/08/2026
+Señor(es) :
+INVERSIONES Y NEGOCIACIONES
+MAREUF E.I.R.L.
+RUC : 20538821374
+Dirección del Cliente :
+CAL. PUQUINA NRO 110
+Tipo de Moneda : SOLES
+Importe Total : S/ 1,224.84
+Esta es una representación impresa de la factura electrónica, generada en el Sistema de SUNAT."""
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    assert resultado["formato_documental"] == "SUNAT_FACTURA"
+    campos = resultado["campos"]
+    assert isinstance(campos, dict)
+    assert campos["ruc_emisor"]["valor"] == "20615898598"
+    assert campos["ruc_receptor"]["valor"] == "20538821374"
+    assert campos["razon_social_emisor"]["valor"] == "MEGAIMPORT R & A E.I.R.L."
+    assert campos["razon_social_receptor"]["valor"] == "INVERSIONES Y NEGOCIACIONES MAREUF E.I.R.L."
+
+
+def test_parser_facturalaya_extrae_emisor_y_receptor() -> None:
+    texto = '''"MULTINEGOCIOS JIRETH"
+R.U.C.: 20602413498
+NEXOMAR NEGOCIOS EIRL - 20602413498
+FACTURA ELECTRÓNICA
+F002 - 000122
+Fecha de Emisión: 10-07-2026 09:33:33 PM
+Razón Social: B2C MUSA E.I.R.L.
+R.U.C. 20614966174
+Dirección: MZA. W LOTE. 05
+Forma de pago: EFECTIVO
+Total: S/ 305.20
+Emitido por: facturalaya.com'''
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    assert resultado["formato_documental"] == "OSE_FACTURALAYA"
+    campos = resultado["campos"]
+    assert isinstance(campos, dict)
+    assert campos["razon_social_emisor"]["valor"] == "NEXOMAR NEGOCIOS EIRL"
+    assert campos["razon_social_receptor"]["valor"] == "B2C MUSA E.I.R.L."
+    assert campos["ruc_emisor"]["valor"] == "20602413498"
+    assert campos["ruc_receptor"]["valor"] == "20614966174"
+
+
+def test_parser_factuhost_extrae_razon_multilinea() -> None:
+    texto = """Para consultar el comprobante ingresar a https://sigma.factuhost.com.pe/buscar
+Representacion impresa de la Factura Electrónica
+SIGMA PROYECTOS Y ABASTECIEMIENTO
+E.I.R.L.
+RUC 20615275400
+FACTURA ELECTRÓNICA
+F001-00004099
+FECHA DE EMISIÓN : 2026-06-30 / 23:30:59
+CLIENTE : B2C MUSA E.I.R.L.
+RUC : 20614966174
+DIRECCIÓN : MZ. W LT. 05
+MONEDA : Soles
+TOTAL A PAGAR: S/ 1,751.44"""
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    assert resultado["formato_documental"] == "OSE_FACTUHOST"
+    campos = resultado["campos"]
+    assert isinstance(campos, dict)
+    assert campos["razon_social_emisor"]["valor"] == "SIGMA PROYECTOS Y ABASTECIEMIENTO E.I.R.L."
+    assert campos["razon_social_receptor"]["valor"] == "B2C MUSA E.I.R.L."
+    assert campos["ruc_emisor"]["valor"] == "20615275400"
+    assert campos["ruc_receptor"]["valor"] == "20614966174"
+
+
+def test_parser_efact_extrae_partes() -> None:
+    texto = """RUC: 20602413498
+Nro. F001-00000230
+NEXOMAR NEGOCIOS E.I.R.L.
+MZA. G2 LOTE. 13 P.J. CIUDAD BLANCA
+FACTURA ELECTRÓNICA
+Cliente:
+CORPORACION LATINOAMERICANO EL NORTE E.I.R.L.
+RUC:
+20524049245
+Dirección:
+MZA. A LOTE. 17
+31-jul-2026
+Moneda: SOLES
+TOTAL S/ 702.84
+Representación impresa de la factura electrónica, consulte en www.efact.pe"""
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    assert resultado["formato_documental"] == "OSE_EFACT"
+    campos = resultado["campos"]
+    assert isinstance(campos, dict)
+    assert campos["ruc_emisor"]["valor"] == "20602413498"
+    assert campos["ruc_receptor"]["valor"] == "20524049245"
+    assert campos["razon_social_emisor"]["valor"] == "NEXOMAR NEGOCIOS E.I.R.L."
+    assert campos["razon_social_receptor"]["valor"] == "CORPORACION LATINOAMERICANO EL NORTE E.I.R.L."
