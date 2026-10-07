@@ -446,3 +446,64 @@ button.peligro {
     flex-direction: column;
   }
 }
+
+
+.login-contenedor {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: #eef3f8;
+}
+
+.login-tarjeta {
+  width: min(28rem, 100%);
+  background: white;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 2rem;
+  box-shadow: 0 10px 30px rgba(31, 41, 51, 0.08);
+}
+
+.login-formulario {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.login-formulario label {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.sesion-resumen {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0 1.25rem 1rem;
+  color: #d9e8f5;
+}
+
+.sesion-resumen small {
+  opacity: 0.8;
+}
+
+.cerrar-sesion {
+  margin: 1rem 1.25rem 0;
+  background: transparent;
+  color: white;
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.credencial-temporal {
+  display: grid;
+  gap: 0.3rem;
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid #e0a800;
+  border-radius: 6px;
+  background: #fff9db;
+}
+
+.credencial-temporal code {
+  font-size: 1rem;
+  font-weight: 700;
+}
