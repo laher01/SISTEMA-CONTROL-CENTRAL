@@ -487,9 +487,13 @@ def _parece_direccion(valor: str) -> bool:
         return True
     tokens = normalizado.split()
     numeros = sum(any(c.isdigit() for c in token) for token in tokens)
-    return len(tokens) >= 3 and numeros >= 2 and not re.search(
-        r"\b(?:SAC|S\.A\.C\.|EIRL|E\.I\.R\.L\.|SRL|S\.R\.L\.|SA|S\.A\.)\b",
-        normalizado,
+    return (
+        len(tokens) >= 3
+        and numeros >= 2
+        and not re.search(
+            r"\b(?:SAC|S\.A\.C\.|EIRL|E\.I\.R\.L\.|SRL|S\.R\.L\.|SA|S\.A\.)\b",
+            normalizado,
+        )
     )
 
 
