@@ -8,6 +8,11 @@ export function Login({ alIngresar }: { alIngresar: () => void }) {
   const [clave, setClave] = useState("");
   const [error, setError] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [solicitar, setSolicitar] = useState(false);
+  const [correo, setCorreo] = useState("");
+  const [nombre, setNombre] = useState("");
+  const [codigo, setCodigo] = useState("");
+  const [mensajeSolicitud, setMensajeSolicitud] = useState("");
 
   const ingresar = async (e: FormEvent) => {
     e.preventDefault();
@@ -20,6 +25,26 @@ export function Login({ alIngresar }: { alIngresar: () => void }) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setEnviando(false);
+    }
+  };
+
+
+  const enviarSolicitud = async (e: FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setMensajeSolicitud("");
+    try {
+      await enviarJson("/api/v1/auth/solicitar-acceso", "POST", {
+        email: correo,
+        nombre,
+        codigo_solicitado: codigo,
+      });
+      setMensajeSolicitud("Solicitud enviada. Debe ser aprobada por SUPERADMIN.");
+      setCorreo("");
+      setNombre("");
+      setCodigo("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -53,6 +78,39 @@ export function Login({ alIngresar }: { alIngresar: () => void }) {
           </button>
           {error && <p className="error">{error}</p>}
         </form>
+
+        <button type="button" className="enlace-boton" onClick={() => setSolicitar((v) => !v)}>
+          {solicitar ? "Volver al inicio de sesión" : "Solicitar acceso"}
+        </button>
+
+        {solicitar && (
+          <form onSubmit={enviarSolicitud} className="login-formulario">
+            <h3>Solicitar acceso</h3>
+            <input
+              type="text"
+              placeholder="Nombre completo"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              required
+            />
+            <input
+              type="email"
+              placeholder="Correo autorizado"
+              value={correo}
+              onChange={(e) => setCorreo(e.target.value)}
+              required
+            />
+            <input
+              type="text"
+              placeholder="Código solicitado, por ejemplo LUIS01"
+              value={codigo}
+              onChange={(e) => setCodigo(e.target.value.toUpperCase())}
+              required
+            />
+            <button type="submit">Enviar solicitud</button>
+            {mensajeSolicitud && <p>{mensajeSolicitud}</p>}
+          </form>
+        )}
       </section>
     </main>
   );
