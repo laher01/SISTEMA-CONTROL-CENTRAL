@@ -26,7 +26,6 @@ _OPCIONALES_BASE = [
 ]
 
 
-
 @router.get("/opciones", response_model=RegistroOpciones)
 def opciones(
     session: SessionDep,
@@ -72,6 +71,7 @@ def opciones(
             )
         ]
     return RegistroOpciones(usuarios=usuarios, gestores=gestores)
+
 
 @router.get("", response_model=RegistroResumen)
 def listar(
