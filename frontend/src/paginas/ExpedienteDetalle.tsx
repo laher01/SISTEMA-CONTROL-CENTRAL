@@ -9,7 +9,7 @@ import {
   formatearFecha,
   formatearMonto,
   formatearTamano,
-  numeroComprobante,
+  numeroExpediente,
 } from "../formato";
 import { TIPOS_DOCUMENTO, type Documento, type ExpedienteDetalle as Detalle, type TipoDocumento } from "../tipos";
 
@@ -22,7 +22,9 @@ export default function ExpedienteDetalle() {
       {datos && (
         <>
           <h2>
-            {datos.tipo_comprobante} {numeroComprobante(datos.serie, datos.correlativo)}{" "}
+            {datos.tipo_comprobante === "RHE"
+              ? numeroExpediente(datos.tipo_comprobante, datos.serie, datos.correlativo)
+              : "FACT " + numeroExpediente(datos.tipo_comprobante, datos.serie, datos.correlativo)}{" "}
             <Semaforo estado={datos.estado} />
           </h2>
           <dl className="ficha">
