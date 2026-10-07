@@ -329,7 +329,9 @@ function resumenPartes(documento: Documento): {
   return {
     emisor: {
       razonSocial:
-        documento.emisor?.razon_social ||
+        (documento.emisor?.razon_social !== documento.emisor?.ruc
+          ? documento.emisor?.razon_social
+          : undefined) ||
         emisorXml.razonSocial ||
         leerValorCampo(camposConfirmados, "razon_social_emisor") ||
         leerValorCampo(campos, "razon_social_emisor"),
@@ -341,7 +343,9 @@ function resumenPartes(documento: Documento): {
     },
     receptor: {
       razonSocial:
-        documento.receptor?.razon_social ||
+        (documento.receptor?.razon_social !== documento.receptor?.ruc
+          ? documento.receptor?.razon_social
+          : undefined) ||
         receptorXml.razonSocial ||
         leerValorCampo(camposConfirmados, "razon_social_receptor") ||
         leerValorCampo(campos, "razon_social_receptor"),
