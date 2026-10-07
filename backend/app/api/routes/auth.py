@@ -1,9 +1,9 @@
 from fastapi import APIRouter, HTTPException, Request, Response, status
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 
 from app.api.deps import AuthDep, SessionDep, SettingsDep
-from app.models import CuentaAcceso, Gestor, Miembro, Tenant
-from app.schemas import CambioClaveIn, LoginIn, SesionOut
+from app.models import ConfiguracionAcceso, CorreoAutorizado, CuentaAcceso, Gestor, Miembro, SolicitudAcceso, Tenant
+from app.schemas import CambioClaveIn, LoginIn, SesionOut, SolicitudAccesoIn, SolicitudAccesoOut
 from app.security import crear_sesion, hash_clave, revocar_sesion, verificar_clave
 from app.services import auditoria
 
@@ -24,7 +24,10 @@ def login(
     cuenta = session.scalar(
         select(CuentaAcceso).where(
             CuentaAcceso.tenant_id == tenant.id,
-            CuentaAcceso.login == datos.login.strip().upper(),
+            or_(
+                CuentaAcceso.login == datos.login.strip().upper(),
+                func.lower(CuentaAcceso.email) == datos.login.strip().lower(),
+            ),
             CuentaAcceso.deleted_at.is_(None),
             CuentaAcceso.activo.is_(True),
         )
@@ -56,6 +59,67 @@ def login(
         path="/",
     )
     return _salida_sesion(session, cuenta, rol)
+
+
+
+@router.post("/solicitar-acceso", response_model=SolicitudAccesoOut, status_code=status.HTTP_201_CREATED)
+def solicitar_acceso(
+    datos: SolicitudAccesoIn,
+    session: SessionDep,
+    settings: SettingsDep,
+) -> SolicitudAcceso:
+    tenant = session.scalar(select(Tenant).where(Tenant.nombre == settings.tenant_default))
+    if tenant is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Acceso no disponible")
+
+    config = session.scalar(
+        select(ConfiguracionAcceso).where(ConfiguracionAcceso.tenant_id == tenant.id)
+    )
+    if config is None or not config.registro_publico:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "La solicitud pública de acceso está desactivada",
+        )
+
+    email = datos.email.strip().lower()
+    if "@" not in email:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Correo inválido")
+
+    if config.solo_correos_autorizados:
+        permitido = session.scalar(
+            select(CorreoAutorizado.id).where(
+                CorreoAutorizado.tenant_id == tenant.id,
+                func.lower(CorreoAutorizado.email) == email,
+                CorreoAutorizado.activo.is_(True),
+            )
+        )
+        if permitido is None:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Este correo no está autorizado para solicitar acceso",
+            )
+
+    existente = session.scalar(
+        select(SolicitudAcceso).where(
+            SolicitudAcceso.tenant_id == tenant.id,
+            func.lower(SolicitudAcceso.email) == email,
+        )
+    )
+    if existente is not None:
+        if existente.estado == "PENDIENTE":
+            return existente
+        raise HTTPException(status.HTTP_409_CONFLICT, "El correo ya tiene una solicitud resuelta")
+
+    solicitud = SolicitudAcceso(
+        tenant_id=tenant.id,
+        email=email,
+        nombre=datos.nombre.strip(),
+        codigo_solicitado=datos.codigo_solicitado.strip().upper(),
+        estado="PENDIENTE",
+    )
+    session.add(solicitud)
+    session.commit()
+    return solicitud
 
 
 @router.get("/me", response_model=SesionOut)
