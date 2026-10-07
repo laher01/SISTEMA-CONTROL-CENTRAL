@@ -90,7 +90,7 @@ def listar(
     if resuelta is not None:
         consulta = consulta.where(AlertaManual.resuelta == resuelta)
 
-    if auth.rol == RolMiembro.ADMINISTRADOR:
+    if auth.rol in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR):
         consulta = consulta.where(AlertaManual.para_administracion.is_(True))
     elif auth.rol == RolMiembro.SECRETARIA:
         pass
