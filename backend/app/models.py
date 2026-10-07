@@ -180,6 +180,26 @@ class Documento(ConId, ConTenant, ConCreacion, Base):
     expediente: Mapped[Expediente | None] = relationship(back_populates="documentos")
 
     @property
+    def fecha_emision(self) -> date | None:
+        return self.expediente.fecha_emision if self.expediente is not None else None
+
+    @property
+    def serie(self) -> str | None:
+        return self.expediente.serie if self.expediente is not None else None
+
+    @property
+    def correlativo(self) -> str | None:
+        return self.expediente.correlativo if self.expediente is not None else None
+
+    @property
+    def moneda(self) -> str | None:
+        return self.expediente.moneda if self.expediente is not None else None
+
+    @property
+    def importe_total(self) -> Decimal | None:
+        return self.expediente.importe_total if self.expediente is not None else None
+
+    @property
     def emisor(self) -> Empresa | None:
         return self.expediente.emisor if self.expediente is not None else None
 
