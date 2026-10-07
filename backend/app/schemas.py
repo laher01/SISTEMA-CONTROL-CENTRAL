@@ -213,3 +213,15 @@ class ProduccionFila(BaseModel):
 
 class ProduccionResumen(BaseModel):
     filas: list[ProduccionFila]
+
+
+class ComprasProveedorFila(BaseModel):
+    usuario_codigo: str
+    gestor_codigo: str
+    emisor_ruc: str
+    emisor_razon_social: str
+    receptor_ruc: str
+    receptor_razon_social: str
+    moneda: Moneda
+    expedientes: int
+    importe_total: Decimal
