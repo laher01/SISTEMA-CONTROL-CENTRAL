@@ -26,6 +26,10 @@ from app.schemas import (
     RelacionSugeridaOut,
 )
 from app.services import auditoria
+from app.services.aprendizaje_documental import (
+    aplicar_perfiles_aprendidos,
+    registrar_correccion_y_aprender,
+)
 from app.services.automatizacion_documental import (
     ResultadoAutomatizacion,
     aplicar_automaticamente,
@@ -407,6 +411,7 @@ def _procesar_y_aplicar(
             procesamiento = procesar(
                 contenido, settings.max_extracted_chars, settings.max_ocr_pdf_pages
             ).a_dict()
+        aplicar_perfiles_aprendidos(session, documento, procesamiento)
         guardar_procesamiento(session, documento, procesamiento)
     return aplicar_automaticamente(session, settings, hoy, documento, procesamiento)
 
@@ -439,8 +444,16 @@ def confirmar_extraccion(
     _validar_ambito_documento(auth, documento)
     campos = confirmacion.model_dump(mode="json", exclude_none=True)
     datos = dict(documento.datos_extraidos or {})
-    datos["extraccion_confirmada"] = {"version": 1, "campos": campos}
+    datos["extraccion_confirmada"] = {"version": 2, "campos": campos}
     documento.datos_extraidos = datos
+    registrar_correccion_y_aprender(
+        session,
+        documento,
+        auth.codigo,
+        auth.rol,
+        campos,
+        motivo="Corrección o confirmación humana",
+    )
     auditoria.registrar(
         session,
         tenant_id,
