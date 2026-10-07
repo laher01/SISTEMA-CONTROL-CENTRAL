@@ -242,10 +242,14 @@ def _reparar_partes_vinculadas(
         razon_actual = empresa.razon_social.strip()
         confianza = confianzas.get(nombre, 0)
         if (
-            ruc_extraido == empresa.ruc
-            and confianza >= max(settings.confianza_minima_expediente, 0.85)
-            and razon_actual != razon
-        ) or razon_actual == empresa.ruc or razon_actual.startswith(empresa.ruc):
+            (
+                ruc_extraido == empresa.ruc
+                and confianza >= max(settings.confianza_minima_expediente, 0.85)
+                and razon_actual != razon
+            )
+            or razon_actual == empresa.ruc
+            or razon_actual.startswith(empresa.ruc)
+        ):
             empresa.razon_social = razon[:300]
             session.flush()
         else:
