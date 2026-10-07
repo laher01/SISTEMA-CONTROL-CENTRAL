@@ -204,6 +204,7 @@ def aplicar_automaticamente(
             importe_total=importe_total,
             requiere_guia=tipo_comprobante == TipoComprobante.FACT,
             gestor_id=documento.gestor_id,
+            usuario_id=documento.usuario_id,
         )
     vincular_documento(session, settings, hoy, documento, expediente.id, tipo)
     _guardar_estado(documento, "COMPLETADO", expediente_id=expediente.id, creado=creado)

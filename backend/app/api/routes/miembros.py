@@ -4,16 +4,29 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from app.api.deps import SessionDep, TenantDep
+from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
 from app.models import Gestor, Miembro
-from app.schemas import MiembroActualizar, MiembroIn, MiembroOut
+from app.schemas import (
+    AltaMiembroOut,
+    CredencialTemporalOut,
+    MiembroActualizar,
+    MiembroIn,
+    MiembroOut,
+)
+from app.security import actualizar_login_cuenta, crear_o_restablecer_cuenta
 
 router = APIRouter(prefix="/miembros", tags=["miembros"])
 
 
-@router.post("", response_model=MiembroOut, status_code=status.HTTP_201_CREATED)
-def crear(session: SessionDep, tenant_id: TenantDep, datos: MiembroIn) -> Miembro:
+@router.post("", response_model=AltaMiembroOut, status_code=status.HTTP_201_CREATED)
+def crear(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    datos: MiembroIn,
+) -> AltaMiembroOut:
+    _solo_admin(auth.rol)
     miembro = Miembro(
         tenant_id=tenant_id,
         codigo=datos.codigo.strip().upper(),
@@ -22,19 +35,31 @@ def crear(session: SessionDep, tenant_id: TenantDep, datos: MiembroIn) -> Miembr
     )
     session.add(miembro)
     try:
+        session.flush()
+        _, temporal = crear_o_restablecer_cuenta(
+            session,
+            tenant_id,
+            miembro.codigo,
+            miembro_id=miembro.id,
+        )
         session.commit()
-    except IntegrityError as exc:
+    except (IntegrityError, ValueError) as exc:
         session.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "El código del miembro ya existe") from exc
-    return miembro
+        raise HTTPException(status.HTTP_409_CONFLICT, "El código/login ya existe") from exc
+    return AltaMiembroOut(
+        miembro=MiembroOut.model_validate(miembro),
+        credencial=CredencialTemporalOut(login=miembro.codigo, clave_temporal=temporal),
+    )
 
 
 @router.get("", response_model=list[MiembroOut])
 def listar(
     session: SessionDep,
     tenant_id: TenantDep,
+    auth: OperativeAuthDep,
     rol: RolMiembro | None = None,
 ) -> list[Miembro]:
+    _solo_admin(auth.rol)
     consulta = select(Miembro).where(
         Miembro.tenant_id == tenant_id,
         Miembro.deleted_at.is_(None),
@@ -62,9 +87,11 @@ def usuario_operativo(session: SessionDep, tenant_id: uuid.UUID, usuario_id: uui
 def actualizar(
     session: SessionDep,
     tenant_id: TenantDep,
+    auth: OperativeAuthDep,
     miembro_id: uuid.UUID,
     datos: MiembroActualizar,
 ) -> Miembro:
+    _solo_admin(auth.rol)
     miembro = session.get(Miembro, miembro_id)
     if miembro is None or miembro.tenant_id != tenant_id or miembro.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Miembro no encontrado")
@@ -85,18 +112,59 @@ def actualizar(
                 "Reasigne los gestores antes de cambiar el rol o desactivar al Usuario",
             )
 
-    if datos.codigo is not None:
-        miembro.codigo = datos.codigo.strip().upper()
-    if datos.nombre is not None:
-        miembro.nombre = datos.nombre.strip()
-    if datos.rol is not None:
-        miembro.rol = datos.rol
-    if datos.activo is not None:
-        miembro.activo = datos.activo
-
     try:
+        if datos.codigo is not None:
+            actualizar_login_cuenta(
+                session,
+                tenant_id,
+                datos.codigo,
+                miembro_id=miembro.id,
+            )
+            miembro.codigo = datos.codigo.strip().upper()
+        if datos.nombre is not None:
+            miembro.nombre = datos.nombre.strip()
+        if datos.rol is not None:
+            miembro.rol = datos.rol
+        if datos.activo is not None:
+            miembro.activo = datos.activo
         session.commit()
-    except IntegrityError as exc:
+    except (IntegrityError, ValueError) as exc:
         session.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "El código del miembro ya existe") from exc
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "El código/login del miembro ya existe",
+        ) from exc
     return miembro
+
+
+@router.post("/{miembro_id}/restablecer-acceso", response_model=CredencialTemporalOut)
+def restablecer_acceso(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    miembro_id: uuid.UUID,
+) -> CredencialTemporalOut:
+    _solo_admin(auth.rol)
+    miembro = session.get(Miembro, miembro_id)
+    if miembro is None or miembro.tenant_id != tenant_id or miembro.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Miembro no encontrado")
+    try:
+        _, temporal = crear_o_restablecer_cuenta(
+            session,
+            tenant_id,
+            miembro.codigo,
+            miembro_id=miembro.id,
+        )
+        session.commit()
+    except ValueError as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    return CredencialTemporalOut(login=miembro.codigo, clave_temporal=temporal)
+
+
+def _solo_admin(rol: str) -> None:
+    if rol != RolMiembro.ADMINISTRADOR:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Solo Administración puede realizar esta acción",
+        )

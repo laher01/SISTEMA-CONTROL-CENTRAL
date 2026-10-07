@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
     alertas,
+    auth,
     dashboard,
     documentos,
     empresas,
@@ -24,11 +25,13 @@ if cors_origins:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
-        allow_methods=["GET", "POST", "PATCH"],
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["Content-Type"],
     )
 
 api = APIRouter(prefix="/api/v1")
+api.include_router(auth.router)
 for modulo in (
     documentos,
     expedientes,

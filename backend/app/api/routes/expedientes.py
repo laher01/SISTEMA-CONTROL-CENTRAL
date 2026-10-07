@@ -7,9 +7,9 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 
-from app.api.deps import HoyDep, SessionDep, SettingsDep, TenantDep
-from app.api.errores import no_encontrado, validar_gestor
-from app.enums import EstadoExpediente
+from app.api.deps import HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
+from app.api.errores import no_encontrado
+from app.enums import EstadoExpediente, RolMiembro
 from app.models import Empresa, Expediente
 from app.schemas import ExpedienteDetalle, ExpedienteIn, ExpedienteOut, Recalculo
 from app.services.expedientes import (
@@ -32,9 +32,20 @@ def crear(
     settings: SettingsDep,
     hoy: HoyDep,
     tenant_id: TenantDep,
+    auth: OperativeAuthDep,
     datos: ExpedienteIn,
 ) -> Expediente:
-    validar_gestor(session, tenant_id, datos.gestor_id)
+    if auth.rol == "GESTOR":
+        gestor_id = auth.gestor_id
+        usuario_id = auth.usuario_id
+    elif auth.rol == RolMiembro.USUARIO:
+        gestor_id = None
+        usuario_id = auth.usuario_id
+    else:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Solo un Usuario o Gestor puede crear expedientes operativos",
+        )
     existente = buscar_expediente(
         session,
         tenant_id,
@@ -64,7 +75,8 @@ def crear(
             moneda=datos.moneda,
             importe_total=datos.importe_total,
             requiere_guia=datos.requiere_guia,
-            gestor_id=datos.gestor_id,
+            gestor_id=gestor_id,
+            usuario_id=usuario_id,
         )
         session.commit()
     except IntegrityError as exc:
@@ -77,6 +89,7 @@ def crear(
 def listar(
     session: SessionDep,
     tenant_id: TenantDep,
+    auth: OperativeAuthDep,
     estado: EstadoExpediente | None = None,
     receptor_ruc: str | None = None,
     usuario_id: uuid.UUID | None = None,
@@ -89,6 +102,10 @@ def listar(
     consulta = select(Expediente).where(
         Expediente.tenant_id == tenant_id, Expediente.deleted_at.is_(None)
     )
+    if auth.rol == "GESTOR":
+        consulta = consulta.where(Expediente.gestor_id == auth.gestor_id)
+    elif auth.rol == RolMiembro.USUARIO:
+        consulta = consulta.where(Expediente.usuario_id == auth.usuario_id)
     if estado is not None:
         consulta = consulta.where(Expediente.estado == estado)
     if pendiente_aprobacion is not None:
@@ -124,8 +141,17 @@ def listar(
 
 @router.post("/recalcular", response_model=Recalculo)
 def recalcular(
-    session: SessionDep, settings: SettingsDep, hoy: HoyDep, tenant_id: TenantDep
+    session: SessionDep,
+    settings: SettingsDep,
+    hoy: HoyDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
 ) -> Recalculo:
+    if auth.rol not in (RolMiembro.ADMINISTRADOR, RolMiembro.SECRETARIA):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "No tiene permiso para recalcular expedientes",
+        )
     actualizados = recalcular_expedientes(session, tenant_id, hoy, settings)
     session.commit()
     return Recalculo(actualizados=actualizados)
@@ -133,10 +159,18 @@ def recalcular(
 
 @router.get("/{expediente_id}", response_model=ExpedienteDetalle)
 def detalle(
-    session: SessionDep, settings: SettingsDep, tenant_id: TenantDep, expediente_id: uuid.UUID
+    session: SessionDep,
+    settings: SettingsDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    expediente_id: uuid.UUID,
 ) -> ExpedienteDetalle:
     expediente = session.get(Expediente, expediente_id)
     if expediente is None or expediente.tenant_id != tenant_id or expediente.deleted_at:
+        raise no_encontrado("Expediente")
+    if auth.rol == "GESTOR" and expediente.gestor_id != auth.gestor_id:
+        raise no_encontrado("Expediente")
+    if auth.rol == RolMiembro.USUARIO and expediente.usuario_id != auth.usuario_id:
         raise no_encontrado("Expediente")
     base = ExpedienteOut.model_validate(expediente)
     return ExpedienteDetalle(

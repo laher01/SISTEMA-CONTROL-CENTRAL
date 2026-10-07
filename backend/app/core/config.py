@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     confianza_minima_clasificacion: float = 0.80
     confianza_minima_expediente: float = 0.75
     cors_origins: list[str] = []
+    session_cookie_name: str = "factcentral_session"
+    session_hours: int = 12
 
     def hoy(self) -> date:
         return datetime.now(ZoneInfo(self.zona_horaria)).date()

@@ -1,10 +1,12 @@
 from decimal import Decimal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import aliased
+from sqlalchemy.sql.elements import ColumnElement
 
-from app.api.deps import SessionDep, TenantDep
+from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
+from app.enums import RolMiembro
 from app.models import Empresa, Expediente, Gestor, Miembro
 from app.schemas import ComprasProveedorFila, ProduccionFila, ProduccionResumen
 
@@ -12,7 +14,8 @@ router = APIRouter(prefix="/produccion", tags=["produccion"])
 
 
 @router.get("/resumen", response_model=ProduccionResumen)
-def resumen(session: SessionDep, tenant_id: TenantDep) -> ProduccionResumen:
+def resumen(session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep) -> ProduccionResumen:
+    _validar_acceso_produccion(auth.rol)
     consulta = (
         select(
             Expediente.usuario_id,
@@ -31,6 +34,7 @@ def resumen(session: SessionDep, tenant_id: TenantDep) -> ProduccionResumen:
             Expediente.tenant_id == tenant_id,
             Expediente.deleted_at.is_(None),
         )
+        .where(*_scope(auth))
         .group_by(
             Expediente.usuario_id,
             Miembro.codigo,
@@ -70,7 +74,10 @@ def resumen(session: SessionDep, tenant_id: TenantDep) -> ProduccionResumen:
 
 
 @router.get("/compras", response_model=list[ComprasProveedorFila])
-def compras(session: SessionDep, tenant_id: TenantDep) -> list[ComprasProveedorFila]:
+def compras(
+    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
+) -> list[ComprasProveedorFila]:
+    _validar_acceso_produccion(auth.rol)
     emisor = aliased(Empresa)
     receptor = aliased(Empresa)
     consulta = (
@@ -93,6 +100,7 @@ def compras(session: SessionDep, tenant_id: TenantDep) -> list[ComprasProveedorF
             Expediente.tenant_id == tenant_id,
             Expediente.deleted_at.is_(None),
         )
+        .where(*_scope(auth))
         .group_by(
             Miembro.codigo,
             Gestor.codigo,
@@ -128,3 +136,21 @@ def compras(session: SessionDep, tenant_id: TenantDep) -> list[ComprasProveedorF
             importe_total,
         ) in session.execute(consulta)
     ]
+
+
+def _scope(auth: OperativeAuthDep) -> tuple[ColumnElement[bool], ...]:
+    if auth.rol == "GESTOR":
+        return (Expediente.gestor_id == auth.gestor_id,)
+    if auth.rol == RolMiembro.USUARIO:
+        return (Expediente.usuario_id == auth.usuario_id,)
+    return ()
+
+
+def _validar_acceso_produccion(rol: str) -> None:
+    if rol not in (
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.GERENTE,
+        RolMiembro.USUARIO,
+        "GESTOR",
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No tiene permiso para ver Producción")

@@ -12,7 +12,7 @@ from app.core.config import Settings
 from app.models import Expediente
 from app.services import procesamiento_documental
 from app.services.procesamiento_documental import ResultadoProcesamiento, sugerir_tipo
-from tests.conftest import Reloj
+from tests.conftest import AuthPrueba, Reloj
 from tests.xml import RECEPTOR, factura, guia
 
 
@@ -44,13 +44,23 @@ def alertas_abiertas(detalle: dict[str, object]) -> set[str]:
     return {a["tipo"] for a in alertas if not a["resuelta"]}
 
 
-def autorizar_receptor(client: TestClient, **extra: bool) -> None:
+def autorizar_receptor(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    **extra: bool,
+) -> None:
+    contexto_anterior = auth_prueba.contexto
     empresas = client.get("/api/v1/empresas").json()
     receptor = next(e for e in empresas if e["ruc"] == RECEPTOR)
-    respuesta = client.patch(
-        f"/api/v1/empresas/{receptor['id']}", json={"autorizada": True, **extra}
-    )
-    assert respuesta.status_code == 200, respuesta.text
+    auth_prueba.como_admin()
+    try:
+        respuesta = client.patch(
+            f"/api/v1/empresas/{receptor['id']}",
+            json={"autorizada": True, **extra},
+        )
+        assert respuesta.status_code == 200, respuesta.text
+    finally:
+        auth_prueba.contexto = contexto_anterior
 
 
 def test_health(client: TestClient) -> None:
@@ -78,7 +88,7 @@ def test_duplicado_por_hash_y_no_por_nombre(client: TestClient) -> None:
     subir(client, "a.xml", factura(numero="F001-00000124"))
 
 
-def test_expediente_completo_queda_verde(client: TestClient) -> None:
+def test_expediente_completo_queda_verde(client: TestClient, auth_prueba: AuthPrueba) -> None:
     doc_factura = subir(client, "f.xml", factura())
     expediente_id = doc_factura["expediente_id"]
 
@@ -95,7 +105,7 @@ def test_expediente_completo_queda_verde(client: TestClient) -> None:
     assert respuesta.status_code == 200, respuesta.text
     assert respuesta.json()["estado"] == "RELACIONADO"
 
-    autorizar_receptor(client)
+    autorizar_receptor(client, auth_prueba)
     detalle = expediente(client, expediente_id)
     assert detalle["estado"] == "VERDE"
     assert detalle["pendiente_aprobacion"] is False
@@ -103,12 +113,14 @@ def test_expediente_completo_queda_verde(client: TestClient) -> None:
     assert alertas_abiertas(detalle) == set()
 
 
-def test_agente_retencion_sin_constancia_queda_amarillo(client: TestClient) -> None:
+def test_agente_retencion_sin_constancia_queda_amarillo(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
     doc_factura = subir(client, "f.xml", factura())
     expediente_id = str(doc_factura["expediente_id"])
     subir(client, "g.xml", guia())
     subir(client, "v.jpg", b"\xff\xd8 voucher", tipo_documento="VCHR", expediente_id=expediente_id)
-    autorizar_receptor(client, agente_retencion=True)
+    autorizar_receptor(client, auth_prueba, agente_retencion=True)
 
     detalle = expediente(client, expediente_id)
     assert detalle["estado"] == "AMARILLO"
@@ -118,12 +130,15 @@ def test_agente_retencion_sin_constancia_queda_amarillo(client: TestClient) -> N
     assert expediente(client, expediente_id)["estado"] == "VERDE"
 
 
-def test_expediente_vencido_queda_rojo(client: TestClient, reloj: Reloj) -> None:
+def test_expediente_vencido_queda_rojo(
+    client: TestClient, reloj: Reloj, auth_prueba: AuthPrueba
+) -> None:
     doc_factura = subir(client, "f.xml", factura(importe="2500.00"))
     expediente_id = doc_factura["expediente_id"]
-    autorizar_receptor(client)
+    autorizar_receptor(client, auth_prueba)
 
     reloj.hoy = date(2026, 10, 8)
+    auth_prueba.como_admin()
     assert client.post("/api/v1/expedientes/recalcular").json() == {"actualizados": 1}
 
     detalle = expediente(client, expediente_id)
@@ -542,11 +557,13 @@ def test_reprocesamiento_masivo_repara_razones_sociales(
 
 
 def test_recalcular_corrige_expedientes_historicos_menores_al_umbral(
-    client: TestClient, engine: Engine
+    client: TestClient,
+    engine: Engine,
+    auth_prueba: AuthPrueba,
 ) -> None:
     documento = subir(client, "historica.xml", factura(importe="950.00"))
     expediente_id = documento["expediente_id"]
-    autorizar_receptor(client)
+    autorizar_receptor(client, auth_prueba)
 
     with sessionmaker(engine, expire_on_commit=False)() as session:
         historico = session.get(Expediente, expediente_id)
@@ -555,6 +572,7 @@ def test_recalcular_corrige_expedientes_historicos_menores_al_umbral(
         historico.estado = "NARANJA"
         session.commit()
 
+    auth_prueba.como_admin()
     respuesta = client.post("/api/v1/expedientes/recalcular")
     assert respuesta.status_code == 200, respuesta.text
 
