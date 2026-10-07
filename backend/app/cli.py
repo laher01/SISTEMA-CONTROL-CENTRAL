@@ -40,12 +40,12 @@ def _bootstrap_admin(codigo: str, nombre: str) -> None:
                 tenant_id=tenant.id,
                 codigo=codigo_normalizado,
                 nombre=nombre.strip(),
-                rol=RolMiembro.ADMINISTRADOR,
+                rol=RolMiembro.SUPERADMIN,
                 activo=True,
             )
             session.add(miembro)
             session.flush()
-        elif miembro.rol != RolMiembro.ADMINISTRADOR:
+        elif miembro.rol != RolMiembro.SUPERADMIN:
             raise SystemExit("El código indicado ya existe y no es Administrador")
 
         _, temporal = crear_o_restablecer_cuenta(
