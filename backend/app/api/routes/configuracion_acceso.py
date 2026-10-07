@@ -10,7 +10,9 @@ from app.enums import RolMiembro
 from app.models import (
     ConfiguracionAcceso,
     CorreoAutorizado,
+    CuentaAcceso,
     Miembro,
+    SesionAcceso,
     SolicitudAcceso,
 )
 from app.schemas import (
@@ -18,6 +20,10 @@ from app.schemas import (
     ConfiguracionAccesoOut,
     CorreoAutorizadoIn,
     CorreoAutorizadoOut,
+    CredencialTemporalOut,
+    CuentaAccesoAdminActualizar,
+    CuentaAccesoAdminOut,
+    SesionAccesoAdminOut,
     SolicitudAccesoOut,
     SolicitudAccesoResolverIn,
 )
@@ -88,6 +94,12 @@ def actualizar(
     config.solo_correos_autorizados = datos.solo_correos_autorizados
     config.requiere_email_verificado = datos.requiere_email_verificado
     config.acceso_cloudflare_activo = datos.acceso_cloudflare_activo
+    config.duracion_sesion_horas = datos.duracion_sesion_horas
+    config.intentos_fallidos_max = datos.intentos_fallidos_max
+    config.bloqueo_minutos = datos.bloqueo_minutos
+    config.clave_min_longitud = datos.clave_min_longitud
+    config.clave_requiere_letra = datos.clave_requiere_letra
+    config.clave_requiere_numero = datos.clave_requiere_numero
     session.commit()
     return config
 
@@ -122,6 +134,11 @@ def autorizar_correo(
     email = datos.email.strip().lower()
     if "@" not in email:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Correo inválido")
+    if datos.rol_sugerido == RolMiembro.SUPERADMIN:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "SUPERADMIN no puede asignarse mediante invitación o solicitud pública",
+        )
     registro = CorreoAutorizado(
         tenant_id=tenant_id,
         email=email,
@@ -190,6 +207,15 @@ def resolver_solicitud(
         return {"estado": solicitud.estado}
 
     rol = datos.rol
+    if rol is None:
+        correo = session.scalar(
+            select(CorreoAutorizado).where(
+                CorreoAutorizado.tenant_id == tenant_id,
+                CorreoAutorizado.email == solicitud.email,
+                CorreoAutorizado.activo.is_(True),
+            )
+        )
+        rol = RolMiembro(correo.rol_sugerido) if correo and correo.rol_sugerido else None
     if rol is None or rol == RolMiembro.SUPERADMIN:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -229,3 +255,121 @@ def resolver_solicitud(
         "email": cuenta.email,
         "clave_temporal": temporal,
     }
+
+
+@router.get("/cuentas", response_model=list[CuentaAccesoAdminOut])
+def listar_cuentas(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> list[CuentaAcceso]:
+    _solo_superadmin(auth.rol)
+    return list(
+        session.scalars(
+            select(CuentaAcceso)
+            .where(
+                CuentaAcceso.tenant_id == tenant_id,
+                CuentaAcceso.deleted_at.is_(None),
+            )
+            .order_by(CuentaAcceso.login)
+        )
+    )
+
+
+@router.patch("/cuentas/{cuenta_id}", response_model=CuentaAccesoAdminOut)
+def actualizar_cuenta(
+    cuenta_id: uuid.UUID,
+    datos: CuentaAccesoAdminActualizar,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> CuentaAcceso:
+    _solo_superadmin(auth.rol)
+    cuenta = session.get(CuentaAcceso, cuenta_id)
+    if cuenta is None or cuenta.tenant_id != tenant_id or cuenta.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cuenta no encontrada")
+    if datos.activo is False and cuenta.id == auth.cuenta_id:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "SUPERADMIN no puede desactivar su propia cuenta",
+        )
+    if datos.activo is not None:
+        cuenta.activo = datos.activo
+    if datos.email_verificado is not None:
+        cuenta.email_verificado = datos.email_verificado
+    if datos.activo is True:
+        cuenta.intentos_fallidos = 0
+        cuenta.bloqueado_hasta = None
+    session.commit()
+    return cuenta
+
+
+@router.post(
+    "/cuentas/{cuenta_id}/restablecer-clave",
+    response_model=CredencialTemporalOut,
+)
+def restablecer_clave(
+    cuenta_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> CredencialTemporalOut:
+    _solo_superadmin(auth.rol)
+    cuenta = session.get(CuentaAcceso, cuenta_id)
+    if cuenta is None or cuenta.tenant_id != tenant_id or cuenta.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cuenta no encontrada")
+    _, temporal = crear_o_restablecer_cuenta(
+        session,
+        tenant_id,
+        cuenta.login,
+        miembro_id=cuenta.miembro_id,
+        gestor_id=cuenta.gestor_id,
+    )
+    cuenta.intentos_fallidos = 0
+    cuenta.bloqueado_hasta = None
+    session.commit()
+    return CredencialTemporalOut(login=cuenta.login, clave_temporal=temporal)
+
+
+@router.get("/sesiones", response_model=list[SesionAccesoAdminOut])
+def listar_sesiones(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> list[SesionAccesoAdminOut]:
+    _solo_superadmin(auth.rol)
+    filas = session.execute(
+        select(SesionAcceso, CuentaAcceso.login)
+        .join(CuentaAcceso, CuentaAcceso.id == SesionAcceso.cuenta_id)
+        .where(SesionAcceso.tenant_id == tenant_id)
+        .order_by(SesionAcceso.ultima_actividad.desc())
+        .limit(200)
+    ).all()
+    return [
+        SesionAccesoAdminOut(
+            id=sesion.id,
+            cuenta_id=sesion.cuenta_id,
+            login=login,
+            rol_activo=sesion.rol_activo,
+            expira_at=sesion.expira_at,
+            ultima_actividad=sesion.ultima_actividad,
+            revocada_at=sesion.revocada_at,
+        )
+        for sesion, login in filas
+    ]
+
+
+@router.delete("/sesiones/{sesion_id}", status_code=status.HTTP_204_NO_CONTENT)
+def revocar_sesion_admin(
+    sesion_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> None:
+    _solo_superadmin(auth.rol)
+    sesion = session.get(SesionAcceso, sesion_id)
+    if sesion is None or sesion.tenant_id != tenant_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Sesión no encontrada")
+    if sesion.revocada_at is None:
+        sesion.revocada_at = datetime.now(UTC)
+    session.commit()
