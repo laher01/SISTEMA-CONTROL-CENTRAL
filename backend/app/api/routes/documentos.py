@@ -118,6 +118,9 @@ async def subir_documento(
         if expediente is None or expediente.tenant_id != tenant_id or expediente.deleted_at:
             raise no_encontrado("Expediente")
         _validar_ambito_expediente(auth, expediente)
+        # Los adjuntos heredan siempre la propiedad del expediente.
+        usuario_id = expediente.usuario_id
+        gestor_id = expediente.gestor_id
 
     subido = ArchivoSubido(
         nombre=archivo.filename or "sin_nombre",
