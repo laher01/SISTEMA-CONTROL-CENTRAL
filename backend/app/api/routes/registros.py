@@ -35,7 +35,7 @@ def opciones(
     usuarios: list[FiltroOpcion] = []
     gestores: list[FiltroOpcion] = []
 
-    if auth.rol in (RolMiembro.ADMINISTRADOR, RolMiembro.SECRETARIA):
+    if auth.rol in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.SECRETARIA):
         usuarios = [
             FiltroOpcion(id=u.id, codigo=u.codigo, nombre=u.nombre)
             for u in session.scalars(
@@ -119,9 +119,10 @@ def listar(
     )
 
     consulta = _aplicar_ambito(consulta, auth)
-    if usuario_id is not None and auth.rol in (RolMiembro.ADMINISTRADOR, RolMiembro.SECRETARIA):
+    if usuario_id is not None and auth.rol in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.SECRETARIA):
         consulta = consulta.where(Expediente.usuario_id == usuario_id)
     if gestor_id is not None and auth.rol in (
+        RolMiembro.SUPERADMIN,
         RolMiembro.ADMINISTRADOR,
         RolMiembro.SECRETARIA,
         RolMiembro.USUARIO,
