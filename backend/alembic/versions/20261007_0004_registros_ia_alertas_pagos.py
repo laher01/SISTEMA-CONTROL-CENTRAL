@@ -64,7 +64,12 @@ def upgrade() -> None:
             name=op.f("uq_perfiles_extraccion_tenant_id_ruc_tipo_parte_formato"),
         ),
     )
-    op.create_index(op.f("ix_perfiles_extraccion_ruc"), "perfiles_extraccion", ["ruc"], unique=False)
+    op.create_index(
+        op.f("ix_perfiles_extraccion_ruc"),
+        "perfiles_extraccion",
+        ["ruc"],
+        unique=False,
+    )
     op.create_index(
         op.f("ix_perfiles_extraccion_formato"),
         "perfiles_extraccion",
@@ -280,8 +285,18 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_planes_liquidacion")),
     )
-    op.create_index(op.f("ix_planes_liquidacion_tenant_id"), "planes_liquidacion", ["tenant_id"], unique=False)
-    op.create_index(op.f("ix_planes_liquidacion_usuario_id"), "planes_liquidacion", ["usuario_id"], unique=False)
+    op.create_index(
+        op.f("ix_planes_liquidacion_tenant_id"),
+        "planes_liquidacion",
+        ["tenant_id"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_planes_liquidacion_usuario_id"),
+        "planes_liquidacion",
+        ["usuario_id"],
+        unique=False,
+    )
 
     op.create_table(
         "cuentas_pago_erp",
@@ -314,8 +329,18 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_cuentas_pago_erp")),
     )
-    op.create_index(op.f("ix_cuentas_pago_erp_tenant_id"), "cuentas_pago_erp", ["tenant_id"], unique=False)
-    op.create_index(op.f("ix_cuentas_pago_erp_usuario_id"), "cuentas_pago_erp", ["usuario_id"], unique=False)
+    op.create_index(
+        op.f("ix_cuentas_pago_erp_tenant_id"),
+        "cuentas_pago_erp",
+        ["tenant_id"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_cuentas_pago_erp_usuario_id"),
+        "cuentas_pago_erp",
+        ["usuario_id"],
+        unique=False,
+    )
 
     op.create_table(
         "adelantos_erp",
@@ -345,8 +370,18 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_adelantos_erp")),
     )
-    op.create_index(op.f("ix_adelantos_erp_tenant_id"), "adelantos_erp", ["tenant_id"], unique=False)
-    op.create_index(op.f("ix_adelantos_erp_usuario_id"), "adelantos_erp", ["usuario_id"], unique=False)
+    op.create_index(
+        op.f("ix_adelantos_erp_tenant_id"),
+        "adelantos_erp",
+        ["tenant_id"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_adelantos_erp_usuario_id"),
+        "adelantos_erp",
+        ["usuario_id"],
+        unique=False,
+    )
 
     op.create_table(
         "pagos_erp",
