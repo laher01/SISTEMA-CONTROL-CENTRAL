@@ -67,7 +67,9 @@ def ingerir_documento(
     if comprobante is not None:
         tipo_documento = comprobante.tipo_documento
         datos = comprobante.a_dict()
-        expediente = _expediente_para_comprobante(session, tenant_id, comprobante, gestor_id)
+        expediente = _expediente_para_comprobante(
+            session, settings, tenant_id, comprobante, gestor_id
+        )
 
     usuario_id = _usuario_de_gestor(session, tenant_id, gestor_id)
     if expediente is not None and usuario_id is None:
@@ -180,6 +182,7 @@ def crear_expediente(
 
 def _expediente_para_comprobante(
     session: Session,
+    settings: Settings,
     tenant_id: uuid.UUID,
     comprobante: ComprobanteUbl,
     gestor_id: uuid.UUID | None,
