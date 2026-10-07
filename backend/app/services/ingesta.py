@@ -15,6 +15,7 @@ from app.services.expedientes import (
     actualizar_expediente,
     buscar_expediente,
     obtener_o_crear_empresa,
+    requiere_bancarizacion,
 )
 from app.services.ubl import ComprobanteUbl, parece_xml, parse_ubl
 from app.storage import AlmacenLocal
@@ -162,7 +163,11 @@ def crear_expediente(
         fecha_emision=fecha_emision,
         moneda=moneda,
         importe_total=importe_total,
-        requiere_guia=requiere_guia and tipo_comprobante == TipoComprobante.FACT,
+        requiere_guia=(
+            requiere_guia
+            and tipo_comprobante == TipoComprobante.FACT
+            and requiere_bancarizacion(moneda, importe_total, settings)
+        ),
         gestor_id=gestor_id,
         usuario_id=usuario_id,
     )
@@ -210,6 +215,9 @@ def _expediente_para_comprobante(
             fecha_emision=comprobante.fecha_emision,
             moneda=comprobante.moneda,
             importe_total=comprobante.importe_total,
+            requiere_guia=requiere_bancarizacion(
+                comprobante.moneda, comprobante.importe_total, settings
+            ),
             gestor_id=gestor_id,
             usuario_id=usuario_id,
         )
