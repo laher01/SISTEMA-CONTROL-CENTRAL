@@ -23,6 +23,14 @@ def upgrade() -> None:
         "cuentas_acceso",
         sa.Column("email_verificado", sa.Boolean(), server_default="false", nullable=False),
     )
+    op.add_column(
+        "cuentas_acceso",
+        sa.Column("intentos_fallidos", sa.Integer(), server_default="0", nullable=False),
+    )
+    op.add_column(
+        "cuentas_acceso",
+        sa.Column("bloqueado_hasta", sa.DateTime(timezone=True), nullable=True),
+    )
     op.create_index(op.f("ix_cuentas_acceso_email"), "cuentas_acceso", ["email"], unique=False)
     op.create_unique_constraint(
         op.f("uq_cuentas_acceso_tenant_id_email"),
@@ -48,6 +56,12 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("acceso_cloudflare_activo", sa.Boolean(), server_default="true", nullable=False),
+        sa.Column("duracion_sesion_horas", sa.Integer(), server_default="12", nullable=False),
+        sa.Column("intentos_fallidos_max", sa.Integer(), server_default="5", nullable=False),
+        sa.Column("bloqueo_minutos", sa.Integer(), server_default="15", nullable=False),
+        sa.Column("clave_min_longitud", sa.Integer(), server_default="10", nullable=False),
+        sa.Column("clave_requiere_letra", sa.Boolean(), server_default="true", nullable=False),
+        sa.Column("clave_requiere_numero", sa.Boolean(), server_default="true", nullable=False),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
@@ -176,5 +190,7 @@ def downgrade() -> None:
         type_="unique",
     )
     op.drop_index(op.f("ix_cuentas_acceso_email"), table_name="cuentas_acceso")
+    op.drop_column("cuentas_acceso", "bloqueado_hasta")
+    op.drop_column("cuentas_acceso", "intentos_fallidos")
     op.drop_column("cuentas_acceso", "email_verificado")
     op.drop_column("cuentas_acceso", "email")
