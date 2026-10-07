@@ -10,7 +10,7 @@ from sqlalchemy.orm import aliased
 from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.enums import Moneda, RolMiembro, TipoDocumento
 from app.models import Empresa, Expediente, Gestor, Miembro
-from app.schemas import RegistroFila, RegistroResumen
+from app.schemas import FiltroOpcion, RegistroFila, RegistroOpciones, RegistroResumen
 from app.services.expedientes import documentos_principales
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 
@@ -25,6 +25,54 @@ _OPCIONALES_BASE = [
     TipoDocumento.RET,
 ]
 
+
+
+
+@router.get("/opciones", response_model=RegistroOpciones)
+def opciones(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> RegistroOpciones:
+    usuarios: list[FiltroOpcion] = []
+    gestores: list[FiltroOpcion] = []
+
+    if auth.rol in (RolMiembro.ADMINISTRADOR, RolMiembro.SECRETARIA):
+        usuarios = [
+            FiltroOpcion(id=u.id, codigo=u.codigo, nombre=u.nombre)
+            for u in session.scalars(
+                select(Miembro)
+                .where(
+                    Miembro.tenant_id == tenant_id,
+                    Miembro.rol == RolMiembro.USUARIO,
+                    Miembro.activo.is_(True),
+                    Miembro.deleted_at.is_(None),
+                )
+                .order_by(Miembro.codigo)
+            )
+        ]
+        gestores = [
+            FiltroOpcion(id=g.id, codigo=g.codigo, nombre=g.nombre)
+            for g in session.scalars(
+                select(Gestor)
+                .where(Gestor.tenant_id == tenant_id, Gestor.deleted_at.is_(None))
+                .order_by(Gestor.codigo)
+            )
+        ]
+    elif auth.rol == RolMiembro.USUARIO:
+        gestores = [
+            FiltroOpcion(id=g.id, codigo=g.codigo, nombre=g.nombre)
+            for g in session.scalars(
+                select(Gestor)
+                .where(
+                    Gestor.tenant_id == tenant_id,
+                    Gestor.usuario_id == auth.usuario_id,
+                    Gestor.deleted_at.is_(None),
+                )
+                .order_by(Gestor.codigo)
+            )
+        ]
+    return RegistroOpciones(usuarios=usuarios, gestores=gestores)
 
 @router.get("", response_model=RegistroResumen)
 def listar(
