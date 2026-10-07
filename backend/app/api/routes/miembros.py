@@ -14,7 +14,7 @@ from app.schemas import (
     MiembroIn,
     MiembroOut,
 )
-from app.security import crear_o_restablecer_cuenta
+from app.security import actualizar_login_cuenta, crear_o_restablecer_cuenta
 
 router = APIRouter(prefix="/miembros", tags=["miembros"])
 
@@ -113,6 +113,12 @@ def actualizar(
             )
 
     if datos.codigo is not None:
+        actualizar_login_cuenta(
+            session,
+            tenant_id,
+            datos.codigo,
+            miembro_id=miembro.id,
+        )
         miembro.codigo = datos.codigo.strip().upper()
     if datos.nombre is not None:
         miembro.nombre = datos.nombre.strip()
@@ -123,9 +129,9 @@ def actualizar(
 
     try:
         session.commit()
-    except IntegrityError as exc:
+    except (IntegrityError, ValueError) as exc:
         session.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "El código del miembro ya existe") from exc
+        raise HTTPException(status.HTTP_409_CONFLICT, "El código/login del miembro ya existe") from exc
     return miembro
 
 
