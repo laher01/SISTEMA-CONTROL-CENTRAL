@@ -3,6 +3,7 @@ from decimal import Decimal
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import aliased
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
@@ -137,7 +138,7 @@ def compras(
     ]
 
 
-def _scope(auth: OperativeAuthDep) -> tuple[object, ...]:
+def _scope(auth: OperativeAuthDep) -> tuple[ColumnElement[bool], ...]:
     if auth.rol == "GESTOR":
         return (Expediente.gestor_id == auth.gestor_id,)
     if auth.rol == RolMiembro.USUARIO:
