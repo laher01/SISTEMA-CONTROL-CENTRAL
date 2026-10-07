@@ -148,6 +148,7 @@ def _scope(auth: OperativeAuthDep) -> tuple[ColumnElement[bool], ...]:
 
 def _validar_acceso_produccion(rol: str) -> None:
     if rol not in (
+        RolMiembro.SUPERADMIN,
         RolMiembro.ADMINISTRADOR,
         RolMiembro.GERENTE,
         RolMiembro.USUARIO,
