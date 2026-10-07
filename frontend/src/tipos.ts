@@ -12,7 +12,7 @@ export type TipoAlerta =
   | "RECEPTOR_NO_AUTORIZADO"
   | "EXPEDIENTE_VENCIDO";
 export type TipoComprobante = "FACT" | "RHE";
-export type RolMiembro = "ADMINISTRADOR" | "GERENTE" | "SECRETARIA" | "USUARIO";
+export type RolMiembro = "SUPERADMIN" | "ADMINISTRADOR" | "GERENTE" | "SECRETARIA" | "USUARIO";
 
 export const TIPOS_DOCUMENTO = [
   "FACT",
@@ -351,4 +351,34 @@ export interface NexusEstado {
   consulta_ruc_externa: boolean;
   busqueda_internet: boolean;
   fuente_oficial_preferida: string;
+}
+
+
+export interface ConfiguracionAcceso {
+  id: string;
+  registro_publico: boolean;
+  requiere_aprobacion: boolean;
+  solo_correos_autorizados: boolean;
+  requiere_email_verificado: boolean;
+  proveedor_email_configurado: boolean;
+  acceso_cloudflare_activo: boolean;
+}
+
+export interface CorreoAutorizado {
+  id: string;
+  email: string;
+  rol_sugerido: RolMiembro | null;
+  activo: boolean;
+  created_at: string;
+}
+
+export interface SolicitudAcceso {
+  id: string;
+  email: string;
+  nombre: string;
+  codigo_solicitado: string;
+  estado: string;
+  rol_asignado: string | null;
+  created_at: string;
+  resuelta_at: string | null;
 }
