@@ -39,7 +39,11 @@ def _validar_acceso(rol: str) -> None:
         )
 
 
-def _usuario_valido(session: SessionDep, tenant_id, usuario_id):
+def _usuario_valido(
+    session: SessionDep,
+    tenant_id: uuid.UUID,
+    usuario_id: uuid.UUID,
+) -> Miembro:
     usuario = session.get(Miembro, usuario_id)
     if (
         usuario is None
