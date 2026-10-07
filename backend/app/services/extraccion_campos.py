@@ -210,7 +210,6 @@ def extraer_campos(
     return resultado
 
 
-
 def _aplicar_parser_especializado(
     texto: str,
     formato: str,
@@ -483,11 +482,7 @@ def _parsear_factuhost(
     )
 
     indice_ruc = next(
-        (
-            i
-            for i, linea in enumerate(lineas)
-            if ruc_emisor in re.sub(r"\D", "", linea)
-        ),
+        (i for i, linea in enumerate(lineas) if ruc_emisor in re.sub(r"\D", "", linea)),
         None,
     )
     if indice_ruc is not None:
@@ -548,11 +543,7 @@ def _parsear_efact(
     )
 
     indice_ruc = next(
-        (
-            i
-            for i, linea in enumerate(lineas)
-            if ruc_emisor in re.sub(r"\D", "", linea)
-        ),
+        (i for i, linea in enumerate(lineas) if ruc_emisor in re.sub(r"\D", "", linea)),
         None,
     )
     if indice_ruc is not None:
@@ -566,11 +557,7 @@ def _parsear_efact(
             r"\b(?:E\.?I\.?R\.?L\.?|S\.?A\.?C\.?|"
             r"S\.?R\.?L\.?|S\.?A\.?)\b"
         )
-        preferidos = [
-            linea
-            for linea in candidatos
-            if re.search(patron_societario, linea, re.I)
-        ]
+        preferidos = [linea for linea in candidatos if re.search(patron_societario, linea, re.I)]
         if preferidos or candidatos:
             razon = (preferidos or candidatos)[0]
             _poner_campo(
@@ -908,9 +895,8 @@ def detectar_formato_documental(texto: str) -> str:
         return "PSE"
     if "TICKET" in normalizado or "BOLETA DE VENTA" in normalizado:
         return "TICKET"
-    if (
-        "GENERADA EN EL SISTEMA DE SUNAT" in normalizado
-        or ("SENOR(ES)" in normalizado and "DIRECCION DEL CLIENTE" in normalizado)
+    if "GENERADA EN EL SISTEMA DE SUNAT" in normalizado or (
+        "SENOR(ES)" in normalizado and "DIRECCION DEL CLIENTE" in normalizado
     ):
         return "SUNAT_FACTURA"
     if "SUNAT" in normalizado or re.search(r"\bE\d{3}\s*[-–—]", normalizado):
