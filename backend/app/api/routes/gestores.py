@@ -1,11 +1,12 @@
 import uuid
+
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import SessionDep, TenantDep
-from app.models import Gestor, Miembro
 from app.enums import RolMiembro
+from app.models import Gestor, Miembro
 from app.schemas import GestorIn, GestorOut
 
 router = APIRouter(prefix="/gestores", tags=["gestores"])
