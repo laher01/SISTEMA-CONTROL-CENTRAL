@@ -5,6 +5,7 @@ from app.api.routes import (
     alertas,
     auth,
     configuracion,
+    configuracion_acceso,
     dashboard,
     documentos,
     empresas,
@@ -51,6 +52,7 @@ for modulo in (
     produccion,
     pagos,
     configuracion,
+    configuracion_acceso,
 ):
     api.include_router(modulo.router)
 app.include_router(api)
