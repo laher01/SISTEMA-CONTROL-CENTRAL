@@ -82,8 +82,8 @@ def listar(
     auth: OperativeAuthDep,
     usuario_id: uuid.UUID | None = None,
     gestor_id: uuid.UUID | None = None,
-    emisor_ruc: Annotated[str | None, Query(min_length=11, max_length=11)] = None,
-    receptor_ruc: Annotated[str | None, Query(min_length=11, max_length=11)] = None,
+    emisor: Annotated[str | None, Query(max_length=100)] = None,
+    receptor: Annotated[str | None, Query(max_length=100)] = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
     mes: Annotated[str | None, Query(pattern=r"^\d{4}-\d{2}$")] = None,
@@ -128,10 +128,18 @@ def listar(
         RolMiembro.USUARIO,
     ):
         consulta = consulta.where(Expediente.gestor_id == gestor_id)
-    if emisor_ruc:
-        consulta = consulta.where(emisor.ruc == emisor_ruc)
-    if receptor_ruc:
-        consulta = consulta.where(receptor.ruc == receptor_ruc)
+    if emisor and emisor.strip():
+        texto_emisor = emisor.strip().lower()
+        consulta = consulta.where(
+            (func.lower(emisor.ruc).contains(texto_emisor, autoescape=True))
+            | (func.lower(emisor.razon_social).contains(texto_emisor, autoescape=True))
+        )
+    if receptor and receptor.strip():
+        texto_receptor = receptor.strip().lower()
+        consulta = consulta.where(
+            (func.lower(receptor.ruc).contains(texto_receptor, autoescape=True))
+            | (func.lower(receptor.razon_social).contains(texto_receptor, autoescape=True))
+        )
     if fecha_desde:
         consulta = consulta.where(Expediente.fecha_emision >= fecha_desde)
     if fecha_hasta:
