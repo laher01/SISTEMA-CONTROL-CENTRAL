@@ -404,15 +404,37 @@ def _parsear_facturalaya(
         return
     lineas = _lineas_limpias(texto)
     ruc_emisor, ruc_receptor = rucs[0], rucs[1]
-    _poner_campo(campos, "ruc_emisor", ruc_emisor, min(0.95, 0.93 * factor), _contexto(texto, ruc_emisor), fuente)
-    _poner_campo(campos, "ruc_receptor", ruc_receptor, min(0.95, 0.93 * factor), _contexto(texto, ruc_receptor), fuente)
+    _poner_campo(
+        campos,
+        "ruc_emisor",
+        ruc_emisor,
+        min(0.95, 0.93 * factor),
+        _contexto(texto, ruc_emisor),
+        fuente,
+    )
+    _poner_campo(
+        campos,
+        "ruc_receptor",
+        ruc_receptor,
+        min(0.95, 0.93 * factor),
+        _contexto(texto, ruc_receptor),
+        fuente,
+    )
 
     # Facturalaya suele incluir "NOMBRE - RUC" en el encabezado.
     for linea in lineas:
         if ruc_emisor in re.sub(r"\D", "", linea):
-            candidato = re.sub(r"[-–—]?\s*" + re.escape(ruc_emisor) + r"\s*$", "", linea).strip(" -:")
+            patron = r"[-–—]?\s*" + re.escape(ruc_emisor) + r"\s*$"
+            candidato = re.sub(patron, "", linea).strip(" -:")
             if _razon_social_valida(candidato):
-                _poner_campo(campos, "razon_social_emisor", candidato, min(0.96, 0.94 * factor), linea, fuente)
+                _poner_campo(
+                    campos,
+                    "razon_social_emisor",
+                    candidato,
+                    min(0.96, 0.94 * factor),
+                    linea,
+                    fuente,
+                )
                 break
 
     receptor = _bloque_despues_de_etiqueta(
@@ -422,7 +444,14 @@ def _parsear_facturalaya(
         max_lineas=3,
     )
     if receptor:
-        _poner_campo(campos, "razon_social_receptor", receptor[0], min(0.97, 0.95 * factor), receptor[1], fuente)
+        _poner_campo(
+            campos,
+            "razon_social_receptor",
+            receptor[0],
+            min(0.97, 0.95 * factor),
+            receptor[1],
+            fuente,
+        )
 
 
 def _parsear_factuhost(
@@ -436,14 +465,42 @@ def _parsear_factuhost(
         return
     lineas = _lineas_limpias(texto)
     ruc_emisor, ruc_receptor = rucs[0], rucs[1]
-    _poner_campo(campos, "ruc_emisor", ruc_emisor, min(0.96, 0.94 * factor), _contexto(texto, ruc_emisor), fuente)
-    _poner_campo(campos, "ruc_receptor", ruc_receptor, min(0.96, 0.94 * factor), _contexto(texto, ruc_receptor), fuente)
+    _poner_campo(
+        campos,
+        "ruc_emisor",
+        ruc_emisor,
+        min(0.96, 0.94 * factor),
+        _contexto(texto, ruc_emisor),
+        fuente,
+    )
+    _poner_campo(
+        campos,
+        "ruc_receptor",
+        ruc_receptor,
+        min(0.96, 0.94 * factor),
+        _contexto(texto, ruc_receptor),
+        fuente,
+    )
 
-    indice_ruc = next((i for i, linea in enumerate(lineas) if ruc_emisor in re.sub(r"\D", "", linea)), None)
+    indice_ruc = next(
+        (
+            i
+            for i, linea in enumerate(lineas)
+            if ruc_emisor in re.sub(r"\D", "", linea)
+        ),
+        None,
+    )
     if indice_ruc is not None:
         emisor = _razon_emisor_encabezado(lineas, indice_ruc)
         if emisor:
-            _poner_campo(campos, "razon_social_emisor", emisor[0], min(0.97, 0.95 * factor), emisor[1], fuente)
+            _poner_campo(
+                campos,
+                "razon_social_emisor",
+                emisor[0],
+                min(0.97, 0.95 * factor),
+                emisor[1],
+                fuente,
+            )
 
     receptor = _bloque_despues_de_etiqueta(
         lineas,
@@ -452,7 +509,14 @@ def _parsear_factuhost(
         max_lineas=3,
     )
     if receptor:
-        _poner_campo(campos, "razon_social_receptor", receptor[0], min(0.97, 0.95 * factor), receptor[1], fuente)
+        _poner_campo(
+            campos,
+            "razon_social_receptor",
+            receptor[0],
+            min(0.97, 0.95 * factor),
+            receptor[1],
+            fuente,
+        )
 
 
 def _parsear_efact(
@@ -466,10 +530,31 @@ def _parsear_efact(
         return
     lineas = _lineas_limpias(texto)
     ruc_emisor, ruc_receptor = rucs[0], rucs[1]
-    _poner_campo(campos, "ruc_emisor", ruc_emisor, min(0.95, 0.93 * factor), _contexto(texto, ruc_emisor), fuente)
-    _poner_campo(campos, "ruc_receptor", ruc_receptor, min(0.95, 0.93 * factor), _contexto(texto, ruc_receptor), fuente)
+    _poner_campo(
+        campos,
+        "ruc_emisor",
+        ruc_emisor,
+        min(0.95, 0.93 * factor),
+        _contexto(texto, ruc_emisor),
+        fuente,
+    )
+    _poner_campo(
+        campos,
+        "ruc_receptor",
+        ruc_receptor,
+        min(0.95, 0.93 * factor),
+        _contexto(texto, ruc_receptor),
+        fuente,
+    )
 
-    indice_ruc = next((i for i, linea in enumerate(lineas) if ruc_emisor in re.sub(r"\D", "", linea)), None)
+    indice_ruc = next(
+        (
+            i
+            for i, linea in enumerate(lineas)
+            if ruc_emisor in re.sub(r"\D", "", linea)
+        ),
+        None,
+    )
     if indice_ruc is not None:
         candidatos = [
             linea
@@ -477,14 +562,25 @@ def _parsear_efact(
             if _razon_social_valida(linea)
             and not re.match(r"^(?:NRO\.?|F\d{3}\b)", _sin_tildes(linea), re.I)
         ]
+        patron_societario = (
+            r"\b(?:E\.?I\.?R\.?L\.?|S\.?A\.?C\.?|"
+            r"S\.?R\.?L\.?|S\.?A\.?)\b"
+        )
         preferidos = [
             linea
             for linea in candidatos
-            if re.search(r"\b(?:E\.?I\.?R\.?L\.?|S\.?A\.?C\.?|S\.?R\.?L\.?|S\.?A\.?)\b", linea, re.I)
+            if re.search(patron_societario, linea, re.I)
         ]
         if preferidos or candidatos:
             razon = (preferidos or candidatos)[0]
-            _poner_campo(campos, "razon_social_emisor", razon, min(0.94, 0.92 * factor), razon, fuente)
+            _poner_campo(
+                campos,
+                "razon_social_emisor",
+                razon,
+                min(0.94, 0.92 * factor),
+                razon,
+                fuente,
+            )
 
     receptor = _bloque_despues_de_etiqueta(
         lineas,
@@ -493,7 +589,14 @@ def _parsear_efact(
         max_lineas=4,
     )
     if receptor:
-        _poner_campo(campos, "razon_social_receptor", receptor[0], min(0.95, 0.93 * factor), receptor[1], fuente)
+        _poner_campo(
+            campos,
+            "razon_social_receptor",
+            receptor[0],
+            min(0.95, 0.93 * factor),
+            receptor[1],
+            fuente,
+        )
 
 
 def _extraer_rucs_etiquetados(
