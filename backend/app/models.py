@@ -87,6 +87,31 @@ class Miembro(ConId, ConTenant, ConCreacion, Base):
     gestores: Mapped[list["Gestor"]] = relationship(back_populates="usuario")
 
 
+class CuentaAcceso(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "cuentas_acceso"
+    __table_args__ = (UniqueConstraint("tenant_id", "login"),)
+
+    login: Mapped[str] = mapped_column(String(100))
+    password_hash: Mapped[str] = mapped_column(String(500))
+    miembro_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
+    gestor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"), index=True)
+    activo: Mapped[bool] = mapped_column(default=True, server_default="true")
+    cambio_clave_obligatorio: Mapped[bool] = mapped_column(default=True, server_default="true")
+    ultimo_acceso: Mapped[datetime | None]
+    deleted_at: Mapped[datetime | None]
+
+
+class SesionAcceso(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "sesiones_acceso"
+
+    cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    rol_activo: Mapped[str] = mapped_column(String(20), index=True)
+    expira_at: Mapped[datetime]
+    ultima_actividad: Mapped[datetime] = mapped_column(default=ahora, server_default=func.now())
+    revocada_at: Mapped[datetime | None]
+
+
 class Gestor(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "gestores"
     __table_args__ = (UniqueConstraint("tenant_id", "codigo"),)
