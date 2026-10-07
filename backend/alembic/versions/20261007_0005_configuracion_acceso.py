@@ -29,18 +29,47 @@ def upgrade() -> None:
         sa.Column("registro_publico", sa.Boolean(), server_default="false", nullable=False),
         sa.Column("requiere_aprobacion", sa.Boolean(), server_default="true", nullable=False),
         sa.Column("solo_correos_autorizados", sa.Boolean(), server_default="true", nullable=False),
-        sa.Column("requiere_email_verificado", sa.Boolean(), server_default="false", nullable=False),
-        sa.Column("proveedor_email_configurado", sa.Boolean(), server_default="false", nullable=False),
+        sa.Column(
+            "requiere_email_verificado",
+            sa.Boolean(),
+            server_default="false",
+            nullable=False,
+        ),
+        sa.Column(
+            "proveedor_email_configurado",
+            sa.Boolean(),
+            server_default="false",
+            nullable=False,
+        ),
         sa.Column("acceso_cloudflare_activo", sa.Boolean(), server_default="true", nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("tenant_id", sa.Uuid(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name=op.f("fk_configuracion_acceso_tenant_id_tenants")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(
+            ["tenant_id"],
+            ["tenants.id"],
+            name=op.f("fk_configuracion_acceso_tenant_id_tenants"),
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_configuracion_acceso")),
         sa.UniqueConstraint("tenant_id", name=op.f("uq_configuracion_acceso_tenant_id")),
     )
-    op.create_index(op.f("ix_configuracion_acceso_tenant_id"), "configuracion_acceso", ["tenant_id"], unique=False)
+    op.create_index(
+        op.f("ix_configuracion_acceso_tenant_id"),
+        "configuracion_acceso",
+        ["tenant_id"],
+        unique=False,
+    )
 
     op.create_table(
         "correos_autorizados",
@@ -49,13 +78,36 @@ def upgrade() -> None:
         sa.Column("activo", sa.Boolean(), server_default="true", nullable=False),
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("tenant_id", sa.Uuid(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name=op.f("fk_correos_autorizados_tenant_id_tenants")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(
+            ["tenant_id"],
+            ["tenants.id"],
+            name=op.f("fk_correos_autorizados_tenant_id_tenants"),
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_correos_autorizados")),
-        sa.UniqueConstraint("tenant_id", "email", name=op.f("uq_correos_autorizados_tenant_id_email")),
+        sa.UniqueConstraint(
+            "tenant_id",
+            "email",
+            name=op.f("uq_correos_autorizados_tenant_id_email"),
+        ),
     )
-    op.create_index(op.f("ix_correos_autorizados_email"), "correos_autorizados", ["email"], unique=False)
-    op.create_index(op.f("ix_correos_autorizados_tenant_id"), "correos_autorizados", ["tenant_id"], unique=False)
+    op.create_index(
+        op.f("ix_correos_autorizados_email"),
+        "correos_autorizados",
+        ["email"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_correos_autorizados_tenant_id"),
+        "correos_autorizados",
+        ["tenant_id"],
+        unique=False,
+    )
 
     op.create_table(
         "solicitudes_acceso",
@@ -67,14 +119,42 @@ def upgrade() -> None:
         sa.Column("resuelta_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("tenant_id", sa.Uuid(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"], name=op.f("fk_solicitudes_acceso_tenant_id_tenants")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(
+            ["tenant_id"],
+            ["tenants.id"],
+            name=op.f("fk_solicitudes_acceso_tenant_id_tenants"),
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_solicitudes_acceso")),
-        sa.UniqueConstraint("tenant_id", "email", name=op.f("uq_solicitudes_acceso_tenant_id_email")),
+        sa.UniqueConstraint(
+            "tenant_id",
+            "email",
+            name=op.f("uq_solicitudes_acceso_tenant_id_email"),
+        ),
     )
-    op.create_index(op.f("ix_solicitudes_acceso_email"), "solicitudes_acceso", ["email"], unique=False)
-    op.create_index(op.f("ix_solicitudes_acceso_estado"), "solicitudes_acceso", ["estado"], unique=False)
-    op.create_index(op.f("ix_solicitudes_acceso_tenant_id"), "solicitudes_acceso", ["tenant_id"], unique=False)
+    op.create_index(
+        op.f("ix_solicitudes_acceso_email"),
+        "solicitudes_acceso",
+        ["email"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_solicitudes_acceso_estado"),
+        "solicitudes_acceso",
+        ["estado"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_solicitudes_acceso_tenant_id"),
+        "solicitudes_acceso",
+        ["tenant_id"],
+        unique=False,
+    )
 
     # Conserva acceso al sistema tras introducir SUPERADMIN.
     op.execute("UPDATE miembros SET rol = 'SUPERADMIN' WHERE rol = 'ADMINISTRADOR'")
