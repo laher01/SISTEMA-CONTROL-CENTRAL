@@ -38,7 +38,12 @@ def hash_clave(clave: str) -> str:
         p=1,
         dklen=32,
     )
-    return "scrypt$16384$8$1$" + base64.urlsafe_b64encode(salt).decode() + "$" + base64.urlsafe_b64encode(derivada).decode()
+    return (
+        "scrypt$16384$8$1$"
+        + base64.urlsafe_b64encode(salt).decode()
+        + "$"
+        + base64.urlsafe_b64encode(derivada).decode()
+    )
 
 
 def verificar_clave(clave: str, almacenada: str) -> bool:
