@@ -73,7 +73,7 @@ def extraer_campos(
             CampoExtraido(ruc, min(0.95, 0.9 * factor), _contexto(texto, ruc)).a_dict(fuente)
             for ruc in rucs
         ]
-        for nombre, etiquetas in (
+        for nombre, etiquetas_razon in (
             ("ruc_emisor", ("RUC EMISOR", "PROVEEDOR", "SEÑOR(ES)")),
             ("ruc_receptor", ("RUC RECEPTOR", "CLIENTE", "ADQUIRIENTE")),
         ):
@@ -100,7 +100,7 @@ def extraer_campos(
             ),
         ),
     ):
-        encontrado = _razon_social_cercana_a_etiqueta(texto, etiquetas)
+        encontrado = _razon_social_cercana_a_etiqueta(texto, etiquetas_razon)
         if encontrado:
             campos[nombre] = CampoExtraido(encontrado, min(0.9, 0.86 * factor), encontrado).a_dict(
                 fuente
