@@ -163,7 +163,7 @@ def restablecer_acceso(
 
 
 def _solo_admin(rol: str) -> None:
-    if rol != RolMiembro.ADMINISTRADOR:
+    if rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "Solo Administración puede realizar esta acción",
