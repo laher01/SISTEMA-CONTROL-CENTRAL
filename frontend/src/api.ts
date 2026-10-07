@@ -26,7 +26,7 @@ export function mensajeDeDetalle(status: number, detalle: unknown): string {
 }
 
 async function solicitar<T>(ruta: string, init?: RequestInit): Promise<T> {
-  const respuesta = await fetch(`${BASE}${ruta}`, init);
+  const respuesta = await fetch(`${BASE}${ruta}`, { credentials: "include", ...init });
   const cuerpo: unknown = respuesta.headers.get("content-type")?.includes("json")
     ? await respuesta.json()
     : await respuesta.text();
