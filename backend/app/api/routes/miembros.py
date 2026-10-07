@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from app.api.deps import SessionDep, TenantDep
 from app.enums import RolMiembro
 from app.models import Miembro
-from app.schemas import MiembroIn, MiembroOut
+from app.schemas import MiembroActualizar, MiembroIn, MiembroOut
 
 router = APIRouter(prefix="/miembros", tags=["miembros"])
 
@@ -56,3 +56,31 @@ def usuario_operativo(session: SessionDep, tenant_id: uuid.UUID, usuario_id: uui
     ):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Usuario operativo inválido")
     return usuario
+
+
+@router.patch("/{miembro_id}", response_model=MiembroOut)
+def actualizar(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    miembro_id: uuid.UUID,
+    datos: MiembroActualizar,
+) -> Miembro:
+    miembro = session.get(Miembro, miembro_id)
+    if miembro is None or miembro.tenant_id != tenant_id or miembro.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Miembro no encontrado")
+
+    if datos.codigo is not None:
+        miembro.codigo = datos.codigo.strip().upper()
+    if datos.nombre is not None:
+        miembro.nombre = datos.nombre.strip()
+    if datos.rol is not None:
+        miembro.rol = datos.rol
+    if datos.activo is not None:
+        miembro.activo = datos.activo
+
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "El código del miembro ya existe") from exc
+    return miembro
