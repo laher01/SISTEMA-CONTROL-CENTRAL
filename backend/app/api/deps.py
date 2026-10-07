@@ -38,7 +38,9 @@ def get_contexto_actual(
     return contexto
 
 
-def get_contexto_operativo(contexto: Annotated[ContextoAcceso, Depends(get_contexto_actual)]) -> ContextoAcceso:
+def get_contexto_operativo(
+    contexto: Annotated[ContextoAcceso, Depends(get_contexto_actual)],
+) -> ContextoAcceso:
     if contexto.cambio_clave_obligatorio:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
