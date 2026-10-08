@@ -746,10 +746,25 @@ def _razon_emisor_rhe(texto: str, ruc: str) -> tuple[str, str] | None:
 
         # El texto PDF también puede reordenar visualmente el encabezado.
         # Buscamos alrededor del RUC saltando etiquetas, serie, dirección y teléfono.
-        # Preferimos líneas posteriores: en algunos PDF SUNAT el orden extraído es
-        # RUC -> serie -> nombre, aunque visualmente el nombre esté arriba.
+        # En el formato normal el nombre está inmediatamente antes del RUC.
+        if indice > 0:
+            anterior = _recortar_razon(lineas[indice - 1])
+            normal_anterior = _sin_tildes(anterior).upper().strip()
+            if (
+                anterior
+                and normal_anterior not in {"NRO", "NRO.", "RUC", "R.U.C."}
+                and _razon_social_valida(anterior)
+                and not _parece_direccion(anterior)
+            ):
+                evidencia = " ".join(
+                    x.strip() for x in lineas[indice - 1 : indice + 1] if x.strip()
+                )
+                return anterior[:300], evidencia[:300]
+
+        # En algunos PDF SUNAT el orden extraído es RUC -> serie -> nombre,
+        # aunque visualmente el nombre esté arriba.
         indices = list(range(indice + 1, min(len(lineas), indice + 7)))
-        indices += list(range(indice - 1, max(-1, indice - 5), -1))
+        indices += list(range(indice - 2, max(-1, indice - 5), -1))
         for posicion in indices:
             if posicion < 0 or posicion >= len(lineas):
                 continue
