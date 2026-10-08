@@ -1,72 +1,679 @@
 import { useMemo, useState, type FormEvent } from "react";
 
-import { eliminar, enviarJson, useDatos } from "../api";
+import { conParametros, eliminar, enviarJson, useDatos } from "../api";
 import { formatearFecha, formatearMonto } from "../formato";
 import type {
+  AbonoClienteERP,
   AdelantoERP,
+  CarteraClientesResumen,
   CuentaPagoERP,
   FiltroOpcion,
   PagoERP,
+  PedidoGerencia,
   PlanLiquidacion,
   SesionActual,
 } from "../tipos";
 
+type PestanaPagos = "PEDIDOS" | "COBROS" | "LIQUIDACIONES";
+
+function mesActual(): string {
+  return new Date().toISOString().slice(0, 7);
+}
+
 export default function Pagos({ sesion }: { sesion: SesionActual }) {
+  const [pestana, setPestana] = useState<PestanaPagos>("PEDIDOS");
+  const [mes, setMes] = useState(mesActual());
+  const [moneda, setMoneda] = useState<"PEN" | "USD">("PEN");
+  const [usuarioId, setUsuarioId] = useState("");
+  const [mensaje, setMensaje] = useState("");
+
   const usuarios = useDatos<FiltroOpcion[]>("/api/v1/pagos/usuarios");
+  const clientes = useDatos<FiltroOpcion[]>("/api/v1/pagos/clientes");
+  const proveedores = useDatos<FiltroOpcion[]>("/api/v1/pagos/proveedores");
+  const gestores = useDatos<FiltroOpcion[]>("/api/v1/pagos/gestores");
   const planes = useDatos<PlanLiquidacion[]>("/api/v1/pagos/planes");
   const cuentas = useDatos<CuentaPagoERP[]>("/api/v1/pagos/cuentas");
   const adelantos = useDatos<AdelantoERP[]>("/api/v1/pagos/adelantos");
   const pagos = useDatos<PagoERP[]>("/api/v1/pagos");
+  const pedidos = useDatos<PedidoGerencia[]>(
+    conParametros("/api/v1/pagos/pedidos", { mes, moneda }),
+  );
+  const cartera = useDatos<CarteraClientesResumen>(
+    conParametros("/api/v1/pagos/clientes/resumen", { mes, moneda }),
+  );
 
-  const [usuarioId, setUsuarioId] = useState("");
-  const [mensaje, setMensaje] = useState("");
+  const usuarioSeleccionado = usuarios.datos?.find((u) => u.id === usuarioId);
+  const porcentajePredeterminado = usuarioSeleccionado?.porcentaje_produccion ?? "1.5";
 
   const nombreUsuario = (id: string) => {
     const u = usuarios.datos?.find((x) => x.id === id);
     return u ? u.codigo + " · " + u.nombre : id;
   };
 
-  const recargarTodo = () => {
+  const recargarLiquidaciones = () => {
     planes.recargar();
     cuentas.recargar();
     adelantos.recargar();
     pagos.recargar();
   };
 
+  const recargarPedidosYCobros = () => {
+    pedidos.recargar();
+    cartera.recargar();
+  };
+
   return (
     <>
       <h2>Pagos ERP</h2>
       <p className="tenue">
-        Liquidaciones separadas de Billing SaaS. Producción por Usuario, planes,
-        adelantos, programación, pago y conciliación.
+        Pedidos de Gerencia, cartera de Clientes y liquidación de producción son procesos
+        independientes, pero comparten la misma fuente de verdad: los Expedientes procesados.
       </p>
 
-      <div className="filtros">
-        <select value={usuarioId} onChange={(e) => setUsuarioId(e.target.value)}>
-          <option value="">Selecciona un Usuario</option>
-          {usuarios.datos?.map((u) => (
-            <option key={u.id} value={u.id}>{u.codigo} · {u.nombre}</option>
-          ))}
-        </select>
+      <div className="acciones">
+        <button
+          className={pestana === "PEDIDOS" ? "activo" : undefined}
+          onClick={() => setPestana("PEDIDOS")}
+        >
+          Pedidos de Gerencia
+        </button>
+        <button
+          className={pestana === "COBROS" ? "activo" : undefined}
+          onClick={() => setPestana("COBROS")}
+        >
+          Cobros de clientes
+        </button>
+        <button
+          className={pestana === "LIQUIDACIONES" ? "activo" : undefined}
+          onClick={() => setPestana("LIQUIDACIONES")}
+        >
+          Liquidación de usuarios
+        </button>
       </div>
 
-      {usuarioId && (
-        <div className="columnas">
-          <PlanForm usuarioId={usuarioId} alCrear={() => { planes.recargar(); setMensaje("Plan creado."); }} />
-          <AdelantoForm usuarioId={usuarioId} alCrear={() => { adelantos.recargar(); setMensaje("Adelanto registrado."); }} />
-          <CuentaForm usuarioId={usuarioId} alCrear={() => { cuentas.recargar(); setMensaje("Cuenta registrada."); }} />
-          <ProgramarPagoForm
-            usuarioId={usuarioId}
-            alCrear={() => {
-              recargarTodo();
-              setMensaje("Pago programado con producción y adelantos calculados.");
-            }}
-          />
+      {(pestana === "PEDIDOS" || pestana === "COBROS") && (
+        <div className="filtros">
+          <label>
+            Mes
+            <input type="month" value={mes} onChange={(e) => setMes(e.target.value)} />
+          </label>
+          <label>
+            Moneda
+            <select value={moneda} onChange={(e) => setMoneda(e.target.value as "PEN" | "USD")}>
+              <option value="PEN">PEN</option>
+              <option value="USD">USD</option>
+            </select>
+          </label>
         </div>
       )}
 
       {mensaje && <p className="resumen-carga">{mensaje}</p>}
 
+      {pestana === "PEDIDOS" && (
+        <PedidosGerencia
+          mes={mes}
+          moneda={moneda}
+          pedidos={pedidos.datos ?? []}
+          clientes={clientes.datos ?? []}
+          usuarios={usuarios.datos ?? []}
+          gestores={gestores.datos ?? []}
+          proveedores={proveedores.datos ?? []}
+          error={pedidos.error}
+          alCambiar={() => {
+            recargarPedidosYCobros();
+            setMensaje("Pedido de Gerencia actualizado.");
+          }}
+          alMensaje={setMensaje}
+        />
+      )}
+
+      {pestana === "COBROS" && (
+        <CobrosClientes
+          mes={mes}
+          moneda={moneda}
+          resumen={cartera.datos}
+          clientes={clientes.datos ?? []}
+          error={cartera.error}
+          alCambiar={() => {
+            recargarPedidosYCobros();
+            setMensaje("Cartera de clientes actualizada.");
+          }}
+          alMensaje={setMensaje}
+        />
+      )}
+
+      {pestana === "LIQUIDACIONES" && (
+        <>
+          <div className="filtros">
+            <select value={usuarioId} onChange={(e) => setUsuarioId(e.target.value)}>
+              <option value="">Selecciona un Usuario</option>
+              {usuarios.datos?.map((u) => (
+                <option key={u.id} value={u.id}>{u.codigo} · {u.nombre}</option>
+              ))}
+            </select>
+            {usuarioSeleccionado && (
+              <span className="tenue">
+                % predeterminado: {usuarioSeleccionado.porcentaje_produccion ?? "Sin definir"}%
+              </span>
+            )}
+          </div>
+
+          {usuarioId && (
+            <div className="columnas">
+              <PlanForm
+                key={usuarioId + porcentajePredeterminado}
+                usuarioId={usuarioId}
+                porcentajeInicial={porcentajePredeterminado}
+                alCrear={() => {
+                  planes.recargar();
+                  setMensaje("Plan creado.");
+                }}
+              />
+              <AdelantoForm
+                usuarioId={usuarioId}
+                alCrear={() => {
+                  adelantos.recargar();
+                  setMensaje("Adelanto registrado.");
+                }}
+              />
+              <CuentaForm
+                usuarioId={usuarioId}
+                alCrear={() => {
+                  cuentas.recargar();
+                  setMensaje("Cuenta registrada.");
+                }}
+              />
+              <ProgramarPagoForm
+                usuarioId={usuarioId}
+                alCrear={() => {
+                  recargarLiquidaciones();
+                  setMensaje("Pago programado con producción y adelantos calculados.");
+                }}
+              />
+            </div>
+          )}
+
+          <Liquidaciones
+            pagos={pagos.datos ?? []}
+            planes={planes.datos ?? []}
+            adelantos={adelantos.datos ?? []}
+            sesion={sesion}
+            nombreUsuario={nombreUsuario}
+            alCambiar={pagos.recargar}
+          />
+        </>
+      )}
+    </>
+  );
+}
+
+function PedidosGerencia({
+  mes,
+  moneda,
+  pedidos,
+  clientes,
+  usuarios,
+  gestores,
+  proveedores,
+  error,
+  alCambiar,
+  alMensaje,
+}: {
+  mes: string;
+  moneda: "PEN" | "USD";
+  pedidos: PedidoGerencia[];
+  clientes: FiltroOpcion[];
+  usuarios: FiltroOpcion[];
+  gestores: FiltroOpcion[];
+  proveedores: FiltroOpcion[];
+  error?: string;
+  alCambiar: () => void;
+  alMensaje: (mensaje: string) => void;
+}) {
+  const [clienteId, setClienteId] = useState("");
+  const [monto, setMonto] = useState("");
+  const [modalidad, setModalidad] = useState<"POR_PEDIDO" | "SIN_RESTRICCION">("POR_PEDIDO");
+  const [modo, setModo] = useState<"MANUAL" | "SEMIASISTIDA" | "AUTOMATICA">("MANUAL");
+  const [observacion, setObservacion] = useState("");
+  const [seleccionado, setSeleccionado] = useState("");
+
+  const pedidoSeleccionado = pedidos.find((p) => p.id === seleccionado) ?? pedidos[0];
+
+  const crear = async (e: FormEvent) => {
+    e.preventDefault();
+    await enviarJson<PedidoGerencia>("/api/v1/pagos/pedidos", "POST", {
+      cliente_id: clienteId,
+      periodo_mes: mes + "-01",
+      moneda,
+      monto_solicitado: monto,
+      modalidad,
+      modo_distribucion: modo,
+      observacion: observacion || null,
+    });
+    setMonto("");
+    setObservacion("");
+    alCambiar();
+  };
+
+  return (
+    <>
+      <section>
+        <h3>Nuevo Pedido de Gerencia</h3>
+        <form onSubmit={crear} className="formulario-linea">
+          <select value={clienteId} onChange={(e) => setClienteId(e.target.value)} required>
+            <option value="">Cliente receptor</option>
+            {clientes.map((c) => (
+              <option key={c.id} value={c.id}>{c.codigo} · {c.nombre}</option>
+            ))}
+          </select>
+          <input
+            type="number"
+            min="0.01"
+            step="0.01"
+            placeholder="Monto solicitado"
+            value={monto}
+            onChange={(e) => setMonto(e.target.value)}
+            required
+          />
+          <select value={modalidad} onChange={(e) => setModalidad(e.target.value as typeof modalidad)}>
+            <option value="POR_PEDIDO">Por pedido</option>
+            <option value="SIN_RESTRICCION">Sin restricción</option>
+          </select>
+          <select value={modo} onChange={(e) => setModo(e.target.value as typeof modo)}>
+            <option value="MANUAL">Distribución manual</option>
+            <option value="SEMIASISTIDA">Semiasistida</option>
+            <option value="AUTOMATICA">Automática inicial</option>
+          </select>
+          <input
+            placeholder="Observación"
+            value={observacion}
+            onChange={(e) => setObservacion(e.target.value)}
+          />
+          <button type="submit">Crear pedido</button>
+        </form>
+        <p className="tenue">
+          Semiasistida/Automática genera una distribución inicial entre Usuarios activos.
+          El ejecutado siempre se calcula desde Expedientes reales.
+        </p>
+      </section>
+
+      {error && <p className="error">{error}</p>}
+
+      <h3>Pedidos del mes</h3>
+      <div className="tabla-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Modalidad</th>
+              <th className="num">Solicitado</th>
+              <th className="num">Asignado</th>
+              <th className="num">Ejecutado</th>
+              <th className="num">Pendiente</th>
+              <th className="num">Exceso</th>
+              <th className="num">Avance</th>
+              <th>Concentración</th>
+              <th>Estado</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {pedidos.map((p) => (
+              <tr key={p.id}>
+                <td>{p.cliente_ruc} · {p.cliente_razon_social}</td>
+                <td>{p.modalidad} / {p.modo_distribucion}</td>
+                <td className="num">{formatearMonto(p.moneda, p.monto_solicitado)}</td>
+                <td className="num">{formatearMonto(p.moneda, p.monto_asignado)}</td>
+                <td className="num">{formatearMonto(p.moneda, p.monto_ejecutado)}</td>
+                <td className="num">{formatearMonto(p.moneda, p.saldo_pendiente)}</td>
+                <td className="num">{formatearMonto(p.moneda, p.exceso)}</td>
+                <td className="num">{p.avance_porcentaje}%</td>
+                <td>
+                  {p.concentracion_maxima_proveedor}%
+                  {p.proveedor_mayor_concentracion && (
+                    <small> · {p.proveedor_mayor_concentracion}</small>
+                  )}
+                </td>
+                <td>{p.estado}</td>
+                <td>
+                  <button onClick={() => setSeleccionado(p.id)}>Detalle</button>{" "}
+                  <button
+                    onClick={async () => {
+                      await enviarJson<PedidoGerencia>(
+                        "/api/v1/pagos/pedidos/" + p.id,
+                        "PATCH",
+                        { estado: p.estado === "ACTIVO" ? "CERRADO" : "ACTIVO" },
+                      );
+                      alCambiar();
+                    }}
+                  >
+                    {p.estado === "ACTIVO" ? "Cerrar" : "Reabrir"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {pedidoSeleccionado && (
+        <DetallePedido
+          pedido={pedidoSeleccionado}
+          usuarios={usuarios}
+          gestores={gestores}
+          proveedores={proveedores}
+          alCambiar={alCambiar}
+          alMensaje={alMensaje}
+        />
+      )}
+    </>
+  );
+}
+
+function DetallePedido({
+  pedido,
+  usuarios,
+  gestores,
+  proveedores,
+  alCambiar,
+  alMensaje,
+}: {
+  pedido: PedidoGerencia;
+  usuarios: FiltroOpcion[];
+  gestores: FiltroOpcion[];
+  proveedores: FiltroOpcion[];
+  alCambiar: () => void;
+  alMensaje: (mensaje: string) => void;
+}) {
+  const [usuarioId, setUsuarioId] = useState("");
+  const [gestorId, setGestorId] = useState("");
+  const [proveedorId, setProveedorId] = useState("");
+  const [monto, setMonto] = useState("");
+
+  const gestoresUsuario = gestores.filter((g) => !usuarioId || g.usuario_id === usuarioId);
+
+  const asignar = async (e: FormEvent) => {
+    e.preventDefault();
+    await enviarJson<PedidoGerencia>(
+      `/api/v1/pagos/pedidos/${pedido.id}/asignaciones`,
+      "POST",
+      {
+        usuario_id: usuarioId,
+        gestor_id: gestorId || null,
+        proveedor_id: proveedorId || null,
+        monto_asignado: monto,
+      },
+    );
+    setMonto("");
+    alMensaje("Asignación de Pedido actualizada.");
+    alCambiar();
+  };
+
+  return (
+    <section>
+      <h3>Distribución · {pedido.cliente_razon_social}</h3>
+      <form onSubmit={asignar} className="formulario-linea">
+        <select
+          value={usuarioId}
+          onChange={(e) => {
+            setUsuarioId(e.target.value);
+            setGestorId("");
+          }}
+          required
+        >
+          <option value="">Usuario</option>
+          {usuarios.map((u) => (
+            <option key={u.id} value={u.id}>{u.codigo} · {u.nombre}</option>
+          ))}
+        </select>
+        <select value={gestorId} onChange={(e) => setGestorId(e.target.value)}>
+          <option value="">Todos sus Gestores</option>
+          {gestoresUsuario.map((g) => (
+            <option key={g.id} value={g.id}>{g.codigo} · {g.nombre}</option>
+          ))}
+        </select>
+        <select value={proveedorId} onChange={(e) => setProveedorId(e.target.value)}>
+          <option value="">Todos los Proveedores</option>
+          {proveedores.map((p) => (
+            <option key={p.id} value={p.id}>{p.codigo} · {p.nombre}</option>
+          ))}
+        </select>
+        <input
+          type="number"
+          min="0.01"
+          step="0.01"
+          placeholder="Monto asignado"
+          value={monto}
+          onChange={(e) => setMonto(e.target.value)}
+          required
+        />
+        <button type="submit">Asignar / actualizar</button>
+      </form>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Gestor</th>
+            <th>Proveedor</th>
+            <th className="num">Asignado</th>
+            <th className="num">Ejecutado</th>
+            <th className="num">Saldo</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {pedido.asignaciones.map((a) => (
+            <tr key={a.id}>
+              <td>{a.usuario_codigo} · {a.usuario_nombre}</td>
+              <td>{a.gestor_codigo ? a.gestor_codigo + " · " + a.gestor_nombre : "Todos"}</td>
+              <td>
+                {a.proveedor_ruc
+                  ? a.proveedor_ruc + " · " + a.proveedor_razon_social
+                  : "Todos"}
+              </td>
+              <td className="num">{formatearMonto(pedido.moneda, a.monto_asignado)}</td>
+              <td className="num">{formatearMonto(pedido.moneda, a.ejecutado)}</td>
+              <td className="num">{formatearMonto(pedido.moneda, a.saldo)}</td>
+              <td>
+                <button
+                  onClick={async () => {
+                    await eliminar(
+                      `/api/v1/pagos/pedidos/${pedido.id}/asignaciones/${a.id}`,
+                    );
+                    alCambiar();
+                  }}
+                >
+                  Quitar
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+function CobrosClientes({
+  mes,
+  moneda,
+  resumen,
+  clientes,
+  error,
+  alCambiar,
+  alMensaje,
+}: {
+  mes: string;
+  moneda: "PEN" | "USD";
+  resumen?: CarteraClientesResumen;
+  clientes: FiltroOpcion[];
+  error?: string;
+  alCambiar: () => void;
+  alMensaje: (mensaje: string) => void;
+}) {
+  if (error) return <p className="error">{error}</p>;
+
+  return (
+    <>
+      <div className="tarjetas registros-resumen">
+        <div className="tarjeta borde-verde">
+          <span className="cifra">{formatearMonto(moneda, resumen?.total_compras_mes ?? "0")}</span>
+          <span>Compras del mes</span>
+        </div>
+        <div className="tarjeta borde-verde">
+          <span className="cifra">{formatearMonto(moneda, resumen?.total_saldo_anterior ?? "0")}</span>
+          <span>Saldo anterior</span>
+        </div>
+        <div className="tarjeta borde-verde">
+          <span className="cifra">{formatearMonto(moneda, resumen?.total_abonos_mes ?? "0")}</span>
+          <span>Abonos del mes</span>
+        </div>
+        <div className="tarjeta borde-verde">
+          <span className="cifra">{formatearMonto(moneda, resumen?.total_saldo ?? "0")}</span>
+          <span>Saldo por cobrar</span>
+        </div>
+      </div>
+
+      <AbonoClienteForm
+        mes={mes}
+        moneda={moneda}
+        clientes={clientes}
+        alCrear={() => {
+          alMensaje("Abono del Cliente registrado.");
+          alCambiar();
+        }}
+      />
+
+      <h3>Cartera por Cliente receptor</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Cliente</th>
+            <th>Agente retención</th>
+            <th className="num">Compras mes</th>
+            <th className="num">Saldo anterior</th>
+            <th className="num">Abonos mes</th>
+            <th className="num">Saldo total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {resumen?.filas.map((fila) => (
+            <tr key={fila.cliente_id}>
+              <td>{fila.ruc} · {fila.razon_social}</td>
+              <td>
+                <input
+                  type="checkbox"
+                  checked={fila.agente_retencion}
+                  onChange={async (e) => {
+                    await enviarJson<boolean>(
+                      `/api/v1/pagos/clientes/${fila.cliente_id}/agente-retencion`,
+                      "PATCH",
+                      { agente_retencion: e.target.checked },
+                    );
+                    alCambiar();
+                  }}
+                />
+              </td>
+              <td className="num">{formatearMonto(fila.moneda, fila.compras_mes)}</td>
+              <td className="num">{formatearMonto(fila.moneda, fila.saldo_anterior)}</td>
+              <td className="num">{formatearMonto(fila.moneda, fila.abonos_mes)}</td>
+              <td className="num">{formatearMonto(fila.moneda, fila.saldo_total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+}
+
+function AbonoClienteForm({
+  mes,
+  moneda,
+  clientes,
+  alCrear,
+}: {
+  mes: string;
+  moneda: "PEN" | "USD";
+  clientes: FiltroOpcion[];
+  alCrear: () => void;
+}) {
+  const [clienteId, setClienteId] = useState("");
+  const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10));
+  const [monto, setMonto] = useState("");
+  const [referencia, setReferencia] = useState("");
+  const [descripcion, setDescripcion] = useState("");
+
+  const enviar = async (e: FormEvent) => {
+    e.preventDefault();
+    await enviarJson<AbonoClienteERP>("/api/v1/pagos/clientes/abonos", "POST", {
+      cliente_id: clienteId,
+      fecha,
+      moneda,
+      monto,
+      referencia: referencia || null,
+      descripcion: descripcion || null,
+    });
+    setMonto("");
+    setReferencia("");
+    setDescripcion("");
+    alCrear();
+  };
+
+  return (
+    <section>
+      <h3>Registrar abono de Cliente</h3>
+      <p className="tenue">Vista actual: {mes} · {moneda}</p>
+      <form onSubmit={enviar} className="formulario-linea">
+        <select value={clienteId} onChange={(e) => setClienteId(e.target.value)} required>
+          <option value="">Cliente</option>
+          {clientes.map((c) => (
+            <option key={c.id} value={c.id}>{c.codigo} · {c.nombre}</option>
+          ))}
+        </select>
+        <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} required />
+        <input
+          type="number"
+          min="0.01"
+          step="0.01"
+          placeholder="Monto"
+          value={monto}
+          onChange={(e) => setMonto(e.target.value)}
+          required
+        />
+        <input
+          placeholder="Referencia"
+          value={referencia}
+          onChange={(e) => setReferencia(e.target.value)}
+        />
+        <input
+          placeholder="Descripción"
+          value={descripcion}
+          onChange={(e) => setDescripcion(e.target.value)}
+        />
+        <button type="submit">Registrar abono</button>
+      </form>
+    </section>
+  );
+}
+
+function Liquidaciones({
+  pagos,
+  planes,
+  adelantos,
+  sesion,
+  nombreUsuario,
+  alCambiar,
+}: {
+  pagos: PagoERP[];
+  planes: PlanLiquidacion[];
+  adelantos: AdelantoERP[];
+  sesion: SesionActual;
+  nombreUsuario: (id: string) => string;
+  alCambiar: () => void;
+}) {
+  return (
+    <>
       <h3>Pagos programados</h3>
       <div className="tabla-responsive">
         <table>
@@ -86,7 +693,7 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
             </tr>
           </thead>
           <tbody>
-            {pagos.datos?.map((pago) => (
+            {pagos.map((pago) => (
               <tr key={pago.id}>
                 <td>{nombreUsuario(pago.usuario_id)}</td>
                 <td>{formatearFecha(pago.periodo_desde)} – {formatearFecha(pago.periodo_hasta)}</td>
@@ -99,7 +706,7 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
                 <td className="num">{formatearMonto(pago.moneda, pago.saldo)}</td>
                 <td>{pago.estado}</td>
                 <td>
-                  <AccionesPago pago={pago} sesion={sesion} alCambiar={pagos.recargar} />
+                  <AccionesPago pago={pago} sesion={sesion} alCambiar={alCambiar} />
                 </td>
               </tr>
             ))}
@@ -113,7 +720,7 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
           <table>
             <thead><tr><th>Usuario</th><th>Plan</th><th>%</th><th>Desde</th></tr></thead>
             <tbody>
-              {planes.datos?.map((p) => (
+              {planes.map((p) => (
                 <tr key={p.id}>
                   <td>{nombreUsuario(p.usuario_id)}</td>
                   <td>{p.nombre}</td>
@@ -130,7 +737,7 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
           <table>
             <thead><tr><th>Usuario</th><th>Fecha</th><th>Monto</th><th>Aplicado</th></tr></thead>
             <tbody>
-              {adelantos.datos?.map((a) => (
+              {adelantos.map((a) => (
                 <tr key={a.id}>
                   <td>{nombreUsuario(a.usuario_id)}</td>
                   <td>{formatearFecha(a.fecha)}</td>
@@ -146,9 +753,17 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
   );
 }
 
-function PlanForm({ usuarioId, alCrear }: { usuarioId: string; alCrear: () => void }) {
+function PlanForm({
+  usuarioId,
+  porcentajeInicial,
+  alCrear,
+}: {
+  usuarioId: string;
+  porcentajeInicial: string;
+  alCrear: () => void;
+}) {
   const [nombre, setNombre] = useState("Plan base");
-  const [porcentaje, setPorcentaje] = useState("1.5");
+  const [porcentaje, setPorcentaje] = useState(porcentajeInicial);
   const [desde, setDesde] = useState(new Date().toISOString().slice(0, 10));
 
   const enviar = async (e: FormEvent) => {
@@ -166,6 +781,7 @@ function PlanForm({ usuarioId, alCrear }: { usuarioId: string; alCrear: () => vo
   return (
     <section>
       <h3>Plan de liquidación</h3>
+      <p className="tenue">Precargado desde el porcentaje predeterminado del Usuario.</p>
       <form onSubmit={enviar} className="formulario-pagos">
         <input value={nombre} onChange={(e) => setNombre(e.target.value)} required />
         <input
