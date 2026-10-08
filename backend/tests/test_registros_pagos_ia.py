@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Documento, PerfilExtraccion
+from app.models import Documento, Expediente, Gestor, PerfilExtraccion
 from app.services.aprendizaje_documental import (
     aplicar_perfiles_aprendidos,
     registrar_correccion_y_aprender,
@@ -350,3 +350,113 @@ def test_no_elimina_programacion_que_aplico_adelantos(
 
     eliminado = client.delete(f"/api/v1/pagos/{pago.json()['id']}")
     assert eliminado.status_code == 409
+
+
+def test_registros_totalizan_por_receptor_dia_y_mes(client: TestClient) -> None:
+    casos = [
+        ("F001-00000101", "100.00", "2026-09-10", "20100000001"),
+        ("F001-00000102", "200.00", "2026-09-10", "20100000002"),
+        ("F001-00000103", "300.00", "2026-10-01", "20100000001"),
+    ]
+    for numero, importe, fecha, receptor in casos:
+        respuesta = client.post(
+            "/api/v1/documentos",
+            files={
+                "archivo": (
+                    numero + ".xml",
+                    factura(
+                        numero=numero,
+                        importe=importe,
+                        fecha=fecha,
+                        receptor=receptor,
+                    ),
+                )
+            },
+        )
+        assert respuesta.status_code == 201, respuesta.text
+
+    por_dia = client.get("/api/v1/registros", params={"dia": "2026-09-10"})
+    assert por_dia.status_code == 200, por_dia.text
+    assert por_dia.json()["total_registros"] == 2
+    assert Decimal(por_dia.json()["total_pen"]) == Decimal("300.00")
+
+    por_mes = client.get("/api/v1/registros", params={"mes": "2026-09"})
+    assert por_mes.status_code == 200, por_mes.text
+    assert por_mes.json()["total_registros"] == 2
+    assert Decimal(por_mes.json()["total_pen"]) == Decimal("300.00")
+
+    por_receptor = client.get(
+        "/api/v1/registros",
+        params={"receptor": "20100000001"},
+    )
+    assert por_receptor.status_code == 200, por_receptor.text
+    assert por_receptor.json()["total_registros"] == 2
+    assert Decimal(por_receptor.json()["total_pen"]) == Decimal("400.00")
+
+
+def test_filtros_jerarquicos_por_rol(
+    client: TestClient,
+    session: Session,
+    auth_prueba: AuthPrueba,
+) -> None:
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+
+    documento = _subir_factura(client, "F001-00000104", "500.00")
+    expediente = session.get(Expediente, documento["expediente_id"])
+    assert expediente is not None
+
+    gestor = Gestor(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="GEST-FILTRO",
+        nombre="Gestor filtro",
+        usuario_id=usuario_id,
+        creado_por_cuenta_id=None,
+    )
+    session.add(gestor)
+    session.flush()
+    expediente.gestor_id = gestor.id
+    session.commit()
+
+    auth_prueba.como_gerente()
+    opciones = client.get("/api/v1/registros/opciones")
+    assert opciones.status_code == 200, opciones.text
+    assert any(item["id"] == str(usuario_id) for item in opciones.json()["usuarios"])
+    gestor_opcion = next(
+        item for item in opciones.json()["gestores"] if item["id"] == str(gestor.id)
+    )
+    assert gestor_opcion["usuario_id"] == str(usuario_id)
+
+    filtrado_gerencia = client.get(
+        "/api/v1/registros",
+        params={
+            "usuario_id": str(usuario_id),
+            "gestor_id": str(gestor.id),
+        },
+    )
+    assert filtrado_gerencia.status_code == 200, filtrado_gerencia.text
+    assert filtrado_gerencia.json()["total_registros"] == 1
+    assert Decimal(filtrado_gerencia.json()["total_pen"]) == Decimal("500.00")
+
+    auth_prueba.como_usuario(usuario_id)
+    opciones_usuario = client.get("/api/v1/registros/opciones")
+    assert opciones_usuario.status_code == 200, opciones_usuario.text
+    assert opciones_usuario.json()["usuarios"] == []
+    assert [item["id"] for item in opciones_usuario.json()["gestores"]] == [str(gestor.id)]
+
+    filtrado_usuario = client.get(
+        "/api/v1/registros",
+        params={"gestor_id": str(gestor.id)},
+    )
+    assert filtrado_usuario.status_code == 200, filtrado_usuario.text
+    assert filtrado_usuario.json()["total_registros"] == 1
+
+    auth_prueba.como_gestor(gestor.id, usuario_id)
+    propio = client.get("/api/v1/registros")
+    assert propio.status_code == 200, propio.text
+    assert propio.json()["total_registros"] == 1
+    intento_cambiar = client.get(
+        "/api/v1/registros",
+        params={"gestor_id": str(gestor.id)},
+    )
+    assert intento_cambiar.status_code == 403
