@@ -93,6 +93,7 @@ def listar(
     gestor_id: uuid.UUID | None = None,
     emisor: Annotated[str | None, Query(max_length=100)] = None,
     receptor: Annotated[str | None, Query(max_length=100)] = None,
+    dia: date | None = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
     mes: Annotated[str | None, Query(pattern=r"^\d{4}-\d{2}$")] = None,
@@ -156,6 +157,8 @@ def listar(
             (func.lower(receptor_empresa.ruc).contains(texto_receptor, autoescape=True))
             | (func.lower(receptor_empresa.razon_social).contains(texto_receptor, autoescape=True))
         )
+    if dia:
+        consulta = consulta.where(Expediente.fecha_emision == dia)
     if fecha_desde:
         consulta = consulta.where(Expediente.fecha_emision >= fecha_desde)
     if fecha_hasta:
