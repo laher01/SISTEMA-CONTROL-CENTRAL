@@ -1,5 +1,10 @@
-from fastapi.testclient import TestClient
+from datetime import date
+from decimal import Decimal
 
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from app.models import CuentaAcceso, CuentaPagoERP, Miembro, PlanLiquidacion
 from tests.conftest import AuthPrueba
 
 
@@ -108,3 +113,100 @@ def test_no_permite_desactivar_aprobacion_sin_verificacion_email(
         json=configuracion_payload(registro_publico=True, requiere_aprobacion=False),
     )
     assert respuesta.status_code == 409
+
+
+def test_mantenimiento_es_exclusivo_de_superadmin(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
+    auth_prueba.como_admin()
+    respuesta = client.get("/api/v1/configuracion/mantenimiento/administradores")
+    assert respuesta.status_code == 403
+
+
+def test_superadmin_previsualiza_y_limpia_por_administrador(
+    client: TestClient,
+    session: Session,
+    auth_prueba: AuthPrueba,
+) -> None:
+    tenant_id = auth_prueba.contexto.tenant_id
+    administrador = Miembro(
+        tenant_id=tenant_id,
+        codigo="ADMIN02",
+        nombre="Administrador dos",
+        rol="ADMINISTRADOR",
+        activo=True,
+    )
+    usuario = Miembro(
+        tenant_id=tenant_id,
+        codigo="USR-MANT",
+        nombre="Usuario mantenimiento",
+        rol="USUARIO",
+        activo=True,
+    )
+    session.add_all([administrador, usuario])
+    session.flush()
+    cuenta = CuentaAcceso(
+        tenant_id=tenant_id,
+        login="ADMIN02",
+        password_hash="test-hash",
+        miembro_id=administrador.id,
+        gestor_id=None,
+        activo=True,
+        cambio_clave_obligatorio=False,
+    )
+    session.add(cuenta)
+    session.flush()
+    plan = PlanLiquidacion(
+        tenant_id=tenant_id,
+        usuario_id=usuario.id,
+        creado_por_cuenta_id=cuenta.id,
+        nombre="Plan de prueba",
+        porcentaje=Decimal("2.2"),
+        vigencia_desde=date(2026, 10, 1),
+        vigencia_hasta=None,
+        activo=True,
+    )
+    cuenta_pago = CuentaPagoERP(
+        tenant_id=tenant_id,
+        usuario_id=usuario.id,
+        creado_por_cuenta_id=cuenta.id,
+        titular="Usuario mantenimiento",
+        banco="Banco prueba",
+        tipo_cuenta="AHORROS",
+        moneda="PEN",
+        numero_cuenta="123",
+        cci=None,
+        porcentaje_distribucion=Decimal("100"),
+        activa=True,
+    )
+    session.add_all([plan, cuenta_pago])
+    session.commit()
+
+    auth_prueba.como_superadmin()
+    listado = client.get("/api/v1/configuracion/mantenimiento/administradores")
+    assert listado.status_code == 200, listado.text
+    fila = next(item for item in listado.json() if item["login"] == "ADMIN02")
+    assert fila["registros"]["planes"] == 1
+    assert fila["registros"]["cuentas_pago"] == 1
+
+    seleccion = {
+        "cuenta_ids": [str(cuenta.id)],
+        "incluir_sin_trazabilidad": False,
+        "tipos": ["planes", "cuentas_pago"],
+        "fecha_desde": None,
+        "fecha_hasta": None,
+    }
+    previa = client.post(
+        "/api/v1/configuracion/mantenimiento/vista-previa",
+        json=seleccion,
+    )
+    assert previa.status_code == 200, previa.text
+    assert previa.json()["totales"] == {"planes": 1, "cuentas_pago": 1}
+
+    limpieza = client.post(
+        "/api/v1/configuracion/mantenimiento/limpiar",
+        json={**seleccion, "confirmacion": "ELIMINAR-DATOS-OPERATIVOS"},
+    )
+    assert limpieza.status_code == 200, limpieza.text
+    assert limpieza.json()["eliminados"] == {"planes": 1, "cuentas_pago": 1}
