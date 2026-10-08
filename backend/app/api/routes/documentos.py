@@ -40,8 +40,8 @@ from app.services.automatizacion_documental import (
 from app.services.expedientes import actualizar_expediente, buscar_expediente
 from app.services.ingesta import (
     ArchivoSubido,
-    DocumentoDuplicado,
     ComprobanteYaRegistrado,
+    DocumentoDuplicado,
     ExpedienteNoEncontrado,
     crear_expediente,
     ingerir_documento,
