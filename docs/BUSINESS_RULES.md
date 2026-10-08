@@ -595,3 +595,131 @@ Cuando una Empresa Receptora sea Agente de Retención, el sistema deberá mostra
 
 ```text
 AGENTE DE RETENCIÓN
+
+
+---
+
+# CAPÍTULO 12
+## Pedidos de Gerencia, Cobros y Liquidaciones ERP
+
+### Regla 61 — Separación económica
+
+FACT CENTRAL distinguirá siempre tres conceptos independientes:
+
+1. Pedido de Gerencia: objetivo mensual de compra solicitado para un Cliente.
+2. Cobro de Cliente: deuda económica real derivada de Expedientes ejecutados menos abonos.
+3. Liquidación de Usuario: comisión o pago derivado de la producción real atribuida a sus Gestores.
+
+Ninguno de estos saldos podrá sustituir o confundirse con los otros.
+
+### Regla 62 — Pedido de Gerencia
+
+Cada Pedido de Gerencia estará asociado a:
+
+- Tenant;
+- Cliente receptor;
+- mes;
+- moneda;
+- monto solicitado;
+- modalidad;
+- modo de distribución;
+- estado;
+- observación.
+
+Para un mismo Cliente, mes y moneda existirá un único Pedido vigente en la versión operativa actual.
+
+### Regla 63 — Ejecución real del Pedido
+
+El monto ejecutado de un Pedido se calculará exclusivamente desde Expedientes reales cuyo Receptor, mes y moneda coincidan con el Pedido.
+
+Una asignación manual o automática no genera producción por sí misma.
+
+### Regla 64 — Distribución
+
+Un Pedido podrá distribuirse por:
+
+- Usuario;
+- Gestor;
+- Proveedor.
+
+Los modos iniciales son:
+
+- MANUAL;
+- SEMIASISTIDA;
+- AUTOMATICA.
+
+La distribución automática inicial podrá proponer montos, pero Administración o Gerencia conservarán capacidad de revisión y corrección.
+
+### Regla 65 — Seguimiento
+
+Cada Pedido deberá mostrar como mínimo:
+
+- monto solicitado;
+- monto asignado;
+- monto ejecutado;
+- saldo pendiente;
+- exceso;
+- porcentaje de avance;
+- concentración máxima por Proveedor;
+- estado.
+
+### Regla 66 — Concentración
+
+FACT CENTRAL calculará la concentración de compra por Proveedor dentro de cada Pedido.
+
+NEXUS podrá advertir sobre concentraciones elevadas, pero no modificará asignaciones críticas sin aprobación humana.
+
+### Regla 67 — Cartera de Clientes
+
+El saldo por cobrar de un Cliente se calculará así:
+
+Compras reales acumuladas
+menos
+Abonos registrados
+igual
+Saldo por cobrar.
+
+La vista mensual deberá separar:
+
+- compras del mes;
+- saldo anterior;
+- abonos del mes;
+- saldo acumulado.
+
+### Regla 68 — Agente de retención
+
+La condición Agente de Retención pertenece a la Empresa Cliente dentro del Tenant.
+
+Un cambio realizado desde Pagos actualizará el mismo registro maestro de Empresa y será visible para todo el Tenant.
+
+### Regla 69 — Producción del Usuario
+
+La producción del Usuario se obtiene exclusivamente de Expedientes atribuidos a ese Usuario y a sus Gestores.
+
+No depende del monto solicitado por Gerencia.
+
+### Regla 70 — Porcentaje predeterminado
+
+Cada Usuario podrá tener un porcentaje de producción predeterminado.
+
+Al crear un Plan de Liquidación, FACT CENTRAL precargará ese porcentaje.
+
+Administración podrá modificarlo antes de crear el Plan vigente.
+
+Los cambios de porcentaje no alterarán silenciosamente liquidaciones ya cerradas.
+
+### Regla 71 — Acceso
+
+El módulo Pagos ERP será visible únicamente para:
+
+- SUPERADMIN;
+- ADMINISTRADOR;
+- GERENTE.
+
+Gestores, Usuarios y Secretaría no accederán a la operación de Pagos ERP.
+
+### Regla 72 — Fuente de verdad
+
+PostgreSQL y los Expedientes procesados son la fuente de verdad económica.
+
+NEXUS analiza y recomienda, pero no confirma pagos, no altera Pedidos cerrados y no cambia reglas críticas sin autorización.
