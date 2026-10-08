@@ -511,6 +511,10 @@ class AbonoClienteERPOut(Orm):
     created_at: datetime
 
 
+class AgenteRetencionIn(BaseModel):
+    agente_retencion: bool
+
+
 class PagoERPProgramarIn(BaseModel):
     usuario_id: uuid.UUID
     periodo_desde: date
