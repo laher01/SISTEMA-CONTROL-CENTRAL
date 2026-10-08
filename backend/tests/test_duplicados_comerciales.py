@@ -25,8 +25,18 @@ def test_otro_gestor_no_recibe_datos_privados(
 ) -> None:
     user_id = auth_prueba.contexto.usuario_id
     assert user_id is not None
-    a = Gestor(tenant_id=auth_prueba.contexto.tenant_id, codigo="GESTA", nombre="Gestor A", usuario_id=user_id)
-    b = Gestor(tenant_id=auth_prueba.contexto.tenant_id, codigo="GESTB", nombre="Gestor B", usuario_id=user_id)
+    a = Gestor(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="GESTA",
+        nombre="Gestor A",
+        usuario_id=user_id,
+    )
+    b = Gestor(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="GESTB",
+        nombre="Gestor B",
+        usuario_id=user_id,
+    )
     session.add_all([a, b])
     session.commit()
     auth_prueba.como_gestor(a.id, user_id)
