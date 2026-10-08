@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
@@ -27,11 +28,6 @@ def crear(
     datos: MiembroIn,
 ) -> AltaMiembroOut:
     _solo_admin(auth.rol)
-    if datos.rol == RolMiembro.USUARIO and datos.porcentaje_produccion is None:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "Todo Usuario debe tener un porcentaje de producción predeterminado",
-        )
     if datos.rol == RolMiembro.SUPERADMIN and auth.rol != RolMiembro.SUPERADMIN:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
@@ -43,7 +39,9 @@ def crear(
         nombre=datos.nombre.strip(),
         rol=datos.rol,
         porcentaje_produccion=(
-            datos.porcentaje_produccion if datos.rol == RolMiembro.USUARIO else None
+            (datos.porcentaje_produccion or Decimal("1.5000"))
+            if datos.rol == RolMiembro.USUARIO
+            else None
         ),
         creado_por_cuenta_id=auth.cuenta_id,
     )
@@ -133,18 +131,6 @@ def actualizar(
                 "Reasigne los gestores antes de cambiar el rol o desactivar al Usuario",
             )
 
-    rol_final = datos.rol or miembro.rol
-    porcentaje_final = (
-        datos.porcentaje_produccion
-        if "porcentaje_produccion" in datos.model_fields_set
-        else miembro.porcentaje_produccion
-    )
-    if rol_final == RolMiembro.USUARIO and porcentaje_final is None:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "Todo Usuario debe tener un porcentaje de producción predeterminado",
-        )
-
     try:
         if datos.codigo is not None:
             actualizar_login_cuenta(
@@ -164,7 +150,9 @@ def actualizar(
                 if (datos.rol or miembro.rol) == RolMiembro.USUARIO
                 else None
             )
-        if miembro.rol != RolMiembro.USUARIO:
+        if miembro.rol == RolMiembro.USUARIO and miembro.porcentaje_produccion is None:
+            miembro.porcentaje_produccion = Decimal("1.5000")
+        elif miembro.rol != RolMiembro.USUARIO:
             miembro.porcentaje_produccion = None
         if datos.activo is not None:
             miembro.activo = datos.activo
