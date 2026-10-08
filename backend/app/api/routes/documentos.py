@@ -25,6 +25,7 @@ from app.schemas import (
     ProcesamientoLoteOut,
     RelacionSugeridaOut,
 )
+from app.security import cuenta_administradora_responsable
 from app.services import auditoria
 from app.services.aprendizaje_documental import (
     aplicar_perfiles_aprendidos,
@@ -49,7 +50,6 @@ from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 from app.services.relaciones_documentales import sugerir_relaciones
 from app.services.ubl import UblInvalido
-from app.security import cuenta_administradora_responsable
 from app.storage import AlmacenLocal
 
 router = APIRouter(prefix="/documentos", tags=["documentos"])
