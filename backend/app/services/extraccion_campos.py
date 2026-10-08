@@ -746,8 +746,10 @@ def _razon_emisor_rhe(texto: str, ruc: str) -> tuple[str, str] | None:
 
         # El texto PDF también puede reordenar visualmente el encabezado.
         # Buscamos alrededor del RUC saltando etiquetas, serie, dirección y teléfono.
-        indices = list(range(indice - 1, max(-1, indice - 5), -1))
-        indices += list(range(indice + 1, min(len(lineas), indice + 7)))
+        # Preferimos líneas posteriores: en algunos PDF SUNAT el orden extraído es
+        # RUC -> serie -> nombre, aunque visualmente el nombre esté arriba.
+        indices = list(range(indice + 1, min(len(lineas), indice + 7)))
+        indices += list(range(indice - 1, max(-1, indice - 5), -1))
         for posicion in indices:
             if posicion < 0 or posicion >= len(lineas):
                 continue
@@ -757,7 +759,14 @@ def _razon_emisor_rhe(texto: str, ruc: str) -> tuple[str, str] | None:
                 continue
             if re.fullmatch(r"(?:NRO\.?|R\.?U\.?C\.?|E\d{3}\s*[-–—]?\s*\d+)", normal):
                 continue
-            if re.match(r"^(?:TELEFONO|RECIBO POR HONORARIOS|ELECTRONICO)\b", normal):
+            if re.match(
+                r"^(?:TELEFONO|RECIBO POR HONORARIOS|ELECTRONICO|RETENCION|"
+                r"TOTAL|LA SUMA|OBSERVACION|INCISO|IDENTIFICADO|RECIBI DE|"
+                r"POR CONCEPTO|FECHA DE EMISION|NUMERO|DOMICILIADO|FORMA DE PAGO)\b",
+                normal,
+            ):
+                continue
+            if normal in {"A", "SOLES", "DE DEL"}:
                 continue
             if _razon_social_valida(candidato) and not _parece_direccion(candidato):
                 evidencia = " ".join(
