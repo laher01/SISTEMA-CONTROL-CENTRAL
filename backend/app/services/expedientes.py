@@ -35,9 +35,8 @@ def obtener_o_crear_empresa(
         actual = empresa.razon_social.strip()
         actual_compacto = "".join(ch for ch in actual.upper() if ch.isalnum())
         if (
-            (actual == empresa.ruc or actual_compacto in {"RUC", "NRO"})
-            and razon_social.strip() != ruc
-        ):
+            actual == empresa.ruc or actual_compacto in {"RUC", "NRO"}
+        ) and razon_social.strip() != ruc:
             empresa.razon_social = razon_social.strip()[:300]
         session.flush()
     return empresa
