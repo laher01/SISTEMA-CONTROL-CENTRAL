@@ -413,3 +413,21 @@ export interface SesionAccesoAdmin {
   ultima_actividad: string;
   revocada_at: string | null;
 }
+
+
+export interface MantenimientoAdministrador {
+  cuenta_id: string | null;
+  login: string;
+  rol: string;
+  registros: Record<string, number>;
+}
+
+export interface MantenimientoVistaPrevia {
+  administradores: MantenimientoAdministrador[];
+  totales: Record<string, number>;
+}
+
+export interface MantenimientoResultado {
+  eliminados: Record<string, number>;
+  archivos_eliminados: number;
+}
