@@ -82,6 +82,9 @@ class Miembro(ConId, ConTenant, ConCreacion, Base):
     codigo: Mapped[str] = mapped_column(String(50))
     nombre: Mapped[str] = mapped_column(String(200))
     rol: Mapped[str] = mapped_column(String(20), index=True)
+    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_acceso.id"), index=True
+    )
     activo: Mapped[bool] = mapped_column(default=True, server_default="true")
     deleted_at: Mapped[datetime | None]
 
