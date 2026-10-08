@@ -53,6 +53,16 @@ def upgrade() -> None:
         ["modo_distribucion"],
     )
     op.create_index(op.f("ix_pedidos_gerencia_estado"), "pedidos_gerencia", ["estado"])
+    op.create_index(
+        op.f("ix_pedidos_gerencia_creado_por_cuenta_id"),
+        "pedidos_gerencia",
+        ["creado_por_cuenta_id"],
+    )
+    op.create_index(
+        op.f("ix_pedidos_gerencia_tenant_id"),
+        "pedidos_gerencia",
+        ["tenant_id"],
+    )
 
     op.create_table(
         "asignaciones_pedido_gerencia",
@@ -98,9 +108,27 @@ def upgrade() -> None:
         "asignaciones_pedido_gerencia",
         ["proveedor_id"],
     )
+    op.create_index(
+        op.f("ix_asignaciones_pedido_gerencia_creado_por_cuenta_id"),
+        "asignaciones_pedido_gerencia",
+        ["creado_por_cuenta_id"],
+    )
+    op.create_index(
+        op.f("ix_asignaciones_pedido_gerencia_tenant_id"),
+        "asignaciones_pedido_gerencia",
+        ["tenant_id"],
+    )
 
 
 def downgrade() -> None:
+    op.drop_index(
+        op.f("ix_asignaciones_pedido_gerencia_tenant_id"),
+        table_name="asignaciones_pedido_gerencia",
+    )
+    op.drop_index(
+        op.f("ix_asignaciones_pedido_gerencia_creado_por_cuenta_id"),
+        table_name="asignaciones_pedido_gerencia",
+    )
     op.drop_index(
         op.f("ix_asignaciones_pedido_gerencia_proveedor_id"),
         table_name="asignaciones_pedido_gerencia",
@@ -119,6 +147,11 @@ def downgrade() -> None:
     )
     op.drop_table("asignaciones_pedido_gerencia")
 
+    op.drop_index(op.f("ix_pedidos_gerencia_tenant_id"), table_name="pedidos_gerencia")
+    op.drop_index(
+        op.f("ix_pedidos_gerencia_creado_por_cuenta_id"),
+        table_name="pedidos_gerencia",
+    )
     op.drop_index(op.f("ix_pedidos_gerencia_estado"), table_name="pedidos_gerencia")
     op.drop_index(
         op.f("ix_pedidos_gerencia_modo_distribucion"),
