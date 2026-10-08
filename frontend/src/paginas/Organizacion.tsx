@@ -14,7 +14,9 @@ import type {
 const ROLES: RolMiembro[] = ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO"];
 
 export default function Organizacion({ sesion }: { sesion: SesionActual }) {
-  if (sesion.rol === "ADMINISTRADOR") return <OrganizacionAdmin />;
+  if (sesion.rol === "SUPERADMIN" || sesion.rol === "ADMINISTRADOR") {
+    return <OrganizacionAdmin />;
+  }
   if (sesion.rol === "USUARIO") return <OrganizacionUsuario sesion={sesion} />;
   return <p>No tiene permiso para administrar la organización.</p>;
 }
