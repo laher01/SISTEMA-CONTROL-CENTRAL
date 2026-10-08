@@ -37,6 +37,9 @@ def crear(
         codigo=datos.codigo.strip().upper(),
         nombre=datos.nombre.strip(),
         rol=datos.rol,
+        porcentaje_produccion=(
+            datos.porcentaje_produccion if datos.rol == RolMiembro.USUARIO else None
+        ),
         creado_por_cuenta_id=auth.cuenta_id,
     )
     session.add(miembro)
@@ -138,6 +141,14 @@ def actualizar(
             miembro.nombre = datos.nombre.strip()
         if datos.rol is not None:
             miembro.rol = datos.rol
+        if "porcentaje_produccion" in datos.model_fields_set:
+            miembro.porcentaje_produccion = (
+                datos.porcentaje_produccion
+                if (datos.rol or miembro.rol) == RolMiembro.USUARIO
+                else None
+            )
+        if miembro.rol != RolMiembro.USUARIO:
+            miembro.porcentaje_produccion = None
         if datos.activo is not None:
             miembro.activo = datos.activo
         session.commit()
