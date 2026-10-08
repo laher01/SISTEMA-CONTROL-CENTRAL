@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
-from pypdf import PdfWriter
+from pypdf import PdfReader, PdfWriter
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -929,3 +929,86 @@ def test_no_permite_duplicar_ruc_al_editar_empresa(
         json={"ruc": destino["ruc"]},
     )
     assert respuesta.status_code == 409
+
+
+def test_empresas_clasifican_proveedor_cliente_y_usuario(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
+    subir(client, "clasificacion.xml", factura(numero="F001-00000920"))
+
+    respuesta = client.get("/api/v1/empresas")
+    assert respuesta.status_code == 200, respuesta.text
+    empresas = respuesta.json()
+    proveedor = next(item for item in empresas if item["ruc"] == "20500000002")
+    cliente = next(item for item in empresas if item["ruc"] == "20100000001")
+
+    assert proveedor["tipo_relacion"] == "PROVEEDOR"
+    assert cliente["tipo_relacion"] == "CLIENTE"
+    assert proveedor["clasificacion_proveedor"] is None
+    assert cliente["clasificacion_proveedor"] is None
+    assert [u["id"] for u in proveedor["usuarios"]] == [str(auth_prueba.contexto.usuario_id)]
+    assert [u["id"] for u in cliente["usuarios"]] == [str(auth_prueba.contexto.usuario_id)]
+
+    auth_prueba.como_admin()
+    actualizado = client.patch(
+        f"/api/v1/empresas/{proveedor['id']}",
+        json={"clasificacion_proveedor": "A"},
+    )
+    assert actualizado.status_code == 200, actualizado.text
+    assert actualizado.json()["clasificacion_proveedor"] == "A"
+
+    cliente_actualizado = client.patch(
+        f"/api/v1/empresas/{cliente['id']}",
+        json={"clasificacion_proveedor": "B"},
+    )
+    assert cliente_actualizado.status_code == 200, cliente_actualizado.text
+    assert cliente_actualizado.json()["clasificacion_proveedor"] is None
+
+
+def test_impresion_lote_consolida_pdfs_en_orden(
+    client: TestClient,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings.tenant_ruc = RECEPTOR
+    textos = iter(
+        [
+            """FACTURA ELECTRÓNICA F001-00000931
+RUC EMISOR: 20500000002 CLIENTE RUC: 20100000001
+Fecha de emisión: 17/09/2026 Moneda: SOLES TOTAL S/ 100.00""",
+            """FACTURA ELECTRÓNICA F001-00000932
+RUC EMISOR: 20500000002 CLIENTE RUC: 20100000001
+Fecha de emisión: 18/09/2026 Moneda: SOLES TOTAL S/ 200.00""",
+        ]
+    )
+
+    monkeypatch.setattr(
+        documentos_routes,
+        "procesar",
+        lambda *_: ResultadoProcesamiento(
+            texto=next(textos),
+            metodo="TEXTO_PDF",
+            motor="prueba",
+            paginas=1,
+            confianza=1.0,
+            sugerencia={"tipo": "FACT", "confianza": 0.99, "evidencias": ["prueba"]},
+        ),
+    )
+
+    primero = subir(client, "print-1.pdf", pdf_vacio() + b"uno")
+    segundo = subir(client, "print-2.pdf", pdf_vacio() + b"dos")
+    ids = [segundo["expediente_id"], primero["expediente_id"]]
+
+    respuesta = client.post(
+        "/api/v1/expedientes/imprimir-lote",
+        json={"expediente_ids": ids},
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.headers["content-type"].startswith("application/pdf")
+    assert respuesta.headers["x-expedientes-impresos"] == "2"
+    assert respuesta.headers["x-pdfs-impresos"] == "2"
+    assert respuesta.headers["x-expedientes-sin-pdf"] == "0"
+
+    pdf = PdfReader(io.BytesIO(respuesta.content))
+    assert len(pdf.pages) == 2
