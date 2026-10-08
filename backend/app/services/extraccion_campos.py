@@ -774,6 +774,8 @@ def _razon_emisor_rhe(texto: str, ruc: str) -> tuple[str, str] | None:
                 continue
             if re.fullmatch(r"(?:NRO\.?|R\.?U\.?C\.?|E\d{3}\s*[-–—]?\s*\d+)", normal):
                 continue
+            if re.match(r"^NRO\.?\s*[:\-]?\s*[A-Z]\d{3}\s*[-–—]?\s*\d+", normal):
+                continue
             if re.match(
                 r"^(?:TELEFONO|RECIBO POR HONORARIOS|ELECTRONICO|RETENCION|"
                 r"TOTAL|LA SUMA|OBSERVACION|INCISO|IDENTIFICADO|RECIBI DE|"
@@ -955,6 +957,8 @@ def _razon_social_valida(valor: str) -> bool:
     normalizado = _sin_tildes(valor).upper().strip()
     etiqueta_compacta = re.sub(r"[^A-Z0-9]+", "", normalizado)
     if etiqueta_compacta in {"RUC", "NRO", "NUMERO", "ELECTRONICO"}:
+        return False
+    if re.fullmatch(r"NRO[A-Z0-9]{4}\d{1,8}", etiqueta_compacta):
         return False
     if any(
         normalizado == invalido or normalizado.startswith(f"{invalido} ") for invalido in NO_RAZON
