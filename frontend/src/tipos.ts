@@ -344,6 +344,45 @@ export interface AbonoClienteERP {
 }
 
 
+export interface AsignacionPedidoGerencia {
+  id: string;
+  usuario_id: string;
+  usuario_codigo: string;
+  usuario_nombre: string;
+  gestor_id: string | null;
+  gestor_codigo: string | null;
+  gestor_nombre: string | null;
+  proveedor_id: string | null;
+  proveedor_ruc: string | null;
+  proveedor_razon_social: string | null;
+  monto_asignado: string;
+  ejecutado: string;
+  saldo: string;
+}
+
+export interface PedidoGerencia {
+  id: string;
+  cliente_id: string;
+  cliente_ruc: string;
+  cliente_razon_social: string;
+  periodo_mes: string;
+  moneda: Moneda;
+  monto_solicitado: string;
+  monto_asignado: string;
+  monto_ejecutado: string;
+  saldo_pendiente: string;
+  exceso: string;
+  avance_porcentaje: string;
+  modalidad: "SIN_RESTRICCION" | "POR_PEDIDO";
+  modo_distribucion: "MANUAL" | "SEMIASISTIDA" | "AUTOMATICA";
+  estado: "ACTIVO" | "CERRADO" | "CANCELADO";
+  observacion: string | null;
+  concentracion_maxima_proveedor: string;
+  proveedor_mayor_concentracion: string | null;
+  asignaciones: AsignacionPedidoGerencia[];
+}
+
+
 export interface PagoERP {
   id: string;
   usuario_id: string;
