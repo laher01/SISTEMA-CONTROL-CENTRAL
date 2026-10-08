@@ -163,8 +163,12 @@ def crear_expediente(
     usuario_id: uuid.UUID | None = None,
     creado_por_cuenta_id: uuid.UUID | None = None,
 ) -> Expediente:
-    empresa_receptora = obtener_o_crear_empresa(session, tenant_id, *receptor)
-    empresa_emisora = obtener_o_crear_empresa(session, tenant_id, *emisor)
+    empresa_receptora = obtener_o_crear_empresa(
+        session, tenant_id, *receptor, tipo_relacion="CLIENTE"
+    )
+    empresa_emisora = obtener_o_crear_empresa(
+        session, tenant_id, *emisor, tipo_relacion="PROVEEDOR"
+    )
     usuario_id = usuario_id or _usuario_de_gestor(session, tenant_id, gestor_id)
     expediente = Expediente(
         tenant_id=tenant_id,
@@ -216,10 +220,18 @@ def _expediente_para_comprobante(
         if comprobante.moneda is None or comprobante.importe_total is None:
             return None
         receptor = obtener_o_crear_empresa(
-            session, tenant_id, comprobante.receptor.ruc, comprobante.receptor.razon_social
+            session,
+            tenant_id,
+            comprobante.receptor.ruc,
+            comprobante.receptor.razon_social,
+            tipo_relacion="CLIENTE",
         )
         emisor = obtener_o_crear_empresa(
-            session, tenant_id, comprobante.emisor.ruc, comprobante.emisor.razon_social
+            session,
+            tenant_id,
+            comprobante.emisor.ruc,
+            comprobante.emisor.razon_social,
+            tipo_relacion="PROVEEDOR",
         )
         usuario_id = usuario_id or _usuario_de_gestor(session, tenant_id, gestor_id)
         expediente = Expediente(
