@@ -3,9 +3,8 @@ from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.conftest import AuthPrueba
-
 from app.services.distribucion_jonatan import TasasJonatan, calcular_distribucion_jonatan
+from tests.conftest import AuthPrueba
 
 
 def test_pago_sobre_pedido_manual_sin_alex() -> None:
