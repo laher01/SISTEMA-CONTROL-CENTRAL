@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import delete, func, select, update
@@ -274,7 +274,10 @@ def limpiar(
         if restantes:
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
-                "Hay expedientes seleccionados con documentos que no fueron incluidos en la limpieza",
+                (
+                    "Hay expedientes seleccionados con documentos que no fueron "
+                    "incluidos en la limpieza"
+                ),
             )
         if ids:
             session.execute(delete(Alerta).where(Alerta.expediente_id.in_(ids)))
