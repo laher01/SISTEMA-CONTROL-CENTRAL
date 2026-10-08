@@ -14,7 +14,7 @@ from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, Setti
 from app.api.errores import no_encontrado
 from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, RolMiembro, TipoDocumento
-from app.models import Documento, Empresa, Expediente, ahora
+from app.models import Documento, Empresa, Expediente, Gestor, Miembro, ahora
 from app.schemas import (
     DocumentoOut,
     DocumentoVincular,
@@ -41,6 +41,7 @@ from app.services.expedientes import actualizar_expediente, buscar_expediente
 from app.services.ingesta import (
     ArchivoSubido,
     DocumentoDuplicado,
+    ComprobanteYaRegistrado,
     ExpedienteNoEncontrado,
     crear_expediente,
     ingerir_documento,
@@ -56,12 +57,54 @@ router = APIRouter(prefix="/documentos", tags=["documentos"])
 _PROCESAMIENTO_LOCK = Lock()
 
 
-def _duplicado(documento_id: uuid.UUID) -> HTTPException:
-    return HTTPException(
-        status.HTTP_409_CONFLICT,
-        {"mensaje": "El archivo ya fue cargado", "documento_id": str(documento_id)},
-    )
+def _duplicado(
+    session: SessionDep,
+    auth: OperativeAuthDep,
+    documento_id: uuid.UUID,
+) -> HTTPException:
+    documento = session.get(Documento, documento_id)
+    detalle: dict[str, object] = {
+        "mensaje": "El archivo ya fue cargado en este administrador",
+        "duplicado": True,
+    }
+    if documento is not None and (
+        auth.rol in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.SECRETARIA)
+        or (auth.rol == RolMiembro.USUARIO and auth.usuario_id == documento.usuario_id)
+        or (auth.rol == "GESTOR" and auth.gestor_id == documento.gestor_id)
+    ):
+        detalle["documento_id"] = str(documento.id)
+    return HTTPException(status.HTTP_409_CONFLICT, detalle)
 
+
+def _comprobante_duplicado(
+    session: SessionDep,
+    auth: OperativeAuthDep,
+    expediente_id: uuid.UUID,
+) -> HTTPException:
+    expediente = session.get(Expediente, expediente_id)
+    if expediente is None:
+        return HTTPException(status.HTTP_409_CONFLICT, "Comprobante ya registrado")
+    detalles: dict[str, object] = {
+        "mensaje": "Esta factura ya fue registrada en este administrador. Coordine su revisión.",
+        "duplicado": True,
+    }
+    autorizado = (
+        auth.rol in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.SECRETARIA)
+        or (auth.rol == RolMiembro.USUARIO and expediente.usuario_id == auth.usuario_id)
+        or (auth.rol == "GESTOR" and expediente.gestor_id == auth.gestor_id)
+    )
+    if autorizado:
+        usuario = session.get(Miembro, expediente.usuario_id) if expediente.usuario_id else None
+        gestor = session.get(Gestor, expediente.gestor_id) if expediente.gestor_id else None
+        detalles["mensaje"] = (
+            f"Factura duplicada: {expediente.serie}-{expediente.correlativo}. "
+            f"Monto: {expediente.moneda} {expediente.importe_total}. "
+            f"Usuario: {usuario.nombre if usuario else 'Sin usuario'}. "
+            f"Gestor: {gestor.nombre if gestor else 'Sin gestor'}. "
+            f"Fecha de registro: {expediente.created_at.date().isoformat()}."
+        )
+        detalles["expediente_id"] = str(expediente.id)
+    return HTTPException(status.HTTP_409_CONFLICT, detalles)
 
 @router.post("", response_model=DocumentoOut, status_code=status.HTTP_201_CREATED)
 async def subir_documento(
@@ -149,7 +192,9 @@ async def subir_documento(
                 registrar_fallo(session, documento, str(exc))
         session.commit()
     except DocumentoDuplicado as exc:
-        raise _duplicado(exc.documento_id) from exc
+        raise _duplicado(session, auth, exc.documento_id) from exc
+    except ComprobanteYaRegistrado as exc:
+        raise _comprobante_duplicado(session, auth, exc.expediente_id) from exc
     except ExpedienteNoEncontrado as exc:
         raise no_encontrado("Expediente") from exc
     except UblInvalido as exc:
