@@ -223,6 +223,7 @@ export interface AltaGestor {
 
 
 export interface RegistroFila {
+  tipo_empresa: ClasificacionProveedor | null;
   expediente_id: string;
   estado: EstadoExpediente;
   usuario_id: string | null;
