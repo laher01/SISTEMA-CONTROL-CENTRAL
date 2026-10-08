@@ -2,6 +2,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import exists, or_, select
+from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado
@@ -60,16 +61,40 @@ def actualizar(
     empresa = session.get(Empresa, empresa_id)
     if empresa is None or empresa.tenant_id != tenant_id or empresa.deleted_at:
         raise no_encontrado("Empresa")
+    anterior = {
+        "ruc": empresa.ruc,
+        "razon_social": empresa.razon_social,
+        "autorizada": empresa.autorizada,
+        "agente_retencion": empresa.agente_retencion,
+    }
+
+    if datos.ruc is not None:
+        empresa.ruc = datos.ruc.strip()
     if datos.razon_social is not None:
-        empresa.razon_social = datos.razon_social
+        empresa.razon_social = datos.razon_social.strip()
     if datos.autorizada is not None:
         empresa.autorizada = datos.autorizada
     if datos.agente_retencion is not None:
         empresa.agente_retencion = datos.agente_retencion
+
     cambios: dict[str, object] = datos.model_dump(exclude_unset=True, exclude_none=True)
-    auditoria.registrar(session, tenant_id, "EMPRESA_ACTUALIZADA", "empresa", empresa.id, cambios)
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "EMPRESA_ACTUALIZADA",
+        "empresa",
+        empresa.id,
+        {"anterior": anterior, "nuevo": cambios, "actor": auth.codigo},
+    )
     recalcular_expedientes(session, tenant_id, hoy, settings, receptor_id=empresa.id)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Ya existe una empresa registrada con ese RUC",
+        ) from exc
     return empresa
 
 
