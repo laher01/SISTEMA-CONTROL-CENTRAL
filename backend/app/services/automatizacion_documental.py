@@ -181,8 +181,20 @@ def aplicar_automaticamente(
     razon_receptor = campos.get("razon_social_receptor", "").strip()
     if not razon_social_confiable(razon_receptor):
         razon_receptor = receptor_ruc
-    obtener_o_crear_empresa(session, documento.tenant_id, emisor_ruc, razon_emisor)
-    obtener_o_crear_empresa(session, documento.tenant_id, receptor_ruc, razon_receptor)
+    obtener_o_crear_empresa(
+        session,
+        documento.tenant_id,
+        emisor_ruc,
+        razon_emisor,
+        tipo_relacion="PROVEEDOR",
+    )
+    obtener_o_crear_empresa(
+        session,
+        documento.tenant_id,
+        receptor_ruc,
+        razon_receptor,
+        tipo_relacion="CLIENTE",
+    )
 
     expediente = buscar_expediente(
         session,
