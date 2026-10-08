@@ -1,6 +1,8 @@
+import json
 import re
 import tempfile
 import uuid
+import zipfile
 from datetime import date
 from pathlib import Path
 from typing import Annotated, Literal
@@ -380,6 +382,109 @@ def imprimir_lote(
             "X-Pdfs-Impresos": str(pdfs_incluidos),
             "X-Expedientes-Sin-Pdf": str(expedientes_sin_pdf),
         },
+        background=BackgroundTask(_borrar_temporal, ruta_temporal),
+    )
+
+
+@router.get("/{expediente_id}/descargar-zip")
+def descargar_zip(
+    expediente_id: uuid.UUID,
+    session: SessionDep,
+    almacen: AlmacenDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> FileResponse:
+    """Entrega todos los originales de un expediente autorizado con manifiesto."""
+    expediente = session.get(Expediente, expediente_id)
+    if (
+        expediente is None
+        or expediente.tenant_id != tenant_id
+        or expediente.deleted_at is not None
+        or not _visible_para_auth(expediente, auth)
+    ):
+        raise no_encontrado("Expediente")
+
+    documentos = list(
+        session.scalars(
+            select(Documento)
+            .where(
+                Documento.tenant_id == tenant_id,
+                Documento.expediente_id == expediente_id,
+                Documento.deleted_at.is_(None),
+            )
+            .order_by(Documento.created_at, Documento.id)
+        )
+    )
+    if not documentos:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "El expediente no contiene documentos"
+        )
+
+    # Cuota de exportación: evita agotar disco o memoria con expedientes excesivos.
+    if len(documentos) > 200 or sum(d.tamano_bytes for d in documentos) > 500 * 1024 * 1024:
+        raise HTTPException(
+            status.HTTP_413_CONTENT_TOO_LARGE,
+            "Expediente demasiado grande para exportación",
+        )
+
+    nombre_carpeta = f"expediente-{expediente.id}"
+    documentos_manifiesto: list[dict[str, str | None]] = []
+    manifiesto = {
+        "expediente": str(expediente.id),
+        "emisor_ruc": expediente.emisor.ruc,
+        "receptor_ruc": expediente.receptor.ruc,
+        "comprobante": f"{expediente.tipo_comprobante} {expediente.serie}-{expediente.correlativo}",
+        "documentos": documentos_manifiesto,
+    }
+    with tempfile.NamedTemporaryFile(
+        prefix="fact-central-export-",
+        suffix=".zip",
+        delete=False,
+    ) as temporal:
+        ruta_temporal = temporal.name
+    try:
+        with zipfile.ZipFile(ruta_temporal, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for i, doc in enumerate(documentos, start=1):
+                extension = Path(doc.nombre_original).suffix.lower()
+                if not extension or len(extension) > 12 or not extension[1:].isalnum():
+                    extension = ".bin"
+                nombre = (
+                    f"{nombre_carpeta}/{i:03d}_{doc.tipo_documento or 'OTRO'}_{doc.id}{extension}"
+                )
+                ruta = almacen.ruta_absoluta(doc.ruta_storage)
+                zf.write(ruta, arcname=nombre)
+                documentos_manifiesto.append(
+                    {
+                        "nombre_original": doc.nombre_original,
+                        "archivo": nombre,
+                        "tipo_documento": doc.tipo_documento,
+                        "sha256": doc.sha256,
+                        "fecha_carga": doc.created_at.isoformat(),
+                    }
+                )
+            zf.writestr(
+                f"{nombre_carpeta}/manifiesto.json",
+                json.dumps(manifiesto, ensure_ascii=False, indent=2),
+            )
+    except (OSError, zipfile.BadZipFile):
+        _borrar_temporal(ruta_temporal)
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "No se pudo preparar la exportación"
+        ) from None
+
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "EXPEDIENTE_ZIP_DESCARGADO",
+        "expediente",
+        expediente_id,
+        {"actor": auth.codigo, "documentos": len(documentos)},
+    )
+    session.commit()
+    return FileResponse(
+        ruta_temporal,
+        media_type="application/zip",
+        filename=f"fact-central-{expediente.serie}-{expediente.correlativo}.zip",
         background=BackgroundTask(_borrar_temporal, ruta_temporal),
     )
 

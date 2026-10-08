@@ -1,7 +1,7 @@
 import { useMemo, useState, type ChangeEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { conParametros, eliminar, enviarFormulario, useDatos } from "../api";
+import { conParametros, eliminar, enviarFormulario, urlZipExpediente, useDatos } from "../api";
 import { Estado, Paginacion, Semaforo } from "../componentes";
 import { ETIQUETA_TIPO_DOCUMENTO, formatearFecha, formatearMonto } from "../formato";
 import type {
@@ -325,6 +325,7 @@ function FilaRegistro({
       <td className="num">{formatearMonto(fila.moneda, fila.importe_total)}</td>
       <td>
         <div className="acciones-registro">
+          <a href={urlZipExpediente(fila.expediente_id)}>Descargar ZIP</a>
           <small>
             Presentes: {fila.documentos_presentes.map((t) => ETIQUETA_TIPO_DOCUMENTO[t]).join(", ") || "ninguno"}
           </small>
