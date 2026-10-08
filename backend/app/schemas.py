@@ -338,6 +338,7 @@ class AltaGestorOut(BaseModel):
 
 
 class RegistroFila(BaseModel):
+    tipo_empresa: str | None = None
     expediente_id: uuid.UUID
     estado: EstadoExpediente
     usuario_id: uuid.UUID | None
