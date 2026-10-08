@@ -181,6 +181,11 @@ function FilaCarga({ fila }: { fila: Fila }) {
         {resultado.estado === "ok" &&
           (documento?.expediente_id ? "Procesado y relacionado" : "Subido · requiere revisión")}
         {(resultado.estado === "duplicado" || resultado.estado === "error") && resultado.mensaje}
+        {resultado.estado === "duplicado" && (
+          <button type="button" className="secundario" onClick={() => void navigator.clipboard.writeText(resultado.mensaje)}>
+            Copiar aviso para WhatsApp
+          </button>
+        )}
       </td>
       <td>{documento?.tipo_documento ? ETIQUETA_TIPO_DOCUMENTO[documento.tipo_documento] : ""}</td>
       <td>{documento?.fecha_emision ? formatearFecha(documento.fecha_emision) : ""}</td>
@@ -219,5 +224,5 @@ function FilaCarga({ fila }: { fila: Fila }) {
 
 function esDuplicado(error: ErrorApi): boolean {
   const { detalle } = error;
-  return error.status === 409 && typeof detalle === "object" && detalle !== null && "documento_id" in detalle;
+  return error.status === 409 && typeof detalle === "object" && detalle !== null && "duplicado" in detalle;
 }
