@@ -1,8 +1,8 @@
 import json
 import re
-import zipfile
 import tempfile
 import uuid
+import zipfile
 from datetime import date
 from pathlib import Path
 from typing import Annotated, Literal
@@ -416,11 +416,16 @@ def descargar_zip(
         )
     )
     if not documentos:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "El expediente no contiene documentos")
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "El expediente no contiene documentos"
+        )
 
     # Cuota de exportación: evita agotar disco o memoria con expedientes excesivos.
     if len(documentos) > 200 or sum(d.tamano_bytes for d in documentos) > 500 * 1024 * 1024:
-        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Expediente demasiado grande para exportación")
+        raise HTTPException(
+            status.HTTP_413_CONTENT_TOO_LARGE,
+            "Expediente demasiado grande para exportación",
+        )
 
     nombre_carpeta = f"expediente-{expediente.id}"
     manifiesto = {
@@ -442,7 +447,10 @@ def descargar_zip(
                 extension = Path(doc.nombre_original).suffix.lower()
                 if not extension or len(extension) > 12 or not extension[1:].isalnum():
                     extension = ".bin"
-                nombre = f"{nombre_carpeta}/{i:03d}_{doc.tipo_documento or 'OTRO'}_{doc.id}{extension}"
+                nombre = (
+                    f"{nombre_carpeta}/{i:03d}_"
+                    f"{doc.tipo_documento or 'OTRO'}_{doc.id}{extension}"
+                )
                 ruta = almacen.ruta_absoluta(doc.ruta_storage)
                 zf.write(ruta, arcname=nombre)
                 manifiesto["documentos"].append({
@@ -458,7 +466,9 @@ def descargar_zip(
             )
     except (OSError, zipfile.BadZipFile):
         _borrar_temporal(ruta_temporal)
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "No se pudo preparar la exportación") from None
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "No se pudo preparar la exportación"
+        ) from None
 
     auditoria.registrar(
         session, tenant_id, "EXPEDIENTE_ZIP_DESCARGADO", "expediente", expediente_id,
