@@ -112,7 +112,21 @@ def actualizar(
     }
 
     if datos.ruc is not None:
-        empresa.ruc = datos.ruc.strip()
+        nuevo_ruc = datos.ruc.strip()
+        if nuevo_ruc != empresa.ruc:
+            duplicada = session.scalar(
+                select(Empresa).where(
+                    Empresa.tenant_id == tenant_id,
+                    Empresa.ruc == nuevo_ruc,
+                    Empresa.id != empresa.id,
+                )
+            )
+            if duplicada is not None:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    "Ya existe una empresa registrada con ese RUC",
+                )
+        empresa.ruc = nuevo_ruc
     if datos.razon_social is not None:
         empresa.razon_social = datos.razon_social.strip()
     if datos.tipo_relacion is not None:
