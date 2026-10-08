@@ -35,7 +35,12 @@ def opciones(
     usuarios: list[FiltroOpcion] = []
     gestores: list[FiltroOpcion] = []
 
-    if auth.rol in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.SECRETARIA):
+    if auth.rol in (
+        RolMiembro.SUPERADMIN,
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.GERENTE,
+        RolMiembro.SECRETARIA,
+    ):
         usuarios = [
             FiltroOpcion(id=u.id, codigo=u.codigo, nombre=u.nombre)
             for u in session.scalars(
@@ -50,7 +55,12 @@ def opciones(
             )
         ]
         gestores = [
-            FiltroOpcion(id=g.id, codigo=g.codigo, nombre=g.nombre)
+            FiltroOpcion(
+                id=g.id,
+                codigo=g.codigo,
+                nombre=g.nombre,
+                usuario_id=g.usuario_id,
+            )
             for g in session.scalars(
                 select(Gestor)
                 .where(Gestor.tenant_id == tenant_id, Gestor.deleted_at.is_(None))
@@ -122,12 +132,14 @@ def listar(
     if usuario_id is not None and auth.rol in (
         RolMiembro.SUPERADMIN,
         RolMiembro.ADMINISTRADOR,
+        RolMiembro.GERENTE,
         RolMiembro.SECRETARIA,
     ):
         consulta = consulta.where(Expediente.usuario_id == usuario_id)
     if gestor_id is not None and auth.rol in (
         RolMiembro.SUPERADMIN,
         RolMiembro.ADMINISTRADOR,
+        RolMiembro.GERENTE,
         RolMiembro.SECRETARIA,
         RolMiembro.USUARIO,
     ):
@@ -267,9 +279,4 @@ def _validar_filtros(
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "El Usuario ya está limitado a su propia información",
-        )
-    if rol == RolMiembro.GERENTE and (usuario_id is not None or gestor_id is not None):
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            "Gerencia filtra por emisor, receptor y periodo",
         )
