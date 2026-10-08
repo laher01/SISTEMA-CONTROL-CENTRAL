@@ -37,6 +37,7 @@ from app.services.expedientes import (
     recalcular_expedientes,
 )
 from app.services.ingesta import crear_expediente
+from app.services.pdf_consolidado import pdf_con_documentos
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 
 NUMERO_RE = re.compile(r"^([a-z0-9]{4})-0*(\d+)$")
@@ -467,6 +468,72 @@ def imprimir_lote(
             "X-Pdfs-Impresos": str(pdfs_incluidos),
             "X-Expedientes-Sin-Pdf": str(expedientes_sin_pdf),
         },
+        background=BackgroundTask(_borrar_temporal, ruta_temporal),
+    )
+
+
+@router.get("/{expediente_id}/descargar-pdf")
+def descargar_pdf(
+    expediente_id: uuid.UUID,
+    session: SessionDep,
+    almacen: AlmacenDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> FileResponse:
+    expediente = session.get(Expediente, expediente_id)
+    if (
+        expediente is None
+        or expediente.tenant_id != tenant_id
+        or expediente.deleted_at is not None
+        or not _visible_para_auth(expediente, auth)
+    ):
+        raise no_encontrado("Expediente")
+    documentos = list(
+        session.scalars(
+            select(Documento)
+            .where(
+                Documento.tenant_id == tenant_id,
+                Documento.expediente_id == expediente_id,
+                Documento.deleted_at.is_(None),
+            )
+            .order_by(Documento.created_at, Documento.id)
+        )
+    )
+    try:
+        writer, visibles, adjuntos = pdf_con_documentos(
+            documentos,
+            almacen,
+            f"{expediente.serie}-{expediente.correlativo}",
+        )
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    with tempfile.NamedTemporaryFile(
+        prefix="fact-central-pdf-",
+        suffix=".pdf",
+        delete=False,
+    ) as temporal:
+        ruta_temporal = temporal.name
+    try:
+        with open(ruta_temporal, "wb") as destino:
+            writer.write(destino)
+    except OSError:
+        _borrar_temporal(ruta_temporal)
+        raise
+    finally:
+        writer.close()
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "EXPEDIENTE_PDF_DESCARGADO",
+        "expediente",
+        expediente_id,
+        {"actor": auth.codigo, "visibles": visibles, "adjuntos": adjuntos},
+    )
+    session.commit()
+    return FileResponse(
+        ruta_temporal,
+        media_type="application/pdf",
+        filename=f"fact-central-{expediente.serie}-{expediente.correlativo}.pdf",
         background=BackgroundTask(_borrar_temporal, ruta_temporal),
     )
 
