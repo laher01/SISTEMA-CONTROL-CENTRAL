@@ -39,7 +39,11 @@ def crear(
         nombre=datos.nombre.strip(),
         rol=datos.rol,
         porcentaje_produccion=(
-            (datos.porcentaje_produccion or Decimal("1.5000"))
+            (
+                datos.porcentaje_produccion
+                if datos.porcentaje_produccion is not None
+                else Decimal("1.5000")
+            )
             if datos.rol == RolMiembro.USUARIO
             else None
         ),
