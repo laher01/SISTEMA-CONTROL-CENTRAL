@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { conParametros, useDatos } from "../api";
+import { conParametros, imprimirExpedientes, obtener, useDatos } from "../api";
 import { Estado, Paginacion, Semaforo } from "../componentes";
 import { ETIQUETA_ESTADO, formatearFecha, formatearMonto, numeroExpediente } from "../formato";
 import { ESTADOS_EXPEDIENTE, type Expediente } from "../tipos";
@@ -9,19 +10,31 @@ const POR_PAGINA = 50;
 
 export default function Expedientes() {
   const [parametros, setParametros] = useSearchParams();
+  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
+  const [mensaje, setMensaje] = useState("");
+  const [imprimiendo, setImprimiendo] = useState(false);
+
   const estado = parametros.get("estado") ?? "";
   const pendiente = parametros.get("pendiente_aprobacion") ?? "";
   const receptor = parametros.get("receptor_ruc") ?? "";
   const buscar = parametros.get("buscar") ?? "";
   const pagina = Number(parametros.get("pagina") ?? "0");
 
-  const ruta = conParametros("/api/v1/expedientes", {
+  const filtrosBase = {
     estado,
     pendiente_aprobacion: pendiente,
     receptor_ruc: receptor.length === 11 ? receptor : undefined,
     buscar: buscar.trim(),
+  };
+
+  const ruta = conParametros("/api/v1/expedientes", {
+    ...filtrosBase,
     limit: String(POR_PAGINA),
     offset: String(pagina * POR_PAGINA),
+  });
+  const rutaIds = conParametros("/api/v1/expedientes/ids", {
+    ...filtrosBase,
+    limit: "1000",
   });
   const { datos, error, cargando } = useDatos<Expediente[]>(ruta);
 
@@ -30,7 +43,62 @@ export default function Expedientes() {
     if (valor) siguiente.set(clave, valor);
     else siguiente.delete(clave);
     if (clave !== "pagina") siguiente.delete("pagina");
+    setSeleccionados(new Set());
+    setMensaje("");
     setParametros(siguiente);
+  };
+
+  const visibles = datos ?? [];
+  const todosVisibles =
+    visibles.length > 0 && visibles.every((item) => seleccionados.has(item.id));
+
+  const alternarVisible = (id: string, marcado: boolean) => {
+    setSeleccionados((actual) => {
+      const siguiente = new Set(actual);
+      if (marcado) siguiente.add(id);
+      else siguiente.delete(id);
+      return siguiente;
+    });
+  };
+
+  const alternarTodosVisibles = (marcado: boolean) => {
+    setSeleccionados((actual) => {
+      const siguiente = new Set(actual);
+      for (const item of visibles) {
+        if (marcado) siguiente.add(item.id);
+        else siguiente.delete(item.id);
+      }
+      return siguiente;
+    });
+  };
+
+  const seleccionarTodosFiltrados = async () => {
+    try {
+      const ids = await obtener<string[]>(rutaIds);
+      setSeleccionados(new Set(ids));
+      setMensaje(`Seleccionados ${ids.length} expedientes del filtro actual.`);
+    } catch (e) {
+      setMensaje(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const imprimirSeleccion = async () => {
+    if (seleccionados.size === 0) return;
+    setImprimiendo(true);
+    setMensaje("");
+    try {
+      const ordenFiltro = await obtener<string[]>(rutaIds);
+      const idsOrdenados = ordenFiltro.filter((id) => seleccionados.has(id));
+      const resultado = await imprimirExpedientes(idsOrdenados);
+      setMensaje(
+        `Impresión preparada: ${resultado.expedientes} expediente(s), ${resultado.pdfs} PDF(s)` +
+          (resultado.sinPdf > 0 ? ` · sin PDF: ${resultado.sinPdf}` : ""),
+      );
+    } catch (e) {
+      setMensaje(e instanceof Error ? e.message : String(e));
+    } finally {
+      setImprimiendo(false);
+    }
   };
 
   return (
@@ -63,10 +131,35 @@ export default function Expedientes() {
           onChange={(e) => cambiar("receptor_ruc", e.target.value.replace(/\D/g, ""))}
         />
       </div>
+
+      <div className="acciones">
+        <button onClick={() => void seleccionarTodosFiltrados()}>
+          Seleccionar todos los resultados del filtro
+        </button>
+        <button
+          disabled={seleccionados.size === 0 || imprimiendo}
+          onClick={() => void imprimirSeleccion()}
+        >
+          {imprimiendo ? "Preparando impresión…" : `Imprimir seleccionados (${seleccionados.size})`}
+        </button>
+        {seleccionados.size > 0 && (
+          <button onClick={() => setSeleccionados(new Set())}>Limpiar selección</button>
+        )}
+      </div>
+      {mensaje && <p className="tenue">{mensaje}</p>}
+
       <Estado cargando={cargando} error={error} vacio={datos?.length === 0}>
         <table>
           <thead>
             <tr>
+              <th>
+                <input
+                  type="checkbox"
+                  aria-label="Seleccionar expedientes visibles"
+                  checked={todosVisibles}
+                  onChange={(e) => alternarTodosVisibles(e.target.checked)}
+                />
+              </th>
               <th>Estado</th>
               <th>Comprobante</th>
               <th>Emisión</th>
@@ -78,6 +171,14 @@ export default function Expedientes() {
           <tbody>
             {datos?.map((e) => (
               <tr key={e.id}>
+                <td>
+                  <input
+                    type="checkbox"
+                    aria-label={`Seleccionar ${e.serie}-${e.correlativo}`}
+                    checked={seleccionados.has(e.id)}
+                    onChange={(ev) => alternarVisible(e.id, ev.target.checked)}
+                  />
+                </td>
                 <td>
                   <Semaforo estado={e.estado} />
                 </td>
