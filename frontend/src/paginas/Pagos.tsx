@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 
-import { enviarJson, useDatos } from "../api";
+import { eliminar, enviarJson, useDatos } from "../api";
 import { formatearFecha, formatearMonto } from "../formato";
 import type {
   AdelantoERP,
@@ -359,6 +359,24 @@ function AccionesPago({
           {estado}
         </button>
       ))}
+
+      {(sesion.rol === "SUPERADMIN" || sesion.rol === "ADMINISTRADOR") &&
+        pago.estado !== "PAGADO" &&
+        pago.estado !== "CONCILIADO" &&
+        !pago.conciliado && (
+          <button
+            onClick={async () => {
+              const confirmar = window.confirm(
+                "¿Eliminar esta programación de pago? Esta acción quedará registrada en auditoría.",
+              );
+              if (!confirmar) return;
+              await eliminar("/api/v1/pagos/" + pago.id);
+              alCambiar();
+            }}
+          >
+            Eliminar
+          </button>
+        )}
     </div>
   );
 }
