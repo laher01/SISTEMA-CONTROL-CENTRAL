@@ -9,6 +9,9 @@ type Campo = "autorizada" | "agente_retencion";
 export default function Empresas() {
   const { datos, error, cargando, recargar } = useDatos<Empresa[]>("/api/v1/empresas");
   const [errorCambio, setErrorCambio] = useState("");
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [rucEditado, setRucEditado] = useState("");
+  const [razonEditada, setRazonEditada] = useState("");
 
   const cambiar = async (empresa: Empresa, campo: Campo, valor: boolean) => {
     setErrorCambio("");
@@ -20,13 +23,51 @@ export default function Empresas() {
     }
   };
 
+  const iniciarEdicion = (empresa: Empresa) => {
+    setEditandoId(empresa.id);
+    setRucEditado(empresa.ruc);
+    setRazonEditada(empresa.razon_social);
+    setErrorCambio("");
+  };
+
+  const cancelarEdicion = () => {
+    setEditandoId(null);
+    setRucEditado("");
+    setRazonEditada("");
+  };
+
+  const guardarEdicion = async (empresa: Empresa) => {
+    setErrorCambio("");
+    const ruc = rucEditado.trim();
+    const razon = razonEditada.trim();
+
+    if (!/^\d{11}$/.test(ruc)) {
+      setErrorCambio("El RUC debe tener exactamente 11 dígitos.");
+      return;
+    }
+    if (!razon) {
+      setErrorCambio("La razón social no puede quedar vacía.");
+      return;
+    }
+
+    try {
+      await enviarJson<Empresa>(`/api/v1/empresas/${empresa.id}`, "PATCH", {
+        ruc,
+        razon_social: razon,
+      });
+      cancelarEdicion();
+      recargar();
+    } catch (e) {
+      setErrorCambio(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   return (
     <>
       <h2>Empresas</h2>
       <p className="tenue">
-        Se crean solas al subir XML. Marca como <strong>autorizadas</strong> las empresas del grupo
-        que pueden recibir comprobantes y como <strong>agente de retención</strong> las que lo son;
-        los expedientes se recalculan al guardar.
+        Se crean automáticamente al procesar comprobantes. Si una extracción viene incorrecta,
+        puedes corregir manualmente el RUC o la razón social desde <strong>Editar</strong>.
       </p>
       {errorCambio && <p className="error">{errorCambio}</p>}
       <Estado cargando={cargando} error={error} vacio={datos?.length === 0}>
@@ -35,33 +76,70 @@ export default function Empresas() {
             <tr>
               <th>RUC</th>
               <th>Razón social</th>
+              <th>Editar</th>
               <th>Autorizada</th>
               <th>Agente de retención</th>
             </tr>
           </thead>
           <tbody>
-            {datos?.map((e) => (
-              <tr key={e.id}>
-                <td>{e.ruc}</td>
-                <td>{e.razon_social}</td>
-                <td>
-                  <input
-                    type="checkbox"
-                    aria-label={`Autorizada ${e.ruc}`}
-                    checked={e.autorizada}
-                    onChange={(ev) => cambiar(e, "autorizada", ev.target.checked)}
-                  />
-                </td>
-                <td>
-                  <input
-                    type="checkbox"
-                    aria-label={`Agente de retención ${e.ruc}`}
-                    checked={e.agente_retencion}
-                    onChange={(ev) => cambiar(e, "agente_retencion", ev.target.checked)}
-                  />
-                </td>
-              </tr>
-            ))}
+            {datos?.map((empresa) => {
+              const editando = editandoId === empresa.id;
+              return (
+                <tr key={empresa.id}>
+                  <td>
+                    {editando ? (
+                      <input
+                        value={rucEditado}
+                        onChange={(ev) => setRucEditado(ev.target.value.replace(/\D/g, ""))}
+                        maxLength={11}
+                        inputMode="numeric"
+                        aria-label={`Editar RUC ${empresa.ruc}`}
+                      />
+                    ) : (
+                      empresa.ruc
+                    )}
+                  </td>
+                  <td>
+                    {editando ? (
+                      <input
+                        value={razonEditada}
+                        onChange={(ev) => setRazonEditada(ev.target.value)}
+                        maxLength={300}
+                        aria-label={`Editar razón social ${empresa.ruc}`}
+                      />
+                    ) : (
+                      empresa.razon_social
+                    )}
+                  </td>
+                  <td>
+                    {editando ? (
+                      <div className="acciones">
+                        <button onClick={() => void guardarEdicion(empresa)}>Guardar</button>
+                        <button onClick={cancelarEdicion}>Cancelar</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => iniciarEdicion(empresa)}>Editar</button>
+                    )}
+                  </td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      aria-label={`Autorizada ${empresa.ruc}`}
+                      checked={empresa.autorizada}
+                      onChange={(ev) => cambiar(empresa, "autorizada", ev.target.checked)}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      aria-label={`Agente de retención ${empresa.ruc}`}
+                      checked={empresa.agente_retencion}
+                      onChange={(ev) => cambiar(empresa, "agente_retencion", ev.target.checked)}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </Estado>
