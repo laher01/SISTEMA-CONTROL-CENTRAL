@@ -25,9 +25,7 @@ def test_pago_total_emitido_exige_confirmacion() -> None:
         calcular_distribucion_jonatan(
             total_emitido=Decimal("1114897.76"), base_autorizada=Decimal("0")
         )
-    r = calcular_distribucion_jonatan(
-        total_emitido=Decimal("1114897.76"), usar_total_emitido=True
-    )
+    r = calcular_distribucion_jonatan(total_emitido=Decimal("1114897.76"), usar_total_emitido=True)
     assert r.bruto == Decimal("33446.93")
     assert r.gente_lima == Decimal("25085.20")
     assert r.javier == Decimal("1393.62")
@@ -37,9 +35,7 @@ def test_pago_total_emitido_exige_confirmacion() -> None:
 
 def test_tasas_personalizadas_y_validaciones() -> None:
     with pytest.raises(ValueError):
-        calcular_distribucion_jonatan(
-            total_emitido=Decimal("100"), base_autorizada=Decimal("120")
-        )
+        calcular_distribucion_jonatan(total_emitido=Decimal("100"), base_autorizada=Decimal("120"))
     with pytest.raises(ValueError):
         calcular_distribucion_jonatan(
             total_emitido=Decimal("100"),
