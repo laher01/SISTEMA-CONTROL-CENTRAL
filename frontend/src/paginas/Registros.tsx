@@ -40,16 +40,50 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
   const { datos, error, cargando, recargar } = useDatos<RegistroResumen>(ruta);
   const { datos: opciones } = useDatos<RegistroOpciones>("/api/v1/registros/opciones");
 
-  const mostrarUsuario = sesion.rol === "ADMINISTRADOR" || sesion.rol === "SECRETARIA";
-  const mostrarGestor = sesion.rol !== "GESTOR" && sesion.rol !== "GERENTE";
-  const filtrarUsuario = sesion.rol === "ADMINISTRADOR" || sesion.rol === "SECRETARIA";
-  const filtrarGestor =
-    sesion.rol === "ADMINISTRADOR" || sesion.rol === "SECRETARIA" || sesion.rol === "USUARIO";
+  const puedeVerJerarquia = ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA"].includes(
+    sesion.rol,
+  );
+  const mostrarUsuario = puedeVerJerarquia;
+  const mostrarGestor = sesion.rol !== "GESTOR";
+  const filtrarUsuario = puedeVerJerarquia;
+  const filtrarGestor = puedeVerJerarquia || sesion.rol === "USUARIO";
+
+  const gestoresDisponibles = useMemo(() => {
+    const gestores = opciones?.gestores ?? [];
+    if (sesion.rol === "USUARIO") return gestores;
+    if (!usuarioId) return gestores;
+    return gestores.filter((gestor) => gestor.usuario_id === usuarioId);
+  }, [opciones?.gestores, sesion.rol, usuarioId]);
+
+  const etiquetaFiltro = useMemo(() => {
+    const partes: string[] = [];
+    if (usuarioId) {
+      const usuario = opciones?.usuarios.find((item) => item.id === usuarioId);
+      if (usuario) partes.push(`Usuario: ${usuario.codigo} · ${usuario.nombre}`);
+    }
+    if (gestorId) {
+      const gestor = opciones?.gestores.find((item) => item.id === gestorId);
+      if (gestor) partes.push(`Gestor: ${gestor.codigo} · ${gestor.nombre}`);
+    }
+    if (emisor) partes.push(`Emisor: ${emisor}`);
+    if (receptor) partes.push(`Receptor: ${receptor}`);
+    if (mes) partes.push(`Mes: ${mes}`);
+    else if (desde || hasta) partes.push(`Periodo: ${desde || "inicio"} → ${hasta || "hoy"}`);
+    return partes.length > 0 ? partes.join(" · ") : "Todos los registros visibles para este rol";
+  }, [desde, emisor, gestorId, hasta, mes, opciones, receptor, usuarioId]);
 
   const cambiar = (clave: string, valor: string) => {
     const siguiente = new URLSearchParams(parametros);
     if (valor) siguiente.set(clave, valor);
     else siguiente.delete(clave);
+
+    if (clave === "usuario_id") {
+      const gestorActual = opciones?.gestores.find((item) => item.id === gestorId);
+      if (!valor || (gestorActual && gestorActual.usuario_id !== valor)) {
+        siguiente.delete("gestor_id");
+      }
+    }
+
     if (clave !== "pagina") siguiente.delete("pagina");
     setParametros(siguiente);
   };
@@ -67,20 +101,24 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
         </div>
       </div>
 
-      <div className="tarjetas registros-resumen">
-        <div className="tarjeta borde-verde">
-          <span className="cifra">{datos?.total_registros ?? 0}</span>
-          <span>Registros filtrados</span>
+      <section className="panel-configuracion">
+        <strong>Resumen del filtro actual</strong>
+        <p className="tenue">{etiquetaFiltro}</p>
+        <div className="tarjetas registros-resumen">
+          <div className="tarjeta borde-verde">
+            <span className="cifra">{datos?.total_registros ?? 0}</span>
+            <span>Registros filtrados</span>
+          </div>
+          <div className="tarjeta borde-verde">
+            <span className="cifra">{formatearMonto("PEN", datos?.total_pen ?? "0")}</span>
+            <span>Total PEN del filtro</span>
+          </div>
+          <div className="tarjeta borde-verde">
+            <span className="cifra">{formatearMonto("USD", datos?.total_usd ?? "0")}</span>
+            <span>Total USD del filtro</span>
+          </div>
         </div>
-        <div className="tarjeta borde-verde">
-          <span className="cifra">{formatearMonto("PEN", datos?.total_pen ?? "0")}</span>
-          <span>Total PEN</span>
-        </div>
-        <div className="tarjeta borde-verde">
-          <span className="cifra">{formatearMonto("USD", datos?.total_usd ?? "0")}</span>
-          <span>Total USD</span>
-        </div>
-      </div>
+      </section>
 
       <div className="filtros filtros-documentos">
         {filtrarUsuario && (
@@ -94,7 +132,7 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
         {filtrarGestor && (
           <select value={gestorId} onChange={(e) => cambiar("gestor_id", e.target.value)}>
             <option value="">Todos los gestores</option>
-            {opciones?.gestores.map((g) => (
+            {gestoresDisponibles.map((g) => (
               <option key={g.id} value={g.id}>{g.codigo} · {g.nombre}</option>
             ))}
           </select>
