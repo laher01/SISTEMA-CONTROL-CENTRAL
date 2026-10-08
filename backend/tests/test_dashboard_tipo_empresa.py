@@ -5,7 +5,8 @@ from tests.xml import factura
 
 
 def test_dashboard_filtra_clasificacion_proveedor(
-    client: TestClient, auth_prueba: AuthPrueba,
+    client: TestClient,
+    auth_prueba: AuthPrueba,
 ) -> None:
     for numero, emisor in [
         ("F001-00000123", "20500000002"),
