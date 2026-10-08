@@ -79,6 +79,7 @@ def crear(
             requiere_guia=datos.requiere_guia,
             gestor_id=gestor_id,
             usuario_id=usuario_id,
+            creado_por_cuenta_id=auth.cuenta_id,
         )
         session.commit()
     except IntegrityError as exc:
