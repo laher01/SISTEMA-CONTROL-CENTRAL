@@ -39,10 +39,22 @@ export const TIPOS_ALERTA: TipoAlerta[] = [
   "EXPEDIENTE_VENCIDO",
 ];
 
+export type TipoRelacionEmpresa = "PROVEEDOR" | "CLIENTE" | "AMBOS" | "SIN_CLASIFICAR";
+export type ClasificacionProveedor = "A" | "B";
+
+export interface EmpresaUsuario {
+  id: string;
+  codigo: string;
+  nombre: string;
+}
+
 export interface Empresa {
   id: string;
   ruc: string;
   razon_social: string;
+  tipo_relacion: TipoRelacionEmpresa;
+  clasificacion_proveedor: ClasificacionProveedor | null;
+  usuarios?: EmpresaUsuario[];
   autorizada: boolean;
   agente_retencion: boolean;
 }
