@@ -9,16 +9,11 @@ import type {
 } from "../tipos";
 
 type Campo = "autorizada" | "agente_retencion";
-
-const ETIQUETA_RELACION: Record<TipoRelacionEmpresa, string> = {
-  PROVEEDOR: "Proveedor",
-  CLIENTE: "Cliente",
-  AMBOS: "Proveedor y cliente",
-  SIN_CLASIFICAR: "Sin clasificar",
-};
+type PestanaEmpresa = "PROVEEDORES" | "CLIENTES";
 
 export default function Empresas() {
   const { datos, error, cargando, recargar } = useDatos<Empresa[]>("/api/v1/empresas");
+  const [pestana, setPestana] = useState<PestanaEmpresa>("PROVEEDORES");
   const [errorCambio, setErrorCambio] = useState("");
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [rucEditado, setRucEditado] = useState("");
@@ -27,6 +22,20 @@ export default function Empresas() {
     useState<TipoRelacionEmpresa>("SIN_CLASIFICAR");
   const [clasificacionEditada, setClasificacionEditada] =
     useState<ClasificacionProveedor | "">("");
+
+  const proveedores =
+    datos?.filter(
+      (empresa) =>
+        empresa.tipo_relacion === "PROVEEDOR" || empresa.tipo_relacion === "AMBOS",
+    ) ?? [];
+  const clientes =
+    datos?.filter(
+      (empresa) => empresa.tipo_relacion === "CLIENTE" || empresa.tipo_relacion === "AMBOS",
+    ) ?? [];
+  const sinClasificar =
+    datos?.filter((empresa) => empresa.tipo_relacion === "SIN_CLASIFICAR") ?? [];
+  const empresasVisibles = pestana === "PROVEEDORES" ? proveedores : clientes;
+  const esProveedor = pestana === "PROVEEDORES";
 
   const cambiar = async (empresa: Empresa, campo: Campo, valor: boolean) => {
     setErrorCambio("");
@@ -86,58 +95,74 @@ export default function Empresas() {
     }
   };
 
+  const usuariosEmpresa = (empresa: Empresa) =>
+    (empresa.usuarios ?? []).length > 0
+      ? (empresa.usuarios ?? [])
+          .map((usuario) => `${usuario.codigo} · ${usuario.nombre}`)
+          .join(", ")
+      : "—";
+
   return (
     <>
       <h2>Empresas</h2>
       <p className="tenue">
-        El sistema clasifica automáticamente al emisor como proveedor y al receptor como cliente.
-        Si un mismo RUC aparece en ambos lados se identifica como proveedor y cliente. La
-        clasificación Tipo A / Tipo B aplica únicamente a proveedores.
+        Proveedores y clientes se administran por separado. Si un mismo RUC cumple ambos roles,
+        aparecerá en las dos pestañas. La clasificación Tipo A / Tipo B aplica únicamente a
+        proveedores.
       </p>
+
+      <div className="acciones">
+        <button
+          className={pestana === "PROVEEDORES" ? "activo" : undefined}
+          onClick={() => {
+            setPestana("PROVEEDORES");
+            cancelarEdicion();
+          }}
+        >
+          Proveedores ({proveedores.length})
+        </button>
+        <button
+          className={pestana === "CLIENTES" ? "activo" : undefined}
+          onClick={() => {
+            setPestana("CLIENTES");
+            cancelarEdicion();
+          }}
+        >
+          Clientes ({clientes.length})
+        </button>
+      </div>
+
+      {sinClasificar.length > 0 && (
+        <p className="tenue">
+          Hay {sinClasificar.length} empresa(s) sin clasificar. Puedes asignarles su relación desde
+          Editar cuando aparezcan vinculadas a un documento.
+        </p>
+      )}
+
       {errorCambio && <p className="error">{errorCambio}</p>}
-      <Estado cargando={cargando} error={error} vacio={datos?.length === 0}>
+
+      <Estado cargando={cargando} error={error} vacio={empresasVisibles.length === 0}>
         <table>
           <thead>
             <tr>
-              <th>Relación</th>
               <th>RUC</th>
               <th>Razón social</th>
               <th>Usuario</th>
-              <th>Tipo proveedor</th>
+              {esProveedor && <th>Tipo proveedor</th>}
               <th>Editar</th>
               <th>Autorizada</th>
               <th>Agente de retención</th>
             </tr>
           </thead>
           <tbody>
-            {datos?.map((empresa) => {
+            {empresasVisibles.map((empresa) => {
               const editando = editandoId === empresa.id;
-              const proveedor =
+              const proveedorActual =
                 (editando ? relacionEditada : empresa.tipo_relacion) === "PROVEEDOR" ||
                 (editando ? relacionEditada : empresa.tipo_relacion) === "AMBOS";
+
               return (
                 <tr key={empresa.id}>
-                  <td>
-                    {editando ? (
-                      <select
-                        value={relacionEditada}
-                        onChange={(ev) => {
-                          const valor = ev.target.value as TipoRelacionEmpresa;
-                          setRelacionEditada(valor);
-                          if (valor === "CLIENTE" || valor === "SIN_CLASIFICAR") {
-                            setClasificacionEditada("");
-                          }
-                        }}
-                      >
-                        <option value="PROVEEDOR">Proveedor</option>
-                        <option value="CLIENTE">Cliente</option>
-                        <option value="AMBOS">Proveedor y cliente</option>
-                        <option value="SIN_CLASIFICAR">Sin clasificar</option>
-                      </select>
-                    ) : (
-                      ETIQUETA_RELACION[empresa.tipo_relacion]
-                    )}
-                  </td>
                   <td>
                     {editando ? (
                       <input
@@ -160,42 +185,58 @@ export default function Empresas() {
                         aria-label={`Editar razón social ${empresa.ruc}`}
                       />
                     ) : (
-                      empresa.razon_social
+                      <>
+                        {empresa.razon_social}
+                        {empresa.tipo_relacion === "AMBOS" && (
+                          <span className="etiqueta">Proveedor y cliente</span>
+                        )}
+                      </>
                     )}
                   </td>
-                  <td>
-                    {(empresa.usuarios ?? []).length > 0
-                      ? (empresa.usuarios ?? [])
-                          .map((usuario) => `${usuario.codigo} · ${usuario.nombre}`)
-                          .join(", ")
-                      : "—"}
-                  </td>
-                  <td>
-                    {editando ? (
-                      <select
-                        value={clasificacionEditada}
-                        disabled={!proveedor}
-                        onChange={(ev) =>
-                          setClasificacionEditada(
-                            ev.target.value as ClasificacionProveedor | "",
-                          )
-                        }
-                      >
-                        <option value="">Sin tipo</option>
-                        <option value="A">Tipo A</option>
-                        <option value="B">Tipo B</option>
-                      </select>
-                    ) : proveedor ? (
-                      empresa.clasificacion_proveedor
-                        ? `Tipo ${empresa.clasificacion_proveedor}`
-                        : "Sin tipo"
-                    ) : (
-                      "—"
-                    )}
-                  </td>
+                  <td>{usuariosEmpresa(empresa)}</td>
+
+                  {esProveedor && (
+                    <td>
+                      {editando ? (
+                        <select
+                          value={clasificacionEditada}
+                          disabled={!proveedorActual}
+                          onChange={(ev) =>
+                            setClasificacionEditada(
+                              ev.target.value as ClasificacionProveedor | "",
+                            )
+                          }
+                        >
+                          <option value="">Sin tipo</option>
+                          <option value="A">Tipo A</option>
+                          <option value="B">Tipo B</option>
+                        </select>
+                      ) : empresa.clasificacion_proveedor ? (
+                        `Tipo ${empresa.clasificacion_proveedor}`
+                      ) : (
+                        "Sin tipo"
+                      )}
+                    </td>
+                  )}
+
                   <td>
                     {editando ? (
                       <div className="acciones">
+                        <select
+                          value={relacionEditada}
+                          onChange={(ev) => {
+                            const valor = ev.target.value as TipoRelacionEmpresa;
+                            setRelacionEditada(valor);
+                            if (valor === "CLIENTE" || valor === "SIN_CLASIFICAR") {
+                              setClasificacionEditada("");
+                            }
+                          }}
+                        >
+                          <option value="PROVEEDOR">Proveedor</option>
+                          <option value="CLIENTE">Cliente</option>
+                          <option value="AMBOS">Proveedor y cliente</option>
+                          <option value="SIN_CLASIFICAR">Sin clasificar</option>
+                        </select>
                         <button onClick={() => void guardarEdicion(empresa)}>Guardar</button>
                         <button onClick={cancelarEdicion}>Cancelar</button>
                       </div>
