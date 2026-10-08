@@ -36,6 +36,29 @@ FECHA_ETIQUETADA = re.compile(
     re.IGNORECASE,
 )
 FECHA = re.compile(r"\b(\d{1,2}[/-]\d{1,2}[/-]\d{4}|\d{4}-\d{2}-\d{2})\b")
+FECHA_LITERAL_ES = re.compile(
+    r"(?:FECHA(?:\s+DE)?\s+(?:EMISION|EMISI[ÓO]N)|EMITIDO\s+EL)\s*[:\-]?\s*"
+    r"(\d{1,2})\s+DE\s+"
+    r"(ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|"
+    r"SEPTIEMBRE|SETIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE)"
+    r"(?:\s+DEL?|\s+DE)?\s+(\d{4})",
+    re.IGNORECASE,
+)
+MESES_ES = {
+    "ENERO": 1,
+    "FEBRERO": 2,
+    "MARZO": 3,
+    "ABRIL": 4,
+    "MAYO": 5,
+    "JUNIO": 6,
+    "JULIO": 7,
+    "AGOSTO": 8,
+    "SEPTIEMBRE": 9,
+    "SETIEMBRE": 9,
+    "OCTUBRE": 10,
+    "NOVIEMBRE": 11,
+    "DICIEMBRE": 12,
+}
 TOTAL = re.compile(
     r"(?:IMPORTE\s+TOTAL|IMPORTE\s+NETO|MONTO\s+(?:TOTAL|NETO)|"
     r"TOTAL\s+(?:A\s+PAGAR|PAGADO|POR\s+HONORARIOS|HONORARIOS)|TOTAL)\s*[:=]?\s*"
@@ -173,11 +196,34 @@ def extraer_campos(
 
     _extraer_razones_vinculadas_a_ruc(texto, campos, fuente, factor)
 
-    fecha_match = FECHA_ETIQUETADA.search(texto) or FECHA.search(texto)
-    if fecha_match and (fecha := _normalizar_fecha(fecha_match.group(1))):
-        base = 0.94 if FECHA_ETIQUETADA.match(fecha_match.group(0)) else 0.78
+    fecha_match = FECHA_ETIQUETADA.search(texto)
+    fecha_literal = FECHA_LITERAL_ES.search(texto) if fecha_match is None else None
+    fecha_generica = FECHA.search(texto) if fecha_match is None and fecha_literal is None else None
+
+    fecha: str | None = None
+    evidencia_fecha = ""
+    confianza_fecha = 0.78
+    if fecha_match:
+        fecha = _normalizar_fecha(fecha_match.group(1))
+        evidencia_fecha = fecha_match.group(0)
+        confianza_fecha = 0.94
+    elif fecha_literal:
+        fecha = _normalizar_fecha_literal_es(
+            fecha_literal.group(1),
+            fecha_literal.group(2),
+            fecha_literal.group(3),
+        )
+        evidencia_fecha = fecha_literal.group(0)
+        confianza_fecha = 0.96
+    elif fecha_generica:
+        fecha = _normalizar_fecha(fecha_generica.group(1))
+        evidencia_fecha = fecha_generica.group(0)
+
+    if fecha:
         campos["fecha_emision"] = CampoExtraido(
-            fecha, min(0.97, base * factor), fecha_match.group(0)
+            fecha,
+            min(0.98, confianza_fecha * factor),
+            evidencia_fecha,
         ).a_dict(fuente)
 
     moneda = _moneda(texto)
@@ -922,6 +968,14 @@ def _normalizar_fecha(valor: str) -> str | None:
         dia, mes, anio = re.split(r"[/-]", valor)
         return date(int(anio), int(mes), int(dia)).isoformat()
     except ValueError:
+        return None
+
+
+def _normalizar_fecha_literal_es(dia: str, mes: str, anio: str) -> str | None:
+    try:
+        numero_mes = MESES_ES[_sin_tildes(mes).upper()]
+        return date(int(anio), numero_mes, int(dia)).isoformat()
+    except (KeyError, ValueError):
         return None
 
 
