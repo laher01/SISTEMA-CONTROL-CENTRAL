@@ -37,6 +37,7 @@ def crear(
         codigo=datos.codigo.strip().upper(),
         nombre=datos.nombre.strip(),
         rol=datos.rol,
+        creado_por_cuenta_id=auth.cuenta_id,
     )
     session.add(miembro)
     try:
