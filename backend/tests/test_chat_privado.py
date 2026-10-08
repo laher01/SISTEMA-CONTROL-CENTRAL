@@ -5,9 +5,7 @@ from app.models import CuentaAcceso, Miembro
 from tests.conftest import AuthPrueba
 
 
-def _crear_contacto(
-    session: Session, tenant_id: object, codigo: str, rol: str
-) -> str:
+def _crear_contacto(session: Session, tenant_id: object, codigo: str, rol: str) -> str:
     miembro = Miembro(
         tenant_id=tenant_id,
         codigo=codigo,
