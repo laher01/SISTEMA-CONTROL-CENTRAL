@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 
-import { enviarFormulario, urlArchivo, urlZipExpediente, useDatos } from "../api";
+import { enviarFormulario, urlArchivo, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
 import { Estado, Semaforo } from "../componentes";
 import {
   ETIQUETA_ALERTA,
@@ -27,7 +27,7 @@ export default function ExpedienteDetalle() {
               : "FACT " + numeroExpediente(datos.tipo_comprobante, datos.serie, datos.correlativo)}{" "}
             <Semaforo estado={datos.estado} />
           </h2>
-          <p><a className="boton-enlace" href={urlZipExpediente(datos.id)}>Descargar expediente completo (.zip)</a></p>
+          <p><a className="boton-enlace" href={urlZipExpediente(datos.id)}>Descargar expediente completo (.zip)</a>{" · "}<a className="boton-enlace" href={urlPdfExpediente(datos.id)}>Descargar PDF ordenado</a></p>
           <dl className="ficha">
             <dt>Emisor</dt>
             <dd>
