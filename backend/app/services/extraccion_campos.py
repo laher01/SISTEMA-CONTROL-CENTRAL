@@ -696,6 +696,17 @@ def _extraer_partes_rhe(
             rucs[1], min(0.88, 0.84 * factor), _contexto(texto, rucs[1])
         ).a_dict(fuente)
 
+    dato_emisor = campos.get("ruc_emisor")
+    if dato_emisor:
+        nombre_emisor = _razon_emisor_rhe(texto, str(dato_emisor["valor"]))
+        if nombre_emisor:
+            valor, evidencia = nombre_emisor
+            campos["razon_social_emisor"] = CampoExtraido(
+                valor,
+                min(0.98, 0.96 * factor),
+                evidencia,
+            ).a_dict(fuente)
+
     if receptor:
         nombre_receptor = _razon_social_etiquetada_para_ruc(
             texto,
@@ -709,6 +720,52 @@ def _extraer_partes_rhe(
                 min(0.97, 0.95 * factor),
                 evidencia,
             ).a_dict(fuente)
+
+
+def _razon_emisor_rhe(texto: str, ruc: str) -> tuple[str, str] | None:
+    """Obtiene el nombre del prestador en RHE SUNAT reales.
+
+    SUNAT puede extraer el encabezado como:
+      NOMBRE R.U.C. 107...
+    o separar R.U.C., número, serie y nombre en líneas distintas.
+    """
+    lineas = [linea.strip() for linea in texto.splitlines()]
+    for indice, linea in enumerate(lineas):
+        if ruc not in re.sub(r"\D", "", linea):
+            continue
+
+        # Caso habitual del PDF SUNAT: "AYALA ... R.U.C. 10753246920".
+        candidato_misma = re.sub(
+            r"\bR\.?\s*U\.?\s*C\.?\s*[:\-]?\s*" + re.escape(ruc) + r".*$",
+            "",
+            linea,
+            flags=re.IGNORECASE,
+        ).strip(" :-\t")
+        if _razon_social_valida(candidato_misma):
+            return candidato_misma[:300], " ".join(linea.split())[:300]
+
+        # El texto PDF también puede reordenar visualmente el encabezado.
+        # Buscamos alrededor del RUC saltando etiquetas, serie, dirección y teléfono.
+        indices = list(range(indice - 1, max(-1, indice - 5), -1))
+        indices += list(range(indice + 1, min(len(lineas), indice + 7)))
+        for posicion in indices:
+            if posicion < 0 or posicion >= len(lineas):
+                continue
+            candidato = _recortar_razon(lineas[posicion])
+            normal = _sin_tildes(candidato).upper().strip()
+            if not candidato:
+                continue
+            if re.fullmatch(r"(?:NRO\.?|R\.?U\.?C\.?|E\d{3}\s*[-–—]?\s*\d+)", normal):
+                continue
+            if re.match(r"^(?:TELEFONO|RECIBO POR HONORARIOS|ELECTRONICO)\b", normal):
+                continue
+            if _razon_social_valida(candidato) and not _parece_direccion(candidato):
+                evidencia = " ".join(
+                    x.strip() for x in lineas[max(0, indice - 2) : min(len(lineas), posicion + 2)]
+                    if x.strip()
+                )
+                return candidato[:300], evidencia[:300]
+    return None
 
 
 def _extraer_razones_vinculadas_a_ruc(
@@ -871,6 +928,9 @@ def _razon_social_valida(valor: str) -> bool:
     if not re.search(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]", valor):
         return False
     normalizado = _sin_tildes(valor).upper().strip()
+    etiqueta_compacta = re.sub(r"[^A-Z0-9]+", "", normalizado)
+    if etiqueta_compacta in {"RUC", "NRO", "NUMERO", "ELECTRONICO"}:
+        return False
     if any(
         normalizado == invalido or normalizado.startswith(f"{invalido} ") for invalido in NO_RAZON
     ):
