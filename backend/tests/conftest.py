@@ -56,6 +56,19 @@ class AuthPrueba:
             cambio_clave_obligatorio=False,
         )
 
+    def como_gerente(self) -> None:
+        self.contexto = ContextoAcceso(
+            cuenta_id=self.contexto.cuenta_id,
+            tenant_id=self.contexto.tenant_id,
+            rol="GERENTE",
+            miembro_id=self.contexto.miembro_id,
+            gestor_id=None,
+            usuario_id=None,
+            codigo="GERENTE-TEST",
+            nombre="Gerente de pruebas",
+            cambio_clave_obligatorio=False,
+        )
+
     def como_usuario(self, usuario_id: uuid.UUID, codigo: str = "USUARIO") -> None:
         self.contexto = ContextoAcceso(
             cuenta_id=self.contexto.cuenta_id,
