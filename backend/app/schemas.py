@@ -303,6 +303,7 @@ class ComprasProveedorFila(BaseModel):
 
 
 class LoginIn(BaseModel):
+    espacio: str | None = Field(default=None, min_length=1, max_length=200)
     login: str = Field(min_length=1, max_length=100)
     clave: str = Field(min_length=8, max_length=200)
 

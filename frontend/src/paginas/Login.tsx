@@ -4,6 +4,7 @@ import { enviarJson, useDatos } from "../api";
 import type { SesionActual } from "../tipos";
 
 export function Login({ alIngresar }: { alIngresar: () => void }) {
+  const [espacio, setEspacio] = useState("");
   const [login, setLogin] = useState("");
   const [clave, setClave] = useState("");
   const [error, setError] = useState("");
@@ -22,7 +23,7 @@ export function Login({ alIngresar }: { alIngresar: () => void }) {
     setError("");
     setEnviando(true);
     try {
-      await enviarJson<SesionActual>("/api/v1/auth/login", "POST", { login, clave });
+      await enviarJson<SesionActual>("/api/v1/auth/login", "POST", { espacio: espacio.trim() || null, login, clave });
       alIngresar();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -57,6 +58,10 @@ export function Login({ alIngresar }: { alIngresar: () => void }) {
         <h1>FACT CENTRAL</h1>
         <p className="tenue">Ingresa con la cuenta asignada por Administración.</p>
         <form onSubmit={ingresar} className="login-formulario">
+          <label>
+            Espacio administrativo
+            <input value={espacio} onChange={(e) => setEspacio(e.target.value)} placeholder="Código o nombre de Administración" autoComplete="organization" />
+          </label>
           <label>
             Usuario o correo
             <input
