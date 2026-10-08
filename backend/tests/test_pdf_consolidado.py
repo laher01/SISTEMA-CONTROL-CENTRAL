@@ -46,7 +46,5 @@ def test_pdf_convierte_imagen_vinculada(client: TestClient) -> None:
 
 
 def test_pdf_ajeno_responde_404(client: TestClient) -> None:
-    respuesta = client.get(
-        "/api/v1/expedientes/00000000-0000-0000-0000-000000000001/descargar-pdf"
-    )
+    respuesta = client.get("/api/v1/expedientes/00000000-0000-0000-0000-000000000001/descargar-pdf")
     assert respuesta.status_code == 404
