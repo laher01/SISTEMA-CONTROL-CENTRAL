@@ -4,6 +4,7 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
@@ -46,6 +47,7 @@ from app.schemas import (
 )
 from app.security import cuenta_administradora_responsable
 from app.services import auditoria
+from app.services.distribucion_jonatan import calcular_distribucion_jonatan
 
 router = APIRouter(prefix="/pagos", tags=["pagos"])
 
@@ -72,6 +74,51 @@ def _usuario_valido(
     ):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Usuario inválido")
     return usuario
+
+
+class SimulacionJonatanIn(BaseModel):
+    total_emitido: Decimal = Field(ge=0)
+    base_autorizada: Decimal | None = Field(default=None, gt=0)
+    usar_total_emitido: bool = False
+
+
+class SimulacionJonatanOut(BaseModel):
+    base: Decimal
+    bruto_referencial: Decimal
+    neto_pagable: Decimal
+    gente_lima: Decimal
+    javier: Decimal
+    jonatan: Decimal
+    porcentaje_excluido_alex: Decimal
+    modo_base: str
+
+
+@router.post("/simular-jonatan", response_model=SimulacionJonatanOut)
+def simular_jonatan(
+    datos: SimulacionJonatanIn,
+    auth: OperativeAuthDep,
+) -> SimulacionJonatanOut:
+    # Exclusivo de Administración hasta establecer la jerarquía Responsable.
+    if auth.rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin permiso de simulación")
+    try:
+        resultado = calcular_distribucion_jonatan(
+            total_emitido=datos.total_emitido,
+            base_autorizada=datos.base_autorizada,
+            usar_total_emitido=datos.usar_total_emitido,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    return SimulacionJonatanOut(
+        base=resultado.base,
+        bruto_referencial=resultado.bruto,
+        neto_pagable=resultado.neto,
+        gente_lima=resultado.gente_lima,
+        javier=resultado.javier,
+        jonatan=resultado.jonatan,
+        porcentaje_excluido_alex=resultado.excluido_alex,
+        modo_base=resultado.modo_base,
+    )
 
 
 @router.get("/usuarios", response_model=list[FiltroOpcion])
