@@ -41,3 +41,30 @@ La documentación actual dice ADMINISTRADOR -> GERENTE/SECRETARIA -> USUARIO -> 
 - Documentar fórmula de JAVIER01 antes de habilitar cálculos especiales.
 
 No desplegar en productivo hasta definir vigencia, usuarios definitivos, fórmula JAVIER01, compatibilidad histórica y pasar pruebas.
+
+
+## 8. Regla específica documentada para JAVIER01 / Jonatan y gestor Javier
+
+Fuente: cuatro capturas de la hoja «JONATAN» facilitadas por la operación, 08/10/2026. Queda como **regla especial candidata** para un plan de liquidación versionado propio de ese Usuario, no sustituye los pagos generales ni se activa sin pruebas y validación de pagador.
+
+**Variable base B**: si «TOT FACTURAS A PAGAR» contiene un importe manual mayor que cero, tomar ese importe; si está vacío o cero, la hoja calcula sobre TOTAL EMITIDO, incluso cuando excede el REGISTRADO. Esto es funcionamiento observado en la hoja, no una autorización para pagar producción no validada. En FACT CENTRAL conviene exigir confirmación explícita del modo «TOTAL EMITIDO» para evitar que un cero accidental dispare pagos superiores a lo autorizado.
+
+Distribución observada sobre B:
+- Comisión bruta: B × 3.000 %.
+- Gente y Lima: B × 2.250 %.
+- Javier («pata Jonatan»): B × 0.125 %.
+- Bolsa «Alex y Jonatan»: B × 0.625 %.
+- Alex: bolsa / 2 = B × 0.3125 %.
+- Jonatan: bolsa / 2 = B × 0.3125 %.
+- «Total a enviar a Jonatan» = comisión bruta - Alex = B × 2.6875 %; **no equivale al beneficio individual de Jonatan**.
+- El total del envío integra participaciones de otros destinatarios y no debe contabilizarse como ingreso propio de Jonatan.
+
+Pruebas numéricas basadas en capturas:
+1. B = S/ 378,000.00 => bruto S/ 11,340.00; Gente/Lima S/ 8,505.00; Javier S/ 472.50; bolsa S/ 2,362.50; Alex S/ 1,181.25; envío S/ 10,158.75.
+2. B = S/ 1,114,897.76 => bruto S/ 33,446.93; Gente/Lima S/ 25,085.20; Javier S/ 1,393.62; bolsa S/ 6,968.11; Alex S/ 3,484.06; envío S/ 29,962.88.
+3. Columna comparativa del Excel: REGISTRADO S/ 507,937.14 versus TOTAL EMITIDO S/ 1,114,897.76; diferencia S/ 606,960.62. Las filas por proveedor muestran emitido/registrado/exceso. No tratar el total emitido como pagable sin autorización expresa.
+4. Las capturas muestran diferencias por redondeo de 1 céntimo potenciales en repartos. Debe documentarse algoritmo único de precisión interna Decimal y asignación del residuo al beneficiario autorizado, no redondear porcentajes intermedios arbitrariamente.
+
+**Separación jerárquica**: este plan al 3 % es particular a Jonatan/Javier y su flujo de distribución, no altera el 3.5 % bruto por producción válida de su Responsable Luis Arévalo. Registrar beneficiarios individuales, reparto interno, adelantos, saldo y estado; no contabilizar dos veces el total enviado a Jonatan y sus subcomponentes.
+
+**Estado**: se ha entendido y documentado, falta configurar destinatarios reales, política de redondeos, base elegible y autorización de pagos antes de implementar el cálculo especial en backend y frontend. Entretanto, JAVIER01 conserva el plan común vigente sin sustituirlo automáticamente.
