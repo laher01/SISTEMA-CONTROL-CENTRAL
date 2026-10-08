@@ -11,11 +11,14 @@ from app.enums import RolMiembro
 from app.models import (
     AbonoClienteERP,
     AdelantoERP,
+    AsignacionPedidoGerencia,
     CuentaPagoERP,
     Empresa,
     Expediente,
+    Gestor,
     Miembro,
     PagoERP,
+    PedidoGerencia,
     PlanLiquidacion,
 )
 from app.schemas import (
@@ -29,9 +32,14 @@ from app.schemas import (
     CuentaPagoERPIn,
     CuentaPagoERPOut,
     FiltroOpcion,
+    AsignacionPedidoGerenciaIn,
+    AsignacionPedidoGerenciaOut,
     PagoERPActualizarIn,
     PagoERPOut,
     PagoERPProgramarIn,
+    PedidoGerenciaActualizarIn,
+    PedidoGerenciaIn,
+    PedidoGerenciaOut,
     PlanLiquidacionIn,
     PlanLiquidacionOut,
 )
@@ -328,6 +336,451 @@ def actualizar_agente_retencion(
     )
     session.commit()
     return cliente.agente_retencion
+
+
+def _pedido_valido(
+    session: SessionDep,
+    tenant_id: uuid.UUID,
+    pedido_id: uuid.UUID,
+) -> PedidoGerencia:
+    pedido = session.get(PedidoGerencia, pedido_id)
+    if pedido is None or pedido.tenant_id != tenant_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pedido de Gerencia no encontrado")
+    return pedido
+
+
+def _generar_distribucion_usuario(
+    session: SessionDep,
+    tenant_id: uuid.UUID,
+    auth: OperativeAuthDep,
+    pedido: PedidoGerencia,
+) -> None:
+    usuarios = list(
+        session.scalars(
+            select(Miembro)
+            .where(
+                Miembro.tenant_id == tenant_id,
+                Miembro.rol == RolMiembro.USUARIO,
+                Miembro.activo.is_(True),
+                Miembro.deleted_at.is_(None),
+            )
+            .order_by(Miembro.codigo)
+        )
+    )
+    if not usuarios:
+        return
+
+    existentes = list(
+        session.scalars(
+            select(AsignacionPedidoGerencia).where(
+                AsignacionPedidoGerencia.tenant_id == tenant_id,
+                AsignacionPedidoGerencia.pedido_id == pedido.id,
+            )
+        )
+    )
+    for asignacion in existentes:
+        session.delete(asignacion)
+
+    total = Decimal(pedido.monto_solicitado).quantize(Decimal("0.01"))
+    base = (total / Decimal(len(usuarios))).quantize(Decimal("0.01"))
+    acumulado = Decimal("0")
+    for indice, usuario in enumerate(usuarios):
+        monto = total - acumulado if indice == len(usuarios) - 1 else base
+        acumulado += monto
+        session.add(
+            AsignacionPedidoGerencia(
+                tenant_id=tenant_id,
+                pedido_id=pedido.id,
+                usuario_id=usuario.id,
+                gestor_id=None,
+                proveedor_id=None,
+                monto_asignado=monto,
+                creado_por_cuenta_id=cuenta_administradora_responsable(session, auth),
+            )
+        )
+
+
+def _resumen_pedido(
+    session: SessionDep,
+    tenant_id: uuid.UUID,
+    pedido: PedidoGerencia,
+) -> PedidoGerenciaOut:
+    cliente = session.get(Empresa, pedido.cliente_id)
+    if cliente is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "El Cliente del pedido ya no existe")
+
+    desde, hasta = _rango_mes(pedido.periodo_mes.strftime("%Y-%m"))
+    base_filtros = (
+        Expediente.tenant_id == tenant_id,
+        Expediente.deleted_at.is_(None),
+        Expediente.receptor_id == pedido.cliente_id,
+        Expediente.moneda == pedido.moneda,
+        Expediente.fecha_emision >= desde,
+        Expediente.fecha_emision <= hasta,
+    )
+    ejecutado = Decimal(
+        session.scalar(
+            select(func.coalesce(func.sum(Expediente.importe_total), 0)).where(*base_filtros)
+        )
+        or 0
+    )
+
+    asignaciones_db = list(
+        session.scalars(
+            select(AsignacionPedidoGerencia)
+            .where(
+                AsignacionPedidoGerencia.tenant_id == tenant_id,
+                AsignacionPedidoGerencia.pedido_id == pedido.id,
+            )
+            .order_by(AsignacionPedidoGerencia.created_at, AsignacionPedidoGerencia.id)
+        )
+    )
+    asignaciones: list[AsignacionPedidoGerenciaOut] = []
+    asignado = Decimal("0")
+    for asignacion in asignaciones_db:
+        usuario = session.get(Miembro, asignacion.usuario_id)
+        gestor = session.get(Gestor, asignacion.gestor_id) if asignacion.gestor_id else None
+        proveedor = (
+            session.get(Empresa, asignacion.proveedor_id) if asignacion.proveedor_id else None
+        )
+        consulta = select(func.coalesce(func.sum(Expediente.importe_total), 0)).where(
+            *base_filtros,
+            Expediente.usuario_id == asignacion.usuario_id,
+        )
+        if asignacion.gestor_id is not None:
+            consulta = consulta.where(Expediente.gestor_id == asignacion.gestor_id)
+        if asignacion.proveedor_id is not None:
+            consulta = consulta.where(Expediente.emisor_id == asignacion.proveedor_id)
+        ejecutado_asignacion = Decimal(session.scalar(consulta) or 0)
+        monto_asignado = Decimal(asignacion.monto_asignado)
+        asignado += monto_asignado
+        asignaciones.append(
+            AsignacionPedidoGerenciaOut(
+                id=asignacion.id,
+                usuario_id=asignacion.usuario_id,
+                usuario_codigo=usuario.codigo if usuario else "—",
+                usuario_nombre=usuario.nombre if usuario else "Usuario no disponible",
+                gestor_id=asignacion.gestor_id,
+                gestor_codigo=gestor.codigo if gestor else None,
+                gestor_nombre=gestor.nombre if gestor else None,
+                proveedor_id=asignacion.proveedor_id,
+                proveedor_ruc=proveedor.ruc if proveedor else None,
+                proveedor_razon_social=proveedor.razon_social if proveedor else None,
+                monto_asignado=monto_asignado,
+                ejecutado=ejecutado_asignacion,
+                saldo=monto_asignado - ejecutado_asignacion,
+            )
+        )
+
+    concentraciones = list(
+        session.execute(
+            select(
+                Expediente.emisor_id,
+                func.coalesce(func.sum(Expediente.importe_total), 0),
+            )
+            .where(*base_filtros)
+            .group_by(Expediente.emisor_id)
+        )
+    )
+    proveedor_mayor = None
+    concentracion = Decimal("0")
+    if ejecutado > 0 and concentraciones:
+        proveedor_id, mayor = max(concentraciones, key=lambda fila: Decimal(fila[1] or 0))
+        mayor_decimal = Decimal(mayor or 0)
+        concentracion = (
+            mayor_decimal * Decimal("100") / ejecutado
+        ).quantize(Decimal("0.01"))
+        proveedor_obj = session.get(Empresa, proveedor_id) if proveedor_id else None
+        if proveedor_obj is not None:
+            proveedor_mayor = f"{proveedor_obj.ruc} · {proveedor_obj.razon_social}"
+
+    solicitado = Decimal(pedido.monto_solicitado)
+    diferencia = solicitado - ejecutado
+    pendiente = max(diferencia, Decimal("0"))
+    exceso = max(-diferencia, Decimal("0"))
+    avance = (
+        (ejecutado * Decimal("100") / solicitado).quantize(Decimal("0.01"))
+        if solicitado > 0
+        else Decimal("0")
+    )
+
+    return PedidoGerenciaOut(
+        id=pedido.id,
+        cliente_id=pedido.cliente_id,
+        cliente_ruc=cliente.ruc,
+        cliente_razon_social=cliente.razon_social,
+        periodo_mes=pedido.periodo_mes,
+        moneda=pedido.moneda,
+        monto_solicitado=solicitado,
+        monto_asignado=asignado,
+        monto_ejecutado=ejecutado,
+        saldo_pendiente=pendiente,
+        exceso=exceso,
+        avance_porcentaje=avance,
+        modalidad=pedido.modalidad,
+        modo_distribucion=pedido.modo_distribucion,
+        estado=pedido.estado,
+        observacion=pedido.observacion,
+        concentracion_maxima_proveedor=concentracion,
+        proveedor_mayor_concentracion=proveedor_mayor,
+        asignaciones=asignaciones,
+    )
+
+
+@router.post(
+    "/pedidos",
+    response_model=PedidoGerenciaOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def crear_pedido_gerencia(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    datos: PedidoGerenciaIn,
+) -> PedidoGerenciaOut:
+    _validar_acceso(auth.rol)
+    cliente = _cliente_valido(session, tenant_id, datos.cliente_id)
+    periodo = datos.periodo_mes.replace(day=1)
+    pedido = PedidoGerencia(
+        tenant_id=tenant_id,
+        cliente_id=cliente.id,
+        periodo_mes=periodo,
+        moneda=datos.moneda,
+        monto_solicitado=datos.monto_solicitado,
+        modalidad=datos.modalidad,
+        modo_distribucion=datos.modo_distribucion,
+        estado="ACTIVO",
+        observacion=datos.observacion.strip() if datos.observacion else None,
+        creado_por_cuenta_id=cuenta_administradora_responsable(session, auth),
+    )
+    session.add(pedido)
+    try:
+        session.flush()
+    except Exception as exc:
+        session.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Ya existe un Pedido de Gerencia para ese Cliente, mes y moneda",
+        ) from exc
+
+    if pedido.modo_distribucion in {"SEMIASISTIDA", "AUTOMATICA"}:
+        _generar_distribucion_usuario(session, tenant_id, auth, pedido)
+
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "PEDIDO_GERENCIA_CREADO",
+        "pedido_gerencia",
+        pedido.id,
+        {
+            "cliente_id": str(cliente.id),
+            "ruc": cliente.ruc,
+            "periodo": periodo.isoformat(),
+            "moneda": pedido.moneda,
+            "monto_solicitado": str(pedido.monto_solicitado),
+            "modalidad": pedido.modalidad,
+            "modo_distribucion": pedido.modo_distribucion,
+        },
+    )
+    session.commit()
+    return _resumen_pedido(session, tenant_id, pedido)
+
+
+@router.get("/pedidos", response_model=list[PedidoGerenciaOut])
+def listar_pedidos_gerencia(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    mes: str | None = None,
+    moneda: str | None = None,
+) -> list[PedidoGerenciaOut]:
+    _validar_acceso(auth.rol)
+    consulta = select(PedidoGerencia).where(PedidoGerencia.tenant_id == tenant_id)
+    if mes:
+        desde, _ = _rango_mes(mes)
+        consulta = consulta.where(PedidoGerencia.periodo_mes == desde)
+    if moneda:
+        if moneda not in {"PEN", "USD"}:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Moneda inválida")
+        consulta = consulta.where(PedidoGerencia.moneda == moneda)
+    pedidos = list(
+        session.scalars(
+            consulta.order_by(PedidoGerencia.periodo_mes.desc(), PedidoGerencia.created_at.desc())
+        )
+    )
+    return [_resumen_pedido(session, tenant_id, pedido) for pedido in pedidos]
+
+
+@router.patch("/pedidos/{pedido_id}", response_model=PedidoGerenciaOut)
+def actualizar_pedido_gerencia(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    pedido_id: uuid.UUID,
+    datos: PedidoGerenciaActualizarIn,
+) -> PedidoGerenciaOut:
+    _validar_acceso(auth.rol)
+    pedido = _pedido_valido(session, tenant_id, pedido_id)
+    anterior = {
+        "monto_solicitado": str(pedido.monto_solicitado),
+        "modalidad": pedido.modalidad,
+        "modo_distribucion": pedido.modo_distribucion,
+        "estado": pedido.estado,
+        "observacion": pedido.observacion,
+    }
+    if datos.monto_solicitado is not None:
+        pedido.monto_solicitado = datos.monto_solicitado
+    if datos.modalidad is not None:
+        pedido.modalidad = datos.modalidad
+    if datos.modo_distribucion is not None:
+        pedido.modo_distribucion = datos.modo_distribucion
+    if datos.estado is not None:
+        pedido.estado = datos.estado
+    if "observacion" in datos.model_fields_set:
+        pedido.observacion = datos.observacion.strip() if datos.observacion else None
+
+    if (
+        datos.modo_distribucion in {"SEMIASISTIDA", "AUTOMATICA"}
+        or (
+            datos.monto_solicitado is not None
+            and pedido.modo_distribucion in {"SEMIASISTIDA", "AUTOMATICA"}
+        )
+    ):
+        _generar_distribucion_usuario(session, tenant_id, auth, pedido)
+
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "PEDIDO_GERENCIA_ACTUALIZADO",
+        "pedido_gerencia",
+        pedido.id,
+        {
+            "anterior": anterior,
+            "nuevo": datos.model_dump(exclude_unset=True),
+            "actor": auth.codigo,
+        },
+    )
+    session.commit()
+    return _resumen_pedido(session, tenant_id, pedido)
+
+
+@router.post(
+    "/pedidos/{pedido_id}/asignaciones",
+    response_model=PedidoGerenciaOut,
+)
+def agregar_asignacion_pedido(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    pedido_id: uuid.UUID,
+    datos: AsignacionPedidoGerenciaIn,
+) -> PedidoGerenciaOut:
+    _validar_acceso(auth.rol)
+    pedido = _pedido_valido(session, tenant_id, pedido_id)
+    usuario = _usuario_valido(session, tenant_id, datos.usuario_id)
+
+    gestor = None
+    if datos.gestor_id is not None:
+        gestor = session.get(Gestor, datos.gestor_id)
+        if (
+            gestor is None
+            or gestor.tenant_id != tenant_id
+            or gestor.deleted_at is not None
+            or gestor.usuario_id != usuario.id
+        ):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "El Gestor no pertenece al Usuario seleccionado",
+            )
+
+    proveedor = None
+    if datos.proveedor_id is not None:
+        proveedor = session.get(Empresa, datos.proveedor_id)
+        if (
+            proveedor is None
+            or proveedor.tenant_id != tenant_id
+            or proveedor.deleted_at is not None
+            or proveedor.tipo_relacion not in {"PROVEEDOR", "AMBOS"}
+        ):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "La empresa seleccionada no es un Proveedor activo",
+            )
+
+    duplicada = session.scalar(
+        select(AsignacionPedidoGerencia).where(
+            AsignacionPedidoGerencia.tenant_id == tenant_id,
+            AsignacionPedidoGerencia.pedido_id == pedido.id,
+            AsignacionPedidoGerencia.usuario_id == usuario.id,
+            AsignacionPedidoGerencia.gestor_id == datos.gestor_id,
+            AsignacionPedidoGerencia.proveedor_id == datos.proveedor_id,
+        )
+    )
+    if duplicada is not None:
+        duplicada.monto_asignado = datos.monto_asignado
+        asignacion = duplicada
+    else:
+        asignacion = AsignacionPedidoGerencia(
+            tenant_id=tenant_id,
+            pedido_id=pedido.id,
+            usuario_id=usuario.id,
+            gestor_id=gestor.id if gestor else None,
+            proveedor_id=proveedor.id if proveedor else None,
+            monto_asignado=datos.monto_asignado,
+            creado_por_cuenta_id=cuenta_administradora_responsable(session, auth),
+        )
+        session.add(asignacion)
+
+    session.flush()
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "PEDIDO_GERENCIA_ASIGNACION",
+        "asignacion_pedido_gerencia",
+        asignacion.id,
+        {
+            "pedido_id": str(pedido.id),
+            "usuario_id": str(usuario.id),
+            "gestor_id": str(gestor.id) if gestor else None,
+            "proveedor_id": str(proveedor.id) if proveedor else None,
+            "monto": str(datos.monto_asignado),
+        },
+    )
+    session.commit()
+    return _resumen_pedido(session, tenant_id, pedido)
+
+
+@router.delete(
+    "/pedidos/{pedido_id}/asignaciones/{asignacion_id}",
+    response_model=PedidoGerenciaOut,
+)
+def eliminar_asignacion_pedido(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    pedido_id: uuid.UUID,
+    asignacion_id: uuid.UUID,
+) -> PedidoGerenciaOut:
+    _validar_acceso(auth.rol)
+    pedido = _pedido_valido(session, tenant_id, pedido_id)
+    asignacion = session.get(AsignacionPedidoGerencia, asignacion_id)
+    if (
+        asignacion is None
+        or asignacion.tenant_id != tenant_id
+        or asignacion.pedido_id != pedido.id
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Asignación no encontrada")
+    session.delete(asignacion)
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "PEDIDO_GERENCIA_ASIGNACION_ELIMINADA",
+        "asignacion_pedido_gerencia",
+        asignacion.id,
+        {"pedido_id": str(pedido.id), "actor": auth.codigo},
+    )
+    session.commit()
+    return _resumen_pedido(session, tenant_id, pedido)
 
 
 @router.post("/planes", response_model=PlanLiquidacionOut, status_code=status.HTTP_201_CREATED)
