@@ -31,7 +31,10 @@ def upgrade() -> None:
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("tenant_id", sa.Uuid(), nullable=False),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
         ),
         sa.ForeignKeyConstraint(["remitente_cuenta_id"], ["cuentas_acceso.id"]),
         sa.ForeignKeyConstraint(["destinatario_cuenta_id"], ["cuentas_acceso.id"]),
