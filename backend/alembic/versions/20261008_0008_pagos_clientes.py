@@ -36,6 +36,14 @@ def upgrade() -> None:
         WHERE m.rol = 'USUARIO'
         """
     )
+    op.execute(
+        """
+        UPDATE miembros
+        SET porcentaje_produccion = 1.5000
+        WHERE rol = 'USUARIO'
+          AND porcentaje_produccion IS NULL
+        """
+    )
 
     op.create_table(
         "abonos_cliente_erp",
