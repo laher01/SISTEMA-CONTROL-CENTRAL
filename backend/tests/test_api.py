@@ -5,12 +5,12 @@ from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 from pypdf import PdfWriter
-from sqlalchemy import Engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import Engine, select
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.routes import documentos as documentos_routes
 from app.core.config import Settings
-from app.models import Expediente
+from app.models import Empresa, Expediente
 from app.services import procesamiento_documental
 from app.services.procesamiento_documental import ResultadoProcesamiento, sugerir_tipo
 from tests.conftest import AuthPrueba, Reloj
@@ -845,3 +845,44 @@ def test_empresas_solo_se_eliminan_manual_y_se_reactivan_por_ruc(
     reactivadas = client.get("/api/v1/empresas")
     assert reactivadas.status_code == 200, reactivadas.text
     assert {empresa["id"] for empresa in reactivadas.json()} == set(ids)
+
+
+def test_reprocesar_rhe_repara_razon_social_contaminada(
+    client: TestClient,
+    session: Session,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings.tenant_ruc = None
+    texto = """RECIBO POR HONORARIOS ELECTRÓNICO
+AYALA AREVALO ELVIS EDUARDO R.U.C. 10753246920
+Nro: E001-35
+Recibí de MAIK FISHING SOCIEDAD ANONIMA CERRADA
+Identificado con RUC Número 20609762030
+Fecha de emisión 19 de Agosto del 2026
+Total por Honorarios : 1,500.00"""
+
+    monkeypatch.setattr(
+        documentos_routes,
+        "procesar",
+        lambda *_: ResultadoProcesamiento(
+            texto=texto,
+            metodo="TEXTO_PDF",
+            motor="prueba",
+            paginas=1,
+            confianza=1.0,
+            sugerencia=sugerir_tipo(texto),
+        ),
+    )
+
+    documento = subir(client, "rhe-35.pdf", pdf_vacio())
+    empresa = session.scalar(select(Empresa).where(Empresa.ruc == "10753246920"))
+    assert empresa is not None
+    empresa.razon_social = "Nro: E001-33"
+    session.commit()
+
+    respuesta = client.post(f"/api/v1/documentos/{documento['id']}/procesar")
+    assert respuesta.status_code == 200, respuesta.text
+
+    session.refresh(empresa)
+    assert empresa.razon_social == "AYALA AREVALO ELVIS EDUARDO"
