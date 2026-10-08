@@ -448,18 +448,19 @@ def descargar_zip(
                 if not extension or len(extension) > 12 or not extension[1:].isalnum():
                     extension = ".bin"
                 nombre = (
-                    f"{nombre_carpeta}/{i:03d}_"
-                    f"{doc.tipo_documento or 'OTRO'}_{doc.id}{extension}"
+                    f"{nombre_carpeta}/{i:03d}_{doc.tipo_documento or 'OTRO'}_{doc.id}{extension}"
                 )
                 ruta = almacen.ruta_absoluta(doc.ruta_storage)
                 zf.write(ruta, arcname=nombre)
-                manifiesto["documentos"].append({
-                    "nombre_original": doc.nombre_original,
-                    "archivo": nombre,
-                    "tipo_documento": doc.tipo_documento,
-                    "sha256": doc.sha256,
-                    "fecha_carga": doc.created_at.isoformat(),
-                })
+                manifiesto["documentos"].append(
+                    {
+                        "nombre_original": doc.nombre_original,
+                        "archivo": nombre,
+                        "tipo_documento": doc.tipo_documento,
+                        "sha256": doc.sha256,
+                        "fecha_carga": doc.created_at.isoformat(),
+                    }
+                )
             zf.writestr(
                 f"{nombre_carpeta}/manifiesto.json",
                 json.dumps(manifiesto, ensure_ascii=False, indent=2),
@@ -471,7 +472,11 @@ def descargar_zip(
         ) from None
 
     auditoria.registrar(
-        session, tenant_id, "EXPEDIENTE_ZIP_DESCARGADO", "expediente", expediente_id,
+        session,
+        tenant_id,
+        "EXPEDIENTE_ZIP_DESCARGADO",
+        "expediente",
+        expediente_id,
         {"actor": auth.codigo, "documentos": len(documentos)},
     )
     session.commit()
