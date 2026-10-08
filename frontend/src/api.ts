@@ -61,6 +61,10 @@ export function eliminar(ruta: string): Promise<unknown> {
   return solicitar<unknown>(ruta, { method: "DELETE" });
 }
 
+export function urlZipExpediente(expedienteId: string): string {
+  return `${BASE}/api/v1/expedientes/${expedienteId}/descargar-zip`;
+}
+
 export function urlArchivo(documentoId: string): string {
   return `${BASE}/api/v1/documentos/${documentoId}/archivo`;
 }
