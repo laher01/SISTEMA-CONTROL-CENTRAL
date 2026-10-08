@@ -377,3 +377,20 @@ Fecha de emisión"""
     assert campos["ruc_emisor"]["valor"] == "10404432953"
     assert campos["razon_social_emisor"]["valor"] == "AREVALO HERRERA LUIS ALEXANDER"
     assert campos["ruc_receptor"]["valor"] == "20523209176"
+
+
+def test_rhe_no_acepta_nro_como_razon_social_emisor() -> None:
+    texto = """RECIBO POR HONORARIOS ELECTRÓNICO
+R.U.C. 10753246920
+Nro: E001-35
+AYALA AREVALO ELVIS EDUARDO
+Recibí de MAIK FISHING SOCIEDAD ANONIMA CERRADA
+Identificado con RUC Número 20609762030
+Fecha de emisión 19 de Agosto del 2026
+Total por Honorarios : 1,500.00"""
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    campos = resultado["campos"]
+    assert isinstance(campos, dict)
+    assert campos["ruc_emisor"]["valor"] == "10753246920"
+    assert campos["razon_social_emisor"]["valor"] == "AYALA AREVALO ELVIS EDUARDO"
