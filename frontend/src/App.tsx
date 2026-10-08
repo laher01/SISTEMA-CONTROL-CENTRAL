@@ -4,6 +4,7 @@ import { enviarJson, useDatos } from "./api";
 import NexusFlotante from "./componentes/NexusFlotante";
 import Alertas from "./paginas/Alertas";
 import Configuracion from "./paginas/Configuracion";
+import Chat from "./paginas/Chat";
 import Dashboard from "./paginas/Dashboard";
 import Documentos from "./paginas/Documentos";
 import Empresas from "./paginas/Empresas";
@@ -30,6 +31,11 @@ const MENU: { a: string; texto: string; roles: RolSesion[] }[] = [
   {
     a: "/registros",
     texto: "Registros",
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"],
+  },
+  {
+    a: "/chat",
+    texto: "Chat interno",
     roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"],
   },
   {
@@ -117,6 +123,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/subir" element={<Subir sesion={sesion} />} />
           <Route path="/registros" element={<Registros sesion={sesion} />} />
+          <Route path="/chat" element={<Chat />} />
           <Route path="/documentos" element={<Documentos sesion={sesion} />} />
           <Route path="/expedientes" element={<Expedientes sesion={sesion} />} />
           <Route path="/expedientes/:id" element={<ExpedienteDetalle />} />
