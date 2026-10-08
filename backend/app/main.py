@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import (
     alertas,
     auth,
+    chat,
     configuracion,
     configuracion_acceso,
     dashboard,
@@ -41,6 +42,7 @@ api = APIRouter(prefix="/api/v1")
 api.include_router(auth.router)
 for modulo in (
     documentos,
+    chat,
     expedientes,
     registros,
     empresas,
