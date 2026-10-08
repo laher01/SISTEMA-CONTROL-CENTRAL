@@ -27,6 +27,11 @@ def crear(
     datos: MiembroIn,
 ) -> AltaMiembroOut:
     _solo_admin(auth.rol)
+    if datos.rol == RolMiembro.USUARIO and datos.porcentaje_produccion is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Todo Usuario debe tener un porcentaje de producción predeterminado",
+        )
     if datos.rol == RolMiembro.SUPERADMIN and auth.rol != RolMiembro.SUPERADMIN:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
@@ -127,6 +132,18 @@ def actualizar(
                 status.HTTP_409_CONFLICT,
                 "Reasigne los gestores antes de cambiar el rol o desactivar al Usuario",
             )
+
+    rol_final = datos.rol or miembro.rol
+    porcentaje_final = (
+        datos.porcentaje_produccion
+        if "porcentaje_produccion" in datos.model_fields_set
+        else miembro.porcentaje_produccion
+    )
+    if rol_final == RolMiembro.USUARIO and porcentaje_final is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Todo Usuario debe tener un porcentaje de producción predeterminado",
+        )
 
     try:
         if datos.codigo is not None:
