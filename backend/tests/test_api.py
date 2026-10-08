@@ -734,3 +734,72 @@ def test_dashboard_desglose_agrupa_y_filtra(client: TestClient) -> None:
     assert octubre.status_code == 200, octubre.text
     assert len(octubre.json()["filas"]) == 1
     assert octubre.json()["filas"][0]["clave"] == "2026-10-02"
+
+
+def test_rhe_crea_expedientes_propios_y_suma_montos(
+    client: TestClient,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings.tenant_ruc = RECEPTOR
+    textos = iter(
+        [
+            """RECIBO POR HONORARIOS ELECTRÓNICO E001-35
+RUC EMISOR: 10404432953
+Recibí de EMPRESA RECEPTORA SAC identificado con RUC 20100000001
+Fecha de emisión 19 de Agosto del 2026
+Total por Honorarios : 1,500.00
+Total Neto Recibido : 1,500.00 SOLES""",
+            """RECIBO POR HONORARIOS ELECTRÓNICO E001-34
+RUC EMISOR: 10404432953
+Recibí de EMPRESA RECEPTORA SAC identificado con RUC 20100000001
+Fecha de emisión 20 de Agosto del 2026
+Total por Honorarios : 800.00
+Total Neto Recibido : 800.00 SOLES""",
+            """RECIBO POR HONORARIOS ELECTRÓNICO E001-33
+RUC EMISOR: 10404432953
+Recibí de EMPRESA RECEPTORA SAC identificado con RUC 20100000001
+Fecha de emisión 21 de Agosto del 2026
+Total por Honorarios : 700.00
+Total Neto Recibido : 700.00 SOLES""",
+        ]
+    )
+
+    def procesar_rhe(*_: object) -> ResultadoProcesamiento:
+        texto = next(textos)
+        return ResultadoProcesamiento(
+            texto=texto,
+            metodo="TEXTO_PDF",
+            motor="prueba",
+            paginas=1,
+            confianza=1.0,
+            sugerencia=sugerir_tipo(texto),
+        )
+
+    monkeypatch.setattr(documentos_routes, "procesar", procesar_rhe)
+
+    documentos = [
+        subir(client, "rhe-35.pdf", pdf_vacio() + b"35"),
+        subir(client, "rhe-34.pdf", pdf_vacio() + b"34"),
+        subir(client, "rhe-33.pdf", pdf_vacio() + b"33"),
+    ]
+
+    assert all(doc["tipo_documento"] == "RHE" for doc in documentos)
+    assert all(doc["estado"] == "RELACIONADO" for doc in documentos)
+    expedientes_ids = {doc["expediente_id"] for doc in documentos}
+    assert None not in expedientes_ids
+    assert len(expedientes_ids) == 3
+
+    detalles = [expediente(client, expediente_id) for expediente_id in expedientes_ids]
+    assert {detalle["correlativo"] for detalle in detalles} == {"33", "34", "35"}
+    assert all(detalle["requiere_guia"] is False for detalle in detalles)
+
+    resumen = client.get("/api/v1/dashboard/resumen")
+    assert resumen.status_code == 200, resumen.text
+    datos = resumen.json()
+    assert datos["expedientes_total"] == 3
+    montos = {m["moneda"]: m for m in datos["montos"]}
+    total_pen = Decimal(montos["PEN"]["bancarizable"]) + Decimal(
+        montos["PEN"]["no_bancarizable"]
+    )
+    assert total_pen == Decimal("3000.00")
