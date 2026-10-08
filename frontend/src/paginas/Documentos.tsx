@@ -27,6 +27,8 @@ type ResultadoLote = {
 export default function Documentos() {
   const [parametros, setParametros] = useSearchParams();
   const estado = parametros.get("estado") ?? "";
+  const tipoEmpresa = parametros.get("tipo_empresa") ?? "";
+  const dia = parametros.get("dia") ?? "";
   const tipo = parametros.get("tipo_documento") ?? "";
   const emisor = parametros.get("emisor_ruc") ?? "";
   const receptor = parametros.get("receptor_ruc") ?? "";
@@ -36,6 +38,8 @@ export default function Documentos() {
 
   const ruta = conParametros("/api/v1/documentos", {
     estado,
+    tipo_empresa: tipoEmpresa,
+    dia,
     tipo_documento: tipo,
     emisor_ruc: emisor.length === 11 ? emisor : undefined,
     receptor_ruc: receptor.length === 11 ? receptor : undefined,
@@ -102,6 +106,12 @@ export default function Documentos() {
       {errorLote && <p className="error">{errorLote}</p>}
 
       <div className="filtros filtros-documentos">
+        <select aria-label="Tipo de empresa" value={tipoEmpresa} onChange={(e) => cambiar("tipo_empresa", e.target.value)}>
+          <option value="">Todas las empresas</option>
+          <option value="A">Tipo A</option>
+          <option value="B">Tipo B</option>
+        </select>
+        <label className="filtro-fecha">Día de carga <input type="date" value={dia} onChange={(e) => cambiar("dia", e.target.value)} /></label>
         <select value={estado} onChange={(e) => cambiar("estado", e.target.value)}>
           <option value="">Todos los estados</option>
           {ESTADOS_DOCUMENTO.map((e) => (

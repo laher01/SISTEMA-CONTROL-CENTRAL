@@ -1,8 +1,9 @@
 import re
 import tempfile
 import uuid
+from datetime import date
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
@@ -108,6 +109,11 @@ def listar(
     auth: OperativeAuthDep,
     estado: EstadoExpediente | None = None,
     receptor_ruc: str | None = None,
+    emisor_ruc: str | None = None,
+    tipo_empresa: Literal["A", "B"] | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    dia: date | None = None,
     usuario_id: uuid.UUID | None = None,
     gestor_id: uuid.UUID | None = None,
     pendiente_aprobacion: bool | None = None,
@@ -130,6 +136,19 @@ def listar(
         consulta = consulta.where(Expediente.usuario_id == usuario_id)
     if gestor_id is not None:
         consulta = consulta.where(Expediente.gestor_id == gestor_id)
+    if tipo_empresa is not None or emisor_ruc is not None:
+        empresa_emisora = aliased(Empresa)
+        consulta = consulta.join(empresa_emisora, Expediente.emisor_id == empresa_emisora.id)
+        if tipo_empresa is not None:
+            consulta = consulta.where(empresa_emisora.clasificacion_proveedor == tipo_empresa)
+        if emisor_ruc is not None:
+            consulta = consulta.where(empresa_emisora.ruc == emisor_ruc)
+    if dia is not None:
+        consulta = consulta.where(Expediente.fecha_emision == dia)
+    if fecha_desde is not None:
+        consulta = consulta.where(Expediente.fecha_emision >= fecha_desde)
+    if fecha_hasta is not None:
+        consulta = consulta.where(Expediente.fecha_emision <= fecha_hasta)
     if receptor_ruc is not None:
         consulta = consulta.join(Empresa, Expediente.receptor_id == Empresa.id).where(
             Empresa.ruc == receptor_ruc
@@ -170,6 +189,11 @@ def listar_ids(
     auth: OperativeAuthDep,
     estado: EstadoExpediente | None = None,
     receptor_ruc: str | None = None,
+    emisor_ruc: str | None = None,
+    tipo_empresa: Literal["A", "B"] | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    dia: date | None = None,
     usuario_id: uuid.UUID | None = None,
     gestor_id: uuid.UUID | None = None,
     pendiente_aprobacion: bool | None = None,
@@ -192,6 +216,19 @@ def listar_ids(
         consulta = consulta.where(Expediente.usuario_id == usuario_id)
     if gestor_id is not None:
         consulta = consulta.where(Expediente.gestor_id == gestor_id)
+    if tipo_empresa is not None or emisor_ruc is not None:
+        empresa_emisora = aliased(Empresa)
+        consulta = consulta.join(empresa_emisora, Expediente.emisor_id == empresa_emisora.id)
+        if tipo_empresa is not None:
+            consulta = consulta.where(empresa_emisora.clasificacion_proveedor == tipo_empresa)
+        if emisor_ruc is not None:
+            consulta = consulta.where(empresa_emisora.ruc == emisor_ruc)
+    if dia is not None:
+        consulta = consulta.where(Expediente.fecha_emision == dia)
+    if fecha_desde is not None:
+        consulta = consulta.where(Expediente.fecha_emision >= fecha_desde)
+    if fecha_hasta is not None:
+        consulta = consulta.where(Expediente.fecha_emision <= fecha_hasta)
     if receptor_ruc is not None:
         consulta = consulta.join(Empresa, Expediente.receptor_id == Empresa.id).where(
             Empresa.ruc == receptor_ruc

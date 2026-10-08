@@ -1,7 +1,7 @@
 import uuid
 from datetime import date
 from decimal import Decimal
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import case, func, select
@@ -91,6 +91,7 @@ def listar(
     auth: OperativeAuthDep,
     usuario_id: uuid.UUID | None = None,
     gestor_id: uuid.UUID | None = None,
+    tipo_empresa: Literal["A", "B"] | None = None,
     emisor: Annotated[str | None, Query(max_length=100)] = None,
     receptor: Annotated[str | None, Query(max_length=100)] = None,
     dia: date | None = None,
@@ -116,6 +117,7 @@ def listar(
             gestor.nombre,
             emisor_empresa.ruc,
             emisor_empresa.razon_social,
+            emisor_empresa.clasificacion_proveedor,
             receptor_empresa.ruc,
             receptor_empresa.razon_social,
         )
@@ -130,6 +132,8 @@ def listar(
     )
 
     consulta = _aplicar_ambito(consulta, auth)
+    if tipo_empresa is not None:
+        consulta = consulta.where(emisor_empresa.clasificacion_proveedor == tipo_empresa)
     if usuario_id is not None and auth.rol in (
         RolMiembro.SUPERADMIN,
         RolMiembro.ADMINISTRADOR,
@@ -209,6 +213,7 @@ def listar(
         gestor_nombre,
         emisor_ruc_fila,
         emisor_nombre,
+        clasificacion_proveedor,
         receptor_ruc_fila,
         receptor_nombre,
     ) in session.execute(filas_query):
@@ -238,6 +243,7 @@ def listar(
                 tipo_comprobante=expediente.tipo_comprobante,
                 serie=expediente.serie,
                 correlativo=expediente.correlativo,
+                tipo_empresa=clasificacion_proveedor,
                 emisor_ruc=emisor_ruc_fila,
                 emisor_razon_social=emisor_nombre,
                 receptor_ruc=receptor_ruc_fila,

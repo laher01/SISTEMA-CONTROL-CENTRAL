@@ -2,7 +2,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 from threading import Lock
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
@@ -168,6 +168,8 @@ def listar_documentos(
     estado: EstadoDocumento | None = None,
     tipo_documento: TipoDocumento | None = None,
     expediente_id: uuid.UUID | None = None,
+    tipo_empresa: Literal["A", "B"] | None = None,
+    dia: date | None = None,
     usuario_id: uuid.UUID | None = None,
     gestor_id: uuid.UUID | None = None,
     emisor_ruc: Annotated[str | None, Query(min_length=11, max_length=11)] = None,
@@ -196,18 +198,22 @@ def listar_documentos(
         consulta = consulta.where(Documento.usuario_id == usuario_id)
     if gestor_id is not None:
         consulta = consulta.where(Documento.gestor_id == gestor_id)
+    if dia is not None:
+        consulta = consulta.where(func.date(Documento.created_at) == dia)
     if fecha_desde is not None:
         consulta = consulta.where(func.date(Documento.created_at) >= fecha_desde)
     if fecha_hasta is not None:
         consulta = consulta.where(func.date(Documento.created_at) <= fecha_hasta)
 
-    if emisor_ruc is not None or receptor_ruc is not None:
+    if emisor_ruc is not None or receptor_ruc is not None or tipo_empresa is not None:
         consulta = consulta.join(Expediente, Documento.expediente_id == Expediente.id)
-        if emisor_ruc is not None:
+        if emisor_ruc is not None or tipo_empresa is not None:
             emisor = aliased(Empresa)
-            consulta = consulta.join(emisor, Expediente.emisor_id == emisor.id).where(
-                emisor.ruc == emisor_ruc
-            )
+            consulta = consulta.join(emisor, Expediente.emisor_id == emisor.id)
+            if emisor_ruc is not None:
+                consulta = consulta.where(emisor.ruc == emisor_ruc)
+            if tipo_empresa is not None:
+                consulta = consulta.where(emisor.clasificacion_proveedor == tipo_empresa)
         if receptor_ruc is not None:
             receptor = aliased(Empresa)
             consulta = consulta.join(receptor, Expediente.receptor_id == receptor.id).where(
