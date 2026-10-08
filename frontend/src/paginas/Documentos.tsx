@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { conParametros, eliminar, enviarJson, urlArchivo, urlZipExpediente, useDatos } from "../api";
 import { Estado, Paginacion } from "../componentes";
+import { formatearMonto } from "../formato";
 import {
   ETIQUETA_ESTADO_DOCUMENTO,
   ETIQUETA_TIPO_DOCUMENTO,
@@ -49,6 +50,21 @@ export default function Documentos() {
     offset: String(pagina * POR_PAGINA),
   });
   const { datos, error, cargando, recargar } = useDatos<Documento[]>(ruta);
+  const { datos: resumen } = useDatos<{
+    total_documentos: number;
+    total_expedientes: number;
+    total_pen: string;
+    total_usd: string;
+  }>(conParametros("/api/v1/documentos/resumen", {
+    estado,
+    tipo_empresa: tipoEmpresa,
+    dia,
+    tipo_documento: tipo,
+    emisor_ruc: emisor.length === 11 ? emisor : undefined,
+    receptor_ruc: receptor.length === 11 ? receptor : undefined,
+    fecha_desde: desde,
+    fecha_hasta: hasta,
+  }));
   const [reprocesando, setReprocesando] = useState(false);
   const [resultadoLote, setResultadoLote] = useState<ResultadoLote>();
   const [errorLote, setErrorLote] = useState("");
@@ -151,6 +167,10 @@ export default function Documentos() {
         <button className="secundario" onClick={limpiar}>Limpiar filtros</button>
       </div>
 
+      <section className="panel-configuracion">
+        <strong>Total del filtro completo (todas las páginas)</strong>
+        <p>{resumen?.total_documentos ?? "…"} documentos · {resumen?.total_expedientes ?? "…"} expedientes distintos · {formatearMonto("PEN", resumen?.total_pen ?? "0")} · {formatearMonto("USD", resumen?.total_usd ?? "0")}</p>
+      </section>
       <Estado cargando={cargando} error={error} vacio={datos?.length === 0}>
         <div className="tabla-responsive">
           <table>
