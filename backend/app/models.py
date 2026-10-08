@@ -406,9 +406,7 @@ class AbonoClienteERP(ConId, ConTenant, ConCreacion, Base):
 
 class PedidoGerencia(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "pedidos_gerencia"
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "cliente_id", "periodo_mes", "moneda"),
-    )
+    __table_args__ = (UniqueConstraint("tenant_id", "cliente_id", "periodo_mes", "moneda"),)
 
     cliente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("empresas.id"), index=True)
     creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
