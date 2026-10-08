@@ -3,7 +3,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageOps, UnidentifiedImageError
-from pypdf import PdfReader, PdfWriter
+from pypdf import PdfWriter
 from pypdf.errors import PdfReadError
 
 from app.models import Documento
