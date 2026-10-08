@@ -6,8 +6,8 @@ from sqlalchemy import exists, or_, select
 from app.api.deps import HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado
 from app.enums import RolMiembro
-from app.models import Empresa, Expediente
-from app.schemas import EmpresaActualizar, EmpresaOut
+from app.models import Empresa, Expediente, ahora
+from app.schemas import EmpresaActualizar, EmpresaOut, EmpresasEliminarIn, EmpresasEliminarOut
 from app.services import auditoria
 from app.services.expedientes import recalcular_expedientes
 
@@ -71,3 +71,44 @@ def actualizar(
     recalcular_expedientes(session, tenant_id, hoy, settings, receptor_id=empresa.id)
     session.commit()
     return empresa
+
+
+@router.post("/eliminar-seleccion", response_model=EmpresasEliminarOut)
+def eliminar_seleccion(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    datos: EmpresasEliminarIn,
+) -> EmpresasEliminarOut:
+    if auth.rol != RolMiembro.SUPERADMIN:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Solo SUPERADMIN puede eliminar empresas registradas",
+        )
+
+    empresas = list(
+        session.scalars(
+            select(Empresa).where(
+                Empresa.tenant_id == tenant_id,
+                Empresa.id.in_(datos.empresa_ids),
+                Empresa.deleted_at.is_(None),
+            )
+        )
+    )
+    momento = ahora()
+    for empresa in empresas:
+        empresa.deleted_at = momento
+        auditoria.registrar(
+            session,
+            tenant_id,
+            "EMPRESA_ELIMINADA_MANUALMENTE",
+            "empresa",
+            empresa.id,
+            {
+                "ruc": empresa.ruc,
+                "razon_social": empresa.razon_social,
+                "actor": auth.codigo,
+            },
+        )
+    session.commit()
+    return EmpresasEliminarOut(eliminadas=len(empresas))
