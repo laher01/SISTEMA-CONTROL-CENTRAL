@@ -26,6 +26,7 @@ from app.schemas import (
     PlanLiquidacionIn,
     PlanLiquidacionOut,
 )
+from app.security import cuenta_administradora_responsable
 from app.services import auditoria
 
 router = APIRouter(prefix="/pagos", tags=["pagos"])
@@ -94,7 +95,7 @@ def crear_plan(
         vigencia_desde=datos.vigencia_desde,
         vigencia_hasta=datos.vigencia_hasta,
         activo=True,
-        creado_por_cuenta_id=auth.cuenta_id,
+        creado_por_cuenta_id=cuenta_administradora_responsable(session, auth),
     )
     session.add(plan)
     session.commit()
@@ -137,7 +138,7 @@ def crear_cuenta(
         cci=datos.cci,
         porcentaje_distribucion=datos.porcentaje_distribucion,
         activa=True,
-        creado_por_cuenta_id=auth.cuenta_id,
+        creado_por_cuenta_id=cuenta_administradora_responsable(session, auth),
     )
     session.add(cuenta)
     session.commit()
@@ -177,7 +178,7 @@ def crear_adelanto(
         monto=datos.monto,
         descripcion=datos.descripcion,
         aplicado=False,
-        creado_por_cuenta_id=auth.cuenta_id,
+        creado_por_cuenta_id=cuenta_administradora_responsable(session, auth),
     )
     session.add(adelanto)
     session.commit()
@@ -291,7 +292,7 @@ def programar_pago(
         estado="PROGRAMADO",
         fecha_programada=datos.fecha_programada,
         conciliado=False,
-        creado_por_cuenta_id=auth.cuenta_id,
+        creado_por_cuenta_id=cuenta_administradora_responsable(session, auth),
     )
     session.add(pago)
     for adelanto in adelantos:
