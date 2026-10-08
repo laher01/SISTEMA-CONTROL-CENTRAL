@@ -199,10 +199,14 @@ async def enviar_mensaje(
     if archivo is not None:
         extension = Path(archivo.filename or "").suffix.lower()
         if extension not in FORMATOS:
-            raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Tipo de archivo no permitido")
+            raise HTTPException(
+                status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Tipo de archivo no permitido"
+            )
         contenido = await archivo.read(LIMITE_ARCHIVO + 1)
         if not contenido or len(contenido) > LIMITE_ARCHIVO:
-            raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Archivo vacío o demasiado grande")
+            raise HTTPException(
+                status.HTTP_413_CONTENT_TOO_LARGE, "Archivo vacío o demasiado grande"
+            )
         if extension == ".pdf" and not contenido.startswith(b"%PDF-"):
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "PDF inválido")
         if extension == ".png" and not contenido.startswith(b"\x89PNG\r\n\x1a\n"):
