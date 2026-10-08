@@ -76,6 +76,9 @@ class MiembroIn(BaseModel):
     codigo: str = Field(min_length=1, max_length=50)
     nombre: str = Field(min_length=1, max_length=200)
     rol: RolMiembro
+    porcentaje_produccion: Decimal | None = Field(
+        default=None, ge=0, le=100, max_digits=7, decimal_places=4
+    )
 
 
 class MiembroOut(Orm):
@@ -83,6 +86,7 @@ class MiembroOut(Orm):
     codigo: str
     nombre: str
     rol: RolMiembro
+    porcentaje_produccion: Decimal | None
     activo: bool
 
 
@@ -90,6 +94,9 @@ class MiembroActualizar(BaseModel):
     codigo: str | None = Field(default=None, min_length=1, max_length=50)
     nombre: str | None = Field(default=None, min_length=1, max_length=200)
     rol: RolMiembro | None = None
+    porcentaje_produccion: Decimal | None = Field(
+        default=None, ge=0, le=100, max_digits=7, decimal_places=4
+    )
     activo: bool | None = None
 
 
@@ -462,6 +469,48 @@ class AdelantoERPOut(Orm):
     aplicado: bool
 
 
+class CarteraClienteFila(BaseModel):
+    cliente_id: uuid.UUID
+    ruc: str
+    razon_social: str
+    agente_retencion: bool
+    moneda: Moneda
+    compras_mes: Decimal
+    saldo_anterior: Decimal
+    abonos_mes: Decimal
+    saldo_total: Decimal
+
+
+class CarteraClientesResumen(BaseModel):
+    mes: str
+    moneda: Moneda
+    filas: list[CarteraClienteFila]
+    total_compras_mes: Decimal
+    total_saldo_anterior: Decimal
+    total_abonos_mes: Decimal
+    total_saldo: Decimal
+
+
+class AbonoClienteERPIn(BaseModel):
+    cliente_id: uuid.UUID
+    fecha: date
+    moneda: Moneda
+    monto: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    descripcion: str | None = Field(default=None, max_length=500)
+    referencia: str | None = Field(default=None, max_length=120)
+
+
+class AbonoClienteERPOut(Orm):
+    id: uuid.UUID
+    cliente_id: uuid.UUID
+    fecha: date
+    moneda: Moneda
+    monto: Decimal
+    descripcion: str | None
+    referencia: str | None
+    created_at: datetime
+
+
 class PagoERPProgramarIn(BaseModel):
     usuario_id: uuid.UUID
     periodo_desde: date
@@ -504,6 +553,7 @@ class FiltroOpcion(BaseModel):
     codigo: str
     nombre: str
     usuario_id: uuid.UUID | None = None
+    porcentaje_produccion: Decimal | None = None
 
 
 class RegistroOpciones(BaseModel):
