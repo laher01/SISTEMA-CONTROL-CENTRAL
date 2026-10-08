@@ -5,6 +5,7 @@ import { conParametros, imprimirExpedientes, obtener, urlZipExpediente, useDatos
 import { Estado, Paginacion, Semaforo } from "../componentes";
 import { ETIQUETA_ESTADO, formatearFecha, formatearMonto, numeroExpediente } from "../formato";
 import { ESTADOS_EXPEDIENTE, type Expediente } from "../tipos";
+import { formatearMonto as monto } from "../formato";
 
 const POR_PAGINA = 50;
 
@@ -47,6 +48,9 @@ export default function Expedientes() {
     limit: "1000",
   });
   const { datos, error, cargando } = useDatos<Expediente[]>(ruta);
+  const { datos: resumen } = useDatos<{ total_expedientes: number; total_pen: string; total_usd: string }>(
+    conParametros("/api/v1/expedientes/resumen", filtrosBase),
+  );
 
   const cambiar = (clave: string, valor: string) => {
     const siguiente = new URLSearchParams(parametros);
@@ -150,6 +154,11 @@ export default function Expedientes() {
           onChange={(e) => cambiar("receptor_ruc", e.target.value.replace(/\D/g, ""))}
         />
       </div>
+
+      <section className="panel-configuracion">
+        <strong>Total del filtro completo (todas las páginas)</strong>
+        <p>{resumen?.total_expedientes ?? "…"} expedientes · {monto("PEN", resumen?.total_pen ?? "0")} · {monto("USD", resumen?.total_usd ?? "0")}</p>
+      </section>
 
       <div className="acciones">
         <button onClick={() => void seleccionarTodosFiltrados()}>

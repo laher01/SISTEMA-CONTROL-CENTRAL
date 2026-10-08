@@ -4,6 +4,7 @@ import tempfile
 import uuid
 import zipfile
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -11,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from starlette.background import BackgroundTask
@@ -182,6 +183,90 @@ def listar(
         .offset(offset)
     )
     return list(session.scalars(consulta))
+
+
+@router.get("/resumen")
+def resumen_filtrado(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    estado: EstadoExpediente | None = None,
+    receptor_ruc: str | None = None,
+    emisor_ruc: str | None = None,
+    tipo_empresa: Literal["A", "B"] | None = None,
+    usuario_id: uuid.UUID | None = None,
+    gestor_id: uuid.UUID | None = None,
+    pendiente_aprobacion: bool | None = None,
+    buscar: Annotated[str | None, Query(max_length=100)] = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    dia: date | None = None,
+) -> dict[str, int | Decimal]:
+    consulta = select(Expediente).where(
+        Expediente.tenant_id == tenant_id, Expediente.deleted_at.is_(None)
+    )
+    if auth.rol == "GESTOR":
+        consulta = consulta.where(Expediente.gestor_id == auth.gestor_id)
+    elif auth.rol == RolMiembro.USUARIO:
+        consulta = consulta.where(Expediente.usuario_id == auth.usuario_id)
+    if estado is not None:
+        consulta = consulta.where(Expediente.estado == estado)
+    if pendiente_aprobacion is not None:
+        consulta = consulta.where(Expediente.pendiente_aprobacion == pendiente_aprobacion)
+    if usuario_id is not None:
+        consulta = consulta.where(Expediente.usuario_id == usuario_id)
+    if gestor_id is not None:
+        consulta = consulta.where(Expediente.gestor_id == gestor_id)
+    if tipo_empresa is not None or emisor_ruc is not None or buscar:
+        emisor = aliased(Empresa)
+        consulta = consulta.join(emisor, Expediente.emisor_id == emisor.id)
+        if tipo_empresa is not None:
+            consulta = consulta.where(emisor.clasificacion_proveedor == tipo_empresa)
+        if emisor_ruc is not None:
+            consulta = consulta.where(emisor.ruc == emisor_ruc)
+    if receptor_ruc is not None:
+        receptor = aliased(Empresa)
+        consulta = consulta.join(receptor, Expediente.receptor_id == receptor.id)
+        consulta = consulta.where(receptor.ruc == receptor_ruc)
+    if dia is not None:
+        consulta = consulta.where(Expediente.fecha_emision == dia)
+    if fecha_desde is not None:
+        consulta = consulta.where(Expediente.fecha_emision >= fecha_desde)
+    if fecha_hasta is not None:
+        consulta = consulta.where(Expediente.fecha_emision <= fecha_hasta)
+    if buscar and buscar.strip():
+        texto = buscar.strip().lower()
+        if numero_rhe := NUMERO_RHE_RE.match(texto):
+            texto = f"{numero_rhe.group(1)}-{int(numero_rhe.group(2))}"
+            consulta = consulta.where(Expediente.tipo_comprobante == "RHE")
+        elif numero := NUMERO_RE.match(texto):
+            texto = f"{numero.group(1)}-{int(numero.group(2))}"
+        consulta = consulta.where(
+            or_(
+                func.lower(Expediente.serie + "-" + Expediente.correlativo).contains(
+                    texto, autoescape=True
+                ),
+                emisor.ruc.contains(texto, autoescape=True),
+                func.lower(emisor.razon_social).contains(texto, autoescape=True),
+            )
+        )
+    base = consulta.subquery()
+    resultado = session.execute(
+        select(
+            func.count(base.c.id),
+            func.coalesce(
+                func.sum(case((base.c.moneda == "PEN", base.c.importe_total), else_=0)), 0
+            ),
+            func.coalesce(
+                func.sum(case((base.c.moneda == "USD", base.c.importe_total), else_=0)), 0
+            ),
+        )
+    ).one()
+    return {
+        "total_expedientes": int(resultado[0]),
+        "total_pen": Decimal(resultado[1]),
+        "total_usd": Decimal(resultado[2]),
+    }
 
 
 @router.get("/ids", response_model=list[uuid.UUID])
