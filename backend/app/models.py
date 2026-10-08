@@ -86,6 +86,7 @@ class Miembro(ConId, ConTenant, ConCreacion, Base):
     codigo: Mapped[str] = mapped_column(String(50))
     nombre: Mapped[str] = mapped_column(String(200))
     rol: Mapped[str] = mapped_column(String(20), index=True)
+    porcentaje_produccion: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
     creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("cuentas_acceso.id"), index=True
     )
@@ -387,6 +388,20 @@ class AdelantoERP(ConId, ConTenant, ConCreacion, Base):
     monto: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     descripcion: Mapped[str | None] = mapped_column(String(500))
     aplicado: Mapped[bool] = mapped_column(default=False, server_default="false")
+
+
+class AbonoClienteERP(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "abonos_cliente_erp"
+
+    cliente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("empresas.id"), index=True)
+    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_acceso.id"), index=True
+    )
+    fecha: Mapped[date] = mapped_column(Date, index=True)
+    moneda: Mapped[str] = mapped_column(String(3), index=True)
+    monto: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    descripcion: Mapped[str | None] = mapped_column(String(500))
+    referencia: Mapped[str | None] = mapped_column(String(120))
 
 
 class PagoERP(ConId, ConTenant, ConCreacion, Base):
