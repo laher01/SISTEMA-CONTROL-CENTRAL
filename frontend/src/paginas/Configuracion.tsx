@@ -5,6 +5,7 @@ import type {
   ConfiguracionAcceso as ConfiguracionAccesoTipo,
   CorreoAutorizado,
   CuentaAccesoAdmin,
+  Empresa,
   MantenimientoAdministrador,
   MantenimientoResultado,
   MantenimientoVistaPrevia,
@@ -19,7 +20,9 @@ const ROLES = ["GERENTE", "SECRETARIA", "USUARIO"] as const;
 const PERMISO = "ELIMINAR_REGISTROS";
 
 export default function Configuracion({ sesion }: { sesion: SesionActual }) {
-  const [seccion, setSeccion] = useState<"permisos" | "acceso" | "mantenimiento">("permisos");
+  const [seccion, setSeccion] = useState<
+    "permisos" | "acceso" | "empresas" | "mantenimiento"
+  >("permisos");
   const { datos, error, cargando, recargar } = useDatos<PermisoConfigurado[]>(
     "/api/v1/configuracion/permisos",
   );
@@ -40,6 +43,7 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
         {sesion.rol === "SUPERADMIN" && (
           <>
             <button onClick={() => setSeccion("acceso")}>Configuración de acceso</button>
+            <button onClick={() => setSeccion("empresas")}>Empresas registradas</button>
             <button onClick={() => setSeccion("mantenimiento")}>Mantenimiento</button>
           </>
         )}
@@ -90,6 +94,7 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
       )}
 
       {seccion === "acceso" && sesion.rol === "SUPERADMIN" && <ConfiguracionAccesoPanel />}
+      {seccion === "empresas" && sesion.rol === "SUPERADMIN" && <EmpresasRegistradasPanel />}
       {seccion === "mantenimiento" && sesion.rol === "SUPERADMIN" && <MantenimientoPanel />}
     </>
   );
