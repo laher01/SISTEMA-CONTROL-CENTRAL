@@ -14,7 +14,7 @@ from app.api.deps import get_contexto_actual, get_hoy
 from app.core.config import Settings, get_settings
 from app.core.db import get_session
 from app.main import app
-from app.models import Base, Miembro
+from app.models import Base, CuentaAcceso, Miembro
 from app.security import ContextoAcceso
 from app.services.expedientes import obtener_tenant
 
@@ -134,9 +134,20 @@ def auth_prueba(engine: Engine, settings: Settings) -> AuthPrueba:
             activo=True,
         )
         session.add(usuario)
+        session.flush()
+        cuenta = CuentaAcceso(
+            tenant_id=tenant.id,
+            login="TESTUSR",
+            password_hash="test-hash",
+            miembro_id=usuario.id,
+            gestor_id=None,
+            activo=True,
+            cambio_clave_obligatorio=False,
+        )
+        session.add(cuenta)
         session.commit()
         contexto = ContextoAcceso(
-            cuenta_id=uuid.uuid4(),
+            cuenta_id=cuenta.id,
             tenant_id=tenant.id,
             rol="USUARIO",
             miembro_id=usuario.id,
