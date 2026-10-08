@@ -36,6 +36,7 @@ class EmpresaOut(Orm):
 
 
 class EmpresaActualizar(BaseModel):
+    ruc: Ruc | None = None
     razon_social: str | None = Field(default=None, min_length=1, max_length=300)
     autorizada: bool | None = None
     agente_retencion: bool | None = None
