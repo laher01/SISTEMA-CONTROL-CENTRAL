@@ -144,6 +144,7 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
 
       {pestana === "LIQUIDACIONES" && (
         <>
+          {sesion.rol === "ADMINISTRADOR" || sesion.rol === "SUPERADMIN" ? <SimuladorJonatan /> : null}
           <div className="filtros">
             <select value={usuarioId} onChange={(e) => setUsuarioId(e.target.value)}>
               <option value="">Selecciona un Usuario</option>
@@ -994,5 +995,78 @@ function AccionesPago({
           </button>
         )}
     </div>
+  );
+}
+
+
+interface ResultadoJonatan {
+  base: string;
+  bruto_referencial: string;
+  neto_pagable: string;
+  gente_lima: string;
+  javier: string;
+  jonatan: string;
+  porcentaje_excluido_alex: string;
+}
+
+function SimuladorJonatan() {
+  const [emitido, setEmitido] = useState("1114897.76");
+  const [base, setBase] = useState("380000.00");
+  const [modoTotal, setModoTotal] = useState(false);
+  const [resultado, setResultado] = useState<ResultadoJonatan | null>(null);
+  const [error, setError] = useState("");
+  const [trabajando, setTrabajando] = useState(false);
+
+  const calcular = async (evento: FormEvent) => {
+    evento.preventDefault();
+    setTrabajando(true);
+    setError("");
+    setResultado(null);
+    try {
+      const datos = await enviarJson<ResultadoJonatan>("/api/v1/pagos/simular-jonatan", {
+        total_emitido: emitido,
+        base_autorizada: modoTotal ? null : base,
+        usar_total_emitido: modoTotal,
+      });
+      setResultado(datos);
+    } catch (ex) {
+      setError(ex instanceof Error ? ex.message : String(ex));
+    } finally {
+      setTrabajando(false);
+    }
+  };
+
+  return (
+    <section className="tarjeta">
+      <h3>Simulador de distribución: Jonatan / Javier</h3>
+      <p className="tenue">Simulación individual sin registrar ni autorizar un pago. Alex queda excluido del neto.</p>
+      <form className="filtros" onSubmit={calcular}>
+        <label>Total emitido (S/)
+          <input type="number" min="0" step="0.01" required value={emitido} onChange={(e) => setEmitido(e.target.value)} />
+        </label>
+        <label>Facturas autorizadas a pagar (S/)
+          <input type="number" min="0.01" step="0.01" disabled={modoTotal} required={!modoTotal} value={base} onChange={(e) => setBase(e.target.value)} />
+        </label>
+        <label>
+          <input type="checkbox" checked={modoTotal} onChange={(e) => setModoTotal(e.target.checked)} />
+          Confirmo calcular sobre todo lo emitido
+        </label>
+        <button disabled={trabajando} type="submit">Calcular distribución</button>
+      </form>
+      {error && <p role="alert">{error}</p>}
+      {resultado && (
+        <table>
+          <tbody>
+            <tr><th>Base</th><td>{formatearMonto("PEN", resultado.base)}</td></tr>
+            <tr><th>Bruto referencial 3 %</th><td>{formatearMonto("PEN", resultado.bruto_referencial)}</td></tr>
+            <tr><th>Gente y Lima 2,25 %</th><td>{formatearMonto("PEN", resultado.gente_lima)}</td></tr>
+            <tr><th>Javier 0,125 %</th><td>{formatearMonto("PEN", resultado.javier)}</td></tr>
+            <tr><th>Jonatan 0,3125 %</th><td>{formatearMonto("PEN", resultado.jonatan)}</td></tr>
+            <tr><th>Neto a pagar 2,6875 %</th><td><strong>{formatearMonto("PEN", resultado.neto_pagable)}</strong></td></tr>
+            <tr><th>Alex excluido (no pagable)</th><td>{formatearMonto("PEN", resultado.porcentaje_excluido_alex)}</td></tr>
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }
