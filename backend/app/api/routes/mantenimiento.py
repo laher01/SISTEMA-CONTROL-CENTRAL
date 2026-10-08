@@ -96,6 +96,19 @@ def _contar(session: SessionDep, modelo: Any, filtros: list[Any]) -> int:
     return int(session.scalar(select(func.count()).select_from(modelo).where(*filtros)) or 0)
 
 
+def _filtros_creador(
+    modelo: Any,
+    tenant_id: uuid.UUID,
+    cuenta_id: uuid.UUID | None,
+) -> list[Any]:
+    creador = (
+        modelo.creado_por_cuenta_id.is_(None)
+        if cuenta_id is None
+        else modelo.creado_por_cuenta_id == cuenta_id
+    )
+    return [modelo.tenant_id == tenant_id, creador]
+
+
 def _rol_cuenta(session: SessionDep, cuenta: CuentaAcceso) -> str:
     if cuenta.miembro_id is None:
         return "SIN_MIEMBRO"
@@ -127,10 +140,7 @@ def administradores(
             nombre: _contar(
                 session,
                 modelo,
-                [
-                    modelo.tenant_id == tenant_id,
-                    modelo.creado_por_cuenta_id == cuenta.id,
-                ],
+                _filtros_creador(modelo, tenant_id, cuenta.id),
             )
             for nombre, modelo in TIPOS.items()
         }
@@ -147,10 +157,7 @@ def administradores(
         nombre: _contar(
             session,
             modelo,
-            [
-                modelo.tenant_id == tenant_id,
-                modelo.creado_por_cuenta_id.is_(None),
-            ],
+            _filtros_creador(modelo, tenant_id, None),
         )
         for nombre, modelo in TIPOS.items()
     }
