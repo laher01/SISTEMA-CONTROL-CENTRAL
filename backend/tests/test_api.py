@@ -889,3 +889,43 @@ Total por Honorarios : 1,500.00 SOLES"""
 
     session.refresh(empresa)
     assert empresa.razon_social == "AYALA AREVALO ELVIS EDUARDO"
+
+
+def test_admin_edita_ruc_y_razon_social_empresa(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
+    subir(client, "empresa-editar.xml", factura(numero="F001-00000910"))
+    empresas = client.get("/api/v1/empresas").json()
+    empresa = next(item for item in empresas if item["ruc"] == "20615898598")
+
+    auth_prueba.como_admin()
+    respuesta = client.patch(
+        f"/api/v1/empresas/{empresa['id']}",
+        json={
+            "ruc": "20615898599",
+            "razon_social": "EMPRESA CORREGIDA E.I.R.L.",
+        },
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    datos = respuesta.json()
+    assert datos["ruc"] == "20615898599"
+    assert datos["razon_social"] == "EMPRESA CORREGIDA E.I.R.L."
+
+
+def test_no_permite_duplicar_ruc_al_editar_empresa(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
+    subir(client, "empresa-duplicado.xml", factura(numero="F001-00000911"))
+    empresas = client.get("/api/v1/empresas").json()
+    assert len(empresas) >= 2
+    origen = empresas[0]
+    destino = empresas[1]
+
+    auth_prueba.como_admin()
+    respuesta = client.patch(
+        f"/api/v1/empresas/{origen['id']}",
+        json={"ruc": destino["ruc"]},
+    )
+    assert respuesta.status_code == 409
