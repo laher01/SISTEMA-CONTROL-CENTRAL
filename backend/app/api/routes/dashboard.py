@@ -10,7 +10,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.enums import EstadoDocumento, EstadoExpediente, Moneda, RolMiembro, TipoAlerta
-from app.models import Alerta, Documento, Expediente, Miembro
+from app.models import Alerta, Documento, Empresa, Expediente, Miembro
 from app.schemas import DashboardDesglose, DashboardDesgloseFila, DashboardResumen, MontosMoneda
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -112,6 +112,7 @@ def desglose(
     usuario_id: uuid.UUID | None = None,
     emisor_id: uuid.UUID | None = None,
     receptor_id: uuid.UUID | None = None,
+    tipo_empresa: Literal["A", "B"] | None = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
 ) -> DashboardDesglose:
@@ -136,6 +137,10 @@ def desglose(
         consulta = consulta.where(Expediente.emisor_id == emisor_id)
     if receptor_id is not None:
         consulta = consulta.where(Expediente.receptor_id == receptor_id)
+    if tipo_empresa is not None:
+        consulta = consulta.where(
+            Expediente.emisor.has(Empresa.clasificacion_proveedor == tipo_empresa)
+        )
     if fecha_desde is not None:
         consulta = consulta.where(Expediente.fecha_emision >= fecha_desde)
     if fecha_hasta is not None:
