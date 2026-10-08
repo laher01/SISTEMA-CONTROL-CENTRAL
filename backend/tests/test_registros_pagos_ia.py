@@ -460,3 +460,135 @@ def test_filtros_jerarquicos_por_rol(
         params={"gestor_id": str(gestor.id)},
     )
     assert intento_cambiar.status_code == 403
+
+
+def test_cartera_clientes_suma_saldo_anterior_abonos_y_mes(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
+    respuesta_agosto = client.post(
+        "/api/v1/documentos",
+        files={
+            "archivo": (
+                "F001-00000201.xml",
+                factura(numero="F001-00000201", importe="100.00", fecha="2026-08-20"),
+            )
+        },
+    )
+    assert respuesta_agosto.status_code == 201, respuesta_agosto.text
+
+    respuesta_setiembre = client.post(
+        "/api/v1/documentos",
+        files={
+            "archivo": (
+                "F001-00000202.xml",
+                factura(numero="F001-00000202", importe="200.00", fecha="2026-09-10"),
+            )
+        },
+    )
+    assert respuesta_setiembre.status_code == 201, respuesta_setiembre.text
+
+    auth_prueba.como_admin()
+    clientes = client.get("/api/v1/pagos/clientes")
+    assert clientes.status_code == 200, clientes.text
+    cliente = next(item for item in clientes.json() if item["codigo"] == "20100000001")
+
+    abono = client.post(
+        "/api/v1/pagos/clientes/abonos",
+        json={
+            "cliente_id": cliente["id"],
+            "fecha": "2026-08-25",
+            "moneda": "PEN",
+            "monto": "40.00",
+            "descripcion": "Abono agosto",
+            "referencia": "OP-001",
+        },
+    )
+    assert abono.status_code == 201, abono.text
+
+    resumen = client.get(
+        "/api/v1/pagos/clientes/resumen",
+        params={"mes": "2026-09", "moneda": "PEN"},
+    )
+    assert resumen.status_code == 200, resumen.text
+    datos = resumen.json()
+    fila = next(item for item in datos["filas"] if item["cliente_id"] == cliente["id"])
+    assert Decimal(fila["compras_mes"]) == Decimal("200.00")
+    assert Decimal(fila["saldo_anterior"]) == Decimal("60.00")
+    assert Decimal(fila["abonos_mes"]) == Decimal("0.00")
+    assert Decimal(fila["saldo_total"]) == Decimal("260.00")
+
+    retencion = client.patch(
+        f"/api/v1/pagos/clientes/{cliente['id']}/agente-retencion",
+        json={"agente_retencion": True},
+    )
+    assert retencion.status_code == 200, retencion.text
+    assert retencion.json() is True
+
+
+def test_pedido_gerencia_controla_solicitado_ejecutado_y_distribucion(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+
+    _subir_factura(client, "F001-00000211", "100.00")
+    _subir_factura(client, "F001-00000212", "200.00")
+
+    auth_prueba.como_admin()
+    clientes = client.get("/api/v1/pagos/clientes")
+    assert clientes.status_code == 200, clientes.text
+    cliente = next(item for item in clientes.json() if item["codigo"] == "20100000001")
+
+    creado = client.post(
+        "/api/v1/pagos/pedidos",
+        json={
+            "cliente_id": cliente["id"],
+            "periodo_mes": "2026-09-01",
+            "moneda": "PEN",
+            "monto_solicitado": "1000.00",
+            "modalidad": "POR_PEDIDO",
+            "modo_distribucion": "AUTOMATICA",
+            "observacion": "Pedido mensual",
+        },
+    )
+    assert creado.status_code == 201, creado.text
+    pedido = creado.json()
+    assert Decimal(pedido["monto_solicitado"]) == Decimal("1000.00")
+    assert Decimal(pedido["monto_ejecutado"]) == Decimal("300.00")
+    assert Decimal(pedido["saldo_pendiente"]) == Decimal("700.00")
+    assert Decimal(pedido["exceso"]) == Decimal("0.00")
+    assert Decimal(pedido["avance_porcentaje"]) == Decimal("30.00")
+    assert Decimal(pedido["monto_asignado"]) == Decimal("1000.00")
+    assert len(pedido["asignaciones"]) == 1
+    assert pedido["asignaciones"][0]["usuario_id"] == str(usuario_id)
+
+    listado = client.get(
+        "/api/v1/pagos/pedidos",
+        params={"mes": "2026-09", "moneda": "PEN"},
+    )
+    assert listado.status_code == 200, listado.text
+    assert len(listado.json()) == 1
+    assert Decimal(listado.json()[0]["monto_ejecutado"]) == Decimal("300.00")
+
+
+def test_porcentaje_produccion_predeterminado_aparece_en_pagos(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+
+    auth_prueba.como_admin()
+    actualizado = client.patch(
+        f"/api/v1/miembros/{usuario_id}",
+        json={"porcentaje_produccion": "2.2500"},
+    )
+    assert actualizado.status_code == 200, actualizado.text
+    assert Decimal(actualizado.json()["porcentaje_produccion"]) == Decimal("2.2500")
+
+    usuarios = client.get("/api/v1/pagos/usuarios")
+    assert usuarios.status_code == 200, usuarios.text
+    usuario = next(item for item in usuarios.json() if item["id"] == str(usuario_id))
+    assert Decimal(usuario["porcentaje_produccion"]) == Decimal("2.2500")
