@@ -20,6 +20,7 @@ from app.services.expedientes import (
     recalcular_expedientes,
 )
 from app.services.ingesta import crear_expediente
+from app.security import cuenta_administradora_responsable
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 
 NUMERO_RE = re.compile(r"^([a-z0-9]{4})-0*(\d+)$")
@@ -79,7 +80,7 @@ def crear(
             requiere_guia=datos.requiere_guia,
             gestor_id=gestor_id,
             usuario_id=usuario_id,
-            creado_por_cuenta_id=auth.cuenta_id,
+            creado_por_cuenta_id=cuenta_administradora_responsable(session, auth),
         )
         session.commit()
     except IntegrityError as exc:
