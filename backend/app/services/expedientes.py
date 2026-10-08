@@ -1,3 +1,4 @@
+import re
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
@@ -34,9 +35,12 @@ def obtener_o_crear_empresa(
             empresa.deleted_at = None
         actual = empresa.razon_social.strip()
         actual_compacto = "".join(ch for ch in actual.upper() if ch.isalnum())
-        if (
-            actual == empresa.ruc or actual_compacto in {"RUC", "NRO"}
-        ) and razon_social.strip() != ruc:
+        placeholder = (
+            actual == empresa.ruc
+            or actual_compacto in {"RUC", "NRO", "NUMERO", "ELECTRONICO"}
+            or re.fullmatch(r"NRO[A-Z0-9]{4}\d{1,8}", actual_compacto) is not None
+        )
+        if placeholder and razon_social.strip() != ruc:
             empresa.razon_social = razon_social.strip()[:300]
         session.flush()
     return empresa
