@@ -1,6 +1,9 @@
 from decimal import Decimal
 
 import pytest
+from fastapi.testclient import TestClient
+
+from tests.conftest import AuthPrueba
 
 from app.services.distribucion_jonatan import TasasJonatan, calcular_distribucion_jonatan
 
@@ -46,3 +49,19 @@ def test_tasas_personalizadas_y_validaciones() -> None:
             base_autorizada=Decimal("100"),
             tasas=TasasJonatan(jonatan=Decimal("0.500")),
         )
+
+
+def test_endpoint_simulacion_autorizada(client: TestClient, auth_prueba: AuthPrueba) -> None:
+    solicitud = {
+        "total_emitido": "1114897.76",
+        "base_autorizada": "380000.00",
+    }
+    assert client.post("/api/v1/pagos/simular-jonatan", json=solicitud).status_code == 403
+    auth_prueba.como_admin()
+    respuesta = client.post("/api/v1/pagos/simular-jonatan", json=solicitud)
+    assert respuesta.status_code == 200, respuesta.text
+    datos = respuesta.json()
+    assert Decimal(str(datos["neto_pagable"])) == Decimal("10212.50")
+    assert Decimal(str(datos["gente_lima"])) == Decimal("8550.00")
+    assert Decimal(str(datos["javier"])) == Decimal("475.00")
+    assert Decimal(str(datos["jonatan"])) == Decimal("1187.50")
