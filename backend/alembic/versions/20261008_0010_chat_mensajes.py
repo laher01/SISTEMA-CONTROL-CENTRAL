@@ -45,14 +45,12 @@ def upgrade() -> None:
         "remitente_cuenta_id",
         "destinatario_cuenta_id",
         "tenant_id",
-        "created_at",
     ):
         op.create_index(op.f(f"ix_chat_mensajes_{columna}"), "chat_mensajes", [columna])
 
 
 def downgrade() -> None:
     for columna in (
-        "created_at",
         "tenant_id",
         "destinatario_cuenta_id",
         "remitente_cuenta_id",
