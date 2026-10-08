@@ -127,7 +127,9 @@ class Gestor(ConId, ConTenant, ConCreacion, Base):
     codigo: Mapped[str] = mapped_column(String(50))
     nombre: Mapped[str] = mapped_column(String(200))
     usuario_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
-    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cuentas_acceso.id"), index=True)
+    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_acceso.id"), index=True
+    )
     deleted_at: Mapped[datetime | None]
 
     usuario: Mapped[Miembro | None] = relationship(back_populates="gestores")
@@ -152,7 +154,9 @@ class Expediente(ConId, ConTenant, ConCreacion, Base):
     requiere_guia: Mapped[bool] = mapped_column(default=True, server_default="true")
     gestor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"), index=True)
     usuario_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
-    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cuentas_acceso.id"), index=True)
+    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_acceso.id"), index=True
+    )
     estado: Mapped[str] = mapped_column(String(10), default=EstadoExpediente.NARANJA, index=True)
     pendiente_aprobacion: Mapped[bool] = mapped_column(default=False, server_default="false")
     updated_at: Mapped[datetime] = mapped_column(
@@ -334,7 +338,9 @@ class PlanLiquidacion(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "planes_liquidacion"
 
     usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
-    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cuentas_acceso.id"), index=True)
+    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_acceso.id"), index=True
+    )
     nombre: Mapped[str] = mapped_column(String(120))
     porcentaje: Mapped[Decimal] = mapped_column(Numeric(7, 4))
     vigencia_desde: Mapped[date] = mapped_column(Date)
@@ -346,7 +352,9 @@ class CuentaPagoERP(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "cuentas_pago_erp"
 
     usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
-    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cuentas_acceso.id"), index=True)
+    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_acceso.id"), index=True
+    )
     titular: Mapped[str] = mapped_column(String(200))
     banco: Mapped[str] = mapped_column(String(120))
     tipo_cuenta: Mapped[str] = mapped_column(String(50))
@@ -361,7 +369,9 @@ class AdelantoERP(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "adelantos_erp"
 
     usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
-    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cuentas_acceso.id"), index=True)
+    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_acceso.id"), index=True
+    )
     fecha: Mapped[date] = mapped_column(Date)
     moneda: Mapped[str] = mapped_column(String(3))
     monto: Mapped[Decimal] = mapped_column(Numeric(14, 2))
@@ -382,7 +392,9 @@ class PagoERP(ConId, ConTenant, ConCreacion, Base):
     )
 
     usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
-    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cuentas_acceso.id"), index=True)
+    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_acceso.id"), index=True
+    )
     plan_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("planes_liquidacion.id"), index=True
     )
