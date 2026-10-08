@@ -139,6 +139,7 @@ async def subir_documento(
             expediente_id,
             gestor_id,
             usuario_id,
+            auth.cuenta_id,
         )
         if settings.procesamiento_automatico and _es_procesable(documento):
             try:
