@@ -806,7 +806,5 @@ Total Neto Recibido : 1,500.00 SOLES""",
     datos = resumen.json()
     assert datos["expedientes_total"] == 3
     montos = {m["moneda"]: m for m in datos["montos"]}
-    total_pen = Decimal(montos["PEN"]["bancarizable"]) + Decimal(
-        montos["PEN"]["no_bancarizable"]
-    )
+    total_pen = Decimal(montos["PEN"]["bancarizable"]) + Decimal(montos["PEN"]["no_bancarizable"])
     assert total_pen == Decimal("4500.00")
