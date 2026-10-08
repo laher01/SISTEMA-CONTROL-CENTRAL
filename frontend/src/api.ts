@@ -106,3 +106,61 @@ export function useDatos<T>(ruta: string) {
     recargar: () => setVersion((v) => v + 1),
   };
 }
+
+
+export async function imprimirExpedientes(
+  expedienteIds: string[],
+): Promise<{ expedientes: number; pdfs: number; sinPdf: number }> {
+  const ventana = window.open("", "_blank");
+  if (ventana) {
+    ventana.document.title = "Preparando impresión · FACT CENTRAL";
+    ventana.document.body.innerHTML = "<p>Preparando documentos para impresión…</p>";
+  }
+
+  try {
+    const respuesta = await fetch(`${BASE}/api/v1/expedientes/imprimir-lote`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expediente_ids: expedienteIds }),
+    });
+    if (!respuesta.ok) {
+      const cuerpo: unknown = respuesta.headers.get("content-type")?.includes("json")
+        ? await respuesta.json()
+        : await respuesta.text();
+      const detalle =
+        cuerpo && typeof cuerpo === "object" && "detail" in cuerpo ? cuerpo.detail : cuerpo;
+      throw new ErrorApi(respuesta.status, detalle);
+    }
+
+    const blob = await respuesta.blob();
+    const url = URL.createObjectURL(blob);
+    const expedientes = Number(respuesta.headers.get("X-Expedientes-Impresos") ?? "0");
+    const pdfs = Number(respuesta.headers.get("X-Pdfs-Impresos") ?? "0");
+    const sinPdf = Number(respuesta.headers.get("X-Expedientes-Sin-Pdf") ?? "0");
+
+    if (ventana) {
+      ventana.location.href = url;
+      window.setTimeout(() => {
+        try {
+          ventana.print();
+        } catch {
+          // El visor PDF del navegador conserva igualmente el documento abierto para imprimir.
+        }
+      }, 1500);
+      window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+    } else {
+      const enlace = document.createElement("a");
+      enlace.href = url;
+      enlace.target = "_blank";
+      enlace.rel = "noopener";
+      enlace.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+    }
+
+    return { expedientes, pdfs, sinPdf };
+  } catch (error) {
+    ventana?.close();
+    throw error;
+  }
+}
