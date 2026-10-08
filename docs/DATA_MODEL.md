@@ -1018,3 +1018,101 @@ Si uno falla, los demás continuarán operando.
 Todo desarrollo futuro deberá respetar las reglas contenidas en este documento.
 
 Estas reglas constituyen el comportamiento oficial del modelo de datos de FACT CENTRAL.
+
+---
+
+# 61. Pedido de Gerencia
+
+Representa el objetivo mensual de compra solicitado por Gerencia para un Cliente receptor.
+
+### Datos principales
+
+- Cliente receptor;
+- mes;
+- moneda;
+- monto solicitado;
+- modalidad;
+- modo de distribución;
+- estado;
+- observación.
+
+### Relaciones
+
+Un Pedido de Gerencia:
+
+- pertenece a un Tenant;
+- pertenece a un Cliente;
+- puede distribuirse entre varios Usuarios;
+- puede bajar a nivel de Gestor;
+- puede bajar a nivel de Proveedor;
+- mide ejecución a partir de Expedientes reales;
+- conserva auditoría.
+
+---
+
+# 62. Asignación de Pedido de Gerencia
+
+Representa una porción del Pedido asignada operativamente.
+
+### Datos principales
+
+- Pedido;
+- Usuario;
+- Gestor opcional;
+- Proveedor opcional;
+- monto asignado.
+
+### Regla
+
+La Asignación no produce impacto económico por sí misma.
+
+El monto ejecutado se deriva de Expedientes que coincidan con Cliente, periodo, moneda y responsables asignados.
+
+---
+
+# 63. Abono de Cliente ERP
+
+Representa un pago o abono recibido de una Empresa Cliente.
+
+### Datos principales
+
+- Cliente;
+- fecha;
+- moneda;
+- monto;
+- referencia;
+- descripción.
+
+### Relaciones
+
+Un Abono:
+
+- reduce la cartera del Cliente;
+- no modifica el monto ejecutado de un Pedido de Gerencia;
+- no modifica la producción del Usuario;
+- queda auditado.
+
+---
+
+# 64. Porcentaje de Producción del Usuario
+
+Cada Miembro con rol USUARIO puede tener un porcentaje de producción predeterminado.
+
+Este valor:
+
+- se utiliza para precargar nuevos Planes de Liquidación;
+- puede cambiarse por Administración;
+- no sustituye el porcentaje guardado históricamente en liquidaciones ya programadas;
+- no se calcula a partir de Pedidos de Gerencia.
+
+---
+
+# 65. Separación de saldos
+
+FACT CENTRAL mantiene tres saldos conceptualmente distintos:
+
+Pedido de Gerencia: Monto solicitado - Monto ejecutado = Pendiente / Exceso.
+Cartera del Cliente: Compras acumuladas - Abonos = Saldo por cobrar.
+Liquidación del Usuario: Producción real × porcentaje - adelantos + ajustes = Saldo a pagar.
+
+Los tres pueden relacionarse mediante Expedientes, pero nunca se almacenan como si fueran el mismo saldo.
