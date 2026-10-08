@@ -761,7 +761,8 @@ def _razon_emisor_rhe(texto: str, ruc: str) -> tuple[str, str] | None:
                 continue
             if _razon_social_valida(candidato) and not _parece_direccion(candidato):
                 evidencia = " ".join(
-                    x.strip() for x in lineas[max(0, indice - 2) : min(len(lineas), posicion + 2)]
+                    x.strip()
+                    for x in lineas[max(0, indice - 2) : min(len(lineas), posicion + 2)]
                     if x.strip()
                 )
                 return candidato[:300], evidencia[:300]
