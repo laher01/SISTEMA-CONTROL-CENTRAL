@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
@@ -27,13 +28,13 @@ from app.schemas import (
     AdelantoERPIn,
     AdelantoERPOut,
     AgenteRetencionIn,
+    AsignacionPedidoGerenciaIn,
+    AsignacionPedidoGerenciaOut,
     CarteraClienteFila,
     CarteraClientesResumen,
     CuentaPagoERPIn,
     CuentaPagoERPOut,
     FiltroOpcion,
-    AsignacionPedidoGerenciaIn,
-    AsignacionPedidoGerenciaOut,
     PagoERPActualizarIn,
     PagoERPOut,
     PagoERPProgramarIn,
@@ -623,7 +624,7 @@ def crear_pedido_gerencia(
     session.add(pedido)
     try:
         session.flush()
-    except Exception as exc:
+    except IntegrityError as exc:
         session.rollback()
         raise HTTPException(
             status.HTTP_409_CONFLICT,
