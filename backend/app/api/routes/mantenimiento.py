@@ -265,9 +265,9 @@ def limpiar(
         if ids:
             restantes = int(
                 session.scalar(
-                    select(func.count()).select_from(Documento).where(
-                        Documento.expediente_id.in_(ids)
-                    )
+                    select(func.count())
+                    .select_from(Documento)
+                    .where(Documento.expediente_id.in_(ids))
                 )
                 or 0
             )
