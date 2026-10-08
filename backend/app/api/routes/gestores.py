@@ -14,7 +14,11 @@ from app.schemas import (
     GestorIn,
     GestorOut,
 )
-from app.security import actualizar_login_cuenta, crear_o_restablecer_cuenta
+from app.security import (
+    actualizar_login_cuenta,
+    crear_o_restablecer_cuenta,
+    cuenta_administradora_responsable,
+)
 
 router = APIRouter(prefix="/gestores", tags=["gestores"])
 
@@ -33,6 +37,7 @@ def crear(
         codigo=datos.codigo.strip().upper(),
         nombre=datos.nombre.strip(),
         usuario_id=usuario.id,
+        creado_por_cuenta_id=cuenta_administradora_responsable(session, auth),
     )
     session.add(gestor)
     try:
