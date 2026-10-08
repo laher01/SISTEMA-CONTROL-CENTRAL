@@ -64,6 +64,7 @@ export interface Miembro {
   codigo: string;
   nombre: string;
   rol: RolMiembro;
+  porcentaje_produccion: string | null;
   activo: boolean;
 }
 
@@ -309,6 +310,40 @@ export interface AdelantoERP {
   aplicado: boolean;
 }
 
+export interface CarteraClienteFila {
+  cliente_id: string;
+  ruc: string;
+  razon_social: string;
+  agente_retencion: boolean;
+  moneda: Moneda;
+  compras_mes: string;
+  saldo_anterior: string;
+  abonos_mes: string;
+  saldo_total: string;
+}
+
+export interface CarteraClientesResumen {
+  mes: string;
+  moneda: Moneda;
+  filas: CarteraClienteFila[];
+  total_compras_mes: string;
+  total_saldo_anterior: string;
+  total_abonos_mes: string;
+  total_saldo: string;
+}
+
+export interface AbonoClienteERP {
+  id: string;
+  cliente_id: string;
+  fecha: string;
+  moneda: Moneda;
+  monto: string;
+  descripcion: string | null;
+  referencia: string | null;
+  created_at: string;
+}
+
+
 export interface PagoERP {
   id: string;
   usuario_id: string;
@@ -336,6 +371,7 @@ export interface FiltroOpcion {
   codigo: string;
   nombre: string;
   usuario_id: string | null;
+  porcentaje_produccion: string | null;
 }
 
 export interface RegistroOpciones {
