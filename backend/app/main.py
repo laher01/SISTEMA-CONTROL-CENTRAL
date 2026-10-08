@@ -11,6 +11,7 @@ from app.api.routes import (
     empresas,
     expedientes,
     gestores,
+    mantenimiento,
     mensajes_alerta,
     miembros,
     nexus,
@@ -53,6 +54,7 @@ for modulo in (
     pagos,
     configuracion,
     configuracion_acceso,
+    mantenimiento,
 ):
     api.include_router(modulo.router)
 app.include_router(api)
