@@ -17,6 +17,11 @@ export default function Expedientes() {
   const estado = parametros.get("estado") ?? "";
   const pendiente = parametros.get("pendiente_aprobacion") ?? "";
   const receptor = parametros.get("receptor_ruc") ?? "";
+  const emisor = parametros.get("emisor_ruc") ?? "";
+  const tipoEmpresa = parametros.get("tipo_empresa") ?? "";
+  const dia = parametros.get("dia") ?? "";
+  const desde = parametros.get("fecha_desde") ?? "";
+  const hasta = parametros.get("fecha_hasta") ?? "";
   const buscar = parametros.get("buscar") ?? "";
   const pagina = Number(parametros.get("pagina") ?? "0");
 
@@ -24,6 +29,11 @@ export default function Expedientes() {
     estado,
     pendiente_aprobacion: pendiente,
     receptor_ruc: receptor.length === 11 ? receptor : undefined,
+    emisor_ruc: emisor.length === 11 ? emisor : undefined,
+    tipo_empresa: tipoEmpresa,
+    dia,
+    fecha_desde: desde,
+    fecha_hasta: hasta,
     buscar: buscar.trim(),
   };
 
@@ -105,6 +115,15 @@ export default function Expedientes() {
     <>
       <h2>Expedientes</h2>
       <div className="filtros">
+        <select aria-label="Tipo de empresa" value={tipoEmpresa} onChange={(e) => cambiar("tipo_empresa", e.target.value)}>
+          <option value="">Todas las empresas</option>
+          <option value="A">Tipo A</option>
+          <option value="B">Tipo B</option>
+        </select>
+        <label>Día <input type="date" value={dia} onChange={(e) => cambiar("dia", e.target.value)} /></label>
+        <label>Desde <input type="date" value={desde} onChange={(e) => cambiar("fecha_desde", e.target.value)} /></label>
+        <label>Hasta <input type="date" value={hasta} onChange={(e) => cambiar("fecha_hasta", e.target.value)} /></label>
+        <input placeholder="RUC emisor (11 dígitos)" value={emisor} maxLength={11} onChange={(e) => cambiar("emisor_ruc", e.target.value.replace(/\D/g, ""))} />
         <input
           placeholder="Buscar F001-123, RHE-E001-15, RUC o proveedor"
           value={buscar}
@@ -161,6 +180,7 @@ export default function Expedientes() {
                 />
               </th>
               <th>Estado</th>
+              <th>Tipo</th>
               <th>Comprobante</th>
               <th>Emisión</th>
               <th>Emisor</th>
@@ -182,6 +202,7 @@ export default function Expedientes() {
                 <td>
                   <Semaforo estado={e.estado} />
                 </td>
+                <td>{e.emisor.clasificacion_proveedor ? `Tipo ${e.emisor.clasificacion_proveedor}` : "Sin clasificar"}</td>
                 <td>
                   <Link to={`/expedientes/${e.id}`}>
                     {e.tipo_comprobante === "RHE"
@@ -190,9 +211,10 @@ export default function Expedientes() {
                   </Link>
                 </td>
                 <td>{formatearFecha(e.fecha_emision)}</td>
-                <td>{e.emisor.razon_social}</td>
+                <td><strong>{e.emisor.razon_social}</strong><small className="bloque tenue">RUC {e.emisor.ruc}</small></td>
                 <td>
-                  {e.receptor.razon_social}
+                  <strong>{e.receptor.razon_social}</strong>
+                  <small className="bloque tenue">RUC {e.receptor.ruc}</small>
                   {e.pendiente_aprobacion && <span className="etiqueta">No autorizado</span>}
                 </td>
                 <td className="num">{formatearMonto(e.moneda, e.importe_total)}</td>
