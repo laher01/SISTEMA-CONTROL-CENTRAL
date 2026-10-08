@@ -27,6 +27,7 @@ function OrganizacionAdmin() {
   const [codigo, setCodigo] = useState("");
   const [nombre, setNombre] = useState("");
   const [rol, setRol] = useState<RolMiembro>("USUARIO");
+  const [porcentajeProduccion, setPorcentajeProduccion] = useState("1.5");
   const [miembroEditando, setMiembroEditando] = useState<string | null>(null);
   const [usuarioId, setUsuarioId] = useState("");
   const [codigoGestor, setCodigoGestor] = useState("");
@@ -50,6 +51,7 @@ function OrganizacionAdmin() {
           codigo,
           nombre,
           rol,
+          porcentaje_produccion: rol === "USUARIO" ? porcentajeProduccion : null,
         });
         setMensaje("Miembro actualizado.");
       } else {
@@ -57,6 +59,7 @@ function OrganizacionAdmin() {
           codigo,
           nombre,
           rol,
+          porcentaje_produccion: rol === "USUARIO" ? porcentajeProduccion : null,
         });
         setCredencial(alta.credencial);
         setMensaje("Miembro creado. Entrega la clave temporal de forma segura.");
@@ -64,6 +67,7 @@ function OrganizacionAdmin() {
       setCodigo("");
       setNombre("");
       setRol("USUARIO");
+      setPorcentajeProduccion("1.5");
       setMiembroEditando(null);
       recargar();
       recargarGestores();
@@ -137,9 +141,26 @@ function OrganizacionAdmin() {
               required
             />
             <input placeholder="Nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} required />
-            <select value={rol} onChange={(e) => setRol(e.target.value as RolMiembro)}>
+            <select
+              value={rol}
+              onChange={(e) => setRol(e.target.value as RolMiembro)}
+            >
               {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
+            {rol === "USUARIO" && (
+              <label>
+                % producción predeterminado
+                <input
+                  type="number"
+                  step="0.0001"
+                  min="0"
+                  max="100"
+                  value={porcentajeProduccion}
+                  onChange={(e) => setPorcentajeProduccion(e.target.value)}
+                  required
+                />
+              </label>
+            )}
             <button type="submit">{miembroEditando ? "Guardar" : "Crear y generar clave"}</button>
             {miembroEditando && (
               <button type="button" onClick={() => {
@@ -147,23 +168,26 @@ function OrganizacionAdmin() {
                 setCodigo("");
                 setNombre("");
                 setRol("USUARIO");
+                setPorcentajeProduccion("1.5");
               }}>Cancelar</button>
             )}
           </form>
 
           <h3>Miembros</h3>
           <table>
-            <thead><tr><th>Código</th><th>Nombre</th><th>Rol</th><th>Acciones</th></tr></thead>
+            <thead><tr><th>Código</th><th>Nombre</th><th>Rol</th><th>% producción</th><th>Acciones</th></tr></thead>
             <tbody>
               {miembros?.map((m) => (
                 <tr key={m.id}>
                   <td>{m.codigo}</td><td>{m.nombre}</td><td>{m.rol}</td>
+                  <td>{m.rol === "USUARIO" ? (m.porcentaje_produccion ?? "0") + "%" : "—"}</td>
                   <td>
                     <button type="button" onClick={() => {
                       setMiembroEditando(m.id);
                       setCodigo(m.codigo);
                       setNombre(m.nombre);
                       setRol(m.rol);
+                      setPorcentajeProduccion(m.porcentaje_produccion ?? "1.5");
                     }}>Editar</button>{" "}
                     <button type="button" onClick={() => void restablecerMiembro(m)}>
                       Restablecer acceso
