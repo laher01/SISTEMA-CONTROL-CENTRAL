@@ -7,21 +7,28 @@ from sqlalchemy.exc import IntegrityError
 from app.api.deps import HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado
 from app.enums import RolMiembro
-from app.models import Empresa, Expediente, ahora
-from app.schemas import EmpresaActualizar, EmpresaOut, EmpresasEliminarIn, EmpresasEliminarOut
+from app.models import Empresa, Expediente, Miembro, ahora
+from app.schemas import (
+    EmpresaActualizar,
+    EmpresaListadoOut,
+    EmpresaOut,
+    EmpresaUsuarioOut,
+    EmpresasEliminarIn,
+    EmpresasEliminarOut,
+)
 from app.services import auditoria
 from app.services.expedientes import recalcular_expedientes
 
 router = APIRouter(prefix="/empresas", tags=["empresas"])
 
 
-@router.get("", response_model=list[EmpresaOut])
+@router.get("", response_model=list[EmpresaListadoOut])
 def listar(
     session: SessionDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
     autorizada: bool | None = None,
-) -> list[Empresa]:
+) -> list[EmpresaListadoOut]:
     consulta = select(Empresa).where(Empresa.tenant_id == tenant_id, Empresa.deleted_at.is_(None))
     if auth.rol == "GESTOR":
         consulta = consulta.where(
@@ -43,7 +50,41 @@ def listar(
         )
     if autorizada is not None:
         consulta = consulta.where(Empresa.autorizada == autorizada)
-    return list(session.scalars(consulta.order_by(Empresa.razon_social)))
+
+    empresas = list(session.scalars(consulta.order_by(Empresa.razon_social)))
+    salida: list[EmpresaListadoOut] = []
+    for empresa in empresas:
+        usuarios_q = (
+            select(Miembro)
+            .join(Expediente, Expediente.usuario_id == Miembro.id)
+            .where(
+                Expediente.tenant_id == tenant_id,
+                Expediente.deleted_at.is_(None),
+                Miembro.deleted_at.is_(None),
+                or_(
+                    Expediente.emisor_id == empresa.id,
+                    Expediente.receptor_id == empresa.id,
+                ),
+            )
+            .distinct()
+            .order_by(Miembro.codigo)
+        )
+        if auth.rol == "GESTOR":
+            usuarios_q = usuarios_q.where(Expediente.gestor_id == auth.gestor_id)
+        elif auth.rol == RolMiembro.USUARIO:
+            usuarios_q = usuarios_q.where(Expediente.usuario_id == auth.usuario_id)
+
+        usuarios = [
+            EmpresaUsuarioOut(id=u.id, codigo=u.codigo, nombre=u.nombre)
+            for u in session.scalars(usuarios_q)
+        ]
+        salida.append(
+            EmpresaListadoOut(
+                **EmpresaOut.model_validate(empresa).model_dump(),
+                usuarios=usuarios,
+            )
+        )
+    return salida
 
 
 @router.patch("/{empresa_id}", response_model=EmpresaOut)
@@ -64,6 +105,8 @@ def actualizar(
     anterior = {
         "ruc": empresa.ruc,
         "razon_social": empresa.razon_social,
+        "tipo_relacion": empresa.tipo_relacion,
+        "clasificacion_proveedor": empresa.clasificacion_proveedor,
         "autorizada": empresa.autorizada,
         "agente_retencion": empresa.agente_retencion,
     }
@@ -72,6 +115,16 @@ def actualizar(
         empresa.ruc = datos.ruc.strip()
     if datos.razon_social is not None:
         empresa.razon_social = datos.razon_social.strip()
+    if datos.tipo_relacion is not None:
+        empresa.tipo_relacion = datos.tipo_relacion
+    if "clasificacion_proveedor" in datos.model_fields_set:
+        empresa.clasificacion_proveedor = datos.clasificacion_proveedor
+
+    if empresa.tipo_relacion == "CLIENTE":
+        empresa.clasificacion_proveedor = None
+    elif empresa.tipo_relacion == "SIN_CLASIFICAR":
+        empresa.clasificacion_proveedor = None
+
     if datos.autorizada is not None:
         empresa.autorizada = datos.autorizada
     if datos.agente_retencion is not None:
