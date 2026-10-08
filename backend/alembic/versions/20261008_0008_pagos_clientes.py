@@ -83,9 +83,16 @@ def upgrade() -> None:
         ["moneda"],
         unique=False,
     )
+    op.create_index(
+        op.f("ix_abonos_cliente_erp_tenant_id"),
+        "abonos_cliente_erp",
+        ["tenant_id"],
+        unique=False,
+    )
 
 
 def downgrade() -> None:
+    op.drop_index(op.f("ix_abonos_cliente_erp_tenant_id"), table_name="abonos_cliente_erp")
     op.drop_index(op.f("ix_abonos_cliente_erp_moneda"), table_name="abonos_cliente_erp")
     op.drop_index(op.f("ix_abonos_cliente_erp_fecha"), table_name="abonos_cliente_erp")
     op.drop_index(
