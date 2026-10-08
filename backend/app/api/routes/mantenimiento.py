@@ -1,5 +1,6 @@
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import delete, func, select, update
@@ -67,13 +68,17 @@ def _validar_seleccion(datos: MantenimientoSeleccionIn) -> None:
         )
 
 
-def _filtros(modelo: object, tenant_id: uuid.UUID, datos: MantenimientoSeleccionIn) -> list[object]:
-    filtros: list[object] = [modelo.tenant_id == tenant_id]  # type: ignore[attr-defined]
-    creadores: list[object] = []
+def _filtros(
+    modelo: Any,
+    tenant_id: uuid.UUID,
+    datos: MantenimientoSeleccionIn,
+) -> list[Any]:
+    filtros: list[Any] = [modelo.tenant_id == tenant_id]
+    creadores: list[Any] = []
     if datos.cuenta_ids:
-        creadores.append(modelo.creado_por_cuenta_id.in_(datos.cuenta_ids))  # type: ignore[attr-defined]
+        creadores.append(modelo.creado_por_cuenta_id.in_(datos.cuenta_ids))
     if datos.incluir_sin_trazabilidad:
-        creadores.append(modelo.creado_por_cuenta_id.is_(None))  # type: ignore[attr-defined]
+        creadores.append(modelo.creado_por_cuenta_id.is_(None))
     if len(creadores) == 1:
         filtros.append(creadores[0])
     else:
@@ -81,13 +86,13 @@ def _filtros(modelo: object, tenant_id: uuid.UUID, datos: MantenimientoSeleccion
 
         filtros.append(or_(*creadores))
     if datos.fecha_desde is not None:
-        filtros.append(func.date(modelo.created_at) >= datos.fecha_desde)  # type: ignore[attr-defined]
+        filtros.append(func.date(modelo.created_at) >= datos.fecha_desde)
     if datos.fecha_hasta is not None:
-        filtros.append(func.date(modelo.created_at) <= datos.fecha_hasta)  # type: ignore[attr-defined]
+        filtros.append(func.date(modelo.created_at) <= datos.fecha_hasta)
     return filtros
 
 
-def _contar(session: SessionDep, modelo: object, filtros: list[object]) -> int:
+def _contar(session: SessionDep, modelo: Any, filtros: list[Any]) -> int:
     return int(session.scalar(select(func.count()).select_from(modelo).where(*filtros)) or 0)
 
 
