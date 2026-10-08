@@ -12,6 +12,7 @@ from app.api.errores import no_encontrado
 from app.enums import EstadoExpediente, RolMiembro
 from app.models import Empresa, Expediente, ahora
 from app.schemas import ExpedienteDetalle, ExpedienteIn, ExpedienteOut, Recalculo
+from app.security import cuenta_administradora_responsable
 from app.services import auditoria
 from app.services.expedientes import (
     buscar_expediente,
@@ -20,7 +21,6 @@ from app.services.expedientes import (
     recalcular_expedientes,
 )
 from app.services.ingesta import crear_expediente
-from app.security import cuenta_administradora_responsable
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 
 NUMERO_RE = re.compile(r"^([a-z0-9]{4})-0*(\d+)$")
