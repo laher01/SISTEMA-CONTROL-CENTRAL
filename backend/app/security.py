@@ -25,7 +25,6 @@ class ContextoAcceso:
     cambio_clave_obligatorio: bool
 
 
-
 def cuenta_administradora_responsable(
     session: Session,
     contexto: ContextoAcceso,
@@ -44,6 +43,7 @@ def cuenta_administradora_responsable(
         if miembro is not None:
             return miembro.creado_por_cuenta_id
     return None
+
 
 def clave_temporal() -> str:
     return secrets.token_urlsafe(12)
