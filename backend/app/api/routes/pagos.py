@@ -1,4 +1,6 @@
+import calendar
 import uuid
+from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, status
@@ -7,16 +9,23 @@ from sqlalchemy import func, select
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
 from app.models import (
+    AbonoClienteERP,
     AdelantoERP,
     CuentaPagoERP,
+    Empresa,
     Expediente,
     Miembro,
     PagoERP,
     PlanLiquidacion,
 )
 from app.schemas import (
+    AbonoClienteERPIn,
+    AbonoClienteERPOut,
     AdelantoERPIn,
     AdelantoERPOut,
+    AgenteRetencionIn,
+    CarteraClienteFila,
+    CarteraClientesResumen,
     CuentaPagoERPIn,
     CuentaPagoERPOut,
     FiltroOpcion,
@@ -64,7 +73,12 @@ def usuarios_pago(
 ) -> list[FiltroOpcion]:
     _validar_acceso(auth.rol)
     return [
-        FiltroOpcion(id=u.id, codigo=u.codigo, nombre=u.nombre)
+        FiltroOpcion(
+            id=u.id,
+            codigo=u.codigo,
+            nombre=u.nombre,
+            porcentaje_produccion=u.porcentaje_produccion,
+        )
         for u in session.scalars(
             select(Miembro)
             .where(
@@ -76,6 +90,244 @@ def usuarios_pago(
             .order_by(Miembro.codigo)
         )
     ]
+
+
+def _rango_mes(mes: str) -> tuple[date, date]:
+    try:
+        anio_texto, mes_texto = mes.split("-", 1)
+        anio = int(anio_texto)
+        numero_mes = int(mes_texto)
+        ultimo = calendar.monthrange(anio, numero_mes)[1]
+        return date(anio, numero_mes, 1), date(anio, numero_mes, ultimo)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Mes inválido. Use formato AAAA-MM",
+        ) from exc
+
+
+def _cliente_valido(
+    session: SessionDep,
+    tenant_id: uuid.UUID,
+    cliente_id: uuid.UUID,
+) -> Empresa:
+    cliente = session.get(Empresa, cliente_id)
+    if (
+        cliente is None
+        or cliente.tenant_id != tenant_id
+        or cliente.deleted_at is not None
+        or cliente.tipo_relacion not in {"CLIENTE", "AMBOS"}
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "La empresa seleccionada no es un Cliente activo",
+        )
+    return cliente
+
+
+@router.get("/clientes/resumen", response_model=CarteraClientesResumen)
+def resumen_clientes(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    mes: str,
+    moneda: str = "PEN",
+) -> CarteraClientesResumen:
+    _validar_acceso(auth.rol)
+    if moneda not in {"PEN", "USD"}:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Moneda inválida")
+    desde, hasta = _rango_mes(mes)
+
+    clientes = list(
+        session.scalars(
+            select(Empresa)
+            .where(
+                Empresa.tenant_id == tenant_id,
+                Empresa.deleted_at.is_(None),
+                Empresa.tipo_relacion.in_(["CLIENTE", "AMBOS"]),
+            )
+            .order_by(Empresa.razon_social)
+        )
+    )
+
+    filas: list[CarteraClienteFila] = []
+    total_compras = Decimal("0")
+    total_anterior = Decimal("0")
+    total_abonos = Decimal("0")
+    total_saldo = Decimal("0")
+
+    for cliente in clientes:
+        compras_mes = Decimal(
+            session.scalar(
+                select(func.coalesce(func.sum(Expediente.importe_total), 0)).where(
+                    Expediente.tenant_id == tenant_id,
+                    Expediente.deleted_at.is_(None),
+                    Expediente.receptor_id == cliente.id,
+                    Expediente.moneda == moneda,
+                    Expediente.fecha_emision >= desde,
+                    Expediente.fecha_emision <= hasta,
+                )
+            )
+            or 0
+        )
+        compras_previas = Decimal(
+            session.scalar(
+                select(func.coalesce(func.sum(Expediente.importe_total), 0)).where(
+                    Expediente.tenant_id == tenant_id,
+                    Expediente.deleted_at.is_(None),
+                    Expediente.receptor_id == cliente.id,
+                    Expediente.moneda == moneda,
+                    Expediente.fecha_emision < desde,
+                )
+            )
+            or 0
+        )
+        abonos_previos = Decimal(
+            session.scalar(
+                select(func.coalesce(func.sum(AbonoClienteERP.monto), 0)).where(
+                    AbonoClienteERP.tenant_id == tenant_id,
+                    AbonoClienteERP.cliente_id == cliente.id,
+                    AbonoClienteERP.moneda == moneda,
+                    AbonoClienteERP.fecha < desde,
+                )
+            )
+            or 0
+        )
+        abonos_mes = Decimal(
+            session.scalar(
+                select(func.coalesce(func.sum(AbonoClienteERP.monto), 0)).where(
+                    AbonoClienteERP.tenant_id == tenant_id,
+                    AbonoClienteERP.cliente_id == cliente.id,
+                    AbonoClienteERP.moneda == moneda,
+                    AbonoClienteERP.fecha >= desde,
+                    AbonoClienteERP.fecha <= hasta,
+                )
+            )
+            or 0
+        )
+
+        saldo_anterior = compras_previas - abonos_previos
+        saldo_total = saldo_anterior + compras_mes - abonos_mes
+        if (
+            compras_mes == 0
+            and saldo_anterior == 0
+            and abonos_mes == 0
+        ):
+            continue
+
+        filas.append(
+            CarteraClienteFila(
+                cliente_id=cliente.id,
+                ruc=cliente.ruc,
+                razon_social=cliente.razon_social,
+                agente_retencion=cliente.agente_retencion,
+                moneda=moneda,
+                compras_mes=compras_mes,
+                saldo_anterior=saldo_anterior,
+                abonos_mes=abonos_mes,
+                saldo_total=saldo_total,
+            )
+        )
+        total_compras += compras_mes
+        total_anterior += saldo_anterior
+        total_abonos += abonos_mes
+        total_saldo += saldo_total
+
+    return CarteraClientesResumen(
+        mes=mes,
+        moneda=moneda,
+        filas=filas,
+        total_compras_mes=total_compras,
+        total_saldo_anterior=total_anterior,
+        total_abonos_mes=total_abonos,
+        total_saldo=total_saldo,
+    )
+
+
+@router.post(
+    "/clientes/abonos",
+    response_model=AbonoClienteERPOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def registrar_abono_cliente(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    datos: AbonoClienteERPIn,
+) -> AbonoClienteERP:
+    _validar_acceso(auth.rol)
+    cliente = _cliente_valido(session, tenant_id, datos.cliente_id)
+    abono = AbonoClienteERP(
+        tenant_id=tenant_id,
+        cliente_id=cliente.id,
+        fecha=datos.fecha,
+        moneda=datos.moneda,
+        monto=datos.monto,
+        descripcion=datos.descripcion.strip() if datos.descripcion else None,
+        referencia=datos.referencia.strip() if datos.referencia else None,
+        creado_por_cuenta_id=cuenta_administradora_responsable(session, auth),
+    )
+    session.add(abono)
+    session.flush()
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "ABONO_CLIENTE_REGISTRADO",
+        "abono_cliente_erp",
+        abono.id,
+        {
+            "cliente_id": str(cliente.id),
+            "ruc": cliente.ruc,
+            "moneda": datos.moneda,
+            "monto": str(datos.monto),
+            "fecha": datos.fecha.isoformat(),
+        },
+    )
+    session.commit()
+    return abono
+
+
+@router.get("/clientes/abonos", response_model=list[AbonoClienteERPOut])
+def listar_abonos_cliente(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    cliente_id: uuid.UUID | None = None,
+) -> list[AbonoClienteERP]:
+    _validar_acceso(auth.rol)
+    consulta = select(AbonoClienteERP).where(AbonoClienteERP.tenant_id == tenant_id)
+    if cliente_id is not None:
+        consulta = consulta.where(AbonoClienteERP.cliente_id == cliente_id)
+    return list(session.scalars(consulta.order_by(AbonoClienteERP.fecha.desc())))
+
+
+@router.patch("/clientes/{cliente_id}/agente-retencion", response_model=bool)
+def actualizar_agente_retencion(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    cliente_id: uuid.UUID,
+    datos: AgenteRetencionIn,
+) -> bool:
+    _validar_acceso(auth.rol)
+    cliente = _cliente_valido(session, tenant_id, cliente_id)
+    anterior = cliente.agente_retencion
+    cliente.agente_retencion = datos.agente_retencion
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "CLIENTE_AGENTE_RETENCION_ACTUALIZADO",
+        "empresa",
+        cliente.id,
+        {
+            "ruc": cliente.ruc,
+            "anterior": anterior,
+            "nuevo": datos.agente_retencion,
+            "actor": auth.codigo,
+        },
+    )
+    session.commit()
+    return cliente.agente_retencion
 
 
 @router.post("/planes", response_model=PlanLiquidacionOut, status_code=status.HTTP_201_CREATED)
