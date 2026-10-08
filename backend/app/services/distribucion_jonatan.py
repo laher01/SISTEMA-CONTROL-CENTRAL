@@ -15,20 +15,22 @@ CIEN = Decimal("100")
 class TasasJonatan:
     gente_lima: Decimal = Decimal("2.250")
     javier: Decimal = Decimal("0.125")
-    jonatan: Decimal = Decimal("0.625")
+    jonatan: Decimal = Decimal("0.3125")
 
     def validar(self) -> None:
         tasas = (self.gente_lima, self.javier, self.jonatan)
         if any(t < 0 or t > CIEN for t in tasas):
             raise ValueError("Los porcentajes deben estar entre 0 y 100")
-        if sum(tasas, Decimal("0")) != Decimal("3.000"):
-            raise ValueError("La suma de porcentajes debe ser 3 %")
+        if sum(tasas, Decimal("0")) != Decimal("2.6875"):
+            raise ValueError("La suma de porcentajes debe ser 2.6875 %")
 
 
 @dataclass(frozen=True)
 class ResultadoJonatan:
     base: Decimal
     bruto: Decimal
+    neto: Decimal
+    excluido_alex: Decimal
     gente_lima: Decimal
     javier: Decimal
     jonatan: Decimal
@@ -70,12 +72,14 @@ def calcular_distribucion_jonatan(
     bruto = _redondear(base * Decimal("3") / CIEN)
     gente = _redondear(base * tasas.gente_lima / CIEN)
     javier = _redondear(base * tasas.javier / CIEN)
-    # El último beneficiario recibe el residuo de redondeo,
-    # evitando descuadres entre beneficiarios y comisión bruta.
-    jonatan = bruto - gente - javier
+    neto = _redondear(base * Decimal("2.6875") / CIEN)
+    jonatan = neto - gente - javier
+    excluido_alex = bruto - neto
     return ResultadoJonatan(
         base=_redondear(base),
         bruto=bruto,
+        neto=neto,
+        excluido_alex=excluido_alex,
         gente_lima=gente,
         javier=javier,
         jonatan=jonatan,
