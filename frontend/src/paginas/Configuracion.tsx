@@ -5,6 +5,9 @@ import type {
   ConfiguracionAcceso as ConfiguracionAccesoTipo,
   CorreoAutorizado,
   CuentaAccesoAdmin,
+  MantenimientoAdministrador,
+  MantenimientoResultado,
+  MantenimientoVistaPrevia,
   PermisoConfigurado,
   RolMiembro,
   SesionAccesoAdmin,
@@ -16,7 +19,7 @@ const ROLES = ["GERENTE", "SECRETARIA", "USUARIO"] as const;
 const PERMISO = "ELIMINAR_REGISTROS";
 
 export default function Configuracion({ sesion }: { sesion: SesionActual }) {
-  const [seccion, setSeccion] = useState<"permisos" | "acceso">("permisos");
+  const [seccion, setSeccion] = useState<"permisos" | "acceso" | "mantenimiento">("permisos");
   const { datos, error, cargando, recargar } = useDatos<PermisoConfigurado[]>(
     "/api/v1/configuracion/permisos",
   );
@@ -35,7 +38,10 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
       <div className="acciones">
         <button onClick={() => setSeccion("permisos")}>Permisos operativos</button>
         {sesion.rol === "SUPERADMIN" && (
-          <button onClick={() => setSeccion("acceso")}>Configuración de acceso</button>
+          <>
+            <button onClick={() => setSeccion("acceso")}>Configuración de acceso</button>
+            <button onClick={() => setSeccion("mantenimiento")}>Mantenimiento</button>
+          </>
         )}
       </div>
 
@@ -84,6 +90,7 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
       )}
 
       {seccion === "acceso" && sesion.rol === "SUPERADMIN" && <ConfiguracionAccesoPanel />}
+      {seccion === "mantenimiento" && sesion.rol === "SUPERADMIN" && <MantenimientoPanel />}
     </>
   );
 }
@@ -441,6 +448,204 @@ function ConfiguracionAccesoPanel() {
           ))}
         </tbody>
       </table>
+    </section>
+  );
+}
+
+
+const TIPOS_MANTENIMIENTO = [
+  ["documentos", "Documentos"],
+  ["expedientes", "Expedientes"],
+  ["pagos", "Pagos programados"],
+  ["adelantos", "Adelantos"],
+  ["planes", "Planes de liquidación"],
+  ["cuentas_pago", "Cuentas de pago"],
+] as const;
+
+function MantenimientoPanel() {
+  const administradores = useDatos<MantenimientoAdministrador[]>(
+    "/api/v1/configuracion/mantenimiento/administradores",
+  );
+  const [cuentas, setCuentas] = useState<string[]>([]);
+  const [historicos, setHistoricos] = useState(false);
+  const [tipos, setTipos] = useState<string[]>([
+    "documentos",
+    "expedientes",
+    "pagos",
+    "adelantos",
+    "planes",
+    "cuentas_pago",
+  ]);
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [vista, setVista] = useState<MantenimientoVistaPrevia | null>(null);
+  const [confirmacion, setConfirmacion] = useState("");
+  const [mensaje, setMensaje] = useState("");
+
+  const payload = () => ({
+    cuenta_ids: cuentas,
+    incluir_sin_trazabilidad: historicos,
+    tipos,
+    fecha_desde: desde || null,
+    fecha_hasta: hasta || null,
+  });
+
+  const previsualizar = async () => {
+    setMensaje("");
+    try {
+      const datos = await enviarJson<MantenimientoVistaPrevia>(
+        "/api/v1/configuracion/mantenimiento/vista-previa",
+        "POST",
+        payload(),
+      );
+      setVista(datos);
+    } catch (err) {
+      setVista(null);
+      setMensaje(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const ejecutar = async () => {
+    setMensaje("");
+    try {
+      const resultado = await enviarJson<MantenimientoResultado>(
+        "/api/v1/configuracion/mantenimiento/limpiar",
+        "POST",
+        { ...payload(), confirmacion },
+      );
+      setMensaje(
+        "Limpieza completada: " +
+          Object.entries(resultado.eliminados)
+            .map(([tipo, total]) => `${tipo}: ${total}`)
+            .join(" · ") +
+          ` · archivos: ${resultado.archivos_eliminados}`,
+      );
+      setVista(null);
+      setConfirmacion("");
+      administradores.recargar();
+    } catch (err) {
+      setMensaje(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  return (
+    <section className="panel-configuracion">
+      <h3>Mantenimiento · Zona crítica</h3>
+      <p className="tenue">
+        Exclusivo de SUPERADMIN. Selecciona primero el administrador responsable,
+        los tipos de registros y el rango de fechas. La auditoría de la limpieza se conserva.
+      </p>
+
+      {administradores.error && <p className="error">{administradores.error}</p>}
+      {mensaje && <p className="resumen-carga">{mensaje}</p>}
+
+      <h4>1. Administradores</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Seleccionar</th><th>Administrador</th><th>Rol</th><th>Registros</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(administradores.datos ?? []).map((admin) => {
+            const esHistorico = admin.cuenta_id === null;
+            const seleccionado = esHistorico
+              ? historicos
+              : cuentas.includes(admin.cuenta_id as string);
+            return (
+              <tr key={admin.cuenta_id ?? "historico"}>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={seleccionado}
+                    onChange={(e) => {
+                      if (esHistorico) {
+                        setHistoricos(e.target.checked);
+                      } else if (e.target.checked) {
+                        setCuentas((actual) => [...actual, admin.cuenta_id as string]);
+                      } else {
+                        setCuentas((actual) =>
+                          actual.filter((id) => id !== admin.cuenta_id),
+                        );
+                      }
+                    }}
+                  />
+                </td>
+                <td>{admin.login}</td>
+                <td>{admin.rol}</td>
+                <td>
+                  {Object.entries(admin.registros)
+                    .map(([tipo, total]) => `${tipo}: ${total}`)
+                    .join(" · ")}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      <h4>2. Qué se eliminará</h4>
+      <div className="acciones">
+        {TIPOS_MANTENIMIENTO.map(([valor, etiqueta]) => (
+          <label key={valor}>
+            <input
+              type="checkbox"
+              checked={tipos.includes(valor)}
+              onChange={(e) =>
+                setTipos((actual) =>
+                  e.target.checked
+                    ? [...actual, valor]
+                    : actual.filter((tipo) => tipo !== valor),
+                )
+              }
+            />
+            {etiqueta}
+          </label>
+        ))}
+      </div>
+
+      <div className="acciones">
+        <label>
+          Desde
+          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
+        </label>
+        <label>
+          Hasta
+          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+        </label>
+        <button onClick={() => void previsualizar()}>Previsualizar limpieza</button>
+      </div>
+
+      {vista && (
+        <>
+          <h4>3. Vista previa</h4>
+          <table>
+            <thead><tr><th>Tipo</th><th>Total seleccionado</th></tr></thead>
+            <tbody>
+              {Object.entries(vista.totales).map(([tipo, total]) => (
+                <tr key={tipo}><td>{tipo}</td><td>{total}</td></tr>
+              ))}
+            </tbody>
+          </table>
+
+          <p className="tenue">
+            Para ejecutar escribe exactamente: <strong>ELIMINAR-DATOS-OPERATIVOS</strong>
+          </p>
+          <div className="acciones">
+            <input
+              value={confirmacion}
+              onChange={(e) => setConfirmacion(e.target.value)}
+              placeholder="ELIMINAR-DATOS-OPERATIVOS"
+            />
+            <button
+              disabled={confirmacion !== "ELIMINAR-DATOS-OPERATIVOS"}
+              onClick={() => void ejecutar()}
+            >
+              Eliminar registros seleccionados
+            </button>
+          </div>
+        </>
+      )}
     </section>
   );
 }
