@@ -323,6 +323,7 @@ export interface FiltroOpcion {
   id: string;
   codigo: string;
   nombre: string;
+  usuario_id: string | null;
 }
 
 export interface RegistroOpciones {
