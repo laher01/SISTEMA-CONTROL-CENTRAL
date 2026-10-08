@@ -24,6 +24,7 @@ export default function Dashboard() {
   const [usuarioId, setUsuarioId] = useState("");
   const [emisorId, setEmisorId] = useState("");
   const [receptorId, setReceptorId] = useState("");
+  const [tipoEmpresa, setTipoEmpresa] = useState<"" | "A" | "B">("");
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
 
@@ -35,10 +36,11 @@ export default function Dashboard() {
     if (usuarioId) params.set("usuario_id", usuarioId);
     if (emisorId) params.set("emisor_id", emisorId);
     if (receptorId) params.set("receptor_id", receptorId);
+    if (tipoEmpresa) params.set("tipo_empresa", tipoEmpresa);
     if (fechaDesde) params.set("fecha_desde", fechaDesde);
     if (fechaHasta) params.set("fecha_hasta", fechaHasta);
     return `/api/v1/dashboard/desglose?${params.toString()}`;
-  }, [agruparPor, orden, usuarioId, emisorId, receptorId, fechaDesde, fechaHasta]);
+  }, [agruparPor, orden, usuarioId, emisorId, receptorId, tipoEmpresa, fechaDesde, fechaHasta]);
 
   const {
     datos: desglose,
@@ -54,6 +56,7 @@ export default function Dashboard() {
     setUsuarioId("");
     setEmisorId("");
     setReceptorId("");
+    setTipoEmpresa("");
     setFechaDesde("");
     setFechaHasta("");
   };
@@ -144,6 +147,17 @@ export default function Dashboard() {
                         {empresa.razon_social} · {empresa.ruc}
                       </option>
                     ))}
+                  </select>
+                </label>
+                <label>
+                  Tipo de empresa (emisor / proveedor)
+                  <select
+                    value={tipoEmpresa}
+                    onChange={(e) => setTipoEmpresa(e.target.value as "" | "A" | "B")}
+                  >
+                    <option value="">Todas</option>
+                    <option value="A">Tipo A</option>
+                    <option value="B">Tipo B</option>
                   </select>
                 </label>
                 <label>
