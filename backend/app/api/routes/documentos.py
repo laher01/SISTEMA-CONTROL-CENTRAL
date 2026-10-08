@@ -106,6 +106,7 @@ def _comprobante_duplicado(
         detalles["expediente_id"] = str(expediente.id)
     return HTTPException(status.HTTP_409_CONFLICT, detalles)
 
+
 @router.post("", response_model=DocumentoOut, status_code=status.HTTP_201_CREATED)
 async def subir_documento(
     session: SessionDep,
