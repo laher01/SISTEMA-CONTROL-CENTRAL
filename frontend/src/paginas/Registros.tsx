@@ -21,6 +21,7 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
   const gestorId = parametros.get("gestor_id") ?? "";
   const emisor = parametros.get("emisor") ?? "";
   const receptor = parametros.get("receptor") ?? "";
+  const dia = parametros.get("dia") ?? "";
   const desde = parametros.get("fecha_desde") ?? "";
   const hasta = parametros.get("fecha_hasta") ?? "";
   const mes = parametros.get("mes") ?? "";
@@ -31,6 +32,7 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
     gestor_id: gestorId,
     emisor,
     receptor,
+    dia,
     fecha_desde: desde,
     fecha_hasta: hasta,
     mes,
@@ -67,10 +69,11 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
     }
     if (emisor) partes.push(`Emisor: ${emisor}`);
     if (receptor) partes.push(`Receptor: ${receptor}`);
-    if (mes) partes.push(`Mes: ${mes}`);
+    if (dia) partes.push(`Día: ${dia}`);
+    else if (mes) partes.push(`Mes: ${mes}`);
     else if (desde || hasta) partes.push(`Periodo: ${desde || "inicio"} → ${hasta || "hoy"}`);
     return partes.length > 0 ? partes.join(" · ") : "Todos los registros visibles para este rol";
-  }, [desde, emisor, gestorId, hasta, mes, opciones, receptor, usuarioId]);
+  }, [desde, dia, emisor, gestorId, hasta, mes, opciones, receptor, usuarioId]);
 
   const cambiar = (clave: string, valor: string) => {
     const siguiente = new URLSearchParams(parametros);
@@ -82,6 +85,21 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
       if (!valor || (gestorActual && gestorActual.usuario_id !== valor)) {
         siguiente.delete("gestor_id");
       }
+    }
+
+    if (clave === "dia" && valor) {
+      siguiente.delete("fecha_desde");
+      siguiente.delete("fecha_hasta");
+      siguiente.delete("mes");
+    }
+    if ((clave === "fecha_desde" || clave === "fecha_hasta") && valor) {
+      siguiente.delete("dia");
+      siguiente.delete("mes");
+    }
+    if (clave === "mes" && valor) {
+      siguiente.delete("dia");
+      siguiente.delete("fecha_desde");
+      siguiente.delete("fecha_hasta");
     }
 
     if (clave !== "pagina") siguiente.delete("pagina");
@@ -147,6 +165,10 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
           value={receptor}
           onChange={(e) => cambiar("receptor", e.target.value)}
         />
+        <label className="filtro-fecha">
+          Día
+          <input type="date" value={dia} onChange={(e) => cambiar("dia", e.target.value)} />
+        </label>
         <label className="filtro-fecha">
           Desde
           <input type="date" value={desde} onChange={(e) => cambiar("fecha_desde", e.target.value)} />
