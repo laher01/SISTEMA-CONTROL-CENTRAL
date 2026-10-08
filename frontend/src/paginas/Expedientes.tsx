@@ -3,18 +3,21 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { conParametros, imprimirExpedientes, obtener, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
 import { Estado, Paginacion, Semaforo } from "../componentes";
+import FiltroJerarquia from "../componentes/FiltroJerarquia";
 import { ETIQUETA_ESTADO, formatearFecha, formatearMonto, numeroExpediente } from "../formato";
-import { ESTADOS_EXPEDIENTE, type Expediente } from "../tipos";
+import { ESTADOS_EXPEDIENTE, type Expediente, type SesionActual } from "../tipos";
 import { formatearMonto as monto } from "../formato";
 
 const POR_PAGINA = 50;
 
-export default function Expedientes() {
+export default function Expedientes({ sesion }: { sesion: SesionActual }) {
   const [parametros, setParametros] = useSearchParams();
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
   const [mensaje, setMensaje] = useState("");
   const [imprimiendo, setImprimiendo] = useState(false);
 
+  const usuarioId = parametros.get("usuario_id") ?? "";
+  const gestorId = parametros.get("gestor_id") ?? "";
   const estado = parametros.get("estado") ?? "";
   const pendiente = parametros.get("pendiente_aprobacion") ?? "";
   const receptor = parametros.get("receptor_ruc") ?? "";
@@ -28,6 +31,8 @@ export default function Expedientes() {
 
   const filtrosBase = {
     estado,
+    usuario_id: usuarioId,
+    gestor_id: gestorId,
     pendiente_aprobacion: pendiente,
     receptor_ruc: receptor.length === 11 ? receptor : undefined,
     emisor_ruc: emisor.length === 11 ? emisor : undefined,
@@ -56,6 +61,7 @@ export default function Expedientes() {
     const siguiente = new URLSearchParams(parametros);
     if (valor) siguiente.set(clave, valor);
     else siguiente.delete(clave);
+    if (clave === "usuario_id") siguiente.delete("gestor_id");
     if (clave !== "pagina") siguiente.delete("pagina");
     setSeleccionados(new Set());
     setMensaje("");
@@ -119,6 +125,7 @@ export default function Expedientes() {
     <>
       <h2>Expedientes</h2>
       <div className="filtros">
+        <FiltroJerarquia sesion={sesion} usuarioId={usuarioId} gestorId={gestorId} cambiar={cambiar} />
         <select aria-label="Tipo de empresa" value={tipoEmpresa} onChange={(e) => cambiar("tipo_empresa", e.target.value)}>
           <option value="">Todas las empresas</option>
           <option value="A">Tipo A</option>
