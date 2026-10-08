@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, selectinload
 
@@ -222,6 +222,91 @@ def listar_documentos(
 
     consulta = consulta.order_by(Documento.created_at.desc()).limit(limit).offset(offset)
     return list(session.scalars(consulta))
+
+
+@router.get("/resumen")
+def resumen_documentos(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    estado: EstadoDocumento | None = None,
+    tipo_documento: TipoDocumento | None = None,
+    expediente_id: uuid.UUID | None = None,
+    tipo_empresa: Literal["A", "B"] | None = None,
+    dia: date | None = None,
+    usuario_id: uuid.UUID | None = None,
+    gestor_id: uuid.UUID | None = None,
+    emisor_ruc: Annotated[str | None, Query(min_length=11, max_length=11)] = None,
+    receptor_ruc: Annotated[str | None, Query(min_length=11, max_length=11)] = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+) -> dict[str, int | Decimal]:
+    consulta = select(Documento.id, Documento.expediente_id).where(
+        Documento.tenant_id == tenant_id, Documento.deleted_at.is_(None)
+    )
+    consulta = _aplicar_ambito_documentos(consulta, auth)
+    if estado is not None:
+        consulta = consulta.where(Documento.estado == estado)
+    if tipo_documento is not None:
+        consulta = consulta.where(Documento.tipo_documento == tipo_documento)
+    if expediente_id is not None:
+        consulta = consulta.where(Documento.expediente_id == expediente_id)
+    if usuario_id is not None:
+        consulta = consulta.where(Documento.usuario_id == usuario_id)
+    if gestor_id is not None:
+        consulta = consulta.where(Documento.gestor_id == gestor_id)
+    if dia is not None:
+        consulta = consulta.where(func.date(Documento.created_at) == dia)
+    if fecha_desde is not None:
+        consulta = consulta.where(func.date(Documento.created_at) >= fecha_desde)
+    if fecha_hasta is not None:
+        consulta = consulta.where(func.date(Documento.created_at) <= fecha_hasta)
+    if emisor_ruc is not None or receptor_ruc is not None or tipo_empresa is not None:
+        consulta = consulta.join(Expediente, Documento.expediente_id == Expediente.id)
+        if emisor_ruc is not None or tipo_empresa is not None:
+            emisor = aliased(Empresa)
+            consulta = consulta.join(emisor, Expediente.emisor_id == emisor.id)
+            if emisor_ruc is not None:
+                consulta = consulta.where(emisor.ruc == emisor_ruc)
+            if tipo_empresa is not None:
+                consulta = consulta.where(emisor.clasificacion_proveedor == tipo_empresa)
+        if receptor_ruc is not None:
+            receptor = aliased(Empresa)
+            consulta = consulta.join(receptor, Expediente.receptor_id == receptor.id)
+            consulta = consulta.where(receptor.ruc == receptor_ruc)
+    filtrados = consulta.subquery()
+    cantidad = session.scalar(select(func.count()).select_from(filtrados)) or 0
+    expedientes_unicos = (
+        select(filtrados.c.expediente_id)
+        .where(filtrados.c.expediente_id.is_not(None))
+        .distinct()
+        .subquery()
+    )
+    total = session.execute(
+        select(
+            func.count(Expediente.id),
+            func.coalesce(
+                func.sum(
+                    case((Expediente.moneda == "PEN", Expediente.importe_total), else_=0)
+                ),
+                0,
+            ),
+            func.coalesce(
+                func.sum(
+                    case((Expediente.moneda == "USD", Expediente.importe_total), else_=0)
+                ),
+                0,
+            ),
+        )
+        .join(expedientes_unicos, Expediente.id == expedientes_unicos.c.expediente_id)
+        .where(Expediente.tenant_id == tenant_id, Expediente.deleted_at.is_(None))
+    ).one()
+    return {
+        "total_documentos": int(cantidad),
+        "total_expedientes": int(total[0]),
+        "total_pen": Decimal(total[1]),
+        "total_usd": Decimal(total[2]),
+    }
 
 
 def _documento(session: SessionDep, tenant_id: uuid.UUID, documento_id: uuid.UUID) -> Documento:
