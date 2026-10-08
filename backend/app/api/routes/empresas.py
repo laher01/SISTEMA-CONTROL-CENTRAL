@@ -12,9 +12,9 @@ from app.schemas import (
     EmpresaActualizar,
     EmpresaListadoOut,
     EmpresaOut,
-    EmpresaUsuarioOut,
     EmpresasEliminarIn,
     EmpresasEliminarOut,
+    EmpresaUsuarioOut,
 )
 from app.services import auditoria
 from app.services.expedientes import recalcular_expedientes
@@ -120,9 +120,7 @@ def actualizar(
     if "clasificacion_proveedor" in datos.model_fields_set:
         empresa.clasificacion_proveedor = datos.clasificacion_proveedor
 
-    if empresa.tipo_relacion == "CLIENTE":
-        empresa.clasificacion_proveedor = None
-    elif empresa.tipo_relacion == "SIN_CLASIFICAR":
+    if empresa.tipo_relacion in {"CLIENTE", "SIN_CLASIFICAR"}:
         empresa.clasificacion_proveedor = None
 
     if datos.autorizada is not None:
