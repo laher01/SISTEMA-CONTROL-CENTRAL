@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { conParametros, imprimirExpedientes, obtener, urlZipExpediente, useDatos } from "../api";
+import { conParametros, imprimirExpedientes, obtener, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
 import { Estado, Paginacion, Semaforo } from "../componentes";
 import { ETIQUETA_ESTADO, formatearFecha, formatearMonto, numeroExpediente } from "../formato";
 import { ESTADOS_EXPEDIENTE, type Expediente } from "../tipos";
@@ -228,7 +228,7 @@ export default function Expedientes() {
                   {e.pendiente_aprobacion && <span className="etiqueta">No autorizado</span>}
                 </td>
                 <td className="num">{formatearMonto(e.moneda, e.importe_total)}</td>
-                <td><a href={urlZipExpediente(e.id)}>ZIP completo</a></td>
+                <td><a href={urlZipExpediente(e.id)}>ZIP completo</a>{" · "}<a href={urlPdfExpediente(e.id)}>PDF</a></td>
               </tr>
             ))}
           </tbody>

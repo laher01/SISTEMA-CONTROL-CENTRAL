@@ -1,7 +1,7 @@
 import { useMemo, useState, type ChangeEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { conParametros, eliminar, enviarFormulario, urlZipExpediente, useDatos } from "../api";
+import { conParametros, eliminar, enviarFormulario, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
 import { Estado, Paginacion, Semaforo } from "../componentes";
 import { ETIQUETA_TIPO_DOCUMENTO, formatearFecha, formatearMonto } from "../formato";
 import type {
@@ -326,6 +326,7 @@ function FilaRegistro({
       <td>
         <div className="acciones-registro">
           <a href={urlZipExpediente(fila.expediente_id)}>Descargar ZIP</a>
+          <a href={urlPdfExpediente(fila.expediente_id)}>Descargar PDF</a>
           <small>
             Presentes: {fila.documentos_presentes.map((t) => ETIQUETA_TIPO_DOCUMENTO[t]).join(", ") || "ninguno"}
           </small>
