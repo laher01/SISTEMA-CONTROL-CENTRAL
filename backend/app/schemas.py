@@ -599,3 +599,32 @@ class SesionAccesoAdminOut(BaseModel):
     expira_at: datetime
     ultima_actividad: datetime
     revocada_at: datetime | None
+
+
+class MantenimientoAdministradorOut(BaseModel):
+    cuenta_id: uuid.UUID | None
+    login: str
+    rol: str
+    registros: dict[str, int]
+
+
+class MantenimientoSeleccionIn(BaseModel):
+    cuenta_ids: list[uuid.UUID] = []
+    incluir_sin_trazabilidad: bool = False
+    tipos: list[str] = Field(min_length=1)
+    fecha_desde: date | None = None
+    fecha_hasta: date | None = None
+
+
+class MantenimientoVistaPreviaOut(BaseModel):
+    administradores: list[MantenimientoAdministradorOut]
+    totales: dict[str, int]
+
+
+class MantenimientoEjecutarIn(MantenimientoSeleccionIn):
+    confirmacion: str = Field(min_length=1, max_length=100)
+
+
+class MantenimientoResultadoOut(BaseModel):
+    eliminados: dict[str, int]
+    archivos_eliminados: int
