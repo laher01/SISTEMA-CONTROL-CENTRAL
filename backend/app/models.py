@@ -191,6 +191,9 @@ class Documento(ConId, ConTenant, ConCreacion, Base):
     formato_origen: Mapped[str | None] = mapped_column(String(30), index=True)
     gestor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"), index=True)
     usuario_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
+    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_acceso.id"), index=True
+    )
     deleted_at: Mapped[datetime | None]
 
     expediente: Mapped[Expediente | None] = relationship(back_populates="documentos")
