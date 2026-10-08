@@ -117,8 +117,8 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/subir" element={<Subir sesion={sesion} />} />
           <Route path="/registros" element={<Registros sesion={sesion} />} />
-          <Route path="/documentos" element={<Documentos />} />
-          <Route path="/expedientes" element={<Expedientes />} />
+          <Route path="/documentos" element={<Documentos sesion={sesion} />} />
+          <Route path="/expedientes" element={<Expedientes sesion={sesion} />} />
           <Route path="/expedientes/:id" element={<ExpedienteDetalle />} />
           <Route path="/pendientes" element={<Pendientes />} />
           <Route path="/alertas" element={<Alertas sesion={sesion} />} />

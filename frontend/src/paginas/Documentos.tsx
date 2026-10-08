@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { conParametros, eliminar, enviarJson, urlArchivo, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
 import { Estado, Paginacion } from "../componentes";
+import FiltroJerarquia from "../componentes/FiltroJerarquia";
 import { formatearMonto } from "../formato";
 import {
   ETIQUETA_ESTADO_DOCUMENTO,
@@ -13,6 +14,7 @@ import {
   ESTADOS_DOCUMENTO,
   TIPOS_DOCUMENTO,
   type Documento,
+  type SesionActual,
   type EstadoDocumento,
   type TipoDocumento,
 } from "../tipos";
@@ -25,8 +27,10 @@ type ResultadoLote = {
   fallidos: number;
 };
 
-export default function Documentos() {
+export default function Documentos({ sesion }: { sesion: SesionActual }) {
   const [parametros, setParametros] = useSearchParams();
+  const usuarioId = parametros.get("usuario_id") ?? "";
+  const gestorId = parametros.get("gestor_id") ?? "";
   const estado = parametros.get("estado") ?? "";
   const tipoEmpresa = parametros.get("tipo_empresa") ?? "";
   const dia = parametros.get("dia") ?? "";
@@ -39,6 +43,8 @@ export default function Documentos() {
 
   const ruta = conParametros("/api/v1/documentos", {
     estado,
+    usuario_id: usuarioId,
+    gestor_id: gestorId,
     tipo_empresa: tipoEmpresa,
     dia,
     tipo_documento: tipo,
@@ -90,6 +96,7 @@ export default function Documentos() {
     const siguiente = new URLSearchParams(parametros);
     if (valor) siguiente.set(clave, valor);
     else siguiente.delete(clave);
+    if (clave === "usuario_id") siguiente.delete("gestor_id");
     if (clave !== "pagina") siguiente.delete("pagina");
     setParametros(siguiente);
   };
@@ -122,6 +129,7 @@ export default function Documentos() {
       {errorLote && <p className="error">{errorLote}</p>}
 
       <div className="filtros filtros-documentos">
+        <FiltroJerarquia sesion={sesion} usuarioId={usuarioId} gestorId={gestorId} cambiar={cambiar} />
         <select aria-label="Tipo de empresa" value={tipoEmpresa} onChange={(e) => cambiar("tipo_empresa", e.target.value)}>
           <option value="">Todas las empresas</option>
           <option value="A">Tipo A</option>
