@@ -29,8 +29,11 @@ def obtener_o_crear_empresa(
         empresa = Empresa(tenant_id=tenant_id, ruc=ruc, razon_social=razon_social)
         session.add(empresa)
         session.flush()
-    elif empresa.razon_social.strip() == empresa.ruc and razon_social.strip() != ruc:
-        empresa.razon_social = razon_social.strip()[:300]
+    else:
+        if empresa.deleted_at is not None:
+            empresa.deleted_at = None
+        if empresa.razon_social.strip() == empresa.ruc and razon_social.strip() != ruc:
+            empresa.razon_social = razon_social.strip()[:300]
         session.flush()
     return empresa
 
