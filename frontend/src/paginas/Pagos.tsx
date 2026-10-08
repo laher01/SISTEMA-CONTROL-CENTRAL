@@ -1023,7 +1023,7 @@ function SimuladorJonatan() {
     setError("");
     setResultado(null);
     try {
-      const datos = await enviarJson<ResultadoJonatan>("/api/v1/pagos/simular-jonatan", {
+      const datos = await enviarJson<ResultadoJonatan>("/api/v1/pagos/simular-jonatan", "POST", {
         total_emitido: emitido,
         base_autorizada: modoTotal ? null : base,
         usar_total_emitido: modoTotal,
