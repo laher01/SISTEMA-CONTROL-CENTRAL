@@ -222,6 +222,7 @@ def resolver_solicitud(
         codigo=solicitud.codigo_solicitado.strip().upper(),
         nombre=solicitud.nombre.strip(),
         rol=rol,
+        creado_por_cuenta_id=auth.cuenta_id,
         activo=True,
     )
     session.add(miembro)
