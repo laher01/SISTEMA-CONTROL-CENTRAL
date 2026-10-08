@@ -27,6 +27,12 @@ class DocumentoDuplicado(Exception):
         self.documento_id = documento_id
 
 
+class ComprobanteYaRegistrado(Exception):
+    def __init__(self, expediente_id: uuid.UUID) -> None:
+        self.expediente_id = expediente_id
+        super().__init__("El comprobante ya está registrado")
+
+
 class ExpedienteNoEncontrado(Exception):
     pass
 
@@ -67,6 +73,18 @@ def ingerir_documento(
     )
     datos: dict[str, object] | None = None
     if comprobante is not None:
+        if comprobante.tipo_documento == TipoDocumento.FACT:
+            existente_comercial = buscar_expediente(
+                session,
+                tenant_id,
+                TipoComprobante.FACT,
+                comprobante.serie,
+                comprobante.correlativo,
+                comprobante.emisor.ruc,
+                comprobante.receptor.ruc,
+            )
+            if existente_comercial is not None:
+                raise ComprobanteYaRegistrado(existente_comercial.id)
         tipo_documento = comprobante.tipo_documento
         datos = comprobante.a_dict()
         expediente = _expediente_para_comprobante(
