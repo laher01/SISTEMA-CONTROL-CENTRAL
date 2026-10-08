@@ -138,9 +138,7 @@ def listar(
         consulta = consulta.where(Expediente.gestor_id == gestor_id)
     if tipo_empresa is not None or emisor_ruc is not None:
         empresa_emisora = aliased(Empresa)
-        consulta = consulta.join(
-            empresa_emisora, Expediente.emisor_id == empresa_emisora.id
-        )
+        consulta = consulta.join(empresa_emisora, Expediente.emisor_id == empresa_emisora.id)
         if tipo_empresa is not None:
             consulta = consulta.where(empresa_emisora.clasificacion_proveedor == tipo_empresa)
         if emisor_ruc is not None:
@@ -220,9 +218,7 @@ def listar_ids(
         consulta = consulta.where(Expediente.gestor_id == gestor_id)
     if tipo_empresa is not None or emisor_ruc is not None:
         empresa_emisora = aliased(Empresa)
-        consulta = consulta.join(
-            empresa_emisora, Expediente.emisor_id == empresa_emisora.id
-        )
+        consulta = consulta.join(empresa_emisora, Expediente.emisor_id == empresa_emisora.id)
         if tipo_empresa is not None:
             consulta = consulta.where(empresa_emisora.clasificacion_proveedor == tipo_empresa)
         if emisor_ruc is not None:
