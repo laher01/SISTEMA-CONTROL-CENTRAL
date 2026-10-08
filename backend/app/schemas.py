@@ -515,6 +515,69 @@ class AgenteRetencionIn(BaseModel):
     agente_retencion: bool
 
 
+class PedidoGerenciaIn(BaseModel):
+    cliente_id: uuid.UUID
+    periodo_mes: date
+    moneda: Moneda
+    monto_solicitado: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    modalidad: Literal["SIN_RESTRICCION", "POR_PEDIDO"] = "POR_PEDIDO"
+    modo_distribucion: Literal["MANUAL", "SEMIASISTIDA", "AUTOMATICA"] = "MANUAL"
+    observacion: str | None = Field(default=None, max_length=500)
+
+
+class PedidoGerenciaActualizarIn(BaseModel):
+    monto_solicitado: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=2)
+    modalidad: Literal["SIN_RESTRICCION", "POR_PEDIDO"] | None = None
+    modo_distribucion: Literal["MANUAL", "SEMIASISTIDA", "AUTOMATICA"] | None = None
+    estado: Literal["ACTIVO", "CERRADO", "CANCELADO"] | None = None
+    observacion: str | None = Field(default=None, max_length=500)
+
+
+class AsignacionPedidoGerenciaIn(BaseModel):
+    usuario_id: uuid.UUID
+    gestor_id: uuid.UUID | None = None
+    proveedor_id: uuid.UUID | None = None
+    monto_asignado: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+
+
+class AsignacionPedidoGerenciaOut(BaseModel):
+    id: uuid.UUID
+    usuario_id: uuid.UUID
+    usuario_codigo: str
+    usuario_nombre: str
+    gestor_id: uuid.UUID | None
+    gestor_codigo: str | None
+    gestor_nombre: str | None
+    proveedor_id: uuid.UUID | None
+    proveedor_ruc: str | None
+    proveedor_razon_social: str | None
+    monto_asignado: Decimal
+    ejecutado: Decimal
+    saldo: Decimal
+
+
+class PedidoGerenciaOut(BaseModel):
+    id: uuid.UUID
+    cliente_id: uuid.UUID
+    cliente_ruc: str
+    cliente_razon_social: str
+    periodo_mes: date
+    moneda: Moneda
+    monto_solicitado: Decimal
+    monto_asignado: Decimal
+    monto_ejecutado: Decimal
+    saldo_pendiente: Decimal
+    exceso: Decimal
+    avance_porcentaje: Decimal
+    modalidad: str
+    modo_distribucion: str
+    estado: str
+    observacion: str | None
+    concentracion_maxima_proveedor: Decimal
+    proveedor_mayor_concentracion: str | None
+    asignaciones: list[AsignacionPedidoGerenciaOut] = Field(default_factory=list)
+
+
 class PagoERPProgramarIn(BaseModel):
     usuario_id: uuid.UUID
     periodo_desde: date
