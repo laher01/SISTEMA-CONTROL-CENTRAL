@@ -32,7 +32,12 @@ def obtener_o_crear_empresa(
     else:
         if empresa.deleted_at is not None:
             empresa.deleted_at = None
-        if empresa.razon_social.strip() == empresa.ruc and razon_social.strip() != ruc:
+        actual = empresa.razon_social.strip()
+        actual_compacto = "".join(ch for ch in actual.upper() if ch.isalnum())
+        if (
+            (actual == empresa.ruc or actual_compacto in {"RUC", "NRO"})
+            and razon_social.strip() != ruc
+        ):
             empresa.razon_social = razon_social.strip()[:300]
         session.flush()
     return empresa
