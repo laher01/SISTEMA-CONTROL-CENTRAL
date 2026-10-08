@@ -897,7 +897,7 @@ def test_admin_edita_ruc_y_razon_social_empresa(
 ) -> None:
     subir(client, "empresa-editar.xml", factura(numero="F001-00000910"))
     empresas = client.get("/api/v1/empresas").json()
-    empresa = next(item for item in empresas if item["ruc"] == "20615898598")
+    empresa = next(item for item in empresas if item["ruc"] == "20500000002")
 
     auth_prueba.como_admin()
     respuesta = client.patch(
@@ -992,7 +992,7 @@ Fecha de emisión: 18/09/2026 Moneda: SOLES TOTAL S/ 200.00""",
             motor="prueba",
             paginas=1,
             confianza=1.0,
-            sugerencia={"tipo": "FACT", "confianza": 0.99, "evidencias": ["prueba"]},
+            sugerencia=sugerir_tipo("FACTURA ELECTRÓNICA"),
         ),
     )
 
