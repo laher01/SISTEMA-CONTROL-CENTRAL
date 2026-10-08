@@ -308,13 +308,12 @@ def imprimir_lote(
             "Los expedientes seleccionados no contienen archivos PDF imprimibles",
         )
 
-    temporal = tempfile.NamedTemporaryFile(
+    with tempfile.NamedTemporaryFile(
         prefix="fact-central-impresion-",
         suffix=".pdf",
         delete=False,
-    )
-    ruta_temporal = temporal.name
-    temporal.close()
+    ) as temporal:
+        ruta_temporal = temporal.name
     with open(ruta_temporal, "wb") as destino:
         writer.write(destino)
     writer.close()
