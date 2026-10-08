@@ -18,6 +18,8 @@ depends_on: str | Sequence[str] | None = None
 
 
 TABLAS = (
+    "miembros",
+    "gestores",
     "expedientes",
     "documentos",
     "planes_liquidacion",
