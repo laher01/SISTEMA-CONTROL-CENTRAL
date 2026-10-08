@@ -373,3 +373,52 @@ def actualizar_pago(
     )
     session.commit()
     return pago
+
+
+@router.delete("/{pago_id}", status_code=status.HTTP_204_NO_CONTENT)
+def eliminar_programacion(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    pago_id: uuid.UUID,
+) -> None:
+    if auth.rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Solo SUPERADMIN o Administración pueden eliminar programaciones",
+        )
+
+    pago = session.get(PagoERP, pago_id)
+    if pago is None or pago.tenant_id != tenant_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pago no encontrado")
+
+    if pago.estado in {"PAGADO", "CONCILIADO"} or pago.conciliado:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "No se puede eliminar una programación pagada o conciliada",
+        )
+
+    if Decimal(pago.adelantos) != Decimal("0"):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "No se puede eliminar automáticamente una programación que ya aplicó adelantos",
+        )
+
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "PAGO_ERP_PROGRAMACION_ELIMINADA",
+        "pago_erp",
+        pago.id,
+        {
+            "usuario_id": str(pago.usuario_id),
+            "periodo_desde": pago.periodo_desde.isoformat(),
+            "periodo_hasta": pago.periodo_hasta.isoformat(),
+            "moneda": str(pago.moneda),
+            "produccion_total": str(pago.produccion_total),
+            "saldo": str(pago.saldo),
+            "estado": pago.estado,
+        },
+    )
+    session.delete(pago)
+    session.commit()
