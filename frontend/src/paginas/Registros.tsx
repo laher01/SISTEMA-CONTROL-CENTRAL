@@ -17,6 +17,7 @@ const POR_PAGINA = 100;
 
 export default function Registros({ sesion }: { sesion: SesionActual }) {
   const [parametros, setParametros] = useSearchParams();
+  const tipoEmpresa = parametros.get("tipo_empresa") ?? "";
   const usuarioId = parametros.get("usuario_id") ?? "";
   const gestorId = parametros.get("gestor_id") ?? "";
   const emisor = parametros.get("emisor") ?? "";
@@ -30,6 +31,7 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
   const ruta = conParametros("/api/v1/registros", {
     usuario_id: usuarioId,
     gestor_id: gestorId,
+    tipo_empresa: tipoEmpresa,
     emisor,
     receptor,
     dia,
@@ -67,13 +69,14 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
       const gestor = opciones?.gestores.find((item) => item.id === gestorId);
       if (gestor) partes.push(`Gestor: ${gestor.codigo} · ${gestor.nombre}`);
     }
+    if (tipoEmpresa) partes.push(`Empresa tipo ${tipoEmpresa}`);
     if (emisor) partes.push(`Emisor: ${emisor}`);
     if (receptor) partes.push(`Receptor: ${receptor}`);
     if (dia) partes.push(`Día: ${dia}`);
     else if (mes) partes.push(`Mes: ${mes}`);
     else if (desde || hasta) partes.push(`Periodo: ${desde || "inicio"} → ${hasta || "hoy"}`);
     return partes.length > 0 ? partes.join(" · ") : "Todos los registros visibles para este rol";
-  }, [desde, dia, emisor, gestorId, hasta, mes, opciones, receptor, usuarioId]);
+  }, [desde, dia, emisor, gestorId, hasta, mes, opciones, receptor, tipoEmpresa, usuarioId]);
 
   const cambiar = (clave: string, valor: string) => {
     const siguiente = new URLSearchParams(parametros);
@@ -139,6 +142,11 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
       </section>
 
       <div className="filtros filtros-documentos">
+        <select aria-label="Tipo de empresa" value={tipoEmpresa} onChange={(e) => cambiar("tipo_empresa", e.target.value)}>
+          <option value="">Todas las empresas</option>
+          <option value="A">Tipo A</option>
+          <option value="B">Tipo B</option>
+        </select>
         {filtrarUsuario && (
           <select value={usuarioId} onChange={(e) => cambiar("usuario_id", e.target.value)}>
             <option value="">Todos los usuarios</option>
@@ -193,6 +201,7 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
                 {mostrarUsuario && <th>Usuario</th>}
                 {mostrarGestor && <th>Gestor</th>}
                 <th>Fecha</th>
+                <th>Tipo empresa</th>
                 <th>Correlativo</th>
                 <th>RUC emisor</th>
                 <th>Razón social emisor</th>
@@ -303,6 +312,7 @@ function FilaRegistro({
         </td>
       )}
       <td>{formatearFecha(fila.fecha_emision)}</td>
+      <td>{fila.tipo_empresa ? `Tipo ${fila.tipo_empresa}` : "Sin clasificar"}</td>
       <td>
         <Link to={"/expedientes/" + fila.expediente_id}>
           {fila.tipo_comprobante + " " + fila.serie + "-" + fila.correlativo}
