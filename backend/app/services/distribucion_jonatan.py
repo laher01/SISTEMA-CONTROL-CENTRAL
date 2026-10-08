@@ -5,7 +5,7 @@ La selección de TOTAL_EMITIDO requiere confirmación explícita en el flujo de 
 """
 
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 
 CENTIMO = Decimal("0.01")
 CIEN = Decimal("100")
