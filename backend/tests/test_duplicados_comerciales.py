@@ -42,9 +42,7 @@ def test_otro_gestor_no_recibe_datos_privados(
     primero = client.post("/api/v1/documentos", files={"archivo": ("primero.xml", xml)})
     assert primero.status_code == 201, primero.text
     auth_prueba.como_gestor(b.id, user_id)
-    segundo = client.post(
-        "/api/v1/documentos", files={"archivo": ("copia.xml", xml + b"\n")}
-    )
+    segundo = client.post("/api/v1/documentos", files={"archivo": ("copia.xml", xml + b"\n")})
     assert segundo.status_code == 409, segundo.text
     detalle = segundo.json()["detail"]
     assert detalle["duplicado"] is True
