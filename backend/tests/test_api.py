@@ -1,5 +1,6 @@
 import io
 from datetime import date
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
