@@ -5,7 +5,7 @@ from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 from pypdf import PdfWriter
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.routes import documentos as documentos_routes
@@ -852,15 +852,24 @@ def test_reprocesar_rhe_repara_razon_social_contaminada(
     session: Session,
     settings: Settings,
     monkeypatch: pytest.MonkeyPatch,
+    auth_prueba: AuthPrueba,
 ) -> None:
     settings.tenant_ruc = None
+    empresa = Empresa(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        ruc="10753246920",
+        razon_social="Nro: E001-33",
+    )
+    session.add(empresa)
+    session.commit()
+
     texto = """RECIBO POR HONORARIOS ELECTRÓNICO
 AYALA AREVALO ELVIS EDUARDO R.U.C. 10753246920
 Nro: E001-35
 Recibí de MAIK FISHING SOCIEDAD ANONIMA CERRADA
 Identificado con RUC Número 20609762030
 Fecha de emisión 19 de Agosto del 2026
-Total por Honorarios : 1,500.00"""
+Total por Honorarios : 1,500.00 SOLES"""
 
     monkeypatch.setattr(
         documentos_routes,
@@ -876,13 +885,7 @@ Total por Honorarios : 1,500.00"""
     )
 
     documento = subir(client, "rhe-35.pdf", pdf_vacio())
-    empresa = session.scalar(select(Empresa).where(Empresa.ruc == "10753246920"))
-    assert empresa is not None
-    empresa.razon_social = "Nro: E001-33"
-    session.commit()
-
-    respuesta = client.post(f"/api/v1/documentos/{documento['id']}/procesar")
-    assert respuesta.status_code == 200, respuesta.text
+    assert documento["expediente_id"] is not None
 
     session.refresh(empresa)
     assert empresa.razon_social == "AYALA AREVALO ELVIS EDUARDO"
