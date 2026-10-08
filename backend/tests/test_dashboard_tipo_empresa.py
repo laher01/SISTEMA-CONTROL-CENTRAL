@@ -38,6 +38,4 @@ def test_dashboard_filtra_clasificacion_proveedor(
 
     todos = client.get("/api/v1/dashboard/desglose")
     assert sum(f["expedientes"] for f in todos.json()["filas"]) == 3
-    assert client.get(
-        "/api/v1/dashboard/desglose", params={"tipo_empresa": "C"}
-    ).status_code == 422
+    assert client.get("/api/v1/dashboard/desglose", params={"tipo_empresa": "C"}).status_code == 422
