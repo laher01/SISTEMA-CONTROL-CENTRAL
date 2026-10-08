@@ -284,11 +284,7 @@ def resumen_clientes(
 
         saldo_anterior = compras_previas - abonos_previos
         saldo_total = saldo_anterior + compras_mes - abonos_mes
-        if (
-            compras_mes == 0
-            and saldo_anterior == 0
-            and abonos_mes == 0
-        ):
+        if compras_mes == 0 and saldo_anterior == 0 and abonos_mes == 0:
             continue
 
         filas.append(
@@ -555,9 +551,7 @@ def _resumen_pedido(
     if ejecutado > 0 and concentraciones:
         proveedor_id, mayor = max(concentraciones, key=lambda fila: Decimal(fila[1] or 0))
         mayor_decimal = Decimal(mayor or 0)
-        concentracion = (
-            mayor_decimal * Decimal("100") / ejecutado
-        ).quantize(Decimal("0.01"))
+        concentracion = (mayor_decimal * Decimal("100") / ejecutado).quantize(Decimal("0.01"))
         proveedor_obj = session.get(Empresa, proveedor_id) if proveedor_id else None
         if proveedor_obj is not None:
             proveedor_mayor = f"{proveedor_obj.ruc} · {proveedor_obj.razon_social}"
@@ -707,12 +701,9 @@ def actualizar_pedido_gerencia(
     if "observacion" in datos.model_fields_set:
         pedido.observacion = datos.observacion.strip() if datos.observacion else None
 
-    if (
-        datos.modo_distribucion in {"SEMIASISTIDA", "AUTOMATICA"}
-        or (
-            datos.monto_solicitado is not None
-            and pedido.modo_distribucion in {"SEMIASISTIDA", "AUTOMATICA"}
-        )
+    if datos.modo_distribucion in {"SEMIASISTIDA", "AUTOMATICA"} or (
+        datos.monto_solicitado is not None
+        and pedido.modo_distribucion in {"SEMIASISTIDA", "AUTOMATICA"}
     ):
         _generar_distribucion_usuario(session, tenant_id, auth, pedido)
 
@@ -832,11 +823,7 @@ def eliminar_asignacion_pedido(
     _validar_acceso(auth.rol)
     pedido = _pedido_valido(session, tenant_id, pedido_id)
     asignacion = session.get(AsignacionPedidoGerencia, asignacion_id)
-    if (
-        asignacion is None
-        or asignacion.tenant_id != tenant_id
-        or asignacion.pedido_id != pedido.id
-    ):
+    if asignacion is None or asignacion.tenant_id != tenant_id or asignacion.pedido_id != pedido.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Asignación no encontrada")
     session.delete(asignacion)
     auditoria.registrar(
