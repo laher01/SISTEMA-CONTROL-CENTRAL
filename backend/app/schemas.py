@@ -480,6 +480,7 @@ class FiltroOpcion(BaseModel):
     id: uuid.UUID
     codigo: str
     nombre: str
+    usuario_id: uuid.UUID | None = None
 
 
 class RegistroOpciones(BaseModel):
