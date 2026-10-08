@@ -808,3 +808,40 @@ Total Neto Recibido : 1,500.00 SOLES""",
     montos = {m["moneda"]: m for m in datos["montos"]}
     total_pen = Decimal(montos["PEN"]["bancarizable"]) + Decimal(montos["PEN"]["no_bancarizable"])
     assert total_pen == Decimal("4500.00")
+
+
+def test_empresas_solo_se_eliminan_manual_y_se_reactivan_por_ruc(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+
+    subir(client, "empresa-base.xml", factura(numero="F001-00000901"))
+    listado = client.get("/api/v1/empresas")
+    assert listado.status_code == 200, listado.text
+    empresas = listado.json()
+    assert len(empresas) == 2
+    ids = [empresa["id"] for empresa in empresas]
+
+    auth_prueba.como_admin()
+    prohibido = client.post(
+        "/api/v1/empresas/eliminar-seleccion",
+        json={"empresa_ids": ids},
+    )
+    assert prohibido.status_code == 403
+
+    auth_prueba.como_superadmin()
+    eliminado = client.post(
+        "/api/v1/empresas/eliminar-seleccion",
+        json={"empresa_ids": ids},
+    )
+    assert eliminado.status_code == 200, eliminado.text
+    assert eliminado.json() == {"eliminadas": 2}
+    assert client.get("/api/v1/empresas").json() == []
+
+    auth_prueba.como_usuario(usuario_id)
+    subir(client, "empresa-reaparece.xml", factura(numero="F001-00000902"))
+    reactivadas = client.get("/api/v1/empresas")
+    assert reactivadas.status_code == 200, reactivadas.text
+    assert {empresa["id"] for empresa in reactivadas.json()} == set(ids)
