@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { conParametros, eliminar, enviarJson, urlArchivo, useDatos } from "../api";
+import { conParametros, eliminar, enviarJson, urlArchivo, urlZipExpediente, useDatos } from "../api";
 import { Estado, Paginacion } from "../componentes";
 import {
   ETIQUETA_ESTADO_DOCUMENTO,
@@ -261,7 +261,7 @@ function FilaDocumento({
       </td>
       <td>
         {documento.expediente_id ? (
-          <Link to={`/expedientes/${documento.expediente_id}`}>Ver expediente</Link>
+          <><Link to={`/expedientes/${documento.expediente_id}`}>Ver expediente</Link>{" · "}<a href={urlZipExpediente(documento.expediente_id)}>ZIP</a></>
         ) : (
           <Link to={`/pendientes?estado=${documento.estado}`}>Revisar</Link>
         )}
