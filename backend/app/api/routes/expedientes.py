@@ -428,12 +428,13 @@ def descargar_zip(
         )
 
     nombre_carpeta = f"expediente-{expediente.id}"
+    documentos_manifiesto: list[dict[str, str | None]] = []
     manifiesto = {
         "expediente": str(expediente.id),
         "emisor_ruc": expediente.emisor.ruc,
         "receptor_ruc": expediente.receptor.ruc,
         "comprobante": f"{expediente.tipo_comprobante} {expediente.serie}-{expediente.correlativo}",
-        "documentos": [],
+        "documentos": documentos_manifiesto,
     }
     with tempfile.NamedTemporaryFile(
         prefix="fact-central-export-",
@@ -452,7 +453,7 @@ def descargar_zip(
                 )
                 ruta = almacen.ruta_absoluta(doc.ruta_storage)
                 zf.write(ruta, arcname=nombre)
-                manifiesto["documentos"].append(
+                documentos_manifiesto.append(
                     {
                         "nombre_original": doc.nombre_original,
                         "archivo": nombre,
