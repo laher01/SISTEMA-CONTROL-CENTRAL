@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.enums import RolMiembro
 from app.models import CuentaAcceso, Gestor, Miembro, SesionAcceso
 
 
@@ -23,6 +24,26 @@ class ContextoAcceso:
     nombre: str
     cambio_clave_obligatorio: bool
 
+
+
+def cuenta_administradora_responsable(
+    session: Session,
+    contexto: ContextoAcceso,
+) -> uuid.UUID | None:
+    if contexto.rol in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR):
+        return contexto.cuenta_id
+
+    if contexto.gestor_id is not None:
+        gestor = session.get(Gestor, contexto.gestor_id)
+        if gestor is not None:
+            return gestor.creado_por_cuenta_id
+
+    miembro_id = contexto.usuario_id or contexto.miembro_id
+    if miembro_id is not None:
+        miembro = session.get(Miembro, miembro_id)
+        if miembro is not None:
+            return miembro.creado_por_cuenta_id
+    return None
 
 def clave_temporal() -> str:
     return secrets.token_urlsafe(12)
