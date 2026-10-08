@@ -16,6 +16,7 @@ import Pagos from "./paginas/Pagos";
 import Pendientes from "./paginas/Pendientes";
 import Produccion from "./paginas/Produccion";
 import Registros from "./paginas/Registros";
+import Secretaria from "./paginas/Secretaria";
 import Subir from "./paginas/Subir";
 import type { SesionActual } from "./tipos";
 
@@ -37,6 +38,11 @@ const MENU: { a: string; texto: string; roles: RolSesion[] }[] = [
     a: "/chat",
     texto: "Chat interno",
     roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"],
+  },
+  {
+    a: "/secretaria",
+    texto: "Control de Secretaría",
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA"],
   },
   {
     a: "/documentos",
@@ -124,6 +130,7 @@ export default function App() {
           <Route path="/subir" element={<Subir sesion={sesion} />} />
           <Route path="/registros" element={<Registros sesion={sesion} />} />
           <Route path="/chat" element={<Chat />} />
+          <Route path="/secretaria" element={<Secretaria />} />
           <Route path="/documentos" element={<Documentos sesion={sesion} />} />
           <Route path="/expedientes" element={<Expedientes sesion={sesion} />} />
           <Route path="/expedientes/:id" element={<ExpedienteDetalle />} />
