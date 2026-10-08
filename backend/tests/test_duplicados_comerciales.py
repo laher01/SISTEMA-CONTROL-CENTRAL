@@ -10,9 +10,7 @@ def test_factura_repetida_no_crea_expediente_nuevo(client: TestClient) -> None:
     xml = factura(numero="F001-00000801")
     primero = client.post("/api/v1/documentos", files={"archivo": ("primero.xml", xml)})
     assert primero.status_code == 201, primero.text
-    segundo = client.post(
-        "/api/v1/documentos", files={"archivo": ("copia.xml", xml + b"\n")}
-    )
+    segundo = client.post("/api/v1/documentos", files={"archivo": ("copia.xml", xml + b"\n")})
     assert segundo.status_code == 409, segundo.text
     assert segundo.json()["detail"]["duplicado"] is True
     assert "F001-801" in segundo.json()["detail"]["mensaje"]
