@@ -49,6 +49,7 @@ def ingerir_documento(
     expediente_id: uuid.UUID | None = None,
     gestor_id: uuid.UUID | None = None,
     usuario_id: uuid.UUID | None = None,
+    creado_por_cuenta_id: uuid.UUID | None = None,
 ) -> Documento:
     sha256 = hashlib.sha256(archivo.contenido).hexdigest()
     existente = session.scalar(
@@ -69,7 +70,13 @@ def ingerir_documento(
         tipo_documento = comprobante.tipo_documento
         datos = comprobante.a_dict()
         expediente = _expediente_para_comprobante(
-            session, settings, tenant_id, comprobante, gestor_id, usuario_id
+            session,
+            settings,
+            tenant_id,
+            comprobante,
+            gestor_id,
+            usuario_id,
+            creado_por_cuenta_id,
         )
 
     usuario_id = usuario_id or _usuario_de_gestor(session, tenant_id, gestor_id)
@@ -90,6 +97,7 @@ def ingerir_documento(
         datos_extraidos=datos,
         gestor_id=gestor_id,
         usuario_id=usuario_id,
+        creado_por_cuenta_id=creado_por_cuenta_id,
     )
     session.add(documento)
     session.flush()
@@ -153,6 +161,7 @@ def crear_expediente(
     requiere_guia: bool,
     gestor_id: uuid.UUID | None,
     usuario_id: uuid.UUID | None = None,
+    creado_por_cuenta_id: uuid.UUID | None = None,
 ) -> Expediente:
     empresa_receptora = obtener_o_crear_empresa(session, tenant_id, *receptor)
     empresa_emisora = obtener_o_crear_empresa(session, tenant_id, *emisor)
@@ -174,6 +183,7 @@ def crear_expediente(
         ),
         gestor_id=gestor_id,
         usuario_id=usuario_id,
+        creado_por_cuenta_id=creado_por_cuenta_id,
     )
     session.add(expediente)
     session.flush()
@@ -189,6 +199,7 @@ def _expediente_para_comprobante(
     comprobante: ComprobanteUbl,
     gestor_id: uuid.UUID | None,
     usuario_id: uuid.UUID | None = None,
+    creado_por_cuenta_id: uuid.UUID | None = None,
 ) -> Expediente | None:
     if comprobante.tipo_documento == TipoDocumento.FACT:
         expediente = buscar_expediente(
@@ -226,6 +237,7 @@ def _expediente_para_comprobante(
             ),
             gestor_id=gestor_id,
             usuario_id=usuario_id,
+            creado_por_cuenta_id=creado_por_cuenta_id,
         )
         session.add(expediente)
         session.flush()
