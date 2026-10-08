@@ -2,9 +2,20 @@ import { useState } from "react";
 
 import { enviarJson, useDatos } from "../api";
 import { Estado } from "../componentes";
-import type { Empresa } from "../tipos";
+import type {
+  ClasificacionProveedor,
+  Empresa,
+  TipoRelacionEmpresa,
+} from "../tipos";
 
 type Campo = "autorizada" | "agente_retencion";
+
+const ETIQUETA_RELACION: Record<TipoRelacionEmpresa, string> = {
+  PROVEEDOR: "Proveedor",
+  CLIENTE: "Cliente",
+  AMBOS: "Proveedor y cliente",
+  SIN_CLASIFICAR: "Sin clasificar",
+};
 
 export default function Empresas() {
   const { datos, error, cargando, recargar } = useDatos<Empresa[]>("/api/v1/empresas");
@@ -12,6 +23,10 @@ export default function Empresas() {
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [rucEditado, setRucEditado] = useState("");
   const [razonEditada, setRazonEditada] = useState("");
+  const [relacionEditada, setRelacionEditada] =
+    useState<TipoRelacionEmpresa>("SIN_CLASIFICAR");
+  const [clasificacionEditada, setClasificacionEditada] =
+    useState<ClasificacionProveedor | "">("");
 
   const cambiar = async (empresa: Empresa, campo: Campo, valor: boolean) => {
     setErrorCambio("");
@@ -27,6 +42,8 @@ export default function Empresas() {
     setEditandoId(empresa.id);
     setRucEditado(empresa.ruc);
     setRazonEditada(empresa.razon_social);
+    setRelacionEditada(empresa.tipo_relacion);
+    setClasificacionEditada(empresa.clasificacion_proveedor ?? "");
     setErrorCambio("");
   };
 
@@ -34,6 +51,8 @@ export default function Empresas() {
     setEditandoId(null);
     setRucEditado("");
     setRazonEditada("");
+    setRelacionEditada("SIN_CLASIFICAR");
+    setClasificacionEditada("");
   };
 
   const guardarEdicion = async (empresa: Empresa) => {
@@ -50,10 +69,15 @@ export default function Empresas() {
       return;
     }
 
+    const proveedor =
+      relacionEditada === "PROVEEDOR" || relacionEditada === "AMBOS";
+
     try {
       await enviarJson<Empresa>(`/api/v1/empresas/${empresa.id}`, "PATCH", {
         ruc,
         razon_social: razon,
+        tipo_relacion: relacionEditada,
+        clasificacion_proveedor: proveedor ? clasificacionEditada || null : null,
       });
       cancelarEdicion();
       recargar();
@@ -66,16 +90,20 @@ export default function Empresas() {
     <>
       <h2>Empresas</h2>
       <p className="tenue">
-        Se crean automáticamente al procesar comprobantes. Si una extracción viene incorrecta,
-        puedes corregir manualmente el RUC o la razón social desde <strong>Editar</strong>.
+        El sistema clasifica automáticamente al emisor como proveedor y al receptor como cliente.
+        Si un mismo RUC aparece en ambos lados se identifica como proveedor y cliente. La
+        clasificación Tipo A / Tipo B aplica únicamente a proveedores.
       </p>
       {errorCambio && <p className="error">{errorCambio}</p>}
       <Estado cargando={cargando} error={error} vacio={datos?.length === 0}>
         <table>
           <thead>
             <tr>
+              <th>Relación</th>
               <th>RUC</th>
               <th>Razón social</th>
+              <th>Usuario</th>
+              <th>Tipo proveedor</th>
               <th>Editar</th>
               <th>Autorizada</th>
               <th>Agente de retención</th>
@@ -84,8 +112,32 @@ export default function Empresas() {
           <tbody>
             {datos?.map((empresa) => {
               const editando = editandoId === empresa.id;
+              const proveedor =
+                (editando ? relacionEditada : empresa.tipo_relacion) === "PROVEEDOR" ||
+                (editando ? relacionEditada : empresa.tipo_relacion) === "AMBOS";
               return (
                 <tr key={empresa.id}>
+                  <td>
+                    {editando ? (
+                      <select
+                        value={relacionEditada}
+                        onChange={(ev) => {
+                          const valor = ev.target.value as TipoRelacionEmpresa;
+                          setRelacionEditada(valor);
+                          if (valor === "CLIENTE" || valor === "SIN_CLASIFICAR") {
+                            setClasificacionEditada("");
+                          }
+                        }}
+                      >
+                        <option value="PROVEEDOR">Proveedor</option>
+                        <option value="CLIENTE">Cliente</option>
+                        <option value="AMBOS">Proveedor y cliente</option>
+                        <option value="SIN_CLASIFICAR">Sin clasificar</option>
+                      </select>
+                    ) : (
+                      ETIQUETA_RELACION[empresa.tipo_relacion]
+                    )}
+                  </td>
                   <td>
                     {editando ? (
                       <input
@@ -109,6 +161,36 @@ export default function Empresas() {
                       />
                     ) : (
                       empresa.razon_social
+                    )}
+                  </td>
+                  <td>
+                    {(empresa.usuarios ?? []).length > 0
+                      ? (empresa.usuarios ?? [])
+                          .map((usuario) => `${usuario.codigo} · ${usuario.nombre}`)
+                          .join(", ")
+                      : "—"}
+                  </td>
+                  <td>
+                    {editando ? (
+                      <select
+                        value={clasificacionEditada}
+                        disabled={!proveedor}
+                        onChange={(ev) =>
+                          setClasificacionEditada(
+                            ev.target.value as ClasificacionProveedor | "",
+                          )
+                        }
+                      >
+                        <option value="">Sin tipo</option>
+                        <option value="A">Tipo A</option>
+                        <option value="B">Tipo B</option>
+                      </select>
+                    ) : proveedor ? (
+                      empresa.clasificacion_proveedor
+                        ? `Tipo ${empresa.clasificacion_proveedor}`
+                        : "Sin tipo"
+                    ) : (
+                      "—"
                     )}
                   </td>
                   <td>
