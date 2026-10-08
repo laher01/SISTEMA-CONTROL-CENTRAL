@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -27,17 +27,35 @@ class EmpresaIn(BaseModel):
     razon_social: str = Field(min_length=1, max_length=300)
 
 
+TipoRelacionEmpresa = Literal["PROVEEDOR", "CLIENTE", "AMBOS", "SIN_CLASIFICAR"]
+ClasificacionProveedor = Literal["A", "B"]
+
+
 class EmpresaOut(Orm):
     id: uuid.UUID
     ruc: str
     razon_social: str
+    tipo_relacion: TipoRelacionEmpresa
+    clasificacion_proveedor: ClasificacionProveedor | None
     autorizada: bool
     agente_retencion: bool
+
+
+class EmpresaUsuarioOut(BaseModel):
+    id: uuid.UUID
+    codigo: str
+    nombre: str
+
+
+class EmpresaListadoOut(EmpresaOut):
+    usuarios: list[EmpresaUsuarioOut] = Field(default_factory=list)
 
 
 class EmpresaActualizar(BaseModel):
     ruc: Ruc | None = None
     razon_social: str | None = Field(default=None, min_length=1, max_length=300)
+    tipo_relacion: TipoRelacionEmpresa | None = None
+    clasificacion_proveedor: ClasificacionProveedor | None = None
     autorizada: bool | None = None
     agente_retencion: bool | None = None
 
@@ -48,6 +66,10 @@ class EmpresasEliminarIn(BaseModel):
 
 class EmpresasEliminarOut(BaseModel):
     eliminadas: int
+
+
+class ImpresionExpedientesIn(BaseModel):
+    expediente_ids: list[uuid.UUID] = Field(min_length=1, max_length=1000)
 
 
 class MiembroIn(BaseModel):
