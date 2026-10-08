@@ -16,6 +16,56 @@ from app.schemas import DashboardDesglose, DashboardDesgloseFila, DashboardResum
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
+@router.get("/secretaria-clientes")
+def resumen_secretaria_clientes(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    desde: date,
+    hasta: date,
+) -> list[dict[str, str | int]]:
+    """Producción transversal por receptor sin exponer liquidaciones."""
+    from fastapi import HTTPException, status
+
+    if auth.rol not in (
+        RolMiembro.SUPERADMIN,
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.SECRETARIA,
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Acceso exclusivo de Secretaría")
+    if hasta < desde:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Periodo inválido")
+    consulta = (
+        select(
+            Empresa.ruc,
+            Empresa.razon_social,
+            Expediente.moneda,
+            func.count(Expediente.id),
+            func.coalesce(func.sum(Expediente.importe_total), 0),
+        )
+        .join(Empresa, Expediente.receptor_id == Empresa.id)
+        .where(
+            Expediente.tenant_id == tenant_id,
+            Empresa.tenant_id == tenant_id,
+            Expediente.deleted_at.is_(None),
+            Expediente.fecha_emision >= desde,
+            Expediente.fecha_emision <= hasta,
+        )
+        .group_by(Empresa.ruc, Empresa.razon_social, Expediente.moneda)
+        .order_by(Empresa.razon_social, Expediente.moneda)
+    )
+    return [
+        {
+            "receptor_ruc": ruc,
+            "receptor": nombre,
+            "moneda": moneda,
+            "expedientes": cantidad,
+            "total": str(importe),
+        }
+        for ruc, nombre, moneda, cantidad, importe in session.execute(consulta)
+    ]
+
+
 @router.get("/resumen", response_model=DashboardResumen)
 def resumen(
     session: SessionDep,
