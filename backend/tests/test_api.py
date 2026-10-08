@@ -267,7 +267,7 @@ def test_procesar_pdf_conserva_resultado_verificable(
 def test_pdf_completo_crea_expediente_automaticamente(
     client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    settings.tenant_ruc = RECEPTOR
+    settings.tenant_ruc = None
     texto = """FACTURA ELECTRÓNICA F001-00000123
     RUC EMISOR: 20500000002 CLIENTE RUC: 20100000001
     Fecha de emisión: 17/09/2026 Moneda: SOLES TOTAL S/ 2,500.40"""
@@ -744,24 +744,30 @@ def test_rhe_crea_expedientes_propios_y_suma_montos(
     settings.tenant_ruc = RECEPTOR
     textos = iter(
         [
-            """RECIBO POR HONORARIOS ELECTRÓNICO E001-35
-RUC EMISOR: 10404432953
-Recibí de EMPRESA RECEPTORA SAC identificado con RUC 20100000001
-Fecha de emisión 19 de Agosto del 2026
+            """RECIBO POR HONORARIOS ELECTRÓNICO E001-33
+AYALA AREVALO ELVIS EDUARDO R.U.C. 10753246920
+Recibí de FRUTTI DEL PAESE E.I.R.L.
+Identificado con RUC Número 20611909234
+Fecha de emisión 17 de Agosto del 2026
 Total por Honorarios : 1,500.00
+Retención (8 %) IR : (0.00)
 Total Neto Recibido : 1,500.00 SOLES""",
             """RECIBO POR HONORARIOS ELECTRÓNICO E001-34
-RUC EMISOR: 10404432953
-Recibí de EMPRESA RECEPTORA SAC identificado con RUC 20100000001
-Fecha de emisión 20 de Agosto del 2026
-Total por Honorarios : 800.00
-Total Neto Recibido : 800.00 SOLES""",
-            """RECIBO POR HONORARIOS ELECTRÓNICO E001-33
-RUC EMISOR: 10404432953
-Recibí de EMPRESA RECEPTORA SAC identificado con RUC 20100000001
-Fecha de emisión 21 de Agosto del 2026
-Total por Honorarios : 700.00
-Total Neto Recibido : 700.00 SOLES""",
+AYALA AREVALO ELVIS EDUARDO R.U.C. 10753246920
+Recibí de INVERSIONES YATAMURI E.I.R.L.
+Identificado con RUC Número 20492560601
+Fecha de emisión 18 de Agosto del 2026
+Total por Honorarios : 1,500.00
+Retención (8 %) IR : (0.00)
+Total Neto Recibido : 1,500.00 SOLES""",
+            """RECIBO POR HONORARIOS ELECTRÓNICO E001-35
+AYALA AREVALO ELVIS EDUARDO R.U.C. 10753246920
+Recibí de MAIK FISHING SOCIEDAD ANONIMA CERRADA
+Identificado con RUC Número 20609762030
+Fecha de emisión 19 de Agosto del 2026
+Total por Honorarios : 1,500.00
+Retención (8 %) IR : (0.00)
+Total Neto Recibido : 1,500.00 SOLES""",
         ]
     )
 
@@ -802,4 +808,4 @@ Total Neto Recibido : 700.00 SOLES""",
     total_pen = Decimal(montos["PEN"]["bancarizable"]) + Decimal(
         montos["PEN"]["no_bancarizable"]
     )
-    assert total_pen == Decimal("3000.00")
+    assert total_pen == Decimal("4500.00")
