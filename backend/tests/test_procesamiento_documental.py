@@ -310,3 +310,70 @@ Representación impresa de la factura electrónica, consulte en www.efact.pe"""
     assert (
         campos["razon_social_receptor"]["valor"] == "CORPORACION LATINOAMERICANO EL NORTE E.I.R.L."
     )
+
+
+def test_rhe_sunat_real_extrae_persona_natural_emisora_misma_linea() -> None:
+    texto = """19/8/26, 13:56 Emisión del Recibo por Honorarios Electrónico
+
+AYALA AREVALO ELVIS EDUARDO R.U.C. 10753246920
+MZA. H LOTE. 9 A.H. JUAN VALER SANDOVAL PIURA - PAITA - PAITA
+RECIBO POR HONORARIOS ELECTRÓNICO
+Nro: E001-33
+Recibí de FRUTTI DEL PAESE E.I.R.L.
+Identificado con RUC Número 20611909234
+Fecha de emisión 17 de Agosto del 2026
+Total por Honorarios : 1,500.00
+Retención (8 %) IR : (0.00)
+Total Neto Recibido : 1,500.00 SOLES"""
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    campos = resultado["campos"]
+    assert isinstance(campos, dict)
+    assert campos["ruc_emisor"]["valor"] == "10753246920"
+    assert campos["razon_social_emisor"]["valor"] == "AYALA AREVALO ELVIS EDUARDO"
+    assert campos["ruc_receptor"]["valor"] == "20611909234"
+    assert campos["razon_social_receptor"]["valor"] == "FRUTTI DEL PAESE E.I.R.L."
+    assert campos["fecha_emision"]["valor"] == "2026-08-17"
+    assert campos["importe_total"]["valor"] == "1500.00"
+
+
+def test_rhe_sunat_real_extrae_persona_natural_con_pdf_reordenado() -> None:
+    texto = """DEL ARTÍCULO 33 DE LA LEY DEL IMPUESTO A LA RENTA
+Recibí de:
+Identificado con
+Observación
+Inciso
+La suma de:
+Total por honorarios:
+Retención (
+R.U.C.
+RECIBO POR HONORARIOS ELECTRONICO
+Nro:
+10404432953
+E001- 24
+AREVALO HERRERA LUIS ALEXANDER
+MZA. G2 LOTE. 13 CIUDAD BLANCA PIURA - PAITA - PAITA
+TELÉFONO: -
+número
+Por concepto de
+de del
+Total Neto Recibido:
+INVERSIONES Y NEGOCIACIONES YATDIZ IMPORT
+RUC 20523209176
+UN MIL CIENTO CINCUENTA Y 00/100 SOLES
+SERVICIO DE CONTROL DE DESCARGA DE HIELO Y LOGISTICA
+A
+31 Julio 2026
+1,150.00
+(0.00)
+1,150.00
+SOLES
+8 %) IR:
+Fecha de emisión"""
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    campos = resultado["campos"]
+    assert isinstance(campos, dict)
+    assert campos["ruc_emisor"]["valor"] == "10404432953"
+    assert campos["razon_social_emisor"]["valor"] == "AREVALO HERRERA LUIS ALEXANDER"
+    assert campos["ruc_receptor"]["valor"] == "20523209176"
