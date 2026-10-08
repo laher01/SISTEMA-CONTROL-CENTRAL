@@ -100,6 +100,73 @@ def usuarios_pago(
     ]
 
 
+@router.get("/clientes", response_model=list[FiltroOpcion])
+def clientes_pago(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> list[FiltroOpcion]:
+    _validar_acceso(auth.rol)
+    return [
+        FiltroOpcion(id=e.id, codigo=e.ruc, nombre=e.razon_social)
+        for e in session.scalars(
+            select(Empresa)
+            .where(
+                Empresa.tenant_id == tenant_id,
+                Empresa.deleted_at.is_(None),
+                Empresa.tipo_relacion.in_(["CLIENTE", "AMBOS"]),
+            )
+            .order_by(Empresa.razon_social)
+        )
+    ]
+
+
+@router.get("/proveedores", response_model=list[FiltroOpcion])
+def proveedores_pago(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> list[FiltroOpcion]:
+    _validar_acceso(auth.rol)
+    return [
+        FiltroOpcion(id=e.id, codigo=e.ruc, nombre=e.razon_social)
+        for e in session.scalars(
+            select(Empresa)
+            .where(
+                Empresa.tenant_id == tenant_id,
+                Empresa.deleted_at.is_(None),
+                Empresa.tipo_relacion.in_(["PROVEEDOR", "AMBOS"]),
+            )
+            .order_by(Empresa.razon_social)
+        )
+    ]
+
+
+@router.get("/gestores", response_model=list[FiltroOpcion])
+def gestores_pago(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> list[FiltroOpcion]:
+    _validar_acceso(auth.rol)
+    return [
+        FiltroOpcion(
+            id=g.id,
+            codigo=g.codigo,
+            nombre=g.nombre,
+            usuario_id=g.usuario_id,
+        )
+        for g in session.scalars(
+            select(Gestor)
+            .where(
+                Gestor.tenant_id == tenant_id,
+                Gestor.deleted_at.is_(None),
+            )
+            .order_by(Gestor.codigo)
+        )
+    ]
+
+
 def _rango_mes(mes: str) -> tuple[date, date]:
     try:
         anio_texto, mes_texto = mes.split("-", 1)
