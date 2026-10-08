@@ -654,3 +654,133 @@ function MantenimientoPanel() {
     </section>
   );
 }
+
+
+function EmpresasRegistradasPanel() {
+  const { datos, error, cargando, recargar } = useDatos<Empresa[]>("/api/v1/empresas");
+  const [seleccionadas, setSeleccionadas] = useState<string[]>([]);
+  const [buscar, setBuscar] = useState("");
+  const [mensaje, setMensaje] = useState("");
+
+  const filtradas = useMemo(() => {
+    const termino = buscar.trim().toLowerCase();
+    if (!termino) return datos ?? [];
+    return (datos ?? []).filter(
+      (empresa) =>
+        empresa.ruc.includes(termino) ||
+        empresa.razon_social.toLowerCase().includes(termino),
+    );
+  }, [buscar, datos]);
+
+  const todasSeleccionadas =
+    filtradas.length > 0 &&
+    filtradas.every((empresa) => seleccionadas.includes(empresa.id));
+
+  const alternarTodas = (valor: boolean) => {
+    if (valor) {
+      setSeleccionadas((actual) => [
+        ...new Set([...actual, ...filtradas.map((empresa) => empresa.id)]),
+      ]);
+    } else {
+      const visibles = new Set(filtradas.map((empresa) => empresa.id));
+      setSeleccionadas((actual) => actual.filter((id) => !visibles.has(id)));
+    }
+  };
+
+  const eliminarSeleccionadas = async () => {
+    if (seleccionadas.length === 0) return;
+    const confirmar = window.confirm(
+      `¿Eliminar ${seleccionadas.length} empresa(s) seleccionada(s)? ` +
+        "Solo desaparecerán del padrón activo. Si un RUC vuelve a aparecer en un comprobante, " +
+        "la empresa se reactivará automáticamente.",
+    );
+    if (!confirmar) return;
+
+    setMensaje("");
+    try {
+      const resultado = await enviarJson<{ eliminadas: number }>(
+        "/api/v1/empresas/eliminar-seleccion",
+        "POST",
+        { empresa_ids: seleccionadas },
+      );
+      setMensaje(`Empresas retiradas del padrón activo: ${resultado.eliminadas}`);
+      setSeleccionadas([]);
+      recargar();
+    } catch (err) {
+      setMensaje(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  return (
+    <section className="panel-configuracion">
+      <h3>Empresas registradas</h3>
+      <p className="tenue">
+        Las emisoras y receptoras detectadas quedan registradas aunque provengan de pruebas.
+        No forman parte de la limpieza general. Solo SUPERADMIN puede retirarlas manualmente
+        desde esta pantalla.
+      </p>
+
+      <div className="acciones">
+        <input
+          type="search"
+          placeholder="Buscar por RUC o razón social"
+          value={buscar}
+          onChange={(e) => setBuscar(e.target.value)}
+        />
+        <button
+          disabled={seleccionadas.length === 0}
+          onClick={() => void eliminarSeleccionadas()}
+        >
+          Eliminar seleccionadas ({seleccionadas.length})
+        </button>
+      </div>
+
+      {cargando && <p>Cargando…</p>}
+      {error && <p className="error">{error}</p>}
+      {mensaje && <p>{mensaje}</p>}
+
+      <table>
+        <thead>
+          <tr>
+            <th>
+              <input
+                type="checkbox"
+                aria-label="Seleccionar todas las empresas visibles"
+                checked={todasSeleccionadas}
+                onChange={(e) => alternarTodas(e.target.checked)}
+              />
+            </th>
+            <th>RUC</th>
+            <th>Razón social</th>
+            <th>Autorizada</th>
+            <th>Agente de retención</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filtradas.map((empresa) => (
+            <tr key={empresa.id}>
+              <td>
+                <input
+                  type="checkbox"
+                  aria-label={`Seleccionar ${empresa.ruc}`}
+                  checked={seleccionadas.includes(empresa.id)}
+                  onChange={(e) =>
+                    setSeleccionadas((actual) =>
+                      e.target.checked
+                        ? [...actual, empresa.id]
+                        : actual.filter((id) => id !== empresa.id),
+                    )
+                  }
+                />
+              </td>
+              <td>{empresa.ruc}</td>
+              <td>{empresa.razon_social}</td>
+              <td>{empresa.autorizada ? "Sí" : "No"}</td>
+              <td>{empresa.agente_retencion ? "Sí" : "No"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
