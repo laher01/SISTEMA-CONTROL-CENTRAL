@@ -404,6 +404,38 @@ class AbonoClienteERP(ConId, ConTenant, ConCreacion, Base):
     referencia: Mapped[str | None] = mapped_column(String(120))
 
 
+class PedidoGerencia(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "pedidos_gerencia"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "cliente_id", "periodo_mes", "moneda"),
+    )
+
+    cliente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("empresas.id"), index=True)
+    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_acceso.id"), index=True
+    )
+    periodo_mes: Mapped[date] = mapped_column(Date, index=True)
+    moneda: Mapped[str] = mapped_column(String(3), index=True)
+    monto_solicitado: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    modalidad: Mapped[str] = mapped_column(String(30), default="POR_PEDIDO", index=True)
+    modo_distribucion: Mapped[str] = mapped_column(String(30), default="MANUAL", index=True)
+    estado: Mapped[str] = mapped_column(String(20), default="ACTIVO", index=True)
+    observacion: Mapped[str | None] = mapped_column(String(500))
+
+
+class AsignacionPedidoGerencia(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "asignaciones_pedido_gerencia"
+
+    pedido_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pedidos_gerencia.id"), index=True)
+    usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    gestor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"), index=True)
+    proveedor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("empresas.id"), index=True)
+    monto_asignado: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_acceso.id"), index=True
+    )
+
+
 class PagoERP(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "pagos_erp"
     __table_args__ = (
