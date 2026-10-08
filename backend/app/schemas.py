@@ -41,6 +41,14 @@ class EmpresaActualizar(BaseModel):
     agente_retencion: bool | None = None
 
 
+class EmpresasEliminarIn(BaseModel):
+    empresa_ids: list[uuid.UUID] = Field(min_length=1)
+
+
+class EmpresasEliminarOut(BaseModel):
+    eliminadas: int
+
+
 class MiembroIn(BaseModel):
     codigo: str = Field(min_length=1, max_length=50)
     nombre: str = Field(min_length=1, max_length=200)
