@@ -73,10 +73,7 @@ def _permitido(session: SessionDep, auth: OperativeAuthDep, cuenta: CuentaAcceso
         gestor = session.get(Gestor, cuenta.gestor_id)
         return gestor is not None and gestor.usuario_id == auth.usuario_id
     if auth.rol == "GESTOR":
-        return (
-            rol_destino == RolMiembro.USUARIO
-            and cuenta.miembro_id == auth.usuario_id
-        )
+        return rol_destino == RolMiembro.USUARIO and cuenta.miembro_id == auth.usuario_id
     return False
 
 
