@@ -21,13 +21,22 @@ def obtener_tenant(session: Session, nombre: str) -> Tenant:
 
 
 def obtener_o_crear_empresa(
-    session: Session, tenant_id: uuid.UUID, ruc: str, razon_social: str
+    session: Session,
+    tenant_id: uuid.UUID,
+    ruc: str,
+    razon_social: str,
+    tipo_relacion: str = "SIN_CLASIFICAR",
 ) -> Empresa:
     empresa = session.scalar(
         select(Empresa).where(Empresa.tenant_id == tenant_id, Empresa.ruc == ruc)
     )
     if empresa is None:
-        empresa = Empresa(tenant_id=tenant_id, ruc=ruc, razon_social=razon_social)
+        empresa = Empresa(
+            tenant_id=tenant_id,
+            ruc=ruc,
+            razon_social=razon_social,
+            tipo_relacion=tipo_relacion,
+        )
         session.add(empresa)
         session.flush()
     else:
@@ -42,6 +51,16 @@ def obtener_o_crear_empresa(
         )
         if placeholder and razon_social.strip() != ruc:
             empresa.razon_social = razon_social.strip()[:300]
+
+        if tipo_relacion != "SIN_CLASIFICAR":
+            actual_tipo = empresa.tipo_relacion
+            if actual_tipo == "SIN_CLASIFICAR":
+                empresa.tipo_relacion = tipo_relacion
+            elif actual_tipo != tipo_relacion and actual_tipo != "AMBOS":
+                empresa.tipo_relacion = "AMBOS"
+
+        if empresa.tipo_relacion == "CLIENTE":
+            empresa.clasificacion_proveedor = None
         session.flush()
     return empresa
 
