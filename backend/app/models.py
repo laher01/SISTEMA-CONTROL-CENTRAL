@@ -67,6 +67,10 @@ class Empresa(ConId, ConTenant, ConCreacion, Base):
 
     ruc: Mapped[str] = mapped_column(String(11))
     razon_social: Mapped[str] = mapped_column(String(300))
+    tipo_relacion: Mapped[str] = mapped_column(
+        String(20), default="SIN_CLASIFICAR", server_default="SIN_CLASIFICAR", index=True
+    )
+    clasificacion_proveedor: Mapped[str | None] = mapped_column(String(1), index=True)
     autorizada: Mapped[bool] = mapped_column(default=False, server_default="false")
     agente_retencion: Mapped[bool] = mapped_column(default=False, server_default="false")
     updated_at: Mapped[datetime] = mapped_column(
