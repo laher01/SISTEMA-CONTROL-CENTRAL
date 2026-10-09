@@ -26,7 +26,7 @@ export default function Organizacion({ sesion }: { sesion: SesionActual }) {
 function OrganizacionAdmin() {
   const { datos: miembros, error, cargando, recargar } = useDatos<Miembro[]>("/api/v1/miembros");
   const { datos: gestores, recargar: recargarGestores } = useDatos<Gestor[]>("/api/v1/gestores");
-  const [pestanaAdmin, setPestanaAdmin] = useState<"RESPONSABLE" | "USUARIO" | "GESTOR">("RESPONSABLE");
+  const [pestanaAdmin, setPestanaAdmin] = useState<"GERENTE" | "SECRETARIA" | "RESPONSABLE" | "USUARIO" | "GESTOR">("RESPONSABLE");
   const [codigo, setCodigo] = useState("");
   const [nombre, setNombre] = useState("");
   const [rol, setRol] = useState<RolMiembro>("RESPONSABLE");
@@ -99,7 +99,7 @@ function OrganizacionAdmin() {
       }
       setCodigo("");
       setNombre("");
-      setRol(pestanaAdmin === "RESPONSABLE" ? "RESPONSABLE" : "USUARIO");
+      setRol(pestanaAdmin === "GESTOR" ? "USUARIO" : pestanaAdmin);
       setPorcentajeProduccion("1.5");
       setMiembroEditando(null);
       recargar();
@@ -161,16 +161,23 @@ function OrganizacionAdmin() {
         Administración crea miembros y puede crear Gestores. Cada alta genera una clave temporal
         que debe cambiarse en el primer inicio de sesión.
       </p>
+      <section className="panel-alerta" aria-label="Configuración inicial">
+        <h3>Configuración inicial de la Administración</h3>
+        <p className="tenue">El administrador ya dispone de su cuenta. Asigne nombres y genere credenciales
+          individuales para Gerencia y Secretaría; después cree Responsables. Cada integrante
+          debe cambiar su clave temporal al ingresar.</p>
+        <p><strong>Gerencia:</strong> {(miembros ?? []).some(m => m.rol === "GERENTE") ? "Configurada" : "Pendiente"} · <strong>Secretaría:</strong> {(miembros ?? []).some(m => m.rol === "SECRETARIA") ? "Configurada" : "Pendiente"} · <strong>Responsables:</strong> {(miembros ?? []).filter(m => m.rol === "RESPONSABLE").length}</p>
+      </section>
       <Credencial credencial={credencial} />
       {mensaje && <p className="tenue">{mensaje}</p>}
       {error && <p className="error">{error}</p>}
       {cargando && <p>Cargando…</p>}
 
       <div className="acciones" role="tablist" aria-label="Niveles de la organización">
-        {(["RESPONSABLE", "USUARIO", "GESTOR"] as const).map((p) => (
+        {(["GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"] as const).map((p) => (
           <button key={p} type="button" role="tab" aria-selected={pestanaAdmin === p}
-            onClick={() => { setPestanaAdmin(p); setMiembroEditando(null); setGestorEditando(null); setRol(p === "RESPONSABLE" ? "RESPONSABLE" : "USUARIO"); }}>
-            {p === "RESPONSABLE" ? "Responsables" : p === "USUARIO" ? "Usuarios" : "Gestores"}
+            onClick={() => { setPestanaAdmin(p); setMiembroEditando(null); setGestorEditando(null); setRol(p === "GESTOR" ? "USUARIO" : p); }}>
+            {p === "GERENTE" ? "Gerencia" : p === "SECRETARIA" ? "Secretaría" : p === "RESPONSABLE" ? "Responsables" : p === "USUARIO" ? "Usuarios" : "Gestores"}
           </button>
         ))}
       </div>
@@ -217,7 +224,7 @@ function OrganizacionAdmin() {
               value={rol}
               onChange={(e) => setRol(e.target.value as RolMiembro)}
             >
-              {ROLES.filter((r) => r === (pestanaAdmin === "RESPONSABLE" ? "RESPONSABLE" : "USUARIO")).map((r) => <option key={r} value={r}>{r}</option>)}
+              {ROLES.filter((r) => r === pestanaAdmin).map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
             {rol === "USUARIO" && (
               <label>
