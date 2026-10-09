@@ -235,7 +235,13 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
                   {e.pendiente_aprobacion && <span className="etiqueta">No autorizado</span>}
                 </td>
                 <td className="num">{formatearMonto(e.moneda, e.importe_total)}</td>
-                <td><a href={urlZipExpediente(e.id)}>ZIP completo</a>{" · "}<a href={urlPdfExpediente(e.id)}>PDF</a></td>
+                <td>
+                  <a href={urlPdfExpediente(e.id)} download={`expediente-${e.serie}-${e.correlativo}.pdf`}>
+                    Descargar PDF
+                  </a>
+                  {" · "}
+                  <a href={urlZipExpediente(e.id)}>ZIP completo</a>
+                </td>
               </tr>
             ))}
           </tbody>
