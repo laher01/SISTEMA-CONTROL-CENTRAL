@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
-from app.models import GerenteResponsable, Miembro
+from app.models import Expediente, GerenteResponsable, Miembro, PedidoGerencia
 from app.services import auditoria
 
 router = APIRouter(prefix="/gerencias", tags=["gerencias"])
@@ -114,3 +114,82 @@ def asignar(
     session.commit()
     session.refresh(relacion)
     return relacion
+
+
+class AtribucionFacturaIn(BaseModel):
+    pedido_id: uuid.UUID
+
+
+@router.put("/facturas/{expediente_id}/atribuir")
+def atribuir_factura(
+    expediente_id: uuid.UUID,
+    datos: AtribucionFacturaIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str]:
+    """Atribución explícita y auditable, solo Administración.
+
+    Nunca asignar al Gerente por el RUC del cliente únicamente:
+    varios Gerentes pueden trabajar con el mismo receptor.
+    """
+    _administracion(auth)
+    expediente = session.get(Expediente, expediente_id)
+    pedido = session.get(PedidoGerencia, datos.pedido_id)
+    if (
+        expediente is None
+        or expediente.tenant_id != tenant_id
+        or expediente.deleted_at is not None
+        or pedido is None
+        or pedido.tenant_id != tenant_id
+        or pedido.gerente_id is None
+        or pedido.responsable_id is None
+        or pedido.estado != "ACTIVO"
+    ):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Factura o pedido inválido")
+    if (
+        expediente.receptor_id != pedido.cliente_id
+        or expediente.moneda != pedido.moneda
+        or expediente.fecha_emision.year != pedido.periodo_mes.year
+        or expediente.fecha_emision.month != pedido.periodo_mes.month
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "La factura no corresponde a cliente, moneda y mes del pedido",
+        )
+    usuario = session.get(Miembro, expediente.usuario_id) if expediente.usuario_id else None
+    if usuario is None or usuario.responsable_id != pedido.responsable_id:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "El Usuario no pertenece al Responsable",
+        )
+    autorizado = session.scalar(
+        select(GerenteResponsable.id).where(
+            GerenteResponsable.tenant_id == tenant_id,
+            GerenteResponsable.gerente_id == pedido.gerente_id,
+            GerenteResponsable.responsable_id == pedido.responsable_id,
+            GerenteResponsable.activo.is_(True),
+        )
+    )
+    if autorizado is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Gerencia y Responsable sin vínculo")
+    if expediente.pedido_gerencia_id not in (None, pedido.id):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "La factura ya pertenece a otro pedido; requiere regularización auditada",
+        )
+    expediente.pedido_gerencia_id = pedido.id
+    expediente.gerente_id = pedido.gerente_id
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "FACTURA_ATRIBUIDA_GERENCIA",
+        "expediente",
+        expediente.id,
+        {
+            "gerente_id": str(pedido.gerente_id),
+            "pedido_id": str(pedido.id),
+            "actor": auth.codigo,
+        },
+    )
+    session.commit()
+    return {"expediente_id": str(expediente.id), "pedido_id": str(pedido.id)}
