@@ -113,6 +113,11 @@ def notificar_clasificacion(
     datos: SolicitudClasificacionIn,
 ) -> dict[str, int]:
     """Solicita revisión al administrador, sin conceder autorización."""
+    if auth.rol not in (
+        RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR,
+        RolMiembro.SECRETARIA, RolMiembro.USUARIO, "GESTOR",
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin permiso para solicitar clasificación")
     empresas = list(
         session.scalars(
             select(Empresa).where(
