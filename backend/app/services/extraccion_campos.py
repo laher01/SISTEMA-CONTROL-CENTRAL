@@ -717,9 +717,9 @@ def _extraer_campos_fiscales_rhe(
         if len(cantidades) == 1 and (
             "TOTAL POR HONORARIOS" in normalizado or "TOTAL NETO RECIBIDO" in normalizado
         ):
-            origen, valor = positivos[0]
+            origen, importe_rhe = positivos[0]
             campos["importe_total"] = CampoExtraido(
-                format(valor, ".2f"), min(0.96, 0.94 * factor), origen
+                format(importe_rhe, ".2f"), min(0.96, 0.94 * factor), origen
             ).a_dict(fuente)
 
 
