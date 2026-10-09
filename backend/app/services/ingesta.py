@@ -9,7 +9,15 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, TipoComprobante, TipoDocumento
-from app.models import Documento, Expediente, GerenteEmpresa, GerenteResponsable, Gestor, Miembro, PedidoGerencia
+from app.models import (
+    Documento,
+    Expediente,
+    GerenteEmpresa,
+    GerenteResponsable,
+    Gestor,
+    Miembro,
+    PedidoGerencia,
+)
 from app.services import auditoria
 from app.services.expedientes import (
     actualizar_expediente,
@@ -31,17 +39,20 @@ def atribuir_gerencia_inequivoca(session: Session, expediente: Expediente) -> No
     periodo = expediente.fecha_emision.replace(day=1)
     candidatos = list(
         session.scalars(
-            select(PedidoGerencia).join(
+            select(PedidoGerencia)
+            .join(
                 GerenteResponsable,
                 (GerenteResponsable.gerente_id == PedidoGerencia.gerente_id)
                 & (GerenteResponsable.responsable_id == PedidoGerencia.responsable_id)
                 & (GerenteResponsable.tenant_id == PedidoGerencia.tenant_id),
-            ).join(
+            )
+            .join(
                 GerenteEmpresa,
                 (GerenteEmpresa.gerente_id == PedidoGerencia.gerente_id)
                 & (GerenteEmpresa.empresa_id == PedidoGerencia.cliente_id)
                 & (GerenteEmpresa.tenant_id == PedidoGerencia.tenant_id),
-            ).where(
+            )
+            .where(
                 PedidoGerencia.tenant_id == expediente.tenant_id,
                 PedidoGerencia.responsable_id == usuario.responsable_id,
                 PedidoGerencia.cliente_id == expediente.receptor_id,

@@ -6,7 +6,14 @@ from decimal import Decimal
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models import Empresa, Expediente, GerenteEmpresa, GerenteResponsable, Miembro, PedidoGerencia
+from app.models import (
+    Empresa,
+    Expediente,
+    GerenteEmpresa,
+    GerenteResponsable,
+    Miembro,
+    PedidoGerencia,
+)
 from app.security import ContextoAcceso
 from app.services.ingesta import atribuir_gerencia_inequivoca
 from tests.conftest import AuthPrueba
@@ -108,10 +115,12 @@ def test_produccion_aislada_por_gerente(
     )
     assert intento.status_code == 404
     assert client.get("/api/v1/pagos").status_code == 403
-    assert client.get(
-        "/api/v1/pagos/clientes/resumen", params={"mes": "2026-10", "moneda": "PEN"}
-    ).status_code == 403
-
+    assert (
+        client.get(
+            "/api/v1/pagos/clientes/resumen", params={"mes": "2026-10", "moneda": "PEN"}
+        ).status_code
+        == 403
+    )
 
 
 def test_atribucion_automatica_requiere_unico_pedido(
@@ -125,7 +134,9 @@ def test_atribucion_automatica_requiere_unico_pedido(
     )
     usuario = Miembro(tenant_id=tenant, codigo="US-99", nombre="Usuario", rol="USUARIO")
     cliente = Empresa(
-        tenant_id=tenant, ruc="20995550001", razon_social="CLIENTE COMPARTIDO",
+        tenant_id=tenant,
+        ruc="20995550001",
+        razon_social="CLIENTE COMPARTIDO",
         tipo_relacion="CLIENTE",
     )
     session.add_all([g1, g2, responsable, usuario, cliente])
@@ -133,27 +144,46 @@ def test_atribucion_automatica_requiere_unico_pedido(
     usuario.responsable_id = responsable.id
     v2 = None
     for gerente in (g1, g2):
-        session.add(GerenteEmpresa(
-            tenant_id=tenant, gerente_id=gerente.id, empresa_id=cliente.id, activo=True,
-        ))
+        session.add(
+            GerenteEmpresa(
+                tenant_id=tenant,
+                gerente_id=gerente.id,
+                empresa_id=cliente.id,
+                activo=True,
+            )
+        )
         vinculo = GerenteResponsable(
-            tenant_id=tenant, gerente_id=gerente.id,
-            responsable_id=responsable.id, activo=True,
+            tenant_id=tenant,
+            gerente_id=gerente.id,
+            responsable_id=responsable.id,
+            activo=True,
         )
         session.add(vinculo)
         if gerente == g2:
             v2 = vinculo
-        session.add(PedidoGerencia(
-            tenant_id=tenant, gerente_id=gerente.id,
-            responsable_id=responsable.id, cliente_id=cliente.id,
-            periodo_mes=date(2026, 10, 1), moneda="PEN",
-            monto_solicitado=Decimal("1000"), estado="ACTIVO",
-        ))
+        session.add(
+            PedidoGerencia(
+                tenant_id=tenant,
+                gerente_id=gerente.id,
+                responsable_id=responsable.id,
+                cliente_id=cliente.id,
+                periodo_mes=date(2026, 10, 1),
+                moneda="PEN",
+                monto_solicitado=Decimal("1000"),
+                estado="ACTIVO",
+            )
+        )
     factura = Expediente(
-        tenant_id=tenant, receptor_id=cliente.id, emisor_id=cliente.id,
-        tipo_comprobante="FACT", serie="F001", correlativo="889",
-        fecha_emision=date(2026, 10, 9), moneda="PEN",
-        importe_total=Decimal("100"), usuario_id=usuario.id,
+        tenant_id=tenant,
+        receptor_id=cliente.id,
+        emisor_id=cliente.id,
+        tipo_comprobante="FACT",
+        serie="F001",
+        correlativo="889",
+        fecha_emision=date(2026, 10, 9),
+        moneda="PEN",
+        importe_total=Decimal("100"),
+        usuario_id=usuario.id,
     )
     session.add(factura)
     session.flush()

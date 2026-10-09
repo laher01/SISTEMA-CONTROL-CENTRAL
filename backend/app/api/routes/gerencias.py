@@ -318,9 +318,7 @@ def regularizar_pedido(
             )
         )
         if vinculo is None:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN, "Responsable no vinculado al Gerente"
-            )
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Responsable no vinculado al Gerente")
     conflicto = session.scalar(
         select(PedidoGerencia.id).where(
             PedidoGerencia.tenant_id == tenant_id,
@@ -345,8 +343,11 @@ def regularizar_pedido(
         raise HTTPException(status.HTTP_409_CONFLICT, "Pedido con facturas ya atribuidas")
     pedido.gerente_id = datos.gerente_id
     auditoria.registrar(
-        session, tenant_id, "PEDIDO_GERENCIA_REGULARIZADO",
-        "pedido_gerencia", pedido.id,
+        session,
+        tenant_id,
+        "PEDIDO_GERENCIA_REGULARIZADO",
+        "pedido_gerencia",
+        pedido.id,
         {"gerente_id": str(datos.gerente_id), "actor": auth.codigo},
     )
     session.commit()
