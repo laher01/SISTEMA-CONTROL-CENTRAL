@@ -25,18 +25,20 @@ def upgrade() -> None:
         sa.Column("responsable_id", sa.Uuid(), sa.ForeignKey("miembros.id"), nullable=False),
         sa.Column("activo", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.func.now(),
         ),
         sa.UniqueConstraint(
-            "tenant_id", "gerente_id", "responsable_id",
+            "tenant_id",
+            "gerente_id",
+            "responsable_id",
             name="uq_gerentes_responsables_tenant_id_gerente_id_responsable_id",
         ),
     )
     for column in ("tenant_id", "gerente_id", "responsable_id"):
-        op.create_index(
-            f"ix_gerentes_responsables_{column}", "gerentes_responsables", [column]
-        )
+        op.create_index(f"ix_gerentes_responsables_{column}", "gerentes_responsables", [column])
     op.add_column(
         "pedidos_gerencia",
         sa.Column("gerente_id", sa.Uuid(), sa.ForeignKey("miembros.id"), nullable=True),
@@ -70,7 +72,5 @@ def downgrade() -> None:
     op.drop_index("ix_pedidos_gerencia_gerente_id", table_name="pedidos_gerencia")
     op.drop_column("pedidos_gerencia", "gerente_id")
     for column in ("tenant_id", "gerente_id", "responsable_id"):
-        op.drop_index(
-            f"ix_gerentes_responsables_{column}", table_name="gerentes_responsables"
-        )
+        op.drop_index(f"ix_gerentes_responsables_{column}", table_name="gerentes_responsables")
     op.drop_table("gerentes_responsables")
