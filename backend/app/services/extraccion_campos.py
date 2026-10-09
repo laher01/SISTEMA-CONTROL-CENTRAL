@@ -670,7 +670,7 @@ def _extraer_campos_fiscales_rhe(
         return
 
     # SUNAT puede separar «Nro:» de «E001-39» en distintas líneas.
-    serie_numero = re.search(r"\b(E[0-9]{3})\s*[-–—]\s*0*([0-9]{1,8})\b", texto, re.I)
+    serie_numero = re.search(\n        r"(?<![A-Z0-9])[-–—]?\s*(E[0-9]{3})\s*(?:[-–—]|\s)\s*0*([0-9]{1,8})\b",\n        texto,\n        re.I,\n    )
     if serie_numero:
         evidencia = serie_numero.group(0)
         campos["serie"] = CampoExtraido(
