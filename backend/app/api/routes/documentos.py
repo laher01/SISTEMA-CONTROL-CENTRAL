@@ -49,8 +49,8 @@ from app.services.ingesta import (
 )
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
-from app.services.separador_pdf import analizar_paquete, extraer_fragmento
 from app.services.relaciones_documentales import sugerir_relaciones
+from app.services.separador_pdf import analizar_paquete, extraer_fragmento
 from app.services.ubl import UblInvalido
 from app.storage import AlmacenLocal
 
@@ -125,7 +125,9 @@ async def importar_paquete_pdf(
     Cada comprobante tiene su propia transacción; un error no borra otros.
     """
     if auth.rol not in ("GESTOR", RolMiembro.USUARIO):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Usuario o Gestor puede importar paquetes")
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Solo Usuario o Gestor puede importar paquetes"
+        )
     if auth.usuario_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "La sesión no tiene Usuario propietario")
     limite = settings.max_upload_mb * 1024 * 1024
