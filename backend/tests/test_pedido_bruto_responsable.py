@@ -89,12 +89,12 @@ def test_gerencia_entrega_bruto_y_responsable_distribuye(
     assert len(resumen.json()["pedidos"]) == 1
     assert resumen.json()["pedidos"][0]["monto_solicitado"] == "1500.00"
     url = f"/api/v1/responsable/pedidos/{pedido_id}/distribuir"
-    assert client.post(
-        url, json={"usuario_id": str(ajeno.id), "monto": "100.00"}
-    ).status_code == 403
-    assert client.post(
-        url, json={"usuario_id": str(propio.id), "monto": "1500.01"}
-    ).status_code == 422
+    assert (
+        client.post(url, json={"usuario_id": str(ajeno.id), "monto": "100.00"}).status_code == 403
+    )
+    assert (
+        client.post(url, json={"usuario_id": str(propio.id), "monto": "1500.01"}).status_code == 422
+    )
     registrado = client.post(url, json={"usuario_id": str(propio.id), "monto": "900.00"})
     assert registrado.status_code == 200, registrado.text
     resumen = client.get("/api/v1/responsable/resumen")
