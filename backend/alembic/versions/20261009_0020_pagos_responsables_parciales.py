@@ -43,17 +43,21 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.func.now(),
         ),
     )
     op.create_index(
         "ix_movimientos_pagos_responsables_tenant_id",
-        "movimientos_pagos_responsables", ["tenant_id"],
+        "movimientos_pagos_responsables",
+        ["tenant_id"],
     )
     op.create_index(
         "ix_movimientos_pagos_responsables_pago_id",
-        "movimientos_pagos_responsables", ["pago_id"],
+        "movimientos_pagos_responsables",
+        ["pago_id"],
     )
 
 
