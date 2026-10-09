@@ -12,6 +12,7 @@ import ExpedienteDetalle from "./paginas/ExpedienteDetalle";
 import Expedientes from "./paginas/Expedientes";
 import { CambiarClave, Login } from "./paginas/Login";
 import Organizacion from "./paginas/Organizacion";
+import MiEquipoResponsable from "./paginas/MiEquipoResponsable";
 import Pagos from "./paginas/Pagos";
 import Pendientes from "./paginas/Pendientes";
 import Produccion from "./paginas/Produccion";
@@ -23,6 +24,7 @@ import type { SesionActual } from "./tipos";
 type RolSesion = SesionActual["rol"];
 
 const MENU: { a: string; texto: string; roles: RolSesion[] }[] = [
+  { a: "/mi-equipo", texto: "Mis Usuarios", roles: ["RESPONSABLE"] },
   {
     a: "/",
     texto: "Dashboard",
@@ -137,6 +139,7 @@ export default function App() {
           <Route path="/pendientes" element={<Pendientes />} />
           <Route path="/alertas" element={<Alertas sesion={sesion} />} />
           <Route path="/empresas" element={<Empresas />} />
+          <Route path="/mi-equipo" element={<MiEquipoResponsable />} />
           <Route path="/organizacion" element={<Organizacion sesion={sesion} />} />
           <Route path="/produccion" element={<Produccion />} />
           <Route path="/pagos" element={<Pagos sesion={sesion} />} />
