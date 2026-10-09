@@ -775,10 +775,12 @@ def eliminar_pedido_sin_movimientos(
     _validar_acceso(auth.rol)
     pedido = _pedido_valido(session, tenant_id, pedido_id)
     asignacion = session.scalar(
-        select(AsignacionPedidoGerencia.id).where(
+        select(AsignacionPedidoGerencia.id)
+        .where(
             AsignacionPedidoGerencia.tenant_id == tenant_id,
             AsignacionPedidoGerencia.pedido_id == pedido.id,
-        ).limit(1)
+        )
+        .limit(1)
     )
     if asignacion is not None:
         raise HTTPException(
