@@ -22,13 +22,13 @@ def upgrade() -> None:
         "comisiones_responsable_reglas",
         sa.Column("id", sa.Uuid(), primary_key=True),
         sa.Column("tenant_id", sa.Uuid(), sa.ForeignKey("tenants.id"), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("responsable_id", sa.Uuid(), sa.ForeignKey("miembros.id"), nullable=False),
         sa.Column("cliente_id", sa.Uuid(), sa.ForeignKey("empresas.id"), nullable=False),
         sa.Column("porcentaje", sa.Numeric(7, 4), nullable=False),
         sa.Column("creado_por_cuenta_id", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id"), nullable=False),
         sa.Column("actualizado_por_cuenta_id", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.UniqueConstraint("tenant_id", "responsable_id", "cliente_id"),
     )
     op.create_index("ix_comision_regla_responsable_id", "comisiones_responsable_reglas", ["responsable_id"])
@@ -50,6 +50,7 @@ def upgrade() -> None:
         sa.Column("observacion", sa.String(500), nullable=True),
         sa.Column("creado_por_cuenta_id", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id"), nullable=False),
         sa.Column("pagado_por_cuenta_id", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id"), nullable=True),
+        sa.Column("referencia_pago", sa.String(160), nullable=True),
         sa.UniqueConstraint(
             "tenant_id", "responsable_id", "periodo_desde", "periodo_hasta", "moneda"
         ),
