@@ -1,10 +1,10 @@
 """Comisiones auditables y pagos exclusivamente a Responsables por Gerencia."""
 
 import uuid
-from pathlib import Path
-from typing import Literal
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
+from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
@@ -434,8 +434,13 @@ def listar_pagos(
             "estado": p.estado,
             "fecha_pago": p.fecha_pago.isoformat() if p.fecha_pago else None,
             "referencia_pago": p.referencia_pago,
-            "abonado": str(abonos.get(p.id, Decimal("0"))),
-            "saldo": str(max(Decimal("0"), p.comision_total - abonos.get(p.id, Decimal("0")))),
+            "abonado": str(
+                p.comision_total if p.estado == "PAGADO" else abonos.get(p.id, Decimal("0"))
+            ),
+            "saldo": str(
+                Decimal("0") if p.estado == "PAGADO"
+                else max(Decimal("0"), p.comision_total - abonos.get(p.id, Decimal("0")))
+            ),
             "fecha_reprogramada": (
                 p.fecha_reprogramada.isoformat() if p.fecha_reprogramada else None
             ),
@@ -500,6 +505,11 @@ def reprogramar_pago(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
     if pago.estado in ("PAGADO", "ANULADO"):
         raise HTTPException(status.HTTP_409_CONFLICT, "Liquidación cerrada")
+    if datos.fecha.replace(day=1) <= pago.periodo_hasta.replace(day=1):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Reprogramación debe indicar un mes posterior al periodo",
+        )
     pago.fecha_reprogramada = datos.fecha
     pago.observacion = datos.motivo
     pago.estado = "REPROGRAMADO"
@@ -549,7 +559,7 @@ async def abonar_responsable(
     valor = saldo if accion == "TOTAL" else monto
     if valor is None or valor <= 0 or valor > saldo:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Importe fuera del saldo")
-    if valor.as_tuple().exponent < -2:
+    if valor != valor.quantize(CENTIMO):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Importe con más de dos decimales")
     referencia = referencia.strip()
     if len(referencia) < 4 or len(referencia) > 160:
