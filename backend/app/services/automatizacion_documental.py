@@ -118,8 +118,10 @@ def aplicar_automaticamente(
             return vinculado
         return _revision(
             documento,
-            ["No se encontró una factura única mediante documento relacionado; "
-             "verifique la referencia y vincule manualmente"],
+            [
+                "No se encontró una factura única mediante documento relacionado; "
+                "verifique la referencia y vincule manualmente"
+            ],
         )
 
     if tipo not in (TipoDocumento.FACT, TipoDocumento.RHE):
@@ -305,8 +307,11 @@ def _vincular_guia_por_factura_referenciada(
     expediente = candidatos[0]
     vincular_documento(session, settings, hoy, documento, expediente.id, tipo)
     auditoria.registrar(
-        session, documento.tenant_id, "GRE_VINCULADA_POR_DOCUMENTO_REFERENCIADO",
-        "documento", documento.id,
+        session,
+        documento.tenant_id,
+        "GRE_VINCULADA_POR_DOCUMENTO_REFERENCIADO",
+        "documento",
+        documento.id,
         {"expediente_id": str(expediente.id), "factura": f"{serie}-{numero}"},
     )
     _guardar_estado(documento, "COMPLETADO", expediente_id=expediente.id)
