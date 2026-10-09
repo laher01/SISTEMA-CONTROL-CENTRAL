@@ -80,3 +80,50 @@ def test_asignacion_solo_administracion_y_mismo_tenant(
     assert r.status_code == 200, r.text
     assert r.json()["responsable_id"] == str(responsable.id)
     assert client.put(url, json={"responsable_id": str(uuid.uuid4())}).status_code == 422
+
+
+def test_responsable_crea_usuario_en_su_equipo(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    tenant_id = auth_prueba.contexto.tenant_id
+    responsable = Miembro(
+        tenant_id=tenant_id,
+        codigo="RESP-CREA",
+        nombre="Responsable Alta",
+        rol="RESPONSABLE",
+        activo=True,
+    )
+    session.add(responsable)
+    session.commit()
+    ruta = "/api/v1/miembros/mis-usuarios"
+    datos = {"nombre": "Eduardo Ayala", "porcentaje_produccion": "1.7500"}
+    assert client.post(ruta, json=datos).status_code == 403
+
+    auth_prueba.contexto = ContextoAcceso(
+        cuenta_id=auth_prueba.contexto.cuenta_id,
+        tenant_id=tenant_id,
+        rol="RESPONSABLE",
+        miembro_id=responsable.id,
+        gestor_id=None,
+        usuario_id=None,
+        codigo=responsable.codigo,
+        nombre=responsable.nombre,
+        cambio_clave_obligatorio=False,
+    )
+    respuesta = client.post(ruta, json=datos)
+    assert respuesta.status_code == 201, respuesta.text
+    creado = respuesta.json()
+    assert creado["miembro"]["codigo"] == "EDA-001-US"
+    assert creado["miembro"]["responsable_id"] == str(responsable.id)
+    assert creado["miembro"]["rol"] == "USUARIO"
+    assert creado["credencial"]["login"] == "EDA-001-US"
+    assert creado["credencial"]["clave_temporal"]
+    assert [x["codigo"] for x in client.get(ruta).json()] == ["EDA-001-US"]
+    assert client.get("/api/v1/miembros").status_code == 403
+    assert client.post("/api/v1/miembros", json={
+        "nombre": "Gerente Fraude", "rol": "GERENTE"
+    }).status_code == 403
+    assert client.post(ruta, json={"nombre": "  "}).status_code == 422
+    assert client.post(ruta, json={
+        "nombre": "Otro Usuario", "porcentaje_produccion": "120"
+    }).status_code == 422
