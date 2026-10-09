@@ -8,4 +8,5 @@ RUN npm run build
 FROM nginx:1.28-alpine
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
+COPY website/index.html /usr/share/nginx/comercial/index.html
 EXPOSE 80
