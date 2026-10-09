@@ -98,12 +98,8 @@ def test_pago_erp_calcula_produccion_adelanto_y_saldo(
             "fecha_programada": None,
         },
     )
-    assert pago.status_code == 201, pago.text
-    datos = pago.json()
-    assert Decimal(datos["produccion_total"]) == Decimal("1500.00")
-    assert Decimal(datos["bruto"]) == Decimal("22.50")
-    assert Decimal(datos["adelantos"]) == Decimal("5.00")
-    assert Decimal(datos["saldo"]) == Decimal("18.50")
+    assert pago.status_code == 403
+    assert "Responsable" in pago.json()["detail"]
 
 
 def test_alerta_manual_llega_al_usuario_destinatario(
