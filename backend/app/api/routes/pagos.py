@@ -653,6 +653,7 @@ def _resumen_pedido(
         Expediente.moneda == pedido.moneda,
         Expediente.fecha_emision >= desde,
         Expediente.fecha_emision <= hasta,
+        Expediente.pedido_gerencia_id == pedido.id,
     )
     ejecutado = Decimal(
         session.scalar(
