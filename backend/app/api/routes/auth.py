@@ -313,7 +313,9 @@ def _rol_de_cuenta(session: SessionDep, cuenta: CuentaAcceso) -> str | None:
 
 
 def _cadena_de_responsabilidad(
-    session: SessionDep, cuenta: CuentaAcceso, usuario: Miembro | None,
+    session: SessionDep,
+    cuenta: CuentaAcceso,
+    usuario: Miembro | None,
 ) -> list[JerarquiaSesionOut]:
     """Solo miembros ascendentes del mismo tenant; nunca extrapola por nombre."""
     cadena: list[JerarquiaSesionOut] = []
@@ -359,7 +361,8 @@ def _salida_sesion(session: SessionDep, cuenta: CuentaAcceso, rol: str) -> Sesio
         gestor_id=None,
         usuario_id=miembro.id if miembro.rol == "USUARIO" else None,
         jerarquia=_cadena_de_responsabilidad(session, cuenta, miembro)
-        if miembro.rol == "USUARIO" else [],
+        if miembro.rol == "USUARIO"
+        else [],
         cambio_clave_obligatorio=cuenta.cambio_clave_obligatorio,
     )
 
