@@ -35,6 +35,11 @@ type CampoExtraido = {
   evidencia: string;
 };
 
+const CAMPOS_FISCALES = [
+  "serie", "correlativo", "ruc_emisor", "ruc_receptor",
+  "fecha_emision", "moneda", "importe_total",
+] as const;
+
 const ETIQUETAS_CAMPOS: Record<string, string> = {
   serie: "Serie",
   correlativo: "Correlativo",
@@ -224,7 +229,7 @@ function Procesar({
             <pre className="texto-extraido">{lectura.texto}</pre>
           </details>
         )}
-        {lectura.campos.length > 0 && (
+        {(lectura.campos.length > 0 || lectura.tipoSugerido === "RHE") && (
           <ConfirmarCampos
             documentoId={documento.id}
             campos={lectura.campos}
@@ -243,7 +248,8 @@ function Procesar({
         >
           Buscar expedientes
         </button>
-        {relaciones.length > 0 && (
+        {lectura.tipoSugerido === "RHE" && <small className="tenue">El recibo por honorarios constituye su propio expediente. No lo relaciones con facturas sugeridas por importe o RUC: completa sus datos fiscales y utiliza «Crear o asociar expediente».</small>}
+        {relaciones.length > 0 && lectura.tipoSugerido !== "RHE" && (
           <ul>
             {relaciones.map((relacion) => (
               <li key={relacion.expediente.id}>
@@ -363,7 +369,7 @@ function ConfirmarCampos({
       const actualizado = await enviarJson<Documento>(
         `/api/v1/documentos/${documentoId}/extraccion-confirmada`,
         "PUT",
-        valores,
+        Object.fromEntries(Object.entries(valores).filter(([, valor]) => valor.trim() !== "")),
       );
       alConfirmar(actualizado);
     } catch (e) {
@@ -399,21 +405,28 @@ function ConfirmarCampos({
         Datos sugeridos ({campos.length}){confirmado ? " · Confirmados" : ""}
       </summary>
       <dl className="campos-extraidos">
-        {campos.map((campo) => (
-          <div key={campo.nombre}>
-            <dt>{ETIQUETAS_CAMPOS[campo.nombre] ?? campo.nombre}</dt>
+        {[...CAMPOS_FISCALES, "razon_social_emisor", "razon_social_receptor"].map((nombre) => {
+          const campo = campos.find((dato) => dato.nombre === nombre);
+          return <div key={nombre}>
+            <dt>{ETIQUETAS_CAMPOS[nombre] ?? nombre}</dt>
             <dd>
               <input
-                aria-label={ETIQUETAS_CAMPOS[campo.nombre] ?? campo.nombre}
-                value={valores[campo.nombre] ?? ""}
-                onChange={(e) => setValores({ ...valores, [campo.nombre]: e.target.value })}
+                aria-label={ETIQUETAS_CAMPOS[nombre] ?? nombre}
+                type={nombre === "fecha_emision" ? "date" : nombre === "importe_total" ? "number" : "text"}
+                step={nombre === "importe_total" ? "0.01" : undefined}
+                value={valores[nombre] ?? ""}
+                placeholder={campo ? undefined : "Completar desde el comprobante"}
+                onChange={(e) => setValores({ ...valores, [nombre]: e.target.value })}
               />
-              <span> {Math.round(campo.confianza * 100)} % · {campo.fuente}</span>
-              <small title={campo.evidencia}>Evidencia: {campo.evidencia}</small>
+              {campo && <>
+                <span> {Math.round(campo.confianza * 100)} % · {campo.fuente}</span>
+                <small title={campo.evidencia}>Evidencia: {campo.evidencia}</small>
+              </>}
             </dd>
-          </div>
-        ))}
+          </div>;
+        })}
       </dl>
+      {tipoSugerido === "RHE" && <p className="tenue">Comprueba los datos contra el recibo original. Un RHE genera su expediente independiente, sin obligación de guía de remisión.</p>}
       <button disabled={guardando} onClick={guardar}>
         {guardando ? "Guardando…" : confirmado ? "Actualizar confirmación" : "Confirmar campos"}
       </button>
