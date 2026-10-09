@@ -1,6 +1,7 @@
 """Vista de consulta del Responsable: pedidos, clientes y pagos de su equipo."""
 
 import uuid
+from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, status
@@ -10,12 +11,14 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
+from app.services import auditoria
 from app.models import (
     AsignacionPedidoGerencia,
     Empresa,
     Expediente,
     Miembro,
     PagoERP,
+    PlanLiquidacion,
     PedidoGerencia,
 )
 
@@ -25,6 +28,161 @@ router = APIRouter(prefix="/responsable", tags=["responsable"])
 class DistribucionIn(BaseModel):
     usuario_id: uuid.UUID
     monto: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+
+
+class ProgramarUsuarioIn(BaseModel):
+    usuario_id: uuid.UUID
+    desde: date
+    hasta: date
+    moneda: str = Field(pattern="^(PEN|USD)$")
+
+
+def _usuario_del_responsable(
+    session: SessionDep, tenant_id: uuid.UUID, responsable_id: uuid.UUID, usuario_id: uuid.UUID
+) -> Miembro:
+    usuario = session.get(Miembro, usuario_id)
+    if (
+        usuario is None or usuario.tenant_id != tenant_id
+        or usuario.responsable_id != responsable_id
+        or usuario.rol != RolMiembro.USUARIO
+        or not usuario.activo or usuario.deleted_at is not None
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Usuario fuera del equipo")
+    return usuario
+
+
+def _base_pago_usuario(
+    session: SessionDep, tenant_id: uuid.UUID, datos: ProgramarUsuarioIn
+) -> tuple[Decimal, Decimal, Decimal, uuid.UUID | None]:
+    if datos.hasta < datos.desde:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Fechas inválidas")
+    plan = session.scalar(
+        select(PlanLiquidacion)
+        .where(
+            PlanLiquidacion.tenant_id == tenant_id,
+            PlanLiquidacion.usuario_id == datos.usuario_id,
+            PlanLiquidacion.activo.is_(True),
+            PlanLiquidacion.vigencia_desde <= datos.desde,
+            (
+                PlanLiquidacion.vigencia_hasta.is_(None)
+                | (PlanLiquidacion.vigencia_hasta >= datos.hasta)
+            ),
+        )
+        .order_by(PlanLiquidacion.vigencia_desde.desc())
+        .limit(1)
+    )
+    if plan is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "No existe un plan vigente que cubra todo el periodo",
+        )
+    produccion = Decimal(
+        session.scalar(
+            select(func.coalesce(func.sum(Expediente.importe_total), 0)).where(
+                Expediente.tenant_id == tenant_id,
+                Expediente.usuario_id == datos.usuario_id,
+                Expediente.deleted_at.is_(None),
+                Expediente.moneda == datos.moneda,
+                Expediente.fecha_emision >= datos.desde,
+                Expediente.fecha_emision <= datos.hasta,
+            )
+        ) or 0
+    )
+    tasa = Decimal(plan.porcentaje)
+    bruto = (produccion * tasa / Decimal("100")).quantize(Decimal("0.01"))
+    return produccion, tasa, bruto, plan.id
+
+
+@router.post("/pagos/cotizar")
+def cotizar_pago_usuario(
+    datos: ProgramarUsuarioIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str]:
+    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
+    _usuario_del_responsable(session, tenant_id, auth.miembro_id, datos.usuario_id)
+    produccion, tasa, bruto, _ = _base_pago_usuario(session, tenant_id, datos)
+    return {
+        "produccion": str(produccion), "porcentaje": str(tasa),
+        "bruto": str(bruto), "moneda": datos.moneda,
+    }
+
+
+@router.post("/pagos/programar", status_code=status.HTTP_201_CREATED)
+def programar_pago_usuario(
+    datos: ProgramarUsuarioIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str]:
+    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
+    _usuario_del_responsable(session, tenant_id, auth.miembro_id, datos.usuario_id)
+    anterior = session.scalar(
+        select(PagoERP.id).where(
+            PagoERP.tenant_id == tenant_id,
+            PagoERP.usuario_id == datos.usuario_id,
+            PagoERP.moneda == datos.moneda,
+            PagoERP.periodo_desde <= datos.hasta,
+            PagoERP.periodo_hasta >= datos.desde,
+        )
+    )
+    if anterior is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Existe una liquidación que se solapa")
+    produccion, tasa, bruto, plan_id = _base_pago_usuario(session, tenant_id, datos)
+    pago = PagoERP(
+        tenant_id=tenant_id,
+        usuario_id=datos.usuario_id,
+        plan_id=plan_id,
+        periodo_desde=datos.desde,
+        periodo_hasta=datos.hasta,
+        moneda=datos.moneda,
+        produccion_total=produccion,
+        porcentaje=tasa,
+        bruto=bruto,
+        adelantos=Decimal("0"),
+        ajustes=Decimal("0"),
+        saldo=bruto,
+        estado="PROGRAMADO",
+        conciliado=False,
+        creado_por_cuenta_id=auth.cuenta_id,
+    )
+    session.add(pago)
+    session.flush()
+    auditoria.registrar(
+        session, tenant_id, "PAGO_USUARIO_PROGRAMADO", "pago_erp", pago.id,
+        {"usuario_id": str(datos.usuario_id), "porcentaje": str(tasa), "saldo": str(bruto)},
+    )
+    session.commit()
+    return {"id": str(pago.id), "saldo": str(bruto)}
+
+
+@router.delete("/pagos/{pago_id}", status_code=status.HTTP_204_NO_CONTENT)
+def anular_pago_usuario(
+    pago_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> None:
+    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
+    pago = session.get(PagoERP, pago_id)
+    if pago is None or pago.tenant_id != tenant_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
+    _usuario_del_responsable(session, tenant_id, auth.miembro_id, pago.usuario_id)
+    if (
+        pago.estado != "PROGRAMADO" or pago.conciliado or pago.fecha_pago is not None
+        or pago.voucher_documento_id is not None or Decimal(pago.adelantos) != 0
+    ):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Liquidación ya aplicada o pagada")
+    auditoria.registrar(
+        session, tenant_id, "PAGO_USUARIO_PROGRAMACION_ANULADA", "pago_erp", pago.id,
+        {"usuario_id": str(pago.usuario_id), "saldo": str(pago.saldo)},
+    )
+    session.delete(pago)
+    session.commit()
 
 
 @router.post("/pedidos/{pedido_id}/distribuir")
@@ -203,7 +361,9 @@ def resumen_equipo(
         )
     pagos = [
         {
+            "id": str(p.id),
             "usuario_id": str(p.usuario_id),
+            "porcentaje": str(p.porcentaje),
             "periodo_desde": p.periodo_desde.isoformat(),
             "periodo_hasta": p.periodo_hasta.isoformat(),
             "moneda": p.moneda,
