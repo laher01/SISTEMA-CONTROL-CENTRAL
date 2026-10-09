@@ -59,7 +59,7 @@ const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = 
     a: "/secretaria",
     texto: "Control documental",
     icono: "▧",
-    roles: ["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA", "GERENTE"],
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA"],
   },
   {
     a: "/documentos",
@@ -188,7 +188,7 @@ export default function App() {
           <Route path="/subir" element={<Subir sesion={sesion} />} />
           <Route path="/registros" element={<Registros sesion={sesion} />} />
           <Route path="/chat" element={<Chat />} />
-          <Route path="/secretaria" element={<Secretaria />} />
+          <Route path="/secretaria" element={["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA"].includes(sesion.rol) ? <Secretaria /> : <Navigate to="/" replace />} />
           <Route path="/documentos" element={<Documentos sesion={sesion} />} />
           <Route path="/expedientes" element={<Expedientes sesion={sesion} />} />
           <Route path="/expedientes/:id" element={<ExpedienteDetalle />} />
