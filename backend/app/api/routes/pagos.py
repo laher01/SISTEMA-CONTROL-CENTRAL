@@ -622,6 +622,7 @@ def _resumen_pedido(
 
     return PedidoGerenciaOut(
         id=pedido.id,
+        responsable_id=pedido.responsable_id,
         cliente_id=pedido.cliente_id,
         cliente_ruc=cliente.ruc,
         cliente_razon_social=cliente.razon_social,
@@ -656,10 +657,23 @@ def crear_pedido_gerencia(
 ) -> PedidoGerenciaOut:
     _validar_acceso(auth.rol)
     cliente = _cliente_valido(session, tenant_id, datos.cliente_id)
+    if datos.responsable_id is not None:
+        responsable = session.get(Miembro, datos.responsable_id)
+        if (
+            responsable is None
+            or responsable.tenant_id != tenant_id
+            or responsable.rol != RolMiembro.RESPONSABLE
+            or not responsable.activo
+            or responsable.deleted_at is not None
+        ):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Responsable inválido")
+        if datos.modo_distribucion != "MANUAL":
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "El Responsable distribuye el pedido manualmente")
     periodo = datos.periodo_mes.replace(day=1)
     pedido = PedidoGerencia(
         tenant_id=tenant_id,
         cliente_id=cliente.id,
+        responsable_id=datos.responsable_id,
         periodo_mes=periodo,
         moneda=datos.moneda,
         monto_solicitado=datos.monto_solicitado,
@@ -679,7 +693,7 @@ def crear_pedido_gerencia(
             "Ya existe un Pedido de Gerencia para ese Cliente, mes y moneda",
         ) from exc
 
-    if pedido.modo_distribucion in {"SEMIASISTIDA", "AUTOMATICA"}:
+    if pedido.responsable_id is None and pedido.modo_distribucion in {"SEMIASISTIDA", "AUTOMATICA"}:
         _generar_distribucion_usuario(session, tenant_id, auth, pedido)
 
     auditoria.registrar(
@@ -737,6 +751,24 @@ def actualizar_pedido_gerencia(
 ) -> PedidoGerenciaOut:
     _validar_acceso(auth.rol)
     pedido = _pedido_valido(session, tenant_id, pedido_id)
+    if "responsable_id" in datos.model_fields_set:
+        nuevo = session.get(Miembro, datos.responsable_id) if datos.responsable_id else None
+        if datos.responsable_id is not None and (
+            nuevo is None or nuevo.tenant_id != tenant_id
+            or nuevo.rol != RolMiembro.RESPONSABLE or not nuevo.activo
+            or nuevo.deleted_at is not None
+        ):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Responsable inválido")
+        if pedido.responsable_id != datos.responsable_id:
+            tiene_asignaciones = session.scalar(select(AsignacionPedidoGerencia.id).where(
+                AsignacionPedidoGerencia.tenant_id == tenant_id,
+                AsignacionPedidoGerencia.pedido_id == pedido.id,
+            ))
+            if tiene_asignaciones is not None:
+                raise HTTPException(status.HTTP_409_CONFLICT, "Quite asignaciones anteriores antes de transferir")
+        pedido.responsable_id = datos.responsable_id
+    if pedido.responsable_id is not None and datos.modo_distribucion in {"SEMIASISTIDA", "AUTOMATICA"}:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Distribución reservada al Responsable")
     anterior = {
         "monto_solicitado": str(pedido.monto_solicitado),
         "modalidad": pedido.modalidad,
@@ -755,9 +787,11 @@ def actualizar_pedido_gerencia(
     if "observacion" in datos.model_fields_set:
         pedido.observacion = datos.observacion.strip() if datos.observacion else None
 
-    if datos.modo_distribucion in {"SEMIASISTIDA", "AUTOMATICA"} or (
-        datos.monto_solicitado is not None
-        and pedido.modo_distribucion in {"SEMIASISTIDA", "AUTOMATICA"}
+    if pedido.responsable_id is None and (
+        datos.modo_distribucion in {"SEMIASISTIDA", "AUTOMATICA"} or (
+            datos.monto_solicitado is not None
+            and pedido.modo_distribucion in {"SEMIASISTIDA", "AUTOMATICA"}
+        )
     ):
         _generar_distribucion_usuario(session, tenant_id, auth, pedido)
 
@@ -790,6 +824,8 @@ def agregar_asignacion_pedido(
 ) -> PedidoGerenciaOut:
     _validar_acceso(auth.rol)
     pedido = _pedido_valido(session, tenant_id, pedido_id)
+    if pedido.responsable_id is not None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "El pedido corresponde al Responsable asignado")
     usuario = _usuario_valido(session, tenant_id, datos.usuario_id)
 
     gestor = None
