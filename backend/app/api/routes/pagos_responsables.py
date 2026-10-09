@@ -127,8 +127,11 @@ def _calculo(
     if responsable_id is not None:
         consulta = consulta.where(usuario.responsable_id == responsable_id)
     consulta = consulta.group_by(
-        usuario.responsable_id, Empresa.id, Empresa.ruc,
-        Empresa.razon_social, Empresa.agente_retencion,
+        usuario.responsable_id,
+        Empresa.id,
+        Empresa.ruc,
+        Empresa.razon_social,
+        Empresa.agente_retencion,
     )
     agrupados = list(session.execute(consulta))
     ids_responsables = {r[0] for r in agrupados}
@@ -190,27 +193,31 @@ def _calculo(
             continue
         importe = Decimal(base)
         regla = reglas.get((rid, cid))
-        porcentaje = Decimal(regla.porcentaje) if regla else (
-            Decimal("3.0") if es_agente else Decimal("3.5")
+        porcentaje = (
+            Decimal(regla.porcentaje)
+            if regla
+            else (Decimal("3.0") if es_agente else Decimal("3.5"))
         )
         comision = _redondear(importe * porcentaje / Decimal("100"))
         pedido = pedidos.get((rid, cid), Decimal("0"))
         exceso = max(importe - pedido, Decimal("0"))
-        filas.append({
-            "responsable_id": str(rid),
-            "responsable_codigo": responsable.codigo,
-            "responsable_nombre": responsable.nombre,
-            "cliente_id": str(cid),
-            "cliente_ruc": ruc,
-            "cliente_nombre": empresa,
-            "agente_retencion": bool(es_agente),
-            "produccion": str(_redondear(importe)),
-            "porcentaje": str(porcentaje),
-            "porcentaje_personalizado": regla is not None,
-            "comision": str(comision),
-            "pedido": str(_redondear(pedido)),
-            "exceso": str(_redondear(exceso)),
-        })
+        filas.append(
+            {
+                "responsable_id": str(rid),
+                "responsable_codigo": responsable.codigo,
+                "responsable_nombre": responsable.nombre,
+                "cliente_id": str(cid),
+                "cliente_ruc": ruc,
+                "cliente_nombre": empresa,
+                "agente_retencion": bool(es_agente),
+                "produccion": str(_redondear(importe)),
+                "porcentaje": str(porcentaje),
+                "porcentaje_personalizado": regla is not None,
+                "comision": str(comision),
+                "pedido": str(_redondear(pedido)),
+                "exceso": str(_redondear(exceso)),
+            }
+        )
         total_produccion += importe
         total_comisiones += comision
     return {
@@ -276,8 +283,11 @@ def modificar_comision(
         regla.porcentaje = datos.porcentaje
         regla.actualizado_por_cuenta_id = auth.cuenta_id
     auditoria.registrar(
-        session, tenant_id, "COMISION_RESPONSABLE_MODIFICADA",
-        "comision_responsable", regla.id,
+        session,
+        tenant_id,
+        "COMISION_RESPONSABLE_MODIFICADA",
+        "comision_responsable",
+        regla.id,
         {
             "responsable_id": str(datos.responsable_id),
             "cliente_id": str(datos.cliente_id),
@@ -310,16 +320,16 @@ def historial_comision(
     if regla is None:
         return []
     eventos = session.scalars(
-        select(Auditoria).where(
+        select(Auditoria)
+        .where(
             Auditoria.tenant_id == tenant_id,
             Auditoria.entidad == "comision_responsable",
             Auditoria.entidad_id == regla.id,
-        ).order_by(Auditoria.created_at.desc()).limit(100)
+        )
+        .order_by(Auditoria.created_at.desc())
+        .limit(100)
     )
-    return [
-        {"fecha": e.created_at.isoformat(), "datos": e.datos or {}}
-        for e in eventos
-    ]
+    return [{"fecha": e.created_at.isoformat(), "datos": e.datos or {}} for e in eventos]
 
 
 @router.post("/programar", status_code=status.HTTP_201_CREATED)
@@ -333,7 +343,12 @@ def programar(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "No puede programar pagos a Responsables")
     _responsable(session, tenant_id, datos.responsable_id)
     resumen_calculado = _calculo(
-        session, tenant_id, datos.desde, datos.hasta, datos.moneda, datos.responsable_id,
+        session,
+        tenant_id,
+        datos.desde,
+        datos.hasta,
+        datos.moneda,
+        datos.responsable_id,
     )
     filas = resumen_calculado["filas"]
     assert isinstance(filas, list)
@@ -372,7 +387,11 @@ def programar(
         session.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "El pago ya existe") from exc
     auditoria.registrar(
-        session, tenant_id, "PAGO_RESPONSABLE_PROGRAMADO", "pago_responsable", pago.id,
+        session,
+        tenant_id,
+        "PAGO_RESPONSABLE_PROGRAMADO",
+        "pago_responsable",
+        pago.id,
         {
             "responsable_id": str(datos.responsable_id),
             "periodo": f"{datos.desde} / {datos.hasta}",
@@ -394,9 +413,7 @@ def listar_pagos(
     consulta = select(PagoResponsableERP).where(PagoResponsableERP.tenant_id == tenant_id)
     if auth.rol == RolMiembro.RESPONSABLE:
         consulta = consulta.where(PagoResponsableERP.responsable_id == auth.miembro_id)
-    pagos = session.scalars(
-        consulta.order_by(PagoResponsableERP.created_at.desc()).limit(150)
-    )
+    pagos = session.scalars(consulta.order_by(PagoResponsableERP.created_at.desc()).limit(150))
     return [
         {
             "id": str(p.id),
@@ -434,7 +451,11 @@ def confirmar(
     pago.referencia_pago = datos.referencia_pago.strip()
     pago.pagado_por_cuenta_id = auth.cuenta_id
     auditoria.registrar(
-        session, tenant_id, "PAGO_RESPONSABLE_CONFIRMADO", "pago_responsable", pago.id,
+        session,
+        tenant_id,
+        "PAGO_RESPONSABLE_CONFIRMADO",
+        "pago_responsable",
+        pago.id,
         {
             "importe": str(pago.comision_total),
             "fecha_pago": datos.fecha_pago.isoformat(),
