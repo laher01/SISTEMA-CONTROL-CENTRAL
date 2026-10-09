@@ -8,12 +8,14 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     MetaData,
     Numeric,
     String,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -171,6 +173,17 @@ class Expediente(ConId, ConTenant, ConCreacion, Base):
     __table_args__ = (
         UniqueConstraint(
             "tenant_id", "receptor_id", "tipo_comprobante", "serie", "correlativo", "emisor_id"
+        ),
+        Index(
+            "uq_expedientes_rhe_identidad_activa",
+            "tenant_id",
+            "emisor_id",
+            "tipo_comprobante",
+            "serie",
+            "correlativo",
+            unique=True,
+            postgresql_where=text("tipo_comprobante = 'RHE' AND deleted_at IS NULL"),
+            sqlite_where=text("tipo_comprobante = 'RHE' AND deleted_at IS NULL"),
         ),
     )
 
