@@ -764,6 +764,60 @@ def listar_pedidos_gerencia(
     return [_resumen_pedido(session, tenant_id, pedido) for pedido in pedidos]
 
 
+class AnulacionPedidoIn(BaseModel):
+    motivo: str = Field(min_length=10, max_length=500)
+
+
+@router.post("/pedidos/{pedido_id}/anular", response_model=PedidoGerenciaOut)
+def anular_pedido_gerencia(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    pedido_id: uuid.UUID,
+    datos: AnulacionPedidoIn,
+) -> PedidoGerenciaOut:
+    """Anula sin borrado físico, con motivo y sin afectar pedidos ejecutados."""
+    _validar_acceso(auth.rol)
+    pedido = _pedido_valido(session, tenant_id, pedido_id)
+    if pedido.estado == "CANCELADO":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Pedido ya anulado")
+    if pedido.estado not in ("ACTIVO", "CERRADO"):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Estado incompatible con anulación")
+    tiene_asignaciones = session.scalar(
+        select(AsignacionPedidoGerencia.id).where(
+            AsignacionPedidoGerencia.tenant_id == tenant_id,
+            AsignacionPedidoGerencia.pedido_id == pedido.id,
+        )
+    )
+    if tiene_asignaciones is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "El pedido tiene asignaciones. Revise y revierta las distribuciones antes de anular.",
+        )
+    resumen = _resumen_pedido(session, tenant_id, pedido)
+    if resumen.monto_ejecutado != Decimal("0"):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "No se puede anular un pedido con ejecución. Requiere regularización contable.",
+        )
+    pedido.estado = "CANCELADO"
+    pedido.observacion = (
+        (pedido.observacion + " | " if pedido.observacion else "")
+        + "ANULACIÓN: "
+        + datos.motivo.strip()
+    )[:500]
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "PEDIDO_GERENCIA_ANULADO",
+        "pedido_gerencia",
+        pedido.id,
+        {"motivo": datos.motivo.strip(), "actor": auth.codigo},
+    )
+    session.commit()
+    return _resumen_pedido(session, tenant_id, pedido)
+
+
 @router.patch("/pedidos/{pedido_id}", response_model=PedidoGerenciaOut)
 def actualizar_pedido_gerencia(
     session: SessionDep,
@@ -774,6 +828,8 @@ def actualizar_pedido_gerencia(
 ) -> PedidoGerenciaOut:
     _validar_acceso(auth.rol)
     pedido = _pedido_valido(session, tenant_id, pedido_id)
+    if pedido.estado == "CANCELADO":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Pedido cancelado; no puede reabrirse")
     if "responsable_id" in datos.model_fields_set:
         nuevo = session.get(Miembro, datos.responsable_id) if datos.responsable_id else None
         if datos.responsable_id is not None and (

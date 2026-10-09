@@ -32,7 +32,7 @@ const MENU: { a: string; texto: string; roles: RolSesion[] }[] = [
   { a: "/mi-equipo/cobros", texto: "Cobros y clientes", roles: ["RESPONSABLE"] },
   { a: "/mi-equipo/pagos", texto: "Pago de Usuarios", roles: ["RESPONSABLE"] },
   { a: "/pago-gestores", texto: "Pago de Gestores", roles: ["USUARIO"] },
-  { a: "/comisiones", texto: "Simular comisiones", roles: ["SUPERADMIN", "ADMINISTRADOR", "RESPONSABLE", "USUARIO"] },
+  { a: "/comisiones", texto: "Simular comisiones", roles: ["RESPONSABLE", "USUARIO"] },
   {
     a: "/",
     texto: "Dashboard",
