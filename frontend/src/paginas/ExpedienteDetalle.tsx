@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import { enviarFormulario, urlArchivo, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
 import { Estado, Semaforo } from "../componentes";
@@ -32,11 +32,13 @@ export default function ExpedienteDetalle() {
             <dt>Emisor</dt>
             <dd>
               {datos.emisor.razon_social} ({datos.emisor.ruc})
+              {(!datos.emisor.clasificacion_proveedor || datos.emisor.tipo_relacion === "SIN_CLASIFICAR") && <span className="etiqueta">Sin clasificar · <Link to={`/empresas?pendientes=1&ruc=${datos.emisor.ruc}`}>Revisar empresa</Link></span>}
             </dd>
             <dt>Receptor</dt>
             <dd>
               {datos.receptor.razon_social} ({datos.receptor.ruc})
               {datos.pendiente_aprobacion && <span className="etiqueta">No autorizado</span>}
+              {datos.receptor.tipo_relacion === "SIN_CLASIFICAR" && <span className="etiqueta">Sin clasificar · <Link to={`/empresas?pendientes=1&ruc=${datos.receptor.ruc}`}>Revisar empresa</Link></span>}
             </dd>
             <dt>Emisión</dt>
             <dd>{formatearFecha(datos.fecha_emision)}</dd>
