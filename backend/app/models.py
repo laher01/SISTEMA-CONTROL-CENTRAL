@@ -471,6 +471,49 @@ class AsignacionPedidoGerencia(ConId, ConTenant, ConCreacion, Base):
     )
 
 
+
+class ComisionResponsableRegla(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "comisiones_responsable_reglas"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "responsable_id", "cliente_id"),
+    )
+
+    responsable_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    cliente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("empresas.id"), index=True)
+    porcentaje: Mapped[Decimal] = mapped_column(Numeric(7, 4))
+    creado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
+    actualizado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cuentas_acceso.id")
+    )
+    updated_at: Mapped[datetime] = mapped_column(default=ahora, onupdate=ahora)
+
+
+class PagoResponsableERP(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "pagos_responsables_erp"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "responsable_id", "periodo_desde", "periodo_hasta", "moneda"
+        ),
+    )
+
+    responsable_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    periodo_desde: Mapped[date] = mapped_column(Date)
+    periodo_hasta: Mapped[date] = mapped_column(Date)
+    moneda: Mapped[str] = mapped_column(String(3))
+    produccion_total: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    comision_total: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    detalle: Mapped[JsonDict] = mapped_column(default=dict)
+    estado: Mapped[str] = mapped_column(String(20), default="PROGRAMADO", index=True)
+    fecha_pago: Mapped[date | None] = mapped_column(Date)
+    observacion: Mapped[str | None] = mapped_column(String(500))
+    creado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cuentas_acceso.id")
+    )
+    pagado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_acceso.id")
+    )
+
+
 class PagoERP(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "pagos_erp"
     __table_args__ = (
