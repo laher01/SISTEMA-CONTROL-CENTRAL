@@ -1,15 +1,18 @@
 """Comisiones auditables y pagos exclusivamente a Responsables por Gerencia."""
 
 import uuid
+from pathlib import Path
+from typing import Literal
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
-from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
+from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.enums import RolMiembro
 from app.models import (
     Auditoria,
@@ -17,6 +20,7 @@ from app.models import (
     Empresa,
     Expediente,
     Miembro,
+    MovimientoPagoResponsable,
     PagoResponsableERP,
     PedidoGerencia,
 )
@@ -402,7 +406,22 @@ def listar_pagos(
     consulta = select(PagoResponsableERP).where(PagoResponsableERP.tenant_id == tenant_id)
     if auth.rol == RolMiembro.RESPONSABLE:
         consulta = consulta.where(PagoResponsableERP.responsable_id == auth.miembro_id)
-    pagos = session.scalars(consulta.order_by(PagoResponsableERP.created_at.desc()).limit(150))
+    pagos = list(session.scalars(consulta.order_by(PagoResponsableERP.created_at.desc()).limit(150)))
+    ids = [p.id for p in pagos]
+    abonos = {
+        pid: Decimal(str(total or 0))
+        for pid, total in session.execute(
+            select(
+                MovimientoPagoResponsable.pago_id,
+                func.sum(MovimientoPagoResponsable.monto),
+            )
+            .where(
+                MovimientoPagoResponsable.tenant_id == tenant_id,
+                MovimientoPagoResponsable.pago_id.in_(ids),
+            )
+            .group_by(MovimientoPagoResponsable.pago_id)
+        )
+    }
     return [
         {
             "id": str(p.id),
@@ -415,6 +434,11 @@ def listar_pagos(
             "estado": p.estado,
             "fecha_pago": p.fecha_pago.isoformat() if p.fecha_pago else None,
             "referencia_pago": p.referencia_pago,
+            "abonado": str(abonos.get(p.id, Decimal("0"))),
+            "saldo": str(max(Decimal("0"), p.comision_total - abonos.get(p.id, Decimal("0")))),
+            "fecha_reprogramada": (
+                p.fecha_reprogramada.isoformat() if p.fecha_reprogramada else None
+            ),
         }
         for p in pagos
     ]
@@ -454,3 +478,185 @@ def confirmar(
     )
     session.commit()
     return {"id": str(pago.id), "estado": pago.estado}
+
+
+class ReprogramarPagoIn(BaseModel):
+    fecha: date
+    motivo: str = Field(min_length=5, max_length=500)
+
+
+@router.post("/{pago_id}/reprogramar")
+def reprogramar_pago(
+    pago_id: uuid.UUID,
+    datos: ReprogramarPagoIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str]:
+    if auth.rol != RolMiembro.GERENTE:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Gerencia reprograma")
+    pago = session.get(PagoResponsableERP, pago_id)
+    if pago is None or pago.tenant_id != tenant_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
+    if pago.estado in ("PAGADO", "ANULADO"):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Liquidación cerrada")
+    pago.fecha_reprogramada = datos.fecha
+    pago.observacion = datos.motivo
+    pago.estado = "REPROGRAMADO"
+    auditoria.registrar(
+        session, tenant_id, "PAGO_RESPONSABLE_REPROGRAMADO",
+        "pago_responsable", pago.id,
+        {"fecha": datos.fecha.isoformat(), "motivo": datos.motivo, "actor": auth.codigo},
+    )
+    session.commit()
+    return {"id": str(pago.id), "estado": pago.estado}
+
+
+@router.post("/{pago_id}/abonar")
+async def abonar_responsable(
+    pago_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    settings: SettingsDep,
+    accion: Literal["TOTAL", "ADELANTO"] = Form(...),
+    monto: Decimal | None = Form(None),
+    fecha: date = Form(...),
+    referencia: str = Form(...),
+    comprobante: UploadFile = File(...),
+) -> dict[str, str]:
+    if auth.rol != RolMiembro.GERENTE:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Gerencia registra abonos")
+    pago = session.scalar(
+        select(PagoResponsableERP).where(
+            PagoResponsableERP.id == pago_id,
+            PagoResponsableERP.tenant_id == tenant_id,
+        ).with_for_update()
+    )
+    if pago is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
+    if pago.estado in ("PAGADO", "ANULADO"):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Liquidación cerrada")
+    abonado = Decimal(
+        session.scalar(
+            select(func.coalesce(func.sum(MovimientoPagoResponsable.monto), 0)).where(
+                MovimientoPagoResponsable.tenant_id == tenant_id,
+                MovimientoPagoResponsable.pago_id == pago.id,
+            )
+        ) or 0
+    )
+    saldo = pago.comision_total - abonado
+    valor = saldo if accion == "TOTAL" else monto
+    if valor is None or valor <= 0 or valor > saldo:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Importe fuera del saldo")
+    if valor.as_tuple().exponent < -2:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Importe con más de dos decimales")
+    referencia = referencia.strip()
+    if len(referencia) < 4 or len(referencia) > 160:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Referencia inválida")
+    repetido = session.scalar(
+        select(MovimientoPagoResponsable.id).where(
+            MovimientoPagoResponsable.pago_id == pago.id,
+            MovimientoPagoResponsable.referencia == referencia,
+        )
+    )
+    if repetido is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Referencia ya registrada")
+    tipos = {"image/png": ".png", "image/jpeg": ".jpg", "application/pdf": ".pdf"}
+    extension = tipos.get(comprobante.content_type or "")
+    if extension is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Solo PDF, JPG o PNG")
+    datos_archivo = await comprobante.read(10 * 1024 * 1024 + 1)
+    if not datos_archivo or len(datos_archivo) > 10 * 1024 * 1024:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Comprobante vacío o muy grande")
+    firma_valida = (
+        (extension == ".pdf" and datos_archivo.startswith(b"%PDF-"))
+        or (extension == ".png" and datos_archivo.startswith(b"\\x89PNG\\r\\n\\x1a\\n"))
+        or (extension == ".jpg" and datos_archivo.startswith(b"\\xff\\xd8\\xff"))
+    )
+    if not firma_valida:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Contenido de comprobante inválido")
+    carpeta = Path(settings.storage_dir) / "pagos-responsables" / str(tenant_id) / str(pago.id)
+    carpeta.mkdir(parents=True, exist_ok=True)
+    archivo = uuid.uuid4().hex + extension
+    ruta = carpeta / archivo
+    ruta.write_bytes(datos_archivo)
+    try:
+        movimiento = MovimientoPagoResponsable(
+            tenant_id=tenant_id, pago_id=pago.id, monto=valor, fecha=fecha,
+            referencia=referencia, comprobante_archivo=archivo,
+            creado_por_cuenta_id=auth.cuenta_id,
+        )
+        session.add(movimiento)
+        session.flush()
+        pago.estado = "PAGADO" if valor == saldo else "PARCIAL"
+        if pago.estado == "PAGADO":
+            pago.fecha_pago = fecha
+            pago.referencia_pago = referencia
+            pago.pagado_por_cuenta_id = auth.cuenta_id
+        auditoria.registrar(
+            session, tenant_id, "PAGO_RESPONSABLE_ABONADO",
+            "pago_responsable", pago.id,
+            {"monto": str(valor), "saldo": str(saldo - valor), "actor": auth.codigo},
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+        ruta.unlink(missing_ok=True)
+        raise
+    return {
+        "id": str(pago.id), "estado": pago.estado,
+        "abonado": str(abonado + valor), "saldo": str(saldo - valor),
+    }
+
+
+@router.get("/{pago_id}/movimientos")
+def movimientos_responsable(
+    pago_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> list[dict[str, str]]:
+    _ambito(auth)
+    pago = session.get(PagoResponsableERP, pago_id)
+    if pago is None or pago.tenant_id != tenant_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
+    _ambito(auth, pago.responsable_id)
+    movimientos = session.scalars(
+        select(MovimientoPagoResponsable).where(
+            MovimientoPagoResponsable.tenant_id == tenant_id,
+            MovimientoPagoResponsable.pago_id == pago_id,
+        ).order_by(MovimientoPagoResponsable.created_at)
+    )
+    return [
+        {"id": str(m.id), "fecha": m.fecha.isoformat(), "monto": str(m.monto),
+         "referencia": m.referencia}
+        for m in movimientos
+    ]
+
+
+@router.get("/{pago_id}/movimientos/{movimiento_id}/comprobante")
+def descargar_comprobante_responsable(
+    pago_id: uuid.UUID,
+    movimiento_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    settings: SettingsDep,
+) -> FileResponse:
+    _ambito(auth)
+    pago = session.get(PagoResponsableERP, pago_id)
+    if pago is None or pago.tenant_id != tenant_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
+    _ambito(auth, pago.responsable_id)
+    movimiento = session.get(MovimientoPagoResponsable, movimiento_id)
+    if (
+        movimiento is None or movimiento.tenant_id != tenant_id
+        or movimiento.pago_id != pago.id
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Movimiento no encontrado")
+    archivo = Path(settings.storage_dir) / "pagos-responsables" / str(tenant_id)
+    ruta = archivo / str(pago.id) / movimiento.comprobante_archivo
+    if not ruta.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Comprobante no disponible")
+    return FileResponse(ruta, filename=movimiento.comprobante_archivo)
