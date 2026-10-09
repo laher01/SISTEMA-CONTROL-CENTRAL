@@ -190,6 +190,7 @@ def extraer_campos(
     es_rhe = _es_rhe(texto)
     if es_rhe:
         _extraer_partes_rhe(texto, rucs, campos, fuente, factor)
+        _extraer_campos_fiscales_rhe(texto, campos, fuente, factor)
     else:
         _extraer_rucs_etiquetados(texto, campos, fuente, factor)
         _aplicar_parser_especializado(texto, formato, rucs, campos, fuente, factor)
@@ -650,6 +651,72 @@ def _extraer_rucs_etiquetados(
         if encontrado:
             campos[nombre] = CampoExtraido(
                 encontrado, min(0.92, 0.88 * factor), _contexto(texto, encontrado)
+            ).a_dict(fuente)
+
+
+def _extraer_campos_fiscales_rhe(
+    texto: str,
+    campos: dict[str, dict[str, object]],
+    fuente: str,
+    factor: float,
+) -> None:
+    """Lee RHE SUNAT incluso si pypdf separa etiquetas y valores en columnas.
+
+    Exige evidencia inequívoca: no inventa fechas ni importes por proximidad
+    a números como el RUC, la dirección o el artículo 33.
+    """
+    normalizado = _sin_tildes(texto).upper()
+    if "RECIBO POR HONORARIOS" not in normalizado:
+        return
+
+    # SUNAT puede separar «Nro:» de «E001-39» en distintas líneas.
+    serie_numero = re.search(r"\\b(E[0-9]{3})\\s*[-–—]\\s*0*([0-9]{1,8})\\b", texto, re.I)
+    if serie_numero:
+        evidencia = serie_numero.group(0)
+        campos["serie"] = CampoExtraido(
+            serie_numero.group(1).upper(), min(0.98, 0.98 * factor), evidencia
+        ).a_dict(fuente)
+        campos["correlativo"] = CampoExtraido(
+            str(int(serie_numero.group(2))), min(0.98, 0.98 * factor), evidencia
+        ).a_dict(fuente)
+
+    # Mes escrito con nombre: SUNAT también puede colocar la etiqueta al
+    # final del bloque de texto, lejos de «23 de Setiembre del 2026».
+    if "fecha_emision" not in campos:
+        patron_fecha = re.compile(
+            r"(?<!\\d)(\\d{1,2})\\s+(?:DE\\s+)?"
+            r"(ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|"
+            r"SEPTIEMBRE|SETIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE)"
+            r"\\s+(?:DEL?\\s+)?(20\\d{2})(?!\\d)",
+            re.IGNORECASE,
+        )
+        candidatos_fecha = []
+        for coincidencia in patron_fecha.finditer(_sin_tildes(texto)):
+            fecha = _normalizar_fecha_literal_es(
+                coincidencia.group(1), coincidencia.group(2), coincidencia.group(3)
+            )
+            if fecha:
+                candidatos_fecha.append((fecha, coincidencia.group(0)))
+        fechas_unicas = {valor for valor, _ in candidatos_fecha}
+        if len(fechas_unicas) == 1:
+            valor, evidencia = candidatos_fecha[0]
+            campos["fecha_emision"] = CampoExtraido(
+                valor, min(0.98, 0.94 * factor), evidencia
+            ).a_dict(fuente)
+
+    # En el cuerpo típico aparecen bruto, retención y neto. Nunca tomar la
+    # retención (0.00) como importe; si bruto y neto difieren, se usa bruto.
+    if "importe_total" not in campos:
+        patron_monto = re.compile(r"(?<![\\d.,])(?:\\d{1,3}(?:,\\d{3})+|\\d{1,8})\\.\\d{2}(?!\\d)")
+        montos = [(m.group(0), _normalizar_importe(m.group(0))) for m in patron_monto.finditer(texto)]
+        positivos = [(origen, valor) for origen, valor in montos if valor is not None and valor > 0]
+        cantidades = {valor for _, valor in positivos}
+        if len(cantidades) == 1 and (
+            "TOTAL POR HONORARIOS" in normalizado or "TOTAL NETO RECIBIDO" in normalizado
+        ):
+            origen, valor = positivos[0]
+            campos["importe_total"] = CampoExtraido(
+                format(valor, ".2f"), min(0.96, 0.94 * factor), origen
             ).a_dict(fuente)
 
 
