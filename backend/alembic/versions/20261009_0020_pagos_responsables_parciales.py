@@ -35,6 +35,7 @@ def upgrade() -> None:
         sa.Column("fecha", sa.Date(), nullable=False),
         sa.Column("referencia", sa.String(160), nullable=False),
         sa.Column("comprobante_archivo", sa.String(255), nullable=False),
+        sa.UniqueConstraint("pago_id", "referencia"),
         sa.Column(
             "creado_por_cuenta_id",
             sa.Uuid(),
