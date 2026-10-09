@@ -9,6 +9,7 @@ interface UsuarioResponsable {
   nombre: string;
   rol: string;
   activo: boolean;
+  porcentaje_produccion: string | null;
 }
 interface Equipo {
   usuarios: { id: string; codigo: string; nombre: string }[];
@@ -32,6 +33,14 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const [guardando, setGuardando] = useState(false);
   const [nombreNuevo, setNombreNuevo] = useState("");
   const [porcentajeNuevo, setPorcentajeNuevo] = useState("1.5");
+  const [tipoCodigo, setTipoCodigo] = useState<"AUTO" | "MANUAL">("AUTO");
+  const [codigoNuevo, setCodigoNuevo] = useState("");
+  const [edicion, setEdicion] = useState<UsuarioResponsable | null>(null);
+  const [nombreEditado, setNombreEditado] = useState("");
+  const [codigoEditado, setCodigoEditado] = useState("");
+  const [porcentajeEditado, setPorcentajeEditado] = useState("1.5");
+  const [errorEdicion, setErrorEdicion] = useState("");
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
   const [creandoUsuario, setCreandoUsuario] = useState(false);
   const [credencialNueva, setCredencialNueva] = useState<{ login: string; clave_temporal: string } | null>(null);
   const [errorAlta, setErrorAlta] = useState("");
@@ -45,16 +54,46 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
         "/api/v1/miembros/mis-usuarios", "POST", {
           nombre: nombreNuevo,
           porcentaje_produccion: porcentajeNuevo,
+          codigo: tipoCodigo === 'MANUAL' ? codigoNuevo.trim().toUpperCase() : null,
         },
       );
       setCredencialNueva(alta.credencial);
       setNombreNuevo("");
+      setCodigoNuevo("");
       recargar();
       recargarEquipo();
     } catch (error) {
       setErrorAlta(error instanceof Error ? error.message : String(error));
     } finally {
       setCreandoUsuario(false);
+    }
+  };
+
+  const editarUsuario = (u: UsuarioResponsable) => {
+    setEdicion(u);
+    setNombreEditado(u.nombre);
+    setCodigoEditado(u.codigo);
+    setPorcentajeEditado(u.porcentaje_produccion ?? "1.5");
+    setErrorEdicion("");
+  };
+  const guardarUsuario = async (evento: React.FormEvent<HTMLFormElement>) => {
+    evento.preventDefault();
+    if (!edicion) return;
+    setGuardandoEdicion(true);
+    setErrorEdicion("");
+    try {
+      await enviarJson(`/api/v1/miembros/mis-usuarios/${edicion.id}`, "PATCH", {
+        nombre: nombreEditado, codigo: codigoEditado.trim().toUpperCase(),
+        porcentaje_produccion: porcentajeEditado,
+      });
+      setEdicion(null);
+      recargar();
+      recargarEquipo();
+      setMensaje("Usuario actualizado correctamente.");
+    } catch (error) {
+      setErrorEdicion(error instanceof Error ? error.message : String(error));
+    } finally {
+      setGuardandoEdicion(false);
     }
   };
   const [usuarioPago, setUsuarioPago] = useState("");
@@ -126,7 +165,7 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
       {(error || errorEquipo) && <p role="alert">{error || errorEquipo}</p>}
       {pestana === "USUARIOS" && <section className="panel-configuracion">
         <h3>Crear Usuario de mi equipo</h3>
-        <p className="tenue">Se generará automáticamente un código y una clave inicial. El Usuario quedará asignado a tu responsabilidad.</p>
+        <p className="tenue">Elige un código automático o manual. Se generará una clave temporal inicial.</p>
         <form onSubmit={(e) => void crearUsuario(e)} className="filtros">
           <label>Nombre completo
             <input value={nombreNuevo} required minLength={3} maxLength={200}
@@ -137,6 +176,12 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
             <input type="number" min="0" max="100" step="0.0001" required
               value={porcentajeNuevo} onChange={(e) => setPorcentajeNuevo(e.target.value)} />
           </label>
+          <label>Tipo de código<select value={tipoCodigo} onChange={(e) => setTipoCodigo(e.target.value as "AUTO" | "MANUAL")}>
+            <option value="AUTO">Automático</option><option value="MANUAL">Manual</option>
+          </select></label>
+          {tipoCodigo === "MANUAL" && <label>Código manual<input value={codigoNuevo}
+            required minLength={3} maxLength={50} pattern="[A-Za-z0-9][A-Za-z0-9_-]{2,49}"
+            onChange={(e) => setCodigoNuevo(e.target.value.toUpperCase())} placeholder="JOSE01" /></label>}
           <button type="submit" disabled={creandoUsuario}>
             {creandoUsuario ? "Creando…" : "Crear Usuario"}
           </button>
@@ -150,12 +195,30 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
           <button type="button" onClick={() => setCredencialNueva(null)}>Ocultar credencial</button>
         </div>}
       </section>}
+
+      {pestana === "USUARIOS" && edicion && <section className="panel-configuracion">
+        <h3>Editar Usuario — {edicion.codigo}</h3>
+        <form className="filtros" onSubmit={(e) => void guardarUsuario(e)}>
+          <label>Nombre completo<input required minLength={3} maxLength={200} value={nombreEditado}
+            onChange={(e) => setNombreEditado(e.target.value)} /></label>
+          <label>Código<input required minLength={3} maxLength={50}
+            pattern="[A-Za-z0-9][A-Za-z0-9_-]{2,49}" value={codigoEditado}
+            onChange={(e) => setCodigoEditado(e.target.value.toUpperCase())} /></label>
+          <label>Porcentaje de producción (%)<input type="number" required min="0" max="100" step="0.0001"
+            value={porcentajeEditado} onChange={(e) => setPorcentajeEditado(e.target.value)} /></label>
+          <button type="submit" disabled={guardandoEdicion}>{guardandoEdicion ? "Guardando…" : "Guardar cambios"}</button>
+          <button type="button" onClick={() => setEdicion(null)}>Cancelar</button>
+        </form>
+        {errorEdicion && <p role="alert">{errorEdicion}</p>}
+      </section>}
+      {pestana === "USUARIOS" && mensaje && <p role="status">{mensaje}</p>}
       {pestana === "USUARIOS" && <table>
-        <thead><tr><th>Código</th><th>Nombre</th><th>Estado</th><th>Clientes con expedientes</th></tr></thead>
+        <thead><tr><th>Código</th><th>Nombre</th><th>Estado</th><th>Clientes con expedientes</th><th>Acciones</th></tr></thead>
         <tbody>{(datos ?? []).map((u) => (
           <tr key={u.id}><td>{u.codigo}</td><td>{u.nombre}</td>
             <td>{u.activo ? "Activo" : "Inactivo"}</td>
             <td>{new Set(equipo?.clientes.filter((c) => c.usuario_id === u.id).map((c) => c.receptor_id) ?? []).size}</td>
+            <td><button type="button" onClick={() => editarUsuario(u)}>Editar</button></td>
           </tr>
         ))}</tbody>
       </table>}

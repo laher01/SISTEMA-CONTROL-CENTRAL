@@ -1,3 +1,4 @@
+import re
 import uuid
 from decimal import Decimal
 
@@ -125,6 +126,13 @@ def mis_usuarios_responsable(
 class AltaUsuarioResponsableIn(BaseModel):
     nombre: str
     porcentaje_produccion: Decimal | None = None
+    codigo: str | None = None
+
+
+class EditarUsuarioResponsableIn(BaseModel):
+    nombre: str
+    codigo: str
+    porcentaje_produccion: Decimal
 
 
 @router.post(
@@ -158,11 +166,11 @@ def crear_usuario_responsable(
         if datos.porcentaje_produccion is not None
         else Decimal("1.5000")
     )
-    if porcentaje < 0 or porcentaje > 100:
+    if not porcentaje.is_finite() or porcentaje < 0 or porcentaje > 100:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Porcentaje inválido")
     usuario = Miembro(
         tenant_id=tenant_id,
-        codigo=codigo_automatico(session, tenant_id, nombre, RolMiembro.USUARIO),
+        codigo=(validar_codigo_manual(datos.codigo) if datos.codigo is not None else codigo_automatico(session, tenant_id, nombre, RolMiembro.USUARIO)),
         nombre=nombre,
         rol=RolMiembro.USUARIO,
         responsable_id=responsable.id,
@@ -184,6 +192,48 @@ def crear_usuario_responsable(
         miembro=MiembroOut.model_validate(usuario),
         credencial=CredencialTemporalOut(login=usuario.codigo, clave_temporal=temporal),
     )
+
+
+
+def validar_codigo_manual(valor: str) -> str:
+    codigo = valor.strip().upper()
+    if not re.fullmatch(r"[A-Z0-9][A-Z0-9_-]{2,49}", codigo):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Código manual inválido (3-50 caracteres)")
+    return codigo
+
+
+@router.patch("/mis-usuarios/{usuario_id}", response_model=MiembroOut)
+def editar_usuario_responsable(
+    usuario_id: uuid.UUID,
+    datos: EditarUsuarioResponsableIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> Miembro:
+    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
+    usuario = session.get(Miembro, usuario_id)
+    if (usuario is None or usuario.tenant_id != tenant_id
+        or usuario.responsable_id != auth.miembro_id
+        or usuario.rol != RolMiembro.USUARIO or usuario.deleted_at is not None):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuario no encontrado en tu equipo")
+    nombre = " ".join(datos.nombre.split())
+    if not 3 <= len(nombre) <= 200:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Nombre inválido")
+    if not datos.porcentaje_produccion.is_finite() or not 0 <= datos.porcentaje_produccion <= 100:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Porcentaje inválido")
+    codigo = validar_codigo_manual(datos.codigo)
+    try:
+        if codigo != usuario.codigo:
+            actualizar_login_cuenta(session, tenant_id, codigo, miembro_id=usuario.id)
+        usuario.codigo = codigo
+        usuario.nombre = nombre
+        usuario.porcentaje_produccion = datos.porcentaje_produccion
+        session.commit()
+    except (IntegrityError, ValueError) as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Código/login ya existe") from exc
+    return usuario
 
 
 @router.put("/{usuario_id}/responsable", response_model=MiembroOut)
