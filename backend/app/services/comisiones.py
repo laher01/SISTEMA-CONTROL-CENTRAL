@@ -30,12 +30,14 @@ def calcular_comisiones_por_receptor(
         comision = (monto * tasa / Decimal("100")).quantize(CENTIMO, rounding=ROUND_HALF_UP)
         produccion_total += monto
         comision_total += comision
-        detalle.append({
-            "receptor_id": str(receptor_id),
-            "produccion": str(monto),
-            "porcentaje": str(tasa),
-            "comision": str(comision),
-        })
+        detalle.append(
+            {
+                "receptor_id": str(receptor_id),
+                "produccion": str(monto),
+                "porcentaje": str(tasa),
+                "comision": str(comision),
+            }
+        )
     return {
         "total_produccion": produccion_total.quantize(CENTIMO),
         "comision_total": comision_total,
