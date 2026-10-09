@@ -802,3 +802,58 @@ button.peligro {
   .ruta-personas { display: grid; gap: 0.32rem; }
   .ruta-flecha { display: none; }
 }
+
+/* Barra lateral compacta, modo automático al pasar el mouse o manual con botón. */
+.menu-ajustable {
+  width: 64px;
+  transition: width 180ms ease;
+  overflow-x: hidden;
+  position: relative;
+  z-index: 20;
+}
+.menu-ajustable.menu-abierto { width: 240px; }
+.menu-ajustable .barra-controles {
+  min-height: 39px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.7rem;
+  margin-bottom: 0.7rem;
+}
+.menu-ajustable .barra-toggle {
+  flex-shrink: 0;
+  width: 40px;
+  height: 36px;
+  background: transparent;
+  border: 1px solid #ffffff80;
+  color: white;
+  font-size: 1.2rem;
+}
+.menu-ajustable .barra-opciones { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.menu-ajustable .barra-opciones label { font-size: 0.65rem; color: #e1eefd; }
+.menu-ajustable .barra-opciones select { max-width: 148px; padding: 0.2rem; font-size: 0.75rem; }
+.menu-ajustable.menu-cerrado .barra-texto,
+.menu-ajustable.menu-cerrado .barra-opciones { display: none; }
+.menu-ajustable nav a {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 42px;
+  white-space: nowrap;
+  padding: 0.6rem 0.95rem;
+}
+.menu-ajustable .menu-icono { display: inline-flex; width: 30px; justify-content: center; flex-shrink: 0; font-size: 1.2rem; }
+.menu-ajustable.menu-cerrado nav a { padding-left: 0.75rem; }
+.menu-ajustable .cerrar-sesion { display: flex; align-items: center; white-space: nowrap; gap: 0.3rem; }
+.menu-ajustable.menu-cerrado .cerrar-sesion { margin-left: 0.75rem; padding: 0.4rem 0.7rem; }
+@media (max-width: 760px) {
+  .menu-ajustable { width: 100%; }
+  .menu-ajustable.menu-cerrado { width: 100%; }
+  .menu-ajustable.menu-abierto { width: 100%; }
+  .menu-ajustable nav { flex-direction: column; }
+  .menu-ajustable.menu-cerrado nav { flex-direction: row; flex-wrap: wrap; }
+  .menu-ajustable.menu-cerrado nav a { min-width: 48px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .menu-ajustable { transition: none; }
+}
