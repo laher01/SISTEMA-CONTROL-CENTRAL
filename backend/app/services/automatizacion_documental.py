@@ -5,11 +5,11 @@ los campos de identidad fiscal superan los umbrales configurados. Los casos
 ambiguos permanecen en la bandeja de revisión con motivos explícitos.
 """
 
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
-import re
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
