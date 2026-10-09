@@ -16,6 +16,18 @@ interface Equipo {
   pedidos: { id: string; cliente: string; ruc: string; periodo: string; moneda: string; monto_solicitado: string; monto_asignado: string; pendiente_distribuir: string; estado: string; asignaciones: { usuario_id: string; monto: string }[] }[];
   pagos: { id: string; porcentaje: string; usuario_id: string; periodo_desde: string; periodo_hasta: string; moneda: string; produccion: string; bruto: string; adelantos: string; saldo: string; estado: string }[];
 }
+interface SaldoPendiente { id: string; periodo_mes: string; moneda: string; monto: string; detalle: string }
+interface AdelantoPendiente { id: string; fecha: string; moneda: string; monto: string; descripcion: string }
+interface LiquidacionUsuario {
+  id: string; periodo_desde: string; periodo_hasta: string; moneda: string;
+  produccion_total: string; porcentaje: string; bruto: string; adelantos: string;
+  saldo: string; estado: string; observacion_adelantos: string; referencia_pago: string;
+}
+interface CotizacionUsuario {
+  produccion: string; saldos_agregados: string; base_global: string;
+  porcentaje: string; bruto: string; adelantos: string; neto: string;
+  adelantos_pendientes: number;
+}
 type Pestana = "USUARIOS" | "PEDIDOS" | "COBROS" | "PAGOS";
 
 export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?: Pestana }) {
@@ -60,13 +72,57 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const [usuarioPago, setUsuarioPago] = useState("");
   const [desdePago, setDesdePago] = useState(new Date().toISOString().slice(0, 7) + "-01");
   const [hastaPago, setHastaPago] = useState(new Date().toISOString().slice(0, 10));
-  const [cotizacion, setCotizacion] = useState<{ produccion: string; porcentaje: string; bruto: string } | null>(null);
+  const [cotizacion, setCotizacion] = useState<CotizacionUsuario | null>(null);
+  const [porcentajeManual, setPorcentajeManual] = useState("");
+  const [saldosSeleccionados, setSaldosSeleccionados] = useState<string[]>([]);
+  const [adelantosSeleccionados, setAdelantosSeleccionados] = useState<string[]>([]);
+  const [observacionAdelantos, setObservacionAdelantos] = useState("");
+  const [saldoMes, setSaldoMes] = useState(new Date().toISOString().slice(0, 7));
+  const [saldoMonto, setSaldoMonto] = useState("");
+  const [saldoDetalle, setSaldoDetalle] = useState("");
+  const [fechaConfirmacion, setFechaConfirmacion] = useState(new Date().toISOString().slice(0, 10));
+  const [referenciaConfirmacion, setReferenciaConfirmacion] = useState("");
+  const saldosPendientes = useDatos<SaldoPendiente[]>(
+    usuarioPago ? "/api/v1/responsable/pagos/saldos?usuario_id=" + usuarioPago : null,
+  );
+  const adelantosPendientes = useDatos<AdelantoPendiente[]>(
+    usuarioPago ? "/api/v1/responsable/pagos/adelantos?usuario_id=" + usuarioPago : null,
+  );
+  const liquidaciones = useDatos<LiquidacionUsuario[]>(
+    usuarioPago ? "/api/v1/responsable/pagos/liquidaciones?usuario_id=" + usuarioPago : null,
+  );
   const [errorPago, setErrorPago] = useState("");
-  const parametrosPago = { usuario_id: usuarioPago, desde: desdePago, hasta: hastaPago, moneda };
+  const parametrosPago = {
+    usuario_id: usuarioPago, desde: desdePago, hasta: hastaPago, moneda,
+    saldo_ids: saldosSeleccionados, adelanto_ids: adelantosSeleccionados,
+    porcentaje_manual: porcentajeManual.trim() ? porcentajeManual : null,
+    observacion_adelantos: observacionAdelantos.trim() || null,
+  };
+  const crearSaldo = async () => {
+    try {
+      await enviarJson("/api/v1/responsable/pagos/saldos", "POST", {
+        usuario_id: usuarioPago, periodo_mes: saldoMes + "-01", moneda,
+        monto: saldoMonto, detalle: saldoDetalle.trim(),
+      });
+      setSaldoMonto(""); setSaldoDetalle("");
+      saldosPendientes.recargar();
+      setCotizacion(null);
+      setMensaje("Saldo mensual registrado con trazabilidad.");
+    } catch (e) { setErrorPago(String(e)); }
+  };
+  const confirmarLiquidacion = async (id: string) => {
+    try {
+      await enviarJson("/api/v1/responsable/pagos/" + id + "/confirmar", "POST", {
+        fecha_pago: fechaConfirmacion, referencia_pago: referenciaConfirmacion.trim(),
+      });
+      liquidaciones.recargar(); recargarEquipo();
+      setReferenciaConfirmacion(""); setMensaje("Pago confirmado con referencia.");
+    } catch (e) { setErrorPago(String(e)); }
+  };
   const cotizarPago = async () => {
     setCotizacion(null); setErrorPago("");
     try {
-      setCotizacion(await enviarJson<{ produccion: string; porcentaje: string; bruto: string }>(
+      setCotizacion(await enviarJson<CotizacionUsuario>(
         "/api/v1/responsable/pagos/cotizar", "POST", parametrosPago,
       ));
     } catch (e) { setErrorPago(String(e)); }
@@ -75,14 +131,15 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
     setErrorPago("");
     try {
       await enviarJson("/api/v1/responsable/pagos/programar", "POST", parametrosPago);
-      recargarEquipo(); setCotizacion(null); setMensaje("Pago programado.");
+      recargarEquipo(); liquidaciones.recargar(); saldosPendientes.recargar(); adelantosPendientes.recargar();
+      setSaldosSeleccionados([]); setAdelantosSeleccionados([]); setCotizacion(null); setMensaje("Liquidación programada.");
     } catch (e) { setErrorPago(String(e)); }
   };
   const anularPago = async (id: string) => {
     if (!window.confirm("¿Anular programación pendiente? La auditoría conservará el movimiento.")) return;
     try {
       await eliminar("/api/v1/responsable/pagos/" + id);
-      recargarEquipo(); setMensaje("Programación anulada.");
+      recargarEquipo(); liquidaciones.recargar(); saldosPendientes.recargar(); adelantosPendientes.recargar(); setMensaje("Programación anulada.");
     } catch (e) { setErrorPago(String(e)); }
   };
   const distribuir = async (pedidoId: string) => {
@@ -222,7 +279,71 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
           <label>Hasta <input type="date" value={hastaPago} onChange={(e) => { setHastaPago(e.target.value); setCotizacion(null); }} /></label>
           <button type="button" disabled={!usuarioPago} onClick={() => void cotizarPago()}>Calcular pago</button>
         </div>
-        {cotizacion && <p>Producción: {formatearMonto(moneda, cotizacion.produccion)} · Porcentaje: {cotizacion.porcentaje}% · <strong>Importe: {formatearMonto(moneda, cotizacion.bruto)}</strong> <button type="button" onClick={() => void programarPago()}>Programar</button></p>}
+        {usuarioPago && <>
+          <h4>Saldos de compras pendientes por mes</h4>
+          <div className="filtros">
+            <label>Mes <input type="month" value={saldoMes}
+              onChange={(e) => setSaldoMes(e.target.value)} /></label>
+            <label>Monto <input type="number" min="0.01" step="0.01" value={saldoMonto}
+              onChange={(e) => setSaldoMonto(e.target.value)} /></label>
+            <label>Detalle <input value={saldoDetalle} maxLength={500}
+              onChange={(e) => setSaldoDetalle(e.target.value)} /></label>
+            <button type="button" disabled={!saldoMonto || saldoDetalle.trim().length < 8}
+              onClick={() => void crearSaldo()}>Agregar saldo</button>
+          </div>
+          {(saldosPendientes.datos ?? []).filter((s) => s.moneda === moneda).map((s) =>
+            <label key={s.id} className="bloque">
+              <input type="checkbox" checked={saldosSeleccionados.includes(s.id)}
+                onChange={(e) => { setCotizacion(null); setSaldosSeleccionados((v) =>
+                  e.target.checked ? [...v, s.id] : v.filter((x) => x !== s.id)); }} />
+              {s.periodo_mes.slice(0, 7)} · {s.detalle} · {formatearMonto(moneda, s.monto)}
+            </label>
+          )}
+          <h4>Adelantos pendientes: seleccionar los que se descontarán</h4>
+          {(adelantosPendientes.datos ?? []).filter((a) => a.moneda === moneda).map((a) =>
+            <label key={a.id} className="bloque">
+              <input type="checkbox" checked={adelantosSeleccionados.includes(a.id)}
+                onChange={(e) => { setCotizacion(null); setAdelantosSeleccionados((v) =>
+                  e.target.checked ? [...v, a.id] : v.filter((x) => x !== a.id)); }} />
+              {a.fecha} · {a.descripcion} · {formatearMonto(moneda, a.monto)}
+            </label>
+          )}
+          <label>Observación de adelantos no descontados
+            <input value={observacionAdelantos} maxLength={500}
+              onChange={(e) => setObservacionAdelantos(e.target.value)}
+              placeholder="Motivo para dejar adelantos pendientes" />
+          </label>
+          <label>% de producción (vacío = asignado al Usuario)
+            <input type="number" min="0" max="100" step="0.0001"
+              value={porcentajeManual} onChange={(e) => { setPorcentajeManual(e.target.value); setCotizacion(null); }}
+              placeholder="Porcentaje predeterminado" />
+          </label>
+        </>}
+        {cotizacion && <p>
+          Periodo: {desdePago} al {hastaPago} · Producción: {formatearMonto(moneda, cotizacion.produccion)}
+          {" · "}Saldos seleccionados: {formatearMonto(moneda, cotizacion.saldos_agregados)}
+          {" · "}Base global: {formatearMonto(moneda, cotizacion.base_global)}
+          {" · "}Porcentaje: {cotizacion.porcentaje}%
+          {" · "}Bruto: {formatearMonto(moneda, cotizacion.bruto)}
+          {" · "}Adelantos: {formatearMonto(moneda, cotizacion.adelantos)}
+          {" · "}<strong>Neto: {formatearMonto(moneda, cotizacion.neto)}</strong>
+          <button type="button" onClick={() => void programarPago()}>Programar</button>
+        </p>}
+        <h4>Confirmar pagos programados</h4>
+        <div className="filtros">
+          <label>Fecha <input type="date" value={fechaConfirmacion}
+            onChange={(e) => setFechaConfirmacion(e.target.value)} /></label>
+          <label>Referencia de pago
+            <input value={referenciaConfirmacion} onChange={(e) => setReferenciaConfirmacion(e.target.value)}
+              placeholder="Voucher o referencia bancaria" />
+          </label>
+        </div>
+        {(liquidaciones.datos ?? []).filter((p) => p.moneda === moneda).map((p) => <p key={p.id}>
+          {p.periodo_desde}–{p.periodo_hasta} · {p.estado} · Neto {formatearMonto(moneda, p.saldo)}
+          {p.estado === "PROGRAMADO" && <button type="button"
+            disabled={referenciaConfirmacion.trim().length < 4}
+            onClick={() => void confirmarLiquidacion(p.id)}>Confirmar pago</button>}
+        </p>)}
         {errorPago && <p role="alert">{errorPago}</p>}
         {mensaje && <p role="status">{mensaje}</p>}
         <table><thead><tr><th>Usuario</th><th>Desde</th><th>Hasta</th><th>Producción</th><th>%</th><th>Bruto</th><th>Adelantos</th><th>Saldo</th><th>Estado</th><th>Acción</th></tr></thead>
