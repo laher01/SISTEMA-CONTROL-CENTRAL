@@ -406,7 +406,9 @@ def listar_pagos(
     consulta = select(PagoResponsableERP).where(PagoResponsableERP.tenant_id == tenant_id)
     if auth.rol == RolMiembro.RESPONSABLE:
         consulta = consulta.where(PagoResponsableERP.responsable_id == auth.miembro_id)
-    pagos = list(session.scalars(consulta.order_by(PagoResponsableERP.created_at.desc()).limit(150)))
+    pagos = list(
+        session.scalars(consulta.order_by(PagoResponsableERP.created_at.desc()).limit(150))
+    )
     ids = [p.id for p in pagos]
     abonos = {
         pid: Decimal(str(total or 0))
@@ -560,7 +562,9 @@ async def abonar_responsable(
     if valor is None or valor <= 0 or valor > saldo:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Importe fuera del saldo")
     if valor != valor.quantize(CENTIMO):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Importe con más de dos decimales")
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Importe con más de dos decimales"
+        )
     referencia = referencia.strip()
     if len(referencia) < 4 or len(referencia) > 160:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Referencia inválida")
@@ -585,7 +589,9 @@ async def abonar_responsable(
         or (extension == ".jpg" and datos_archivo.startswith(b"\\xff\\xd8\\xff"))
     )
     if not firma_valida:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Contenido de comprobante inválido")
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Contenido de comprobante inválido"
+        )
     carpeta = Path(settings.storage_dir) / "pagos-responsables" / str(tenant_id) / str(pago.id)
     carpeta.mkdir(parents=True, exist_ok=True)
     archivo = uuid.uuid4().hex + extension
