@@ -192,8 +192,7 @@ def actualizar(
             )
 
     if miembro.rol == RolMiembro.RESPONSABLE and (
-        (datos.rol is not None and datos.rol != RolMiembro.RESPONSABLE)
-        or datos.activo is False
+        (datos.rol is not None and datos.rol != RolMiembro.RESPONSABLE) or datos.activo is False
     ):
         asignados = session.scalar(
             select(Miembro.id).where(
