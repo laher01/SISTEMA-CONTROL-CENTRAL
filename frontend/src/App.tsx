@@ -1,4 +1,4 @@
-import { NavLink, Route, Routes } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 
 import { enviarJson, useDatos } from "./api";
 import NexusFlotante from "./componentes/NexusFlotante";
@@ -143,6 +143,7 @@ export default function App() {
       <main className="contenido">
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/ingresar" element={<Navigate to="/" replace />} />
           <Route path="/subir" element={<Subir sesion={sesion} />} />
           <Route path="/registros" element={<Registros sesion={sesion} />} />
           <Route path="/chat" element={<Chat />} />
