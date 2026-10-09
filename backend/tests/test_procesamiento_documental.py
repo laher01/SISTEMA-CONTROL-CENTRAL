@@ -394,3 +394,47 @@ Total por Honorarios : 1,500.00"""
     assert isinstance(campos, dict)
     assert campos["ruc_emisor"]["valor"] == "10753246920"
     assert campos["razon_social_emisor"]["valor"] == "AYALA AREVALO ELVIS EDUARDO"
+
+
+@pytest.mark.parametrize(
+    ("numero", "receptor", "ruc_receptor", "dia"),
+    [
+        ("37", "MAIK FISHING SOCIEDAD ANONIMA CERRADA", "20609762030", "23"),
+        ("38", "INVERSIONES YATAMURI E.I.R.L.", "20492560601", "24"),
+        ("39", "FRUTTI DEL PAESE E.I.R.L.", "20611909234", "23"),
+    ],
+)
+def test_rhe_sunat_columnas_desordenadas_tres_recibos(
+    numero: str, receptor: str, ruc_receptor: str, dia: str
+) -> None:
+    # Simula texto que pypdf extrae por orden interno de bloques PDF:
+    # fecha/total separados de sus respectivas etiquetas.
+    texto = f"""RECIBO POR HONORARIOS ELECTRONICO
+R.U.C. 10753246920
+Nro:
+E001- {numero}
+AYALA AREVALO ELVIS EDUARDO
+Recibí de: {receptor}
+Identificado con RUC número {ruc_receptor}
+La suma de: UN MIL QUINIENTOS Y 00/100 SOLES
+Por concepto de EL SERVICIO DE ASESORIA Y DOCUMENTACION-PAITA
+Inciso A DEL ARTICULO 33 DE LA LEY DEL IMPUESTO A LA RENTA
+{dia} de Setiembre del 2026
+1,500.00
+(0.00)
+1,500.00
+SOLES
+Total por honorarios:
+Retención (8 %) IR:
+Total Neto Recibido:
+Fecha de emisión"""
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    campos = resultado["campos"]
+    assert campos["serie"]["valor"] == "E001"
+    assert campos["correlativo"]["valor"] == numero
+    assert campos["ruc_emisor"]["valor"] == "10753246920"
+    assert campos["ruc_receptor"]["valor"] == ruc_receptor
+    assert campos["fecha_emision"]["valor"] == f"2026-09-{dia}"
+    assert campos["importe_total"]["valor"] == "1500.00"
+    assert campos["moneda"]["valor"] == "PEN"
