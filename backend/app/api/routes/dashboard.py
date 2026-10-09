@@ -5,15 +5,117 @@ from typing import Literal
 
 from fastapi import APIRouter
 from sqlalchemy import case, func, select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.enums import EstadoDocumento, EstadoExpediente, Moneda, RolMiembro, TipoAlerta
-from app.models import Alerta, Documento, Empresa, Expediente, Miembro
+from app.models import Alerta, Documento, Empresa, Expediente, Gestor, Miembro
 from app.schemas import DashboardDesglose, DashboardDesgloseFila, DashboardResumen, MontosMoneda
+from app.services.expedientes import documentos_faltantes
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+
+@router.get("/secretaria-expedientes")
+def detalle_secretaria(
+    session: SessionDep,
+    settings: SettingsDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    desde: date,
+    hasta: date,
+    emisor_ruc: str | None = None,
+    receptor_ruc: str | None = None,
+    estado: EstadoExpediente | None = None,
+) -> dict[str, object]:
+    """Consulta transversal de Secretaría sin exponer pagos ni comisiones."""
+    from fastapi import HTTPException, status
+
+    if auth.rol not in (
+        RolMiembro.SUPERADMIN,
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.SECRETARIA,
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Acceso exclusivo de Secretaría")
+    if hasta < desde:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Periodo inválido")
+
+    consulta = (
+        select(Expediente)
+        .options(
+            selectinload(Expediente.emisor),
+            selectinload(Expediente.receptor),
+            selectinload(Expediente.documentos),
+        )
+        .where(
+            Expediente.tenant_id == tenant_id,
+            Expediente.deleted_at.is_(None),
+            Expediente.fecha_emision >= desde,
+            Expediente.fecha_emision <= hasta,
+        )
+        .order_by(Expediente.fecha_emision.desc(), Expediente.id)
+    )
+    if emisor_ruc:
+        emisor_empresa = aliased(Empresa)
+        consulta = consulta.join(emisor_empresa, Expediente.emisor_id == emisor_empresa.id).where(
+            emisor_empresa.ruc == emisor_ruc
+        )
+    if receptor_ruc:
+        receptor_empresa = aliased(Empresa)
+        consulta = consulta.join(
+            receptor_empresa, Expediente.receptor_id == receptor_empresa.id
+        ).where(receptor_empresa.ruc == receptor_ruc)
+    if estado is not None:
+        consulta = consulta.where(Expediente.estado == estado)
+    expedientes = list(session.scalars(consulta))
+    usuarios = {
+        item.id: item
+        for item in session.scalars(
+            select(Miembro).where(Miembro.tenant_id == tenant_id, Miembro.deleted_at.is_(None))
+        )
+    }
+    gestores = {
+        item.id: item
+        for item in session.scalars(
+            select(Gestor).where(Gestor.tenant_id == tenant_id, Gestor.deleted_at.is_(None))
+        )
+    }
+    totales = {"PEN": Decimal("0"), "USD": Decimal("0")}
+    filas: list[dict[str, object]] = []
+    for e in expedientes:
+        totales[e.moneda] = totales.get(e.moneda, Decimal("0")) + e.importe_total
+        usuario = usuarios.get(e.usuario_id) if e.usuario_id is not None else None
+        gestor = gestores.get(e.gestor_id) if e.gestor_id is not None else None
+        faltantes = [tipo.value for tipo in documentos_faltantes(e, settings)]
+        filas.append(
+            {
+                "id": str(e.id),
+                "serie": e.serie,
+                "correlativo": e.correlativo,
+                "tipo_comprobante": e.tipo_comprobante,
+                "fecha_emision": e.fecha_emision.isoformat(),
+                "moneda": e.moneda,
+                "importe_total": str(e.importe_total),
+                "estado": e.estado,
+                "emisor": e.emisor.razon_social,
+                "emisor_ruc": e.emisor.ruc,
+                "receptor": e.receptor.razon_social,
+                "receptor_ruc": e.receptor.ruc,
+                "usuario": usuario.nombre if usuario else "Sin asignar",
+                "usuario_codigo": usuario.codigo if usuario else "",
+                "gestor": gestor.nombre if gestor else "Sin asignar",
+                "gestor_codigo": gestor.codigo if gestor else "",
+                "faltantes": faltantes,
+                "documentos": sum(d.deleted_at is None for d in e.documentos),
+            }
+        )
+    return {
+        "total_expedientes": len(filas),
+        "total_pen": str(totales["PEN"]),
+        "total_usd": str(totales["USD"]),
+        "filas": filas,
+    }
 
 
 @router.get("/secretaria-clientes")
