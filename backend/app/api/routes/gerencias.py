@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
-from app.models import Expediente, GerenteResponsable, Miembro, PedidoGerencia
+from app.models import Empresa, Expediente, GerenteEmpresa, GerenteResponsable, Miembro, PedidoGerencia
 from app.services import auditoria
 
 router = APIRouter(prefix="/gerencias", tags=["gerencias"])
@@ -193,3 +193,75 @@ def atribuir_factura(
     )
     session.commit()
     return {"expediente_id": str(expediente.id), "pedido_id": str(pedido.id)}
+
+
+class CarteraGerenteIn(BaseModel):
+    gerente_id: uuid.UUID
+    empresa_id: uuid.UUID
+    activo: bool = True
+
+
+class CarteraGerenteOut(BaseModel):
+    id: uuid.UUID
+    gerente_id: uuid.UUID
+    empresa_id: uuid.UUID
+    activo: bool
+
+
+@router.get("/empresas", response_model=list[CarteraGerenteOut])
+def listar_cartera(
+    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
+) -> list[GerenteEmpresa]:
+    if auth.rol not in (
+        RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.GERENTE
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin acceso a cartera de Gerencia")
+    consulta = select(GerenteEmpresa).where(GerenteEmpresa.tenant_id == tenant_id)
+    if auth.rol == RolMiembro.GERENTE:
+        if auth.miembro_id is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Gerente sin identidad")
+        consulta = consulta.where(GerenteEmpresa.gerente_id == auth.miembro_id)
+    return list(session.scalars(consulta.order_by(GerenteEmpresa.created_at)))
+
+
+@router.put("/empresas", response_model=CarteraGerenteOut)
+def asignar_cartera(
+    datos: CarteraGerenteIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> GerenteEmpresa:
+    _administracion(auth)
+    _miembro_activo(session, tenant_id, datos.gerente_id, RolMiembro.GERENTE)
+    empresa = session.get(Empresa, datos.empresa_id)
+    if empresa is None or empresa.tenant_id != tenant_id or empresa.deleted_at is not None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Empresa inválida")
+    relacion = session.scalar(
+        select(GerenteEmpresa).where(
+            GerenteEmpresa.tenant_id == tenant_id,
+            GerenteEmpresa.gerente_id == datos.gerente_id,
+            GerenteEmpresa.empresa_id == datos.empresa_id,
+        )
+    )
+    if relacion is None:
+        relacion = GerenteEmpresa(
+            tenant_id=tenant_id, gerente_id=datos.gerente_id,
+            empresa_id=datos.empresa_id, activo=datos.activo,
+        )
+        session.add(relacion)
+    else:
+        relacion.activo = datos.activo
+    session.flush()
+    auditoria.registrar(
+        session, tenant_id, "CARTERA_GERENCIA_CAMBIADA",
+        "gerentes_empresas", relacion.id,
+        {
+            "gerente_id": str(datos.gerente_id),
+            "empresa_id": str(datos.empresa_id),
+            "activo": datos.activo,
+            "actor": auth.codigo,
+        },
+    )
+    session.commit()
+    session.refresh(relacion)
+    return relacion
