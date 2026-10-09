@@ -22,6 +22,7 @@ function mesActual(): string {
 
 export default function Pagos({ sesion }: { sesion: SesionActual }) {
   const [pestana, setPestana] = useState<PestanaPagos>("PEDIDOS");
+  const [mesLiquidacion, setMesLiquidacion] = useState(mesActual());
   const [mes, setMes] = useState(mesActual());
   const [moneda, setMoneda] = useState<"PEN" | "USD">("PEN");
   const [usuarioId, setUsuarioId] = useState("");
@@ -44,7 +45,7 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
   );
 
   const usuarioSeleccionado = usuarios.datos?.find((u) => u.id === usuarioId);
-  const porcentajePredeterminado = usuarioSeleccionado?.porcentaje_produccion ?? "1.5";
+  const porcentajePredeterminado = usuarioSeleccionado?.porcentaje_produccion ?? "0";
 
   const nombreUsuario = (id: string) => {
     const u = usuarios.datos?.find((x) => x.id === id);
@@ -139,7 +140,7 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
 
       {pestana === "LIQUIDACIONES" && (
         <>
-          {sesion.rol === "ADMINISTRADOR" || sesion.rol === "SUPERADMIN" ? <SimuladorJonatan /> : null}
+          <label>Mes a liquidar <input type="month" value={mesLiquidacion} onChange={(e) => setMesLiquidacion(e.target.value)} /></label>
           <div className="filtros">
             <select value={usuarioId} onChange={(e) => setUsuarioId(e.target.value)}>
               <option value="">Selecciona un Usuario</option>
@@ -183,7 +184,7 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
           )}
 
           <Liquidaciones
-            pagos={pagos.datos ?? []}
+            pagos={(pagos.datos ?? []).filter((p) => p.periodo_desde.startsWith(mesLiquidacion) || p.periodo_hasta.startsWith(mesLiquidacion))}
             planes={planes.datos ?? []}
             adelantos={adelantos.datos ?? []}
             sesion={sesion}
@@ -337,6 +338,17 @@ function PedidosGerencia({
                 <td>{p.estado}</td>
                 <td>
                   <button onClick={() => setSeleccionado(p.id)}>Detalle</button>{" "}
+                  {p.estado !== "ANULADO" && <button type="button" onClick={async () => {
+                    const motivo = window.prompt("Motivo de anulación (mínimo 10 caracteres). No se permite anular pedidos ejecutados o con asignaciones.");
+                    if (!motivo || motivo.trim().length < 10) return;
+                    try {
+                      await enviarJson<PedidoGerencia>(`/api/v1/pagos/pedidos/${p.id}/anular`, "POST", { motivo: motivo.trim() });
+                      alMensaje("Pedido anulado con registro de auditoría.");
+                      alCambiar();
+                    } catch (error) {
+                      alMensaje(error instanceof Error ? error.message : String(error));
+                    }
+                  }}>Anular</button>}{" "}
                   <button
                     onClick={async () => {
                       await enviarJson<PedidoGerencia>(
