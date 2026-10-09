@@ -470,6 +470,17 @@ class AbonoClienteERP(ConId, ConTenant, ConCreacion, Base):
     referencia: Mapped[str | None] = mapped_column(String(120))
 
 
+class GerenteEmpresa(ConId, ConTenant, ConCreacion, Base):
+    """Cartera de empresas por Gerente; el RUC existe una sola vez por tenant."""
+
+    __tablename__ = "gerentes_empresas"
+    __table_args__ = (UniqueConstraint("tenant_id", "gerente_id", "empresa_id"),)
+
+    gerente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    empresa_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("empresas.id"), index=True)
+    activo: Mapped[bool] = mapped_column(default=True, server_default="true")
+
+
 class GerenteResponsable(ConId, ConTenant, ConCreacion, Base):
     """Vínculo operativo entre Gerencia y Responsable sin duplicar equipos."""
 
