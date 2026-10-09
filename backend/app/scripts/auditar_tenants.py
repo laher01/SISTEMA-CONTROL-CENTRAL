@@ -36,11 +36,14 @@ def main() -> None:
         for tabla in sorted(Base.metadata.tables.values(), key=lambda t: t.name):
             if tabla.name == "tenants" or "tenant_id" not in tabla.c:
                 continue
-            cantidad = session.scalar(
-                select(func.count()).select_from(tabla).where(
-                    tabla.c.tenant_id == args.tenant_id
+            cantidad = (
+                session.scalar(
+                    select(func.count())
+                    .select_from(tabla)
+                    .where(tabla.c.tenant_id == args.tenant_id)
                 )
-            ) or 0
+                or 0
+            )
             if cantidad:
                 print(f"{tabla.name}: {cantidad}")
                 total += cantidad
