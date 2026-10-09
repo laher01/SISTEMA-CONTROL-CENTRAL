@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
@@ -329,7 +330,7 @@ def test_filtros_jerarquicos_por_rol(
     assert usuario_id is not None
 
     documento = _subir_factura(client, "F001-00000104", "500.00")
-    expediente = session.get(Expediente, documento["expediente_id"])
+    expediente = session.get(Expediente, uuid.UUID(str(documento["expediente_id"])))
     assert expediente is not None
 
     gestor = Gestor(

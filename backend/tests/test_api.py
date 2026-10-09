@@ -1,4 +1,5 @@
 import io
+import uuid
 from datetime import date
 from decimal import Decimal
 
@@ -571,7 +572,7 @@ def test_recalcular_corrige_expedientes_historicos_menores_al_umbral(
     autorizar_receptor(client, auth_prueba)
 
     with sessionmaker(engine, expire_on_commit=False)() as session:
-        historico = session.get(Expediente, expediente_id)
+        historico = session.get(Expediente, uuid.UUID(str(expediente_id)))
         assert historico is not None
         historico.requiere_guia = True
         historico.estado = "NARANJA"

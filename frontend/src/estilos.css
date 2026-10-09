@@ -10,6 +10,14 @@
   --primario: #1c4e80;
 }
 
+.infra-indicadores { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1rem 0; }
+.infra-indicadores > div { padding: 1rem; background: white; border: 1px solid var(--borde); min-width: 180px; }
+.infra-indicadores strong { display: block; font-size: 1.8rem; }
+.infra-formulario { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; margin: 1rem 0; }
+.infra-formulario label { display: flex; flex-direction: column; gap: 0.3rem; flex: 1 1 220px; }
+.infra-tabla { overflow-x: auto; }
+.infra-tabla code { overflow-wrap: anywhere; }
+
 * {
   box-sizing: border-box;
 }

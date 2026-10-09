@@ -11,6 +11,7 @@ import Documentos from "./paginas/Documentos";
 import Empresas from "./paginas/Empresas";
 import ExpedienteDetalle from "./paginas/ExpedienteDetalle";
 import Expedientes from "./paginas/Expedientes";
+import Infraestructura from "./paginas/Infraestructura";
 import { CambiarClave, Login } from "./paginas/Login";
 import Presentacion from "./paginas/Presentacion";
 import Organizacion from "./paginas/Organizacion";
@@ -27,6 +28,7 @@ import type { SesionActual } from "./tipos";
 type RolSesion = SesionActual["rol"];
 
 const MENU: { a: string; texto: string; roles: RolSesion[] }[] = [
+  { a: "/infraestructura", texto: "Infraestructura", roles: ["SUPERADMIN"] },
   { a: "/mi-equipo", texto: "Mis Usuarios", roles: ["RESPONSABLE"] },
   { a: "/mi-equipo/pedidos", texto: "Pedidos", roles: ["RESPONSABLE"] },
   { a: "/mi-equipo/cobros", texto: "Cobros y clientes", roles: ["RESPONSABLE"] },
@@ -142,6 +144,7 @@ export default function App() {
       </aside>
       <main className="contenido">
         <Routes>
+          <Route path="/infraestructura" element={sesion.rol === "SUPERADMIN" ? <Infraestructura /> : <Navigate to="/" replace />} />
           <Route path="/" element={<Dashboard />} />
           <Route path="/ingresar" element={<Navigate to="/" replace />} />
           <Route path="/subir" element={<Subir sesion={sesion} />} />

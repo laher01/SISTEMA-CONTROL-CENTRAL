@@ -1,5 +1,7 @@
 # FACT CENTRAL
 
+Etapa 7 (en desarrollo): [infraestructura y estado de validación](docs/ETAPA_7_INFRAESTRUCTURA.md).
+
 ## Plataforma SaaS Inteligente para Gestión Documental Tributaria y Control Integral de Compras Empresariales
 
 FACT CENTRAL es una plataforma SaaS multiempresa (Multi-Tenant) diseñada para administrar, organizar y auditar digitalmente los procesos documentarios de compras de empresas.
