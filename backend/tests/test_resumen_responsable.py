@@ -34,36 +34,58 @@ def test_responsable_solo_consulta_su_equipo(
     for i, usuario in enumerate([propio, ajeno], start=1):
         session.add(
             Expediente(
-                tenant_id=tid, receptor_id=cliente.id, emisor_id=proveedor.id,
-                tipo_comprobante="01", serie="F001", correlativo=f"{i:08d}",
-                fecha_emision=date(2026, 10, 1), moneda="PEN",
-                importe_total=Decimal("100.00"), usuario_id=usuario.id,
+                tenant_id=tid,
+                receptor_id=cliente.id,
+                emisor_id=proveedor.id,
+                tipo_comprobante="01",
+                serie="F001",
+                correlativo=f"{i:08d}",
+                fecha_emision=date(2026, 10, 1),
+                moneda="PEN",
+                importe_total=Decimal("100.00"),
+                usuario_id=usuario.id,
             )
         )
     pedido = PedidoGerencia(
-        tenant_id=tid, cliente_id=cliente.id, periodo_mes=date(2026, 10, 1),
-        moneda="PEN", monto_solicitado=Decimal("200.00"), modalidad="POR_PEDIDO",
-        modo_distribucion="MANUAL", estado="ACTIVO",
+        tenant_id=tid,
+        cliente_id=cliente.id,
+        periodo_mes=date(2026, 10, 1),
+        moneda="PEN",
+        monto_solicitado=Decimal("200.00"),
+        modalidad="POR_PEDIDO",
+        modo_distribucion="MANUAL",
+        estado="ACTIVO",
     )
     session.add(pedido)
     session.flush()
-    session.add_all([
-        AsignacionPedidoGerencia(
-            tenant_id=tid, pedido_id=pedido.id, usuario_id=propio.id,
-            monto_asignado=Decimal("90.00"),
-        ),
-        AsignacionPedidoGerencia(
-            tenant_id=tid, pedido_id=pedido.id, usuario_id=ajeno.id,
-            monto_asignado=Decimal("110.00"),
-        ),
-    ])
+    session.add_all(
+        [
+            AsignacionPedidoGerencia(
+                tenant_id=tid,
+                pedido_id=pedido.id,
+                usuario_id=propio.id,
+                monto_asignado=Decimal("90.00"),
+            ),
+            AsignacionPedidoGerencia(
+                tenant_id=tid,
+                pedido_id=pedido.id,
+                usuario_id=ajeno.id,
+                monto_asignado=Decimal("110.00"),
+            ),
+        ]
+    )
     session.commit()
 
     assert client.get("/api/v1/responsable/resumen").status_code == 403
     auth_prueba.contexto = ContextoAcceso(
-        cuenta_id=auth_prueba.contexto.cuenta_id, tenant_id=tid,
-        rol="RESPONSABLE", miembro_id=responsable.id, gestor_id=None,
-        usuario_id=None, codigo=responsable.codigo, nombre=responsable.nombre,
+        cuenta_id=auth_prueba.contexto.cuenta_id,
+        tenant_id=tid,
+        rol="RESPONSABLE",
+        miembro_id=responsable.id,
+        gestor_id=None,
+        usuario_id=None,
+        codigo=responsable.codigo,
+        nombre=responsable.nombre,
         cambio_clave_obligatorio=False,
     )
     respuesta = client.get("/api/v1/responsable/resumen")
