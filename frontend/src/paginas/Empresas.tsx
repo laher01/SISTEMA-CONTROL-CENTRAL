@@ -7,12 +7,14 @@ import type {
   ClasificacionProveedor,
   Empresa,
   TipoRelacionEmpresa,
+  SesionActual,
 } from "../tipos";
 
 type Campo = "autorizada" | "agente_retencion";
 type PestanaEmpresa = "PROVEEDORES" | "CLIENTES";
 
-export default function Empresas() {
+export default function Empresas({ sesion }: { sesion: SesionActual }) {
+  const puedeClasificar = sesion.rol === "SUPERADMIN" || sesion.rol === "ADMINISTRADOR";
   const { datos, error, cargando, recargar } = useDatos<Empresa[]>("/api/v1/empresas");
   const [params] = useSearchParams();
   const rucFiltro = params.get("ruc") ?? "";
@@ -188,7 +190,7 @@ export default function Empresas() {
         <button type="button" disabled={!seleccion.length || operando} onClick={() => void notificar()}>
           Notificar inmediatamente a Administrador ({seleccion.length})
         </button>
-        {pestana === "SIN_CLASIFICAR" && <>
+        {pestana === "SIN_CLASIFICAR" && puedeClasificar && <>
           <select aria-label="Clasificación a aplicar" value={clasificacionMasiva}
             onChange={(e) => setClasificacionMasiva(e.target.value as "A" | "B")}>
             <option value="A">Tipo A</option><option value="B">Tipo B</option>
@@ -315,15 +317,16 @@ export default function Empresas() {
                         <button onClick={() => void guardarEdicion(empresa)}>Guardar</button>
                         <button onClick={cancelarEdicion}>Cancelar</button>
                       </div>
-                    ) : (
+                    ) : puedeClasificar ? (
                       <button onClick={() => iniciarEdicion(empresa)}>Editar</button>
-                    )}
+                    ) : "Solo Administración"}
                   </td>
                   <td>
                     <input
                       type="checkbox"
                       aria-label={`Autorizada ${empresa.ruc}`}
                       checked={empresa.autorizada}
+                      disabled={!puedeClasificar}
                       onChange={(ev) => cambiar(empresa, "autorizada", ev.target.checked)}
                     />
                   </td>
@@ -332,6 +335,7 @@ export default function Empresas() {
                       type="checkbox"
                       aria-label={`Agente de retención ${empresa.ruc}`}
                       checked={empresa.agente_retencion}
+                      disabled={!puedeClasificar}
                       onChange={(ev) => cambiar(empresa, "agente_retencion", ev.target.checked)}
                     />
                   </td>
