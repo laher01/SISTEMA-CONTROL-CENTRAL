@@ -190,6 +190,10 @@ class Expediente(ConId, ConTenant, ConCreacion, Base):
         ),
     )
 
+    pedido_gerencia_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("pedidos_gerencia.id"), index=True
+    )
+    gerente_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
     receptor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("empresas.id"), index=True)
     emisor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("empresas.id"), index=True)
     tipo_comprobante: Mapped[str] = mapped_column(String(4))
@@ -526,9 +530,13 @@ class ComisionResponsableRegla(ConId, ConTenant, ConCreacion, Base):
 class PagoResponsableERP(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "pagos_responsables_erp"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "responsable_id", "periodo_desde", "periodo_hasta", "moneda"),
+        UniqueConstraint(
+            "tenant_id", "gerente_id", "responsable_id",
+            "periodo_desde", "periodo_hasta", "moneda",
+        ),
     )
 
+    gerente_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
     responsable_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
     periodo_desde: Mapped[date] = mapped_column(Date)
     periodo_hasta: Mapped[date] = mapped_column(Date)
