@@ -41,10 +41,10 @@ export default function ConsolidadoGerencia() {
       </select></label>
       <button type="button" onClick={() => { setDesde(actual.desde); setHasta(actual.hasta); setFiltrado(false); }}>Restablecer meses</button>
     </div>
-    <div className="tarjetas">
-      {filtrado ? <div className="tarjeta"><strong>Rango seleccionado</strong><span className="cifra">{formatearMonto(moneda, resumen.datos?.total ?? "0")}</span></div> : <>
-        <div className="tarjeta"><strong>Mes actual</strong><span className="cifra">{formatearMonto(moneda, actualGlobal.datos?.total ?? "0")}</span></div>
-        <div className="tarjeta"><strong>Mes anterior</strong><span className="cifra">{formatearMonto(moneda, anteriorGlobal.datos?.total ?? "0")}</span></div>
+    <div className="tarjetas" style={{ display: "flex", flexWrap: "wrap", gap: "1rem", minWidth: 0 }}>
+      {filtrado ? <div className="tarjeta" style={{ boxSizing: "border-box", minWidth: "min(100%, 260px)", width: "fit-content", maxWidth: "100%", flex: "0 1 auto" }}><strong>Rango seleccionado</strong><span className="cifra" style={{ display: "block", fontSize: "clamp(1rem, 2.2vw, 1.65rem)", whiteSpace: "normal", overflowWrap: "anywhere", lineHeight: 1.25, maxWidth: "100%" }}>{formatearMonto(moneda, resumen.datos?.total ?? "0")}</span></div> : <>
+        <div className="tarjeta" style={{ boxSizing: "border-box", minWidth: "min(100%, 260px)", width: "fit-content", maxWidth: "100%", flex: "0 1 auto" }}><strong>Mes actual</strong><span className="cifra" style={{ display: "block", fontSize: "clamp(1rem, 2.2vw, 1.65rem)", whiteSpace: "normal", overflowWrap: "anywhere", lineHeight: 1.25, maxWidth: "100%" }}>{formatearMonto(moneda, actualGlobal.datos?.total ?? "0")}</span></div>
+        <div className="tarjeta" style={{ boxSizing: "border-box", minWidth: "min(100%, 260px)", width: "fit-content", maxWidth: "100%", flex: "0 1 auto" }}><strong>Mes anterior</strong><span className="cifra" style={{ display: "block", fontSize: "clamp(1rem, 2.2vw, 1.65rem)", whiteSpace: "normal", overflowWrap: "anywhere", lineHeight: 1.25, maxWidth: "100%" }}>{formatearMonto(moneda, anteriorGlobal.datos?.total ?? "0")}</span></div>
       </>}
     </div>
     {resumen.error && <p className="error">{resumen.error}</p>}
