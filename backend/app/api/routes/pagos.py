@@ -843,6 +843,10 @@ def crear_pedido_gerencia(
         )
         if cartera is None:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Cliente no asignado a Gerencia")
+    if auth.rol == RolMiembro.GERENTE and datos.responsable_id is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Gerencia debe asignar un Responsable"
+        )
     if datos.responsable_id is not None:
         responsable = session.get(Miembro, datos.responsable_id)
         if (
@@ -1009,7 +1013,7 @@ def anular_pedido_gerencia(
 ) -> PedidoGerenciaOut:
     """Anula sin borrado físico, con motivo y sin afectar pedidos ejecutados."""
     _validar_acceso(auth.rol)
-    pedido = _pedido_valido(session, tenant_id, pedido_id)
+    pedido = _pedido_valido(session, tenant_id, pedido_id, auth)
     if pedido.estado == "CANCELADO":
         raise HTTPException(status.HTTP_409_CONFLICT, "Pedido ya anulado")
     if pedido.estado not in ("ACTIVO", "CERRADO"):
@@ -1058,7 +1062,7 @@ def actualizar_pedido_gerencia(
     datos: PedidoGerenciaActualizarIn,
 ) -> PedidoGerenciaOut:
     _validar_acceso(auth.rol)
-    pedido = _pedido_valido(session, tenant_id, pedido_id)
+    pedido = _pedido_valido(session, tenant_id, pedido_id, auth)
     if pedido.estado == "CANCELADO":
         raise HTTPException(status.HTTP_409_CONFLICT, "Pedido cancelado; no puede reabrirse")
     if "responsable_id" in datos.model_fields_set:
@@ -1083,6 +1087,17 @@ def actualizar_pedido_gerencia(
                     status.HTTP_409_CONFLICT,
                     "Quite asignaciones anteriores antes de transferir",
                 )
+        if pedido.gerente_id is not None and datos.responsable_id is not None:
+            vinculo = session.scalar(
+                select(GerenteResponsable.id).where(
+                    GerenteResponsable.tenant_id == tenant_id,
+                    GerenteResponsable.gerente_id == pedido.gerente_id,
+                    GerenteResponsable.responsable_id == datos.responsable_id,
+                    GerenteResponsable.activo.is_(True),
+                )
+            )
+            if vinculo is None:
+                raise HTTPException(status.HTTP_403_FORBIDDEN, "Responsable fuera de Gerencia")
         pedido.responsable_id = datos.responsable_id
     if pedido.responsable_id is not None and datos.modo_distribucion in {
         "SEMIASISTIDA",
@@ -1146,7 +1161,9 @@ def agregar_asignacion_pedido(
     datos: AsignacionPedidoGerenciaIn,
 ) -> PedidoGerenciaOut:
     _validar_acceso(auth.rol)
-    pedido = _pedido_valido(session, tenant_id, pedido_id)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Distribución reservada al Responsable")
+    pedido = _pedido_valido(session, tenant_id, pedido_id, auth)
     if pedido.responsable_id is not None:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, "El pedido corresponde al Responsable asignado"
@@ -1236,7 +1253,9 @@ def eliminar_asignacion_pedido(
     asignacion_id: uuid.UUID,
 ) -> PedidoGerenciaOut:
     _validar_acceso(auth.rol)
-    pedido = _pedido_valido(session, tenant_id, pedido_id)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Distribución reservada al Responsable")
+    pedido = _pedido_valido(session, tenant_id, pedido_id, auth)
     asignacion = session.get(AsignacionPedidoGerencia, asignacion_id)
     if asignacion is None or asignacion.tenant_id != tenant_id or asignacion.pedido_id != pedido.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Asignación no encontrada")
