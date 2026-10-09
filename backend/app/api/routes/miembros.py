@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
+from app.codigos import codigo_automatico
 from app.models import Gestor, Miembro
 from app.schemas import (
     AltaMiembroOut,
