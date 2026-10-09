@@ -93,12 +93,13 @@ interface Estado<T> {
   error?: string;
 }
 
-export function useDatos<T>(ruta: string) {
+export function useDatos<T>(ruta: string | null) {
   const [version, setVersion] = useState(0);
   const [estado, setEstado] = useState<Estado<T>>({ ruta: "", version: -1 });
 
   useEffect(() => {
     let vigente = true;
+    if (!ruta) return;
     obtener<T>(ruta).then(
       (datos) => vigente && setEstado({ ruta, version, datos }),
       (error: unknown) =>
@@ -110,11 +111,11 @@ export function useDatos<T>(ruta: string) {
     };
   }, [ruta, version]);
 
-  const actual = estado.ruta === ruta;
+  const actual = ruta === null || estado.ruta === ruta;
   return {
     datos: actual ? estado.datos : undefined,
     error: actual ? estado.error : undefined,
-    cargando: !actual || estado.version !== version,
+    cargando: ruta !== null && (!actual || estado.version !== version),
     recargar: () => setVersion((v) => v + 1),
   };
 }
