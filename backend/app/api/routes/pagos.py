@@ -764,6 +764,53 @@ def listar_pedidos_gerencia(
     return [_resumen_pedido(session, tenant_id, pedido) for pedido in pedidos]
 
 
+@router.delete("/pedidos/{pedido_id}", status_code=status.HTTP_204_NO_CONTENT)
+def eliminar_pedido_sin_movimientos(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    pedido_id: uuid.UUID,
+) -> None:
+    """Elimina un pedido sin asignaciones ni ejecución, conservando auditoría."""
+    _validar_acceso(auth.rol)
+    pedido = _pedido_valido(session, tenant_id, pedido_id)
+    asignacion = session.scalar(
+        select(AsignacionPedidoGerencia.id).where(
+            AsignacionPedidoGerencia.tenant_id == tenant_id,
+            AsignacionPedidoGerencia.pedido_id == pedido.id,
+        ).limit(1)
+    )
+    if asignacion is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Este pedido tiene asignaciones. Debe regularizarlas antes de eliminarlo.",
+        )
+    resumen = _resumen_pedido(session, tenant_id, pedido)
+    if resumen.monto_ejecutado != Decimal("0"):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Este pedido tiene ejecución; no se puede eliminar.",
+        )
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "PEDIDO_GERENCIA_ELIMINADO",
+        "pedido_gerencia",
+        pedido.id,
+        {
+            "cliente_id": str(pedido.cliente_id),
+            "responsable_id": str(pedido.responsable_id) if pedido.responsable_id else None,
+            "periodo_mes": pedido.periodo_mes.isoformat(),
+            "moneda": pedido.moneda,
+            "monto_solicitado": str(pedido.monto_solicitado),
+            "estado_anterior": pedido.estado,
+            "actor": auth.codigo,
+        },
+    )
+    session.delete(pedido)
+    session.commit()
+
+
 class AnulacionPedidoIn(BaseModel):
     motivo: str = Field(min_length=10, max_length=500)
 
