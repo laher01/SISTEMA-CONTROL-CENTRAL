@@ -98,7 +98,10 @@ def mis_usuarios_responsable(
     auth: OperativeAuthDep,
 ) -> list[Miembro]:
     if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo el Responsable puede consultar sus Usuarios")
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Solo el Responsable puede consultar sus Usuarios",
+        )
     return list(
         session.scalars(
             select(Miembro).where(
