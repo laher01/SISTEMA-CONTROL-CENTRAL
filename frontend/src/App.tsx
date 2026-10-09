@@ -5,6 +5,7 @@ import NexusFlotante from "./componentes/NexusFlotante";
 import Alertas from "./paginas/Alertas";
 import Configuracion from "./paginas/Configuracion";
 import Chat from "./paginas/Chat";
+import Comisiones from "./paginas/Comisiones";
 import Dashboard from "./paginas/Dashboard";
 import Documentos from "./paginas/Documentos";
 import Empresas from "./paginas/Empresas";
@@ -25,6 +26,7 @@ type RolSesion = SesionActual["rol"];
 
 const MENU: { a: string; texto: string; roles: RolSesion[] }[] = [
   { a: "/mi-equipo", texto: "Mis Usuarios", roles: ["RESPONSABLE"] },
+  { a: "/comisiones", texto: "Simular comisiones", roles: ["SUPERADMIN", "ADMINISTRADOR", "RESPONSABLE", "USUARIO"] },
   {
     a: "/",
     texto: "Dashboard",
@@ -140,6 +142,7 @@ export default function App() {
           <Route path="/alertas" element={<Alertas sesion={sesion} />} />
           <Route path="/empresas" element={<Empresas />} />
           <Route path="/mi-equipo" element={<MiEquipoResponsable />} />
+          <Route path="/comisiones" element={<Comisiones sesion={sesion} />} />
           <Route path="/organizacion" element={<Organizacion sesion={sesion} />} />
           <Route path="/produccion" element={<Produccion />} />
           <Route path="/pagos" element={<Pagos sesion={sesion} />} />
