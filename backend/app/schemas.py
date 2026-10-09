@@ -531,6 +531,7 @@ class AgenteRetencionIn(BaseModel):
 
 
 class PedidoGerenciaIn(BaseModel):
+    gerente_id: uuid.UUID | None = None
     responsable_id: uuid.UUID | None = None
     cliente_id: uuid.UUID
     periodo_mes: date
@@ -575,6 +576,7 @@ class AsignacionPedidoGerenciaOut(BaseModel):
 
 class PedidoGerenciaOut(BaseModel):
     id: uuid.UUID
+    gerente_id: uuid.UUID | None = None
     responsable_id: uuid.UUID | None = None
     cliente_id: uuid.UUID
     cliente_ruc: str

@@ -190,6 +190,10 @@ class Expediente(ConId, ConTenant, ConCreacion, Base):
         ),
     )
 
+    pedido_gerencia_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("pedidos_gerencia.id"), index=True
+    )
+    gerente_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
     receptor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("empresas.id"), index=True)
     emisor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("empresas.id"), index=True)
     tipo_comprobante: Mapped[str] = mapped_column(String(4))
@@ -466,10 +470,49 @@ class AbonoClienteERP(ConId, ConTenant, ConCreacion, Base):
     referencia: Mapped[str | None] = mapped_column(String(120))
 
 
+class GerenteEmpresa(ConId, ConTenant, ConCreacion, Base):
+    """Cartera de empresas por Gerente; el RUC existe una sola vez por tenant."""
+
+    __tablename__ = "gerentes_empresas"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "gerente_id",
+            "empresa_id",
+            name="uq_gerentes_empresas_tenant_gerente_empresa",
+        ),
+    )
+
+    gerente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    empresa_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("empresas.id"), index=True)
+    activo: Mapped[bool] = mapped_column(default=True, server_default="true")
+
+
+class GerenteResponsable(ConId, ConTenant, ConCreacion, Base):
+    """Vínculo operativo entre Gerencia y Responsable sin duplicar equipos."""
+
+    __tablename__ = "gerentes_responsables"
+    __table_args__ = (UniqueConstraint("tenant_id", "gerente_id", "responsable_id"),)
+
+    gerente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    responsable_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    activo: Mapped[bool] = mapped_column(default=True, server_default="true")
+
+
 class PedidoGerencia(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "pedidos_gerencia"
-    __table_args__ = (UniqueConstraint("tenant_id", "cliente_id", "periodo_mes", "moneda"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "gerente_id",
+            "cliente_id",
+            "periodo_mes",
+            "moneda",
+            name="uq_pedidos_gerente_cliente_mes_moneda",
+        ),
+    )
 
+    gerente_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
     cliente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("empresas.id"), index=True)
     responsable_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
     creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -512,9 +555,18 @@ class ComisionResponsableRegla(ConId, ConTenant, ConCreacion, Base):
 class PagoResponsableERP(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "pagos_responsables_erp"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "responsable_id", "periodo_desde", "periodo_hasta", "moneda"),
+        UniqueConstraint(
+            "tenant_id",
+            "gerente_id",
+            "responsable_id",
+            "periodo_desde",
+            "periodo_hasta",
+            "moneda",
+            name="uq_pagos_resp_gerente_periodo_moneda",
+        ),
     )
 
+    gerente_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
     responsable_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
     periodo_desde: Mapped[date] = mapped_column(Date)
     periodo_hasta: Mapped[date] = mapped_column(Date)

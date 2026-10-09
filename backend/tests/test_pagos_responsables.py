@@ -47,6 +47,7 @@ def _preparar(session: Session, auth_prueba: AuthPrueba) -> tuple[str, str]:
         moneda="PEN",
         importe_total=Decimal("1000.00"),
         usuario_id=usuario.id,
+        gerente_id=auth_prueba.contexto.miembro_id,
     )
     session.add(factura)
     session.commit()
@@ -79,13 +80,12 @@ def test_comisiones_gerencia_por_cliente_y_autorizacion(
             "motivo": "Condición especial de Gerencia",
         },
     )
-    assert cambio.status_code == 200, cambio.text
+    assert cambio.status_code == 403  # El Gerente no altera una regla financiera global.
     modificado = client.get(url + "/resumen", params=params).json()
-    assert modificado["total_comisiones"] == "40.00"
+    assert modificado["total_comisiones"] == "35.00"
 
     historial = client.get(f"{url}/comision/{responsable_id}/{cliente_id}/historial")
-    assert historial.status_code == 200, historial.text
-    assert historial.json()[0]["datos"]["actor"] == "GERENTE-TEST"
+    assert historial.status_code == 403
 
     programado = client.post(
         url + "/programar",

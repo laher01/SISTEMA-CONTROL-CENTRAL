@@ -11,6 +11,7 @@ import type {
   CarteraClientesResumen,
   CuentaPagoERP,
   FiltroOpcion,
+  Miembro,
   PagoERP,
   PedidoGerencia,
   PlanLiquidacion,
@@ -36,15 +37,16 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
   const clientes = useDatos<FiltroOpcion[]>("/api/v1/pagos/clientes");
   const proveedores = useDatos<FiltroOpcion[]>("/api/v1/pagos/proveedores");
   const gestores = useDatos<FiltroOpcion[]>("/api/v1/pagos/gestores");
-  const planes = useDatos<PlanLiquidacion[]>("/api/v1/pagos/planes");
-  const cuentas = useDatos<CuentaPagoERP[]>("/api/v1/pagos/cuentas");
-  const adelantos = useDatos<AdelantoERP[]>("/api/v1/pagos/adelantos");
-  const pagos = useDatos<PagoERP[]>("/api/v1/pagos");
+  const miembros = useDatos<Miembro[]>(sesion.rol === "GERENTE" ? null : "/api/v1/miembros");
+  const planes = useDatos<PlanLiquidacion[]>(sesion.rol === "GERENTE" ? null : "/api/v1/pagos/planes");
+  const cuentas = useDatos<CuentaPagoERP[]>(sesion.rol === "GERENTE" ? null : "/api/v1/pagos/cuentas");
+  const adelantos = useDatos<AdelantoERP[]>(sesion.rol === "GERENTE" ? null : "/api/v1/pagos/adelantos");
+  const pagos = useDatos<PagoERP[]>(sesion.rol === "GERENTE" ? null : "/api/v1/pagos");
   const pedidos = useDatos<PedidoGerencia[]>(
     conParametros("/api/v1/pagos/pedidos", { mes, moneda }),
   );
   const cartera = useDatos<CarteraClientesResumen>(
-    conParametros("/api/v1/pagos/clientes/resumen", { mes, moneda }),
+    sesion.rol === "GERENTE" ? null : conParametros("/api/v1/pagos/clientes/resumen", { mes, moneda }),
   );
 
   const usuarioSeleccionado = usuarios.datos?.find((u) => u.id === usuarioId);
@@ -115,6 +117,8 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
 
       {pestana === "PEDIDOS" && (
         <PedidosGerencia
+          gerentes={(miembros.datos ?? []).filter((m) => m.rol === "GERENTE").map((m) => ({ id: m.id, codigo: m.codigo, nombre: m.nombre, usuario_id: null, porcentaje_produccion: null }))}
+          esGerente={sesion.rol === "GERENTE"}
           mes={mes}
           moneda={moneda}
           pedidos={pedidos.datos ?? []}
@@ -219,6 +223,8 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
 }
 
 function PedidosGerencia({
+  gerentes,
+  esGerente,
   mes,
   moneda,
   pedidos,
@@ -231,6 +237,8 @@ function PedidosGerencia({
   alCambiar,
   alMensaje,
 }: {
+  gerentes: FiltroOpcion[];
+  esGerente: boolean;
   mes: string;
   moneda: "PEN" | "USD";
   pedidos: PedidoGerencia[];
@@ -243,6 +251,7 @@ function PedidosGerencia({
   alCambiar: () => void;
   alMensaje: (mensaje: string) => void;
 }) {
+  const [gerenteId, setGerenteId] = useState("");
   const [clienteId, setClienteId] = useState("");
   const [responsableId, setResponsableId] = useState("");
   const [monto, setMonto] = useState("");
@@ -257,6 +266,7 @@ function PedidosGerencia({
     e.preventDefault();
     await enviarJson<PedidoGerencia>("/api/v1/pagos/pedidos", "POST", {
       cliente_id: clienteId,
+      gerente_id: esGerente ? null : gerenteId,
       responsable_id: responsableId || null,
       periodo_mes: mes + "-01",
       moneda,
@@ -275,6 +285,10 @@ function PedidosGerencia({
       <section>
         <h3>Nuevo Pedido de Gerencia</h3>
         <form onSubmit={crear} className="formulario-linea">
+          {!esGerente && <select value={gerenteId} onChange={(e) => setGerenteId(e.target.value)} required>
+            <option value="">Seleccionar Gerente</option>
+            {gerentes.map((g) => <option key={g.id} value={g.id}>{g.codigo} · {g.nombre}</option>)}
+          </select>}
           <select value={clienteId} onChange={(e) => setClienteId(e.target.value)} required>
             <option value="">Cliente receptor</option>
             {clientes.map((c) => (

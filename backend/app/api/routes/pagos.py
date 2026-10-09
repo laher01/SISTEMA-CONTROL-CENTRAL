@@ -17,6 +17,8 @@ from app.models import (
     CuentaPagoERP,
     Empresa,
     Expediente,
+    GerenteEmpresa,
+    GerenteResponsable,
     Gestor,
     Miembro,
     PagoERP,
@@ -133,18 +135,23 @@ def responsables_pedido(
     session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
 ) -> list[FiltroOpcion]:
     _validar_acceso(auth.rol)
+    consulta = select(Miembro).where(
+        Miembro.tenant_id == tenant_id,
+        Miembro.rol == RolMiembro.RESPONSABLE,
+        Miembro.activo.is_(True),
+        Miembro.deleted_at.is_(None),
+    )
+    if auth.rol == RolMiembro.GERENTE:
+        consulta = consulta.join(
+            GerenteResponsable, GerenteResponsable.responsable_id == Miembro.id
+        ).where(
+            GerenteResponsable.tenant_id == tenant_id,
+            GerenteResponsable.gerente_id == auth.miembro_id,
+            GerenteResponsable.activo.is_(True),
+        )
     return [
         FiltroOpcion(id=r.id, codigo=r.codigo, nombre=r.nombre)
-        for r in session.scalars(
-            select(Miembro)
-            .where(
-                Miembro.tenant_id == tenant_id,
-                Miembro.rol == RolMiembro.RESPONSABLE,
-                Miembro.activo.is_(True),
-                Miembro.deleted_at.is_(None),
-            )
-            .order_by(Miembro.codigo)
-        )
+        for r in session.scalars(consulta.order_by(Miembro.codigo))
     ]
 
 
@@ -155,6 +162,8 @@ def usuarios_pago(
     auth: OperativeAuthDep,
 ) -> list[FiltroOpcion]:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        return []
     return [
         FiltroOpcion(
             id=u.id,
@@ -182,17 +191,20 @@ def clientes_pago(
     auth: OperativeAuthDep,
 ) -> list[FiltroOpcion]:
     _validar_acceso(auth.rol)
+    consulta = select(Empresa).where(
+        Empresa.tenant_id == tenant_id,
+        Empresa.deleted_at.is_(None),
+        Empresa.tipo_relacion.in_(["CLIENTE", "AMBOS"]),
+    )
+    if auth.rol == RolMiembro.GERENTE:
+        consulta = consulta.join(GerenteEmpresa, GerenteEmpresa.empresa_id == Empresa.id).where(
+            GerenteEmpresa.tenant_id == tenant_id,
+            GerenteEmpresa.gerente_id == auth.miembro_id,
+            GerenteEmpresa.activo.is_(True),
+        )
     return [
         FiltroOpcion(id=e.id, codigo=e.ruc, nombre=e.razon_social)
-        for e in session.scalars(
-            select(Empresa)
-            .where(
-                Empresa.tenant_id == tenant_id,
-                Empresa.deleted_at.is_(None),
-                Empresa.tipo_relacion.in_(["CLIENTE", "AMBOS"]),
-            )
-            .order_by(Empresa.razon_social)
-        )
+        for e in session.scalars(consulta.order_by(Empresa.razon_social))
     ]
 
 
@@ -203,6 +215,8 @@ def proveedores_pago(
     auth: OperativeAuthDep,
 ) -> list[FiltroOpcion]:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        return []
     return [
         FiltroOpcion(id=e.id, codigo=e.ruc, nombre=e.razon_social)
         for e in session.scalars(
@@ -224,6 +238,8 @@ def gestores_pago(
     auth: OperativeAuthDep,
 ) -> list[FiltroOpcion]:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        return []
     return [
         FiltroOpcion(
             id=g.id,
@@ -349,6 +365,8 @@ def consolidado_compras(
             )
             .group_by(responsable.c.id, responsable.c.codigo, responsable.c.nombre)
         )
+    if auth.rol == RolMiembro.GERENTE:
+        consulta = consulta.where(Expediente.gerente_id == auth.miembro_id)
     filas = [
         {
             "id": str(id_),
@@ -378,6 +396,11 @@ def resumen_clientes(
     moneda: str = "PEN",
 ) -> CarteraClientesResumen:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     if moneda not in {"PEN", "USD"}:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Moneda inválida")
     desde, hasta = _rango_mes(mes)
@@ -496,6 +519,11 @@ def registrar_abono_cliente(
     datos: AbonoClienteERPIn,
 ) -> AbonoClienteERP:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     cliente = _cliente_valido(session, tenant_id, datos.cliente_id)
     abono = AbonoClienteERP(
         tenant_id=tenant_id,
@@ -535,6 +563,11 @@ def listar_abonos_cliente(
     cliente_id: uuid.UUID | None = None,
 ) -> list[AbonoClienteERP]:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     consulta = select(AbonoClienteERP).where(AbonoClienteERP.tenant_id == tenant_id)
     if cliente_id is not None:
         consulta = consulta.where(AbonoClienteERP.cliente_id == cliente_id)
@@ -550,6 +583,11 @@ def actualizar_agente_retencion(
     datos: AgenteRetencionIn,
 ) -> bool:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     cliente = _cliente_valido(session, tenant_id, cliente_id)
     anterior = cliente.agente_retencion
     cliente.agente_retencion = datos.agente_retencion
@@ -574,10 +612,17 @@ def _pedido_valido(
     session: SessionDep,
     tenant_id: uuid.UUID,
     pedido_id: uuid.UUID,
+    auth: OperativeAuthDep | None = None,
 ) -> PedidoGerencia:
     pedido = session.get(PedidoGerencia, pedido_id)
     if pedido is None or pedido.tenant_id != tenant_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pedido de Gerencia no encontrado")
+    if (
+        auth is not None
+        and auth.rol == RolMiembro.GERENTE
+        and (auth.miembro_id is None or pedido.gerente_id != auth.miembro_id)
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pedido no encontrado")
     return pedido
 
 
@@ -649,6 +694,7 @@ def _resumen_pedido(
         Expediente.moneda == pedido.moneda,
         Expediente.fecha_emision >= desde,
         Expediente.fecha_emision <= hasta,
+        Expediente.pedido_gerencia_id == pedido.id,
     )
     ejecutado = Decimal(
         session.scalar(
@@ -736,6 +782,7 @@ def _resumen_pedido(
 
     return PedidoGerenciaOut(
         id=pedido.id,
+        gerente_id=pedido.gerente_id,
         responsable_id=pedido.responsable_id,
         cliente_id=pedido.cliente_id,
         cliente_ruc=cliente.ruc,
@@ -771,6 +818,35 @@ def crear_pedido_gerencia(
 ) -> PedidoGerenciaOut:
     _validar_acceso(auth.rol)
     cliente = _cliente_valido(session, tenant_id, datos.cliente_id)
+    gerente_id = auth.miembro_id if auth.rol == RolMiembro.GERENTE else datos.gerente_id
+    if auth.rol == RolMiembro.GERENTE and datos.gerente_id not in (None, auth.miembro_id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No puede crear pedidos de otro Gerente")
+    if auth.rol == RolMiembro.GERENTE and gerente_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Gerente sin identidad")
+    if gerente_id is not None:
+        gerente = session.get(Miembro, gerente_id)
+        if (
+            gerente is None
+            or gerente.tenant_id != tenant_id
+            or gerente.rol != RolMiembro.GERENTE
+            or gerente.deleted_at is not None
+            or not gerente.activo
+        ):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Gerente inválido")
+        cartera = session.scalar(
+            select(GerenteEmpresa.id).where(
+                GerenteEmpresa.tenant_id == tenant_id,
+                GerenteEmpresa.gerente_id == gerente_id,
+                GerenteEmpresa.empresa_id == cliente.id,
+                GerenteEmpresa.activo.is_(True),
+            )
+        )
+        if cartera is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Cliente no asignado a Gerencia")
+    if auth.rol == RolMiembro.GERENTE and datos.responsable_id is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Gerencia debe asignar un Responsable"
+        )
     if datos.responsable_id is not None:
         responsable = session.get(Miembro, datos.responsable_id)
         if (
@@ -781,6 +857,17 @@ def crear_pedido_gerencia(
             or responsable.deleted_at is not None
         ):
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Responsable inválido")
+        if gerente_id is not None:
+            vinculo = session.scalar(
+                select(GerenteResponsable.id).where(
+                    GerenteResponsable.tenant_id == tenant_id,
+                    GerenteResponsable.gerente_id == gerente_id,
+                    GerenteResponsable.responsable_id == datos.responsable_id,
+                    GerenteResponsable.activo.is_(True),
+                )
+            )
+            if vinculo is None:
+                raise HTTPException(status.HTTP_403_FORBIDDEN, "Responsable no vinculado")
         if datos.modo_distribucion != "MANUAL":
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -789,6 +876,7 @@ def crear_pedido_gerencia(
     periodo = datos.periodo_mes.replace(day=1)
     pedido = PedidoGerencia(
         tenant_id=tenant_id,
+        gerente_id=gerente_id,
         cliente_id=cliente.id,
         responsable_id=datos.responsable_id,
         periodo_mes=periodo,
@@ -843,6 +931,10 @@ def listar_pedidos_gerencia(
 ) -> list[PedidoGerenciaOut]:
     _validar_acceso(auth.rol)
     consulta = select(PedidoGerencia).where(PedidoGerencia.tenant_id == tenant_id)
+    if auth.rol == RolMiembro.GERENTE:
+        if auth.miembro_id is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Gerente sin identidad")
+        consulta = consulta.where(PedidoGerencia.gerente_id == auth.miembro_id)
     if mes:
         desde, _ = _rango_mes(mes)
         consulta = consulta.where(PedidoGerencia.periodo_mes == desde)
@@ -867,7 +959,7 @@ def eliminar_pedido_sin_movimientos(
 ) -> None:
     """Elimina un pedido sin asignaciones ni ejecución, conservando auditoría."""
     _validar_acceso(auth.rol)
-    pedido = _pedido_valido(session, tenant_id, pedido_id)
+    pedido = _pedido_valido(session, tenant_id, pedido_id, auth)
     asignacion = session.scalar(
         select(AsignacionPedidoGerencia.id)
         .where(
@@ -921,7 +1013,7 @@ def anular_pedido_gerencia(
 ) -> PedidoGerenciaOut:
     """Anula sin borrado físico, con motivo y sin afectar pedidos ejecutados."""
     _validar_acceso(auth.rol)
-    pedido = _pedido_valido(session, tenant_id, pedido_id)
+    pedido = _pedido_valido(session, tenant_id, pedido_id, auth)
     if pedido.estado == "CANCELADO":
         raise HTTPException(status.HTTP_409_CONFLICT, "Pedido ya anulado")
     if pedido.estado not in ("ACTIVO", "CERRADO"):
@@ -970,7 +1062,7 @@ def actualizar_pedido_gerencia(
     datos: PedidoGerenciaActualizarIn,
 ) -> PedidoGerenciaOut:
     _validar_acceso(auth.rol)
-    pedido = _pedido_valido(session, tenant_id, pedido_id)
+    pedido = _pedido_valido(session, tenant_id, pedido_id, auth)
     if pedido.estado == "CANCELADO":
         raise HTTPException(status.HTTP_409_CONFLICT, "Pedido cancelado; no puede reabrirse")
     if "responsable_id" in datos.model_fields_set:
@@ -995,6 +1087,17 @@ def actualizar_pedido_gerencia(
                     status.HTTP_409_CONFLICT,
                     "Quite asignaciones anteriores antes de transferir",
                 )
+        if pedido.gerente_id is not None and datos.responsable_id is not None:
+            vinculo = session.scalar(
+                select(GerenteResponsable.id).where(
+                    GerenteResponsable.tenant_id == tenant_id,
+                    GerenteResponsable.gerente_id == pedido.gerente_id,
+                    GerenteResponsable.responsable_id == datos.responsable_id,
+                    GerenteResponsable.activo.is_(True),
+                )
+            )
+            if vinculo is None:
+                raise HTTPException(status.HTTP_403_FORBIDDEN, "Responsable fuera de Gerencia")
         pedido.responsable_id = datos.responsable_id
     if pedido.responsable_id is not None and datos.modo_distribucion in {
         "SEMIASISTIDA",
@@ -1058,7 +1161,9 @@ def agregar_asignacion_pedido(
     datos: AsignacionPedidoGerenciaIn,
 ) -> PedidoGerenciaOut:
     _validar_acceso(auth.rol)
-    pedido = _pedido_valido(session, tenant_id, pedido_id)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Distribución reservada al Responsable")
+    pedido = _pedido_valido(session, tenant_id, pedido_id, auth)
     if pedido.responsable_id is not None:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, "El pedido corresponde al Responsable asignado"
@@ -1148,7 +1253,9 @@ def eliminar_asignacion_pedido(
     asignacion_id: uuid.UUID,
 ) -> PedidoGerenciaOut:
     _validar_acceso(auth.rol)
-    pedido = _pedido_valido(session, tenant_id, pedido_id)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Distribución reservada al Responsable")
+    pedido = _pedido_valido(session, tenant_id, pedido_id, auth)
     asignacion = session.get(AsignacionPedidoGerencia, asignacion_id)
     if asignacion is None or asignacion.tenant_id != tenant_id or asignacion.pedido_id != pedido.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Asignación no encontrada")
@@ -1173,6 +1280,11 @@ def crear_plan(
     datos: PlanLiquidacionIn,
 ) -> PlanLiquidacion:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     _usuario_valido(session, tenant_id, datos.usuario_id)
     plan = PlanLiquidacion(
         tenant_id=tenant_id,
@@ -1196,6 +1308,11 @@ def listar_planes(
     auth: OperativeAuthDep,
 ) -> list[PlanLiquidacion]:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     return list(
         session.scalars(
             select(PlanLiquidacion)
@@ -1213,6 +1330,11 @@ def crear_cuenta(
     datos: CuentaPagoERPIn,
 ) -> CuentaPagoERP:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     _usuario_valido(session, tenant_id, datos.usuario_id)
     cuenta = CuentaPagoERP(
         tenant_id=tenant_id,
@@ -1239,6 +1361,11 @@ def listar_cuentas(
     auth: OperativeAuthDep,
 ) -> list[CuentaPagoERP]:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     return list(
         session.scalars(
             select(CuentaPagoERP)
@@ -1256,6 +1383,11 @@ def crear_adelanto(
     datos: AdelantoERPIn,
 ) -> AdelantoERP:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     _usuario_valido(session, tenant_id, datos.usuario_id)
     adelanto = AdelantoERP(
         tenant_id=tenant_id,
@@ -1279,6 +1411,11 @@ def listar_adelantos(
     auth: OperativeAuthDep,
 ) -> list[AdelantoERP]:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     return list(
         session.scalars(
             select(AdelantoERP)
@@ -1308,6 +1445,11 @@ def listar_pagos(
     auth: OperativeAuthDep,
 ) -> list[PagoERP]:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     return list(
         session.scalars(
             select(PagoERP)
@@ -1326,6 +1468,11 @@ def actualizar_pago(
     datos: PagoERPActualizarIn,
 ) -> PagoERP:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     pago = session.get(PagoERP, pago_id)
     if pago is None or pago.tenant_id != tenant_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pago no encontrado")

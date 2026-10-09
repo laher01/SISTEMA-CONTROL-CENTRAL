@@ -80,6 +80,27 @@ def opciones(
                 .order_by(Gestor.codigo)
             )
         ]
+    if auth.rol == RolMiembro.GERENTE:
+        ids_usuarios = set(
+            session.scalars(
+                select(Expediente.usuario_id).where(
+                    Expediente.tenant_id == tenant_id,
+                    Expediente.gerente_id == auth.miembro_id,
+                    Expediente.deleted_at.is_(None),
+                )
+            )
+        )
+        ids_gestores = set(
+            session.scalars(
+                select(Expediente.gestor_id).where(
+                    Expediente.tenant_id == tenant_id,
+                    Expediente.gerente_id == auth.miembro_id,
+                    Expediente.deleted_at.is_(None),
+                )
+            )
+        )
+        usuarios = [u for u in usuarios if u.id in ids_usuarios]
+        gestores = [g for g in gestores if g.id in ids_gestores]
     return RegistroOpciones(usuarios=usuarios, gestores=gestores)
 
 
@@ -271,6 +292,8 @@ def _aplicar_ambito(consulta: Any, auth: OperativeAuthDep) -> Any:
         return consulta.where(Expediente.gestor_id == auth.gestor_id)
     if auth.rol == RolMiembro.USUARIO:
         return consulta.where(Expediente.usuario_id == auth.usuario_id)
+    if auth.rol == RolMiembro.GERENTE:
+        return consulta.where(Expediente.gerente_id == auth.miembro_id)
     return consulta
 
 

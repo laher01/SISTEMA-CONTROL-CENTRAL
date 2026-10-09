@@ -132,6 +132,8 @@ def listar(
         consulta = consulta.where(Expediente.gestor_id == auth.gestor_id)
     elif auth.rol == RolMiembro.USUARIO:
         consulta = consulta.where(Expediente.usuario_id == auth.usuario_id)
+    elif auth.rol == RolMiembro.GERENTE:
+        consulta = consulta.where(Expediente.gerente_id == auth.miembro_id)
     if estado is not None:
         consulta = consulta.where(Expediente.estado == estado)
     if pendiente_aprobacion is not None:
@@ -210,6 +212,8 @@ def resumen_filtrado(
         consulta = consulta.where(Expediente.gestor_id == auth.gestor_id)
     elif auth.rol == RolMiembro.USUARIO:
         consulta = consulta.where(Expediente.usuario_id == auth.usuario_id)
+    elif auth.rol == RolMiembro.GERENTE:
+        consulta = consulta.where(Expediente.gerente_id == auth.miembro_id)
     if estado is not None:
         consulta = consulta.where(Expediente.estado == estado)
     if pendiente_aprobacion is not None:
@@ -296,6 +300,8 @@ def listar_ids(
         consulta = consulta.where(Expediente.gestor_id == auth.gestor_id)
     elif auth.rol == RolMiembro.USUARIO:
         consulta = consulta.where(Expediente.usuario_id == auth.usuario_id)
+    elif auth.rol == RolMiembro.GERENTE:
+        consulta = consulta.where(Expediente.gerente_id == auth.miembro_id)
     if estado is not None:
         consulta = consulta.where(Expediente.estado == estado)
     if pendiente_aprobacion is not None:
@@ -351,6 +357,8 @@ def _visible_para_auth(expediente: Expediente, auth: OperativeAuthDep) -> bool:
         return expediente.gestor_id == auth.gestor_id
     if auth.rol == RolMiembro.USUARIO:
         return expediente.usuario_id == auth.usuario_id
+    if auth.rol == RolMiembro.GERENTE:
+        return expediente.gerente_id == auth.miembro_id
     return True
 
 
@@ -672,7 +680,7 @@ def detalle(
         raise no_encontrado("Expediente")
     if auth.rol == "GESTOR" and expediente.gestor_id != auth.gestor_id:
         raise no_encontrado("Expediente")
-    if auth.rol == RolMiembro.USUARIO and expediente.usuario_id != auth.usuario_id:
+    if not _visible_para_auth(expediente, auth):
         raise no_encontrado("Expediente")
     base = ExpedienteOut.model_validate(expediente)
     return ExpedienteDetalle(
@@ -696,7 +704,7 @@ def eliminar(
         raise no_encontrado("Expediente")
     if auth.rol == "GESTOR" and expediente.gestor_id != auth.gestor_id:
         raise no_encontrado("Expediente")
-    if auth.rol == RolMiembro.USUARIO and expediente.usuario_id != auth.usuario_id:
+    if not _visible_para_auth(expediente, auth):
         raise no_encontrado("Expediente")
     if not permiso_habilitado(
         session,

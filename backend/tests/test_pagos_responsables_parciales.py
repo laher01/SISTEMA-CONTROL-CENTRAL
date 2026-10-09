@@ -36,6 +36,7 @@ def test_adelanto_y_pago_total_con_comprobante(
             moneda="PEN",
             importe_total=Decimal("1000.00"),
             usuario_id=usuario.id,
+            gerente_id=auth_prueba.contexto.miembro_id,
         )
     )
     session.commit()
