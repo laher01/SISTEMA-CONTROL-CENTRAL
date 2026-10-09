@@ -9,6 +9,7 @@ from app.core.config import Settings, get_settings
 from app.core.db import get_session
 from app.security import ContextoAcceso, contexto_desde_token
 from app.storage import AlmacenLocal
+from app.tenant_host import validar_sesion_host
 
 SessionDep = Annotated[Session, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -34,6 +35,7 @@ def get_contexto_actual(
     if contexto is None:
         session.commit()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sesión inválida o vencida")
+    validar_sesion_host(request, session, settings, contexto.tenant_id)
     session.commit()
     return contexto
 

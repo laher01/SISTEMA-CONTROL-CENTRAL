@@ -171,10 +171,9 @@ function OrganizacionAdmin() {
           <h3>{miembroEditando ? "Editar miembro" : "Crear miembro"}</h3>
           <form onSubmit={guardarMiembro} className="formulario-linea">
             <input
-              placeholder="Código / login, ej. WILL01"
+              placeholder="Código automático (opcional, editable)"
               value={codigo}
               onChange={(e) => setCodigo(e.target.value.toUpperCase())}
-              required
             />
             <input placeholder="Nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} required />
             <select
@@ -243,10 +242,9 @@ function OrganizacionAdmin() {
               {usuarios.map((u) => <option key={u.id} value={u.id}>{u.codigo} · {u.nombre}</option>)}
             </select>
             <input
-              placeholder="Código / login gestor"
+              placeholder="Código automático (opcional, editable)"
               value={codigoGestor}
               onChange={(e) => setCodigoGestor(e.target.value.toUpperCase())}
-              required
             />
             <input
               placeholder="Nombre gestor"

@@ -11,12 +11,14 @@ from app.api.deps import OperativeAuthDep, SessionDep
 from app.enums import RolMiembro
 from app.models import CuentaAcceso, Gestor, Miembro, Tenant
 from app.security import crear_o_restablecer_cuenta
+from app.tenant_host import validar_subdominio
 
 
 class AltaAdministracionIn(BaseModel):
     nombre_administrador: str = Field(min_length=3, max_length=180)
     nombre_espacio: str = Field(min_length=3, max_length=200)
     origen: str = "SUPERADMIN"
+    subdominio: str | None = Field(default=None, max_length=63)
 
 
 router = APIRouter(prefix="/configuracion/administraciones", tags=["configuracion"])
@@ -59,6 +61,7 @@ def listar_administraciones(
             "id": str(tenant.id),
             "nombre": tenant.nombre,
             "codigo": tenant.codigo or "",
+            "subdominio": tenant.subdominio or "",
             "origen": tenant.origen_alta,
             "estado": tenant.estado,
             "administradores": miembros.get((tenant.id, RolMiembro.ADMINISTRADOR), 0),
@@ -130,7 +133,17 @@ def crear_administracion(
             status.HTTP_409_CONFLICT,
             "El código generado coincide con el nombre de otra Administración",
         )
-    tenant = Tenant(nombre=espacio, codigo=codigo, origen_alta="SUPERADMIN", estado="ACTIVO")
+    try:
+        subdominio = validar_subdominio(datos.subdominio) if datos.subdominio else None
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    tenant = Tenant(
+        nombre=espacio,
+        codigo=codigo,
+        subdominio=subdominio,
+        origen_alta="SUPERADMIN",
+        estado="ACTIVO",
+    )
     session.add(tenant)
     try:
         session.flush()
@@ -155,6 +168,7 @@ def crear_administracion(
         "tenant_id": str(tenant.id),
         "codigo": codigo,
         "nombre": tenant.nombre,
+        "subdominio": tenant.subdominio or "",
         "login": administrador.codigo,
         "clave_temporal": temporal,
         "origen": "SUPERADMIN",

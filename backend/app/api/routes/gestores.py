@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
+from app.codigos import codigo_automatico
 from app.enums import RolMiembro
 from app.models import Gestor, Miembro
 from app.schemas import (
@@ -34,7 +35,11 @@ def crear(
     usuario = _usuario_valido(session, tenant_id, usuario_id)
     gestor = Gestor(
         tenant_id=tenant_id,
-        codigo=datos.codigo.strip().upper(),
+        codigo=(
+            datos.codigo.strip().upper()
+            if datos.codigo
+            else codigo_automatico(session, tenant_id, datos.nombre, "GESTOR")
+        ),
         nombre=datos.nombre.strip(),
         usuario_id=usuario.id,
         creado_por_cuenta_id=cuenta_administradora_responsable(session, auth),

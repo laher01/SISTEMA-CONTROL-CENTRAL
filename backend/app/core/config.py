@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://fact:fact@localhost:5432/fact_central"
     storage_dir: Path = Path("./storage")
     tenant_default: str = "default"
+    tenant_domain: str = ""
     zona_horaria: str = "America/Lima"
     dia_limite_expediente: int = 7
     umbral_bancarizacion_pen: Decimal = Decimal("2000")

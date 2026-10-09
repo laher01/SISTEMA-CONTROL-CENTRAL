@@ -16,6 +16,7 @@ from app.models import (
 from app.schemas import CambioClaveIn, LoginIn, SesionOut, SolicitudAccesoIn, SolicitudAccesoOut
 from app.security import crear_sesion, hash_clave, revocar_sesion, verificar_clave
 from app.services import auditoria
+from app.tenant_host import tenant_de_host
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -26,8 +27,21 @@ def login(
     response: Response,
     session: SessionDep,
     settings: SettingsDep,
+    request: Request,
 ) -> SesionOut:
-    espacio = (datos.espacio or settings.tenant_default).strip()
+    tenant_host = tenant_de_host(request, session, settings)
+    if (
+        tenant_host is not None
+        and datos.espacio
+        and datos.espacio.strip().lower()
+        not in {tenant_host.nombre.lower(), (tenant_host.codigo or "").lower()}
+    ):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Credenciales inválidas")
+    espacio = (
+        (tenant_host.codigo or tenant_host.nombre)
+        if tenant_host
+        else (datos.espacio or settings.tenant_default).strip()
+    )
     tenant_codigo = session.scalar(
         select(Tenant).where(func.upper(Tenant.codigo) == espacio.upper())
     )
@@ -110,6 +124,22 @@ def login(
         path="/",
     )
     return _salida_sesion(session, cuenta, rol)
+
+
+@router.get("/administracion-publica")
+def administracion_publica(
+    request: Request,
+    session: SessionDep,
+    settings: SettingsDep,
+) -> dict[str, str | bool]:
+    tenant = tenant_de_host(request, session, settings)
+    if tenant is None:
+        return {"por_subdominio": False, "nombre": "", "codigo": ""}
+    return {
+        "por_subdominio": True,
+        "nombre": tenant.nombre,
+        "codigo": tenant.codigo or "",
+    }
 
 
 @router.get("/acceso-publico")

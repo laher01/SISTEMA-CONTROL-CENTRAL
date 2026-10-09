@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
+from app.codigos import codigo_automatico
 from app.enums import RolMiembro
 from app.models import Gestor, Miembro
 from app.schemas import (
@@ -36,7 +37,11 @@ def crear(
         )
     miembro = Miembro(
         tenant_id=tenant_id,
-        codigo=datos.codigo.strip().upper(),
+        codigo=(
+            datos.codigo.strip().upper()
+            if datos.codigo
+            else codigo_automatico(session, tenant_id, datos.nombre, datos.rol)
+        ),
         nombre=datos.nombre.strip(),
         rol=datos.rol,
         porcentaje_produccion=(

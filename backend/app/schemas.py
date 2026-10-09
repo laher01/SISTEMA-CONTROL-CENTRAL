@@ -73,7 +73,7 @@ class ImpresionExpedientesIn(BaseModel):
 
 
 class MiembroIn(BaseModel):
-    codigo: str = Field(min_length=1, max_length=50)
+    codigo: str | None = Field(default=None, min_length=1, max_length=50)
     nombre: str = Field(min_length=1, max_length=200)
     rol: RolMiembro
     porcentaje_produccion: Decimal | None = Field(
@@ -102,7 +102,7 @@ class MiembroActualizar(BaseModel):
 
 
 class GestorIn(BaseModel):
-    codigo: str = Field(min_length=1, max_length=50)
+    codigo: str | None = Field(default=None, min_length=1, max_length=50)
     nombre: str = Field(min_length=1, max_length=200)
     usuario_id: uuid.UUID
 

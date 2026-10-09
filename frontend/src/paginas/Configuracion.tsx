@@ -800,6 +800,7 @@ function EmpresasRegistradasPanel() {
 
 
 interface AdministracionGlobal {
+  subdominio: string;
   id: string;
   nombre: string;
   administradores: number;
@@ -821,6 +822,7 @@ function AdministracionesPanel() {
   const [texto, setTexto] = useState("");
   const [nombreAdministrador, setNombreAdministrador] = useState("Luis Arevalo Herrera");
   const [nombreEspacio, setNombreEspacio] = useState("Administración Luis Arévalo Herrera");
+  const [subdominio, setSubdominio] = useState("");
   const [nuevaCuenta, setNuevaCuenta] = useState<{ codigo: string; login: string; clave_temporal: string } | null>(null);
   const [mensaje, setMensaje] = useState("");
   const crear = async (evento: FormEvent) => {
@@ -832,6 +834,7 @@ function AdministracionesPanel() {
         "/api/v1/configuracion/administraciones", "POST", {
           nombre_administrador: nombreAdministrador,
           nombre_espacio: nombreEspacio,
+          subdominio: subdominio.trim().toLowerCase() || null,
           origen: "SUPERADMIN",
         },
       );
@@ -853,6 +856,9 @@ function AdministracionesPanel() {
         </label>
         <label>Nombre del espacio
           <input required value={nombreEspacio} onChange={(e) => setNombreEspacio(e.target.value)} />
+        </label>
+        <label>Subdominio (opcional)
+          <input value={subdominio} onChange={(e) => setSubdominio(e.target.value.toLowerCase())} placeholder="nexomar" pattern="[a-z][a-z0-9-]{1,61}[a-z0-9]" />
         </label>
         <button type="submit">Crear Administración independiente</button>
       </form>
@@ -877,10 +883,10 @@ function AdministracionesPanel() {
       {error && <p role="alert">{error}</p>}
       <p>Total de Administraciones registradas: <strong>{datos?.length ?? 0}</strong></p>
       <table>
-        <thead><tr><th>Administración</th><th>Código</th><th>Origen</th><th>Estado</th><th>Identificador</th><th>Administradores</th><th>Gerentes</th><th>Secretaría</th><th>Usuarios</th><th>Gestores</th><th>Cuentas habilitadas</th></tr></thead>
+        <thead><tr><th>Administración</th><th>Código</th><th>Subdominio</th><th>Origen</th><th>Estado</th><th>Identificador</th><th>Administradores</th><th>Gerentes</th><th>Secretaría</th><th>Usuarios</th><th>Gestores</th><th>Cuentas habilitadas</th></tr></thead>
         <tbody>{visibles.map((a) => (
           <tr key={a.id}>
-            <td>{a.nombre}</td><td>{a.codigo || "Legado"}</td><td>{a.origen}</td><td>{a.estado}</td><td>{a.id}</td><td>{a.administradores}</td>
+            <td>{a.nombre}</td><td>{a.codigo || "Legado"}</td><td>{a.subdominio || "Sin asignar"}</td><td>{a.origen}</td><td>{a.estado}</td><td>{a.id}</td><td>{a.administradores}</td>
             <td>{a.gerentes}</td><td>{a.secretarias}</td><td>{a.usuarios}</td>
             <td>{a.gestores}</td><td>{a.cuentas_activas}</td>
           </tr>
