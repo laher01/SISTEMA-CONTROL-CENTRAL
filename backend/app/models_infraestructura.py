@@ -27,6 +27,7 @@ class NodoInfraestructura(ConId, ConCreacion, Base):
     token_hash: Mapped[str | None] = mapped_column(String(64))
     ultima_conexion: Mapped[datetime | None]
     version_instalada: Mapped[str | None] = mapped_column(String(100))
+    migracion_instalada: Mapped[str | None] = mapped_column(String(100))
     ultimo_despliegue: Mapped[datetime | None]
 
 
@@ -42,6 +43,7 @@ class ReporteNodo(ConId, ConCreacion, Base):
     disco_porcentaje: Mapped[float | None] = mapped_column(Float)
     servicios: Mapped[JsonDict]
     version: Mapped[str | None] = mapped_column(String(100))
+    migracion: Mapped[str | None] = mapped_column(String(100))
 
 
 class VersionInfraestructura(ConId, ConCreacion, Base):
@@ -52,6 +54,8 @@ class VersionInfraestructura(ConId, ConCreacion, Base):
     commit_git: Mapped[str] = mapped_column(String(40))
     imagen_docker: Mapped[str] = mapped_column(String(300))
     digest: Mapped[str] = mapped_column(String(71))
+    imagen_frontend: Mapped[str | None] = mapped_column(String(300))
+    digest_frontend: Mapped[str | None] = mapped_column(String(71))
     construida_at: Mapped[datetime]
     entorno: Mapped[str] = mapped_column(String(20))
     validacion: Mapped[str] = mapped_column(String(20), default="PENDIENTE")

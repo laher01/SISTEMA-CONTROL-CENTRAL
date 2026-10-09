@@ -53,6 +53,10 @@ class ReporteIn(ContratoInfra):
     disco_porcentaje: float | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
     servicios: dict[Literal["backend", "postgresql", "redis", "storage"], EstadoServicio]
     version: str | None = Field(default=None, min_length=1, max_length=100)
+    migracion: str | None = Field(default=None, min_length=1, max_length=100)
+    cpu_nucleos: int | None = Field(default=None, ge=1, le=65536)
+    ram_bytes: int | None = Field(default=None, ge=1, le=2**63 - 1)
+    disco_bytes: int | None = Field(default=None, ge=1, le=2**63 - 1)
 
 
 class VersionIn(ContratoInfra):
@@ -60,6 +64,10 @@ class VersionIn(ContratoInfra):
     commit_git: str = Field(pattern=r"^[0-9a-f]{40}$")
     imagen_docker: str = Field(min_length=1, max_length=300, pattern=r"^[a-z0-9./_-]+$")
     digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    imagen_frontend: str | None = Field(
+        default=None, min_length=1, max_length=300, pattern=r"^[a-z0-9./_-]+$"
+    )
+    digest_frontend: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
     construida_at: datetime
     entorno: EntornoInfra
     migracion_desde: str = Field(min_length=1, max_length=100)
@@ -70,8 +78,12 @@ class VersionIn(ContratoInfra):
     @classmethod
     def version_semantica(cls, valor: str) -> str:
         numero = r"(?:0|[1-9][0-9]*)"
+        identificador = rf"(?:{numero}|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)"
         if not re.fullmatch(
-            rf"{numero}\.{numero}\.{numero}(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?", valor
+            rf"{numero}\.{numero}\.{numero}"
+            rf"(?:-{identificador}(?:\.{identificador})*)?"
+            r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?",
+            valor,
         ):
             raise ValueError("Versión semántica inválida")
         return valor

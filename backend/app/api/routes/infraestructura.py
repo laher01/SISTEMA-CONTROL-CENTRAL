@@ -26,10 +26,23 @@ def superadmin(auth: OperativeAuthDep, request: Request, settings: SettingsDep) 
         if origin:
             partes = urlsplit(origin)
             actual = urlsplit(str(request.base_url))
-            if (partes.scheme, partes.netloc) != (
-                actual.scheme,
-                actual.netloc,
-            ) and origin not in settings.cors_origins:
+            dominio = settings.tenant_domain.strip().lower().rstrip(".")
+            host = actual.hostname or ""
+            https_publico = (
+                partes.scheme == "https"
+                and partes.netloc == actual.netloc
+                and bool(dominio)
+                and (host == dominio or host.endswith("." + dominio))
+            )
+            if (
+                (partes.scheme, partes.netloc)
+                != (
+                    actual.scheme,
+                    actual.netloc,
+                )
+                and not https_publico
+                and origin not in settings.cors_origins
+            ):
                 raise HTTPException(403, "Origen no autorizado")
     return auth
 
@@ -151,6 +164,8 @@ def version_publica(version: VersionInfraestructura) -> dict[str, object]:
         "commit_git": version.commit_git,
         "imagen_docker": version.imagen_docker,
         "digest": version.digest,
+        "imagen_frontend": version.imagen_frontend,
+        "digest_frontend": version.digest_frontend,
         "construida_at": version.construida_at,
         "entorno": version.entorno,
         "validacion": version.validacion,

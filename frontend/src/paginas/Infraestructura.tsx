@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 
 import { eliminar, enviarJson, useDatos } from "../api";
 import { Estado } from "../componentes";
+import OperacionesInfraestructura from "./OperacionesInfraestructura";
 
 type Entorno = "development" | "staging" | "canary" | "production";
 interface Nodo {
@@ -81,7 +82,12 @@ export default function Infraestructura() {
   const guardarNodo = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const datos = Object.fromEntries(form.entries());
+    const datos = {
+      ...Object.fromEntries(form.entries()),
+      cpu_nucleos: seleccion?.cpu_nucleos ?? null,
+      ram_bytes: seleccion?.ram_bytes ?? null,
+      disco_bytes: seleccion?.disco_bytes ?? null,
+    };
     await operar(async () => {
       await enviarJson(seleccion ? `${BASE}/nodos/${seleccion.id}` : `${BASE}/nodos`, seleccion ? "PUT" : "POST", datos);
       setSeleccion(null);
@@ -183,7 +189,8 @@ export default function Infraestructura() {
       <details><summary>Registrar una versión construida</summary>
         <form className="infra-formulario" onSubmit={registrarVersion}>
           {([ ["version", "Versión semántica"], ["commit_git", "Commit completo"],
-            ["imagen_docker", "Imagen sin etiqueta"], ["digest", "Digest sha256"],
+            ["imagen_docker", "Imagen backend sin etiqueta"], ["digest", "Digest backend sha256"],
+            ["imagen_frontend", "Imagen frontend sin etiqueta"], ["digest_frontend", "Digest frontend sha256"],
             ["migracion_desde", "Migración anterior"], ["migracion_hasta", "Migración nueva"] ] as const).map(([campo, etiqueta]) =>
             <label key={campo}>{etiqueta}<input required name={campo} /></label>)}
           <label>Fecha de construcción<input required type="datetime-local" name="construida_at" /></label>
@@ -199,5 +206,6 @@ export default function Infraestructura() {
           <tbody>{eventos.datos?.map(e => <tr key={e.id}><td>{fecha(e.fecha)}</td><td title={e.correlacion_id}>{e.accion}</td><td>{e.actor_cuenta_id}</td><td>{e.resultado}</td></tr>)}</tbody></table></div>
       </Estado>
     </section>
+    <OperacionesInfraestructura />
   </>;
 }

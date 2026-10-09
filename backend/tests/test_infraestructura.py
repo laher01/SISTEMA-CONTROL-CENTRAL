@@ -7,6 +7,7 @@ from sqlalchemy import Engine, select
 from sqlalchemy.orm import sessionmaker
 
 from app.api.deps import get_contexto_actual
+from app.core.config import Settings
 from app.main import app
 from app.models import Auditoria, Tenant
 from app.models_infraestructura import EventoInfraestructura, NodoInfraestructura, ReporteNodo
@@ -209,3 +210,29 @@ def test_version_por_digest_inmutable_y_salud(client: TestClient, auth_prueba: A
         "base_datos": "OK",
         "redis": "NO_CONFIGURADO",
     }
+
+
+def test_origen_https_publico_detras_de_proxy_sin_confiar_en_cabeceras(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    settings: Settings,
+) -> None:
+    auth_prueba.como_superadmin()
+    settings.tenant_domain = "factcentral.online"
+    respuesta = client.post(
+        f"http://factcentral.online{RUTA}/nodos",
+        json=NODO,
+        headers={"Origin": "https://factcentral.online"},
+    )
+    assert respuesta.status_code == 201, respuesta.text
+    assert (
+        client.post(
+            f"http://factcentral.online{RUTA}/nodos",
+            json={**NODO, "codigo": "SEGUNDO"},
+            headers={
+                "Origin": "https://malicioso.factcentral.online",
+                "X-Forwarded-Host": "malicioso.factcentral.online",
+            },
+        ).status_code
+        == 403
+    )

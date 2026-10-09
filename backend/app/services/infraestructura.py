@@ -18,6 +18,7 @@ from app.models_infraestructura import (
     TenantNodo,
     VersionInfraestructura,
 )
+from app.models_operaciones_infra import OperacionInfra
 from app.repositories.infraestructura import InfraestructuraRepository
 from app.schemas_infraestructura import NodoIn, ReporteIn, TenantNodoIn, VersionIn
 from app.security import ContextoAcceso
@@ -93,6 +94,13 @@ class InfraestructuraService:
         nodo = self.obtener_nodo(nodo_id)
         if not nodo.activo:
             raise HTTPException(409, "El nodo está desactivado")
+        if self.session.scalar(
+            select(OperacionInfra.id).where(
+                OperacionInfra.nodo_id == nodo.id,
+                OperacionInfra.estado.in_(["PENDIENTE", "EJECUTANDO"]),
+            )
+        ):
+            raise HTTPException(409, "No se puede editar un nodo con operaciones pendientes")
         for campo, valor in datos.model_dump().items():
             setattr(nodo, campo, valor)
         self.registrar_evento(auth, correlacion, "infra.nodo.actualizado", nodo.id)
@@ -105,6 +113,19 @@ class InfraestructuraService:
         nodo = self.obtener_nodo(nodo_id)
         if not nodo.activo:
             return
+        operaciones = list(
+            self.session.scalars(
+                select(OperacionInfra).where(
+                    OperacionInfra.nodo_id == nodo.id,
+                    OperacionInfra.estado.in_(["PENDIENTE", "EJECUTANDO"]),
+                )
+            )
+        )
+        if any(o.estado == "EJECUTANDO" for o in operaciones):
+            raise HTTPException(409, "No se puede desactivar un nodo durante una operación")
+        for operacion in operaciones:
+            operacion.estado = "CANCELADA"
+            operacion.finalizada_at = datetime.now(UTC)
         nodo.activo = False
         nodo.token_hash = None
         self.registrar_evento(auth, correlacion, "infra.nodo.desactivado", nodo.id)
@@ -140,10 +161,19 @@ class InfraestructuraService:
             if previo.contenido_hash != huella:
                 raise HTTPException(409, "La clave de reporte ya tiene otro contenido")
             return previo
-        reporte = ReporteNodo(nodo_id=nodo.id, contenido_hash=huella, **datos.model_dump())
+        reporte = ReporteNodo(
+            nodo_id=nodo.id,
+            contenido_hash=huella,
+            **datos.model_dump(exclude={"cpu_nucleos", "ram_bytes", "disco_bytes"}),
+        )
         self.session.add(reporte)
         nodo.ultima_conexion = datetime.now(UTC)
         nodo.version_instalada = datos.version
+        nodo.migracion_instalada = datos.migracion
+        for campo in ("cpu_nucleos", "ram_bytes", "disco_bytes"):
+            valor = getattr(datos, campo)
+            if valor is not None:
+                setattr(nodo, campo, valor)
         self.guardar()
         return reporte
 
@@ -215,6 +245,26 @@ class InfraestructuraService:
             ):
                 if valor is not None and valor >= umbral:
                     alertas.append(f"{recurso}_ELEVADO")
+        ultimas: dict[str, OperacionInfra] = {}
+        for operacion in self.session.scalars(
+            select(OperacionInfra)
+            .where(
+                OperacionInfra.nodo_id == nodo.id,
+            )
+            .order_by(OperacionInfra.created_at.desc())
+            .limit(100)
+        ):
+            ultimas.setdefault(operacion.tipo, operacion)
+        for tipo, operacion in ultimas.items():
+            if operacion.estado == "FALLO":
+                alertas.append("BACKUP_FALLIDO" if tipo == "BACKUP" else "DESPLIEGUE_FALLIDO")
+            if (
+                tipo != "BACKUP"
+                and operacion.estado == "EXITO"
+                and reporte
+                and (nodo.version_instalada != operacion.parametros.get("version"))
+            ):
+                alertas.append("VERSION_DIFERENTE")
         return {
             "id": nodo.id,
             "codigo": nodo.codigo,
@@ -233,6 +283,7 @@ class InfraestructuraService:
             "ultima_conexion": nodo.ultima_conexion,
             "ultimo_despliegue": nodo.ultimo_despliegue,
             "version_instalada": nodo.version_instalada,
+            "migracion_instalada": nodo.migracion_instalada,
             "cpu_porcentaje": reporte.cpu_porcentaje if reporte else None,
             "ram_porcentaje": reporte.ram_porcentaje if reporte else None,
             "disco_porcentaje": reporte.disco_porcentaje if reporte else None,
@@ -240,6 +291,18 @@ class InfraestructuraService:
             "metricas_vigentes": bool(reporte and nodo.activo and not desconectado),
             "tenants": [str(a.tenant_id) for a in self.repository.asociaciones(nodo.id)],
             "alertas": alertas,
+            "ram_disponible_bytes": int(nodo.ram_bytes * (1 - reporte.ram_porcentaje / 100))
+            if nodo.ram_bytes
+            and reporte
+            and reporte.ram_porcentaje is not None
+            and not desconectado
+            else None,
+            "disco_disponible_bytes": int(nodo.disco_bytes * (1 - reporte.disco_porcentaje / 100))
+            if nodo.disco_bytes
+            and reporte
+            and reporte.disco_porcentaje is not None
+            and not desconectado
+            else None,
         }
 
     def dashboard(self, settings: Settings) -> dict[str, object]:

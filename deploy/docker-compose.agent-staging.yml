@@ -1,0 +1,37 @@
+# Entorno aislado de pruebas del agente: no usa volúmenes ni puerto de Oracle.
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Configure la base aislada}
+      POSTGRES_USER: ${POSTGRES_USER:?Configure el usuario aislado}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Configure contraseña privada}
+    volumes: [agent_pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  backend:
+    image: ${FC_INFRA_BACKEND_IMAGE:?Use imagen backend por digest}
+    environment:
+      FC_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?connect_timeout=5
+      FC_STORAGE_DIR: /data/documentos
+      FC_TENANT_DEFAULT: agent-staging
+      FC_INFRA_OPERACIONES_HABILITADAS: "false"
+    volumes: [agent_documentos:/data/documentos]
+    depends_on:
+      db: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "uv", "run", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  frontend:
+    image: ${FC_INFRA_FRONTEND_IMAGE:?Use imagen frontend por digest}
+    ports: ["127.0.0.1:18081:80"]
+    depends_on:
+      backend: {condition: service_healthy}
+volumes:
+  agent_pgdata:
+  agent_documentos:

@@ -19,6 +19,7 @@ from app.api.routes import (
     mensajes_alerta,
     miembros,
     nexus,
+    operaciones_infra,
     pagos,
     pagos_gestores,
     produccion,
@@ -48,6 +49,7 @@ api.include_router(auth.router)
 for modulo in (
     administraciones,
     infraestructura,
+    operaciones_infra,
     documentos,
     chat,
     comisiones,
