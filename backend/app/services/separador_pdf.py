@@ -22,6 +22,12 @@ TIPOS = (
 )
 SERIE = re.compile(r"\b([A-Z][A-Z0-9]{3})\s*[-–—]\s*(\d{1,10})\b", re.I)
 RUC = re.compile(r"\b(?:20|10)\d{9}\b")
+OTRO_DOCUMENTO = re.compile(
+    r"\b(?:COTIZACI[OÓ]N|COMPROBANTE\s+DE\s+PAGO|VOUCHER|TRANSFERENCIA\s+BANCARIA|"
+    r"GU[IÍ]A\s+DE\s+REMISI[OÓ]N|FACTURA\s+ELECTR[OÓ]NICA|"
+    r"RECIBO\s+POR\s+HONORARIOS)\b",
+    re.I,
+)
 
 
 @dataclass(frozen=True)
@@ -70,6 +76,13 @@ def analizar_paquete(contenido: bytes, max_paginas: int = 200) -> list[Fragmento
             texto = (pagina.extract_text() or "").strip()
             cabecera = _cabecera(texto)
             if cabecera is None:
+                # Evitar ocultar guías, vouchers, cotizaciones o PDFs escaneados
+                # dentro de una factura como si fueran páginas de continuación.
+                if not texto or OTRO_DOCUMENTO.search(texto[:2000]):
+                    raise DocumentoNoProcesable(
+                        f"La página {i + 1} parece otro documento o requiere OCR: "
+                        "revise/separe manualmente este paquete antes de importar"
+                    )
                 if not segmentos:
                     raise DocumentoNoProcesable(
                         "La primera página no contiene una cabecera fiscal identificable"
