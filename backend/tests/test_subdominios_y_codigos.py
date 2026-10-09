@@ -47,10 +47,10 @@ def test_codigos_automaticos_sin_reutilizar_login(session: Session) -> None:
     session.add(tenant)
     session.flush()
     assert iniciales("Eduardo Ayala") == "EDA"
-    assert codigo_automatico(session, tenant.id, "Eduardo Ayala", "USUARIO") == "EAX-001-US"
-    session.add(Miembro(tenant_id=tenant.id, codigo="EAX-001-US", nombre="Eduardo", rol="USUARIO"))
+    assert codigo_automatico(session, tenant.id, "Eduardo Ayala", "USUARIO") == "EDA-001-US"
+    session.add(Miembro(tenant_id=tenant.id, codigo="EDA-001-US", nombre="Eduardo", rol="USUARIO"))
     session.flush()
-    assert codigo_automatico(session, tenant.id, "Eduardo Ayala", "USUARIO") == "EAX-002-US"
+    assert codigo_automatico(session, tenant.id, "Eduardo Ayala", "USUARIO") == "EDA-002-US"
 
 
 def test_alta_miembro_generando_codigo(
@@ -60,5 +60,5 @@ def test_alta_miembro_generando_codigo(
     auth_prueba.como_admin()
     respuesta = client.post("/api/v1/miembros", json={"nombre": "Eduardo Ayala", "rol": "USUARIO"})
     assert respuesta.status_code == 201, respuesta.text
-    assert respuesta.json()["miembro"]["codigo"] == "EAX-001-US"
-    assert respuesta.json()["credencial"]["login"] == "EAX-001-US"
+    assert respuesta.json()["miembro"]["codigo"] == "EDA-001-US"
+    assert respuesta.json()["credencial"]["login"] == "EDA-001-US"
