@@ -51,13 +51,6 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
     return u ? u.codigo + " · " + u.nombre : id;
   };
 
-  const recargarLiquidaciones = () => {
-    planes.recargar();
-    cuentas.recargar();
-    adelantos.recargar();
-    pagos.recargar();
-  };
-
   const recargarPedidosYCobros = () => {
     pedidos.recargar();
     cartera.recargar();
