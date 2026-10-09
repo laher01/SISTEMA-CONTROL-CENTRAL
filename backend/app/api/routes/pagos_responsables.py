@@ -172,9 +172,7 @@ def _calculo(
         )
     ):
         llave = (pedido_item.responsable_id, pedido_item.cliente_id)
-        pedidos[llave] = pedidos.get(llave, Decimal("0")) + Decimal(
-            pedido_item.monto_solicitado
-        )
+        pedidos[llave] = pedidos.get(llave, Decimal("0")) + Decimal(pedido_item.monto_solicitado)
     filas: list[dict[str, object]] = []
     total_produccion = Decimal("0")
     total_comisiones = Decimal("0")
