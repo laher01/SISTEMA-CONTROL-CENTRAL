@@ -228,7 +228,19 @@ def solicitar_acceso(
 
 
 @router.get("/me", response_model=SesionOut)
-def me(contexto: AuthDep) -> SesionOut:
+def me(contexto: AuthDep, session: SessionDep) -> SesionOut:
+    cuenta = session.get(CuentaAcceso, contexto.cuenta_id)
+    usuario_id = (
+        contexto.usuario_id
+        if contexto.rol == "GESTOR"
+        else contexto.miembro_id
+        if contexto.rol == "USUARIO"
+        else None
+    )
+    usuario = session.get(Miembro, usuario_id) if usuario_id is not None else None
+    jerarquia = (
+        _cadena_de_responsabilidad(session, cuenta, usuario) if cuenta is not None else []
+    )
     return SesionOut(
         rol=contexto.rol,
         codigo=contexto.codigo,
@@ -236,6 +248,7 @@ def me(contexto: AuthDep) -> SesionOut:
         miembro_id=contexto.miembro_id,
         gestor_id=contexto.gestor_id,
         usuario_id=contexto.usuario_id,
+        jerarquia=jerarquia,
         cambio_clave_obligatorio=contexto.cambio_clave_obligatorio,
     )
 
@@ -271,6 +284,14 @@ def cambiar_clave(
         {"cambio_obligatorio": contexto.cambio_clave_obligatorio},
     )
     session.commit()
+    usuario_id = (
+        contexto.usuario_id
+        if contexto.rol == "GESTOR"
+        else contexto.miembro_id
+        if contexto.rol == "USUARIO"
+        else None
+    )
+    usuario = session.get(Miembro, usuario_id) if usuario_id is not None else None
     return SesionOut(
         rol=contexto.rol,
         codigo=contexto.codigo,
@@ -278,6 +299,7 @@ def cambiar_clave(
         miembro_id=contexto.miembro_id,
         gestor_id=contexto.gestor_id,
         usuario_id=contexto.usuario_id,
+        jerarquia=_cadena_de_responsabilidad(session, cuenta, usuario),
         cambio_clave_obligatorio=False,
     )
 
