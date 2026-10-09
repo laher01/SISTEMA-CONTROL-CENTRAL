@@ -118,7 +118,9 @@ def actualizar(
             gestor.nombre = datos.nombre.strip()
         if "porcentaje_comision" in datos.model_fields_set:
             if auth.rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR):
-                raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Administración define porcentajes")
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN, "Solo Administración define porcentajes"
+                )
             gestor.porcentaje_comision = datos.porcentaje_comision
         session.commit()
     except (IntegrityError, ValueError) as exc:
