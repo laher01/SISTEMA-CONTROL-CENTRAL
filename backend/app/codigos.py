@@ -22,7 +22,7 @@ SUFIJOS = {
 def iniciales(nombre: str) -> str:
     texto = unicodedata.normalize("NFKD", nombre.upper())
     letras = "".join(c for c in texto if not unicodedata.combining(c))
-    partes = re.findall(r"[A-Z]+", letras)
+    partes: list[str] = re.findall(r"[A-Z]+", letras)
     if len(partes) >= 3:
         return "".join(parte[0] for parte in partes[:3])
     if len(partes) == 2:
