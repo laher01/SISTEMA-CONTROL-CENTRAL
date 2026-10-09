@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from tests.conftest import AuthPrueba
 from tests.xml import RECEPTOR, factura
@@ -28,6 +29,61 @@ def crear_usuario_y_gestor(
     assert gestor_resp.status_code == 201, gestor_resp.text
     gestor = gestor_resp.json()["gestor"]
     return usuario, gestor
+
+
+def test_auth_me_devuelve_arbol_usuario_responsable_administrador(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    session: Session,
+) -> None:
+    auth_prueba.como_admin()
+    administrador = client.post(
+        "/api/v1/miembros",
+        json={"codigo": "ADMIN01", "nombre": "Administrador", "rol": "ADMINISTRADOR"},
+    ).json()["miembro"]
+    responsable = client.post(
+        "/api/v1/miembros",
+        json={"codigo": "LUIS01", "nombre": "Luis Arevalo", "rol": "RESPONSABLE"},
+    ).json()["miembro"]
+    usuario = client.post(
+        "/api/v1/miembros",
+        json={"codigo": "JONA01", "nombre": "Jonatan Lama", "rol": "USUARIO"},
+    ).json()["miembro"]
+    gestor = client.post(
+        "/api/v1/gestores",
+        json={"codigo": "JAVIER01", "nombre": "Javier", "usuario_id": usuario["id"]},
+    ).json()["gestor"]
+
+    responsable_db = session.get(__import__("app.models", fromlist=["Miembro"]).Miembro, uuid.UUID(responsable["id"]))
+    usuario_db = session.get(__import__("app.models", fromlist=["Miembro"]).Miembro, uuid.UUID(usuario["id"]))
+    assert responsable_db is not None
+    assert usuario_db is not None
+    responsable_db.responsable_id = uuid.UUID(administrador["id"])
+    usuario_db.responsable_id = uuid.UUID(responsable["id"])
+    session.commit()
+
+    auth_prueba.como_usuario(uuid.UUID(usuario["id"]), "JONA01")
+    sesion_usuario = client.get("/api/v1/auth/me")
+    assert sesion_usuario.status_code == 200, sesion_usuario.text
+    assert [n["codigo"] for n in sesion_usuario.json()["jerarquia"]] == [
+        "JONA01",
+        "LUIS01",
+        "ADMIN01",
+    ]
+
+    auth_prueba.como_gestor(
+        uuid.UUID(gestor["id"]),
+        uuid.UUID(usuario["id"]),
+        "JAVIER01",
+    )
+    sesion_gestor = client.get("/api/v1/auth/me")
+    assert sesion_gestor.status_code == 200, sesion_gestor.text
+    assert sesion_gestor.json()["codigo"] == "JAVIER01"
+    assert [n["codigo"] for n in sesion_gestor.json()["jerarquia"]] == [
+        "JONA01",
+        "LUIS01",
+        "ADMIN01",
+    ]
 
 
 def test_gestor_pertenece_a_usuario_y_propaga_propiedad(
