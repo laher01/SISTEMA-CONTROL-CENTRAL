@@ -113,8 +113,11 @@ def notificar_clasificacion(
 ) -> dict[str, int]:
     """Solicita revisión al administrador, sin conceder autorización."""
     if auth.rol not in (
-        RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR,
-        RolMiembro.SECRETARIA, RolMiembro.USUARIO, "GESTOR",
+        RolMiembro.SUPERADMIN,
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.SECRETARIA,
+        RolMiembro.USUARIO,
+        "GESTOR",
     ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin permiso para solicitar clasificación")
     empresas = list(
@@ -188,7 +191,11 @@ def notificar_clasificacion(
             )
         )
     auditoria.registrar(
-        session, tenant_id, "CLASIFICACION_SOLICITADA", "empresa", empresas[0].id,
+        session,
+        tenant_id,
+        "CLASIFICACION_SOLICITADA",
+        "empresa",
+        empresas[0].id,
         {"empresa_ids": [str(e.id) for e in empresas], "actor": auth.codigo},
     )
     session.commit()
