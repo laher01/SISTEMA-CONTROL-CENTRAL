@@ -7,7 +7,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Gestor, Miembro
+from app.models import CuentaAcceso, Gestor, Miembro
 
 SUFIJOS = {
     "ADMINISTRADOR": "ADM",
@@ -39,6 +39,9 @@ def codigo_automatico(session: Session, tenant_id: uuid.UUID, nombre: str, rol: 
     )
     codigos.update(
         session.scalars(select(Gestor.codigo).where(Gestor.tenant_id == tenant_id)).all()
+    )
+    codigos.update(
+        session.scalars(select(CuentaAcceso.login).where(CuentaAcceso.tenant_id == tenant_id)).all()
     )
     for numero in range(1, 10000):
         candidato = f"{prefijo}-{numero:03d}-{sufijo}"
