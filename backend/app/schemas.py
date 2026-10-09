@@ -519,6 +519,7 @@ class AgenteRetencionIn(BaseModel):
 
 
 class PedidoGerenciaIn(BaseModel):
+    responsable_id: uuid.UUID | None = None
     cliente_id: uuid.UUID
     periodo_mes: date
     moneda: Moneda
@@ -529,6 +530,7 @@ class PedidoGerenciaIn(BaseModel):
 
 
 class PedidoGerenciaActualizarIn(BaseModel):
+    responsable_id: uuid.UUID | None = None
     monto_solicitado: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=2)
     modalidad: Literal["SIN_RESTRICCION", "POR_PEDIDO"] | None = None
     modo_distribucion: Literal["MANUAL", "SEMIASISTIDA", "AUTOMATICA"] | None = None
@@ -561,6 +563,7 @@ class AsignacionPedidoGerenciaOut(BaseModel):
 
 class PedidoGerenciaOut(BaseModel):
     id: uuid.UUID
+    responsable_id: uuid.UUID | None = None
     cliente_id: uuid.UUID
     cliente_ruc: str
     cliente_razon_social: str

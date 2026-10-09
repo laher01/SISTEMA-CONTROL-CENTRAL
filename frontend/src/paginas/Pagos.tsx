@@ -28,6 +28,7 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
   const [mensaje, setMensaje] = useState("");
 
   const usuarios = useDatos<FiltroOpcion[]>("/api/v1/pagos/usuarios");
+  const responsables = useDatos<FiltroOpcion[]>("/api/v1/pagos/responsables");
   const clientes = useDatos<FiltroOpcion[]>("/api/v1/pagos/clientes");
   const proveedores = useDatos<FiltroOpcion[]>("/api/v1/pagos/proveedores");
   const gestores = useDatos<FiltroOpcion[]>("/api/v1/pagos/gestores");
@@ -115,6 +116,7 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
           moneda={moneda}
           pedidos={pedidos.datos ?? []}
           clientes={clientes.datos ?? []}
+          responsables={responsables.datos ?? []}
           usuarios={usuarios.datos ?? []}
           gestores={gestores.datos ?? []}
           proveedores={proveedores.datos ?? []}
@@ -213,6 +215,7 @@ function PedidosGerencia({
   moneda,
   pedidos,
   clientes,
+  responsables,
   usuarios,
   gestores,
   proveedores,
@@ -224,6 +227,7 @@ function PedidosGerencia({
   moneda: "PEN" | "USD";
   pedidos: PedidoGerencia[];
   clientes: FiltroOpcion[];
+  responsables: FiltroOpcion[];
   usuarios: FiltroOpcion[];
   gestores: FiltroOpcion[];
   proveedores: FiltroOpcion[];
@@ -232,6 +236,7 @@ function PedidosGerencia({
   alMensaje: (mensaje: string) => void;
 }) {
   const [clienteId, setClienteId] = useState("");
+  const [responsableId, setResponsableId] = useState("");
   const [monto, setMonto] = useState("");
   const [modalidad, setModalidad] = useState<"POR_PEDIDO" | "SIN_RESTRICCION">("POR_PEDIDO");
   const [modo, setModo] = useState<"MANUAL" | "SEMIASISTIDA" | "AUTOMATICA">("MANUAL");
@@ -244,11 +249,12 @@ function PedidosGerencia({
     e.preventDefault();
     await enviarJson<PedidoGerencia>("/api/v1/pagos/pedidos", "POST", {
       cliente_id: clienteId,
+      responsable_id: responsableId || null,
       periodo_mes: mes + "-01",
       moneda,
       monto_solicitado: monto,
       modalidad,
-      modo_distribucion: modo,
+      modo_distribucion: responsableId ? "MANUAL" : modo,
       observacion: observacion || null,
     });
     setMonto("");
@@ -267,11 +273,18 @@ function PedidosGerencia({
               <option key={c.id} value={c.id}>{c.codigo} · {c.nombre}</option>
             ))}
           </select>
+          <select value={responsableId} onChange={(e) => {
+            setResponsableId(e.target.value);
+            if (e.target.value) setModo("MANUAL");
+          }} required>
+            <option value="">Seleccionar Responsable</option>
+            {responsables.map((r) => <option key={r.id} value={r.id}>{r.codigo} · {r.nombre}</option>)}
+          </select>
           <input
             type="number"
             min="0.01"
             step="0.01"
-            placeholder="Monto solicitado"
+            placeholder="Presupuesto bruto para Responsable"
             value={monto}
             onChange={(e) => setMonto(e.target.value)}
             required
@@ -280,7 +293,7 @@ function PedidosGerencia({
             <option value="POR_PEDIDO">Por pedido</option>
             <option value="SIN_RESTRICCION">Sin restricción</option>
           </select>
-          <select value={modo} onChange={(e) => setModo(e.target.value as typeof modo)}>
+          <select value={modo} disabled={Boolean(responsableId)} onChange={(e) => setModo(e.target.value as typeof modo)}>
             <option value="MANUAL">Distribución manual</option>
             <option value="SEMIASISTIDA">Semiasistida</option>
             <option value="AUTOMATICA">Automática inicial</option>
@@ -293,8 +306,8 @@ function PedidosGerencia({
           <button type="submit">Crear pedido</button>
         </form>
         <p className="tenue">
-          Semiasistida/Automática genera una distribución inicial entre Usuarios activos.
-          El ejecutado siempre se calcula desde Expedientes reales.
+          Gerencia asigna un presupuesto bruto al Responsable; el Responsable decide la distribución por Usuario.
+          No se realiza una distribución automática al registrar el pedido.
         </p>
       </section>
 
@@ -357,7 +370,7 @@ function PedidosGerencia({
         </table>
       </div>
 
-      {pedidoSeleccionado && (
+      {pedidoSeleccionado && !pedidoSeleccionado.responsable_id && (
         <DetallePedido
           pedido={pedidoSeleccionado}
           usuarios={usuarios}

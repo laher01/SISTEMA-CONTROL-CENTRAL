@@ -364,6 +364,7 @@ export interface AsignacionPedidoGerencia {
 
 export interface PedidoGerencia {
   id: string;
+  responsable_id: string | null;
   cliente_id: string;
   cliente_ruc: string;
   cliente_razon_social: string;
