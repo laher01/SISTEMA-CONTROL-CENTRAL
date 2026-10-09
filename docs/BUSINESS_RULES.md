@@ -43,6 +43,24 @@ RUC Emisor
 
 Internamente utilizará UUID.
 
+### Regla 2.1 — Identidad especial del RHE
+
+Para un Recibo por Honorarios Electrónico (RHE), la identidad documental canónica será:
+
+Administración/Tenant
++
+RUC Emisor
++
+Tipo RHE
++
+Serie
++
+Correlativo
+
+El RUC receptor se almacenará, mostrará y validará, pero no sustituirá ni ampliará la identidad
+del RHE. Si el mismo RHE aparece con un receptor diferente, el sistema lo tratará como una
+contradicción documental del mismo comprobante y no creará un segundo expediente.
+
 ---
 
 ### Regla 3
