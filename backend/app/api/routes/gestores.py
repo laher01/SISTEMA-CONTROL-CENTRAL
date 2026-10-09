@@ -73,7 +73,12 @@ def listar(
     auth: OperativeAuthDep,
     usuario_id: uuid.UUID | None = None,
 ) -> list[Gestor]:
-    if auth.rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.USUARIO):
+    if auth.rol not in (
+        RolMiembro.SUPERADMIN,
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.RESPONSABLE,
+        RolMiembro.USUARIO,
+    ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "No tiene permiso para consultar Gestores")
 
     consulta = select(Gestor).where(
@@ -84,6 +89,16 @@ def listar(
         if auth.usuario_id is None:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Usuario sin ámbito operativo")
         consulta = consulta.where(Gestor.usuario_id == auth.usuario_id)
+    elif auth.rol == RolMiembro.RESPONSABLE:
+        if auth.miembro_id is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Responsable sin ámbito")
+        consulta = consulta.join(Miembro, Gestor.usuario_id == Miembro.id).where(
+            Miembro.tenant_id == tenant_id,
+            Miembro.rol == RolMiembro.USUARIO,
+            Miembro.responsable_id == auth.miembro_id,
+            Miembro.activo.is_(True),
+            Miembro.deleted_at.is_(None),
+        )
     elif usuario_id is not None:
         consulta = consulta.where(Gestor.usuario_id == usuario_id)
     return list(session.scalars(consulta.order_by(Gestor.codigo)))
