@@ -12,6 +12,8 @@ from sqlalchemy.exc import IntegrityError
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
 from app.models import (
+    AdelantoERP,
+    AplicacionAdelantoERP,
     AsignacionPedidoGerencia,
     Empresa,
     Expediente,
@@ -19,6 +21,7 @@ from app.models import (
     PagoERP,
     PedidoGerencia,
     PlanLiquidacion,
+    SaldoCompraERP,
 )
 from app.services import auditoria
 
@@ -30,11 +33,31 @@ class DistribucionIn(BaseModel):
     monto: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
 
 
+
 class ProgramarUsuarioIn(BaseModel):
     usuario_id: uuid.UUID
     desde: date
     hasta: date
     moneda: str = Field(pattern="^(PEN|USD)$")
+    saldo_ids: list[uuid.UUID] = Field(default_factory=list, max_length=100)
+    adelanto_ids: list[uuid.UUID] = Field(default_factory=list, max_length=100)
+    porcentaje_manual: Decimal | None = Field(
+        default=None, ge=0, le=100, max_digits=7, decimal_places=4
+    )
+    observacion_adelantos: str | None = Field(default=None, max_length=500)
+
+
+class NuevoSaldoIn(BaseModel):
+    usuario_id: uuid.UUID
+    periodo_mes: date
+    moneda: str = Field(pattern="^(PEN|USD)$")
+    monto: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    detalle: str = Field(min_length=8, max_length=500)
+
+
+class ConfirmarLiquidacionIn(BaseModel):
+    fecha_pago: date
+    referencia_pago: str = Field(min_length=4, max_length=160)
 
 
 def _usuario_del_responsable(
@@ -53,11 +76,84 @@ def _usuario_del_responsable(
     return usuario
 
 
+def _autorizar_pago(
+    session: SessionDep, tenant_id: uuid.UUID, auth: OperativeAuthDep, usuario_id: uuid.UUID
+) -> Miembro:
+    if auth.rol == RolMiembro.RESPONSABLE and auth.miembro_id is not None:
+        return _usuario_del_responsable(session, tenant_id, auth.miembro_id, usuario_id)
+    if auth.rol in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR):
+        usuario = session.get(Miembro, usuario_id)
+        if (
+            usuario is not None
+            and usuario.tenant_id == tenant_id
+            and usuario.rol == RolMiembro.USUARIO
+            and usuario.activo
+            and usuario.deleted_at is None
+        ):
+            return usuario
+    raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin autorización para este Usuario")
+
+
+def _componentes_pendientes(
+    session: SessionDep, tenant_id: uuid.UUID, datos: ProgramarUsuarioIn,
+) -> tuple[list[SaldoCompraERP], list[AdelantoERP], int]:
+    if len(datos.saldo_ids) != len(set(datos.saldo_ids)):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Saldos repetidos")
+    if len(datos.adelanto_ids) != len(set(datos.adelanto_ids)):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Adelantos repetidos")
+    saldos = list(
+        session.scalars(
+            select(SaldoCompraERP)
+            .where(
+                SaldoCompraERP.tenant_id == tenant_id,
+                SaldoCompraERP.usuario_id == datos.usuario_id,
+                SaldoCompraERP.moneda == datos.moneda,
+                SaldoCompraERP.pago_id.is_(None),
+                SaldoCompraERP.id.in_(datos.saldo_ids),
+            )
+            .with_for_update()
+        )
+    )
+    adelantos = list(
+        session.scalars(
+            select(AdelantoERP)
+            .where(
+                AdelantoERP.tenant_id == tenant_id,
+                AdelantoERP.usuario_id == datos.usuario_id,
+                AdelantoERP.moneda == datos.moneda,
+                AdelantoERP.aplicado.is_(False),
+                AdelantoERP.id.in_(datos.adelanto_ids),
+            )
+            .with_for_update()
+        )
+    )
+    if len(saldos) != len(datos.saldo_ids) or len(adelantos) != len(datos.adelanto_ids):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Saldo o adelanto no disponible: actualice la vista antes de liquidar",
+        )
+    pendientes = int(
+        session.scalar(
+            select(func.count(AdelantoERP.id)).where(
+                AdelantoERP.tenant_id == tenant_id,
+                AdelantoERP.usuario_id == datos.usuario_id,
+                AdelantoERP.moneda == datos.moneda,
+                AdelantoERP.aplicado.is_(False),
+            )
+        )
+        or 0
+    )
+    return saldos, adelantos, pendientes
+
+
 def _base_pago_usuario(
     session: SessionDep, tenant_id: uuid.UUID, datos: ProgramarUsuarioIn
 ) -> tuple[Decimal, Decimal, Decimal, uuid.UUID | None]:
-    if datos.hasta < datos.desde:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Fechas inválidas")
+    if datos.hasta < datos.desde or (datos.hasta - datos.desde).days > 366:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Periodo inválido")
+    usuario = session.get(Miembro, datos.usuario_id)
+    if usuario is None or usuario.tenant_id != tenant_id or usuario.rol != RolMiembro.USUARIO:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Usuario inválido")
     plan = session.scalar(
         select(PlanLiquidacion)
         .where(
@@ -73,11 +169,6 @@ def _base_pago_usuario(
         .order_by(PlanLiquidacion.vigencia_desde.desc())
         .limit(1)
     )
-    if plan is None:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "No existe un plan vigente que cubra todo el periodo",
-        )
     produccion = Decimal(
         session.scalar(
             select(func.coalesce(func.sum(Expediente.importe_total), 0)).where(
@@ -91,9 +182,116 @@ def _base_pago_usuario(
         )
         or 0
     )
-    tasa = Decimal(plan.porcentaje)
+    tasa = (
+        datos.porcentaje_manual
+        if datos.porcentaje_manual is not None
+        else Decimal(usuario.porcentaje_produccion or 0)
+    )
+    tasa = Decimal(tasa)
     bruto = (produccion * tasa / Decimal("100")).quantize(Decimal("0.01"))
-    return produccion, tasa, bruto, plan.id
+    return produccion, tasa, bruto, plan.id if plan is not None else None
+
+
+@router.get("/pagos/saldos")
+def listar_saldos_pendientes(
+    usuario_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> list[dict[str, str]]:
+    _autorizar_pago(session, tenant_id, auth, usuario_id)
+    saldos = session.scalars(
+        select(SaldoCompraERP).where(
+            SaldoCompraERP.tenant_id == tenant_id,
+            SaldoCompraERP.usuario_id == usuario_id,
+            SaldoCompraERP.pago_id.is_(None),
+        ).order_by(SaldoCompraERP.periodo_mes)
+    )
+    return [
+        {
+            "id": str(s.id),
+            "periodo_mes": s.periodo_mes.isoformat(),
+            "moneda": s.moneda,
+            "monto": str(s.monto),
+            "detalle": s.detalle,
+        }
+        for s in saldos
+    ]
+
+
+@router.post("/pagos/saldos", status_code=status.HTTP_201_CREATED)
+def registrar_saldo_pendiente(
+    datos: NuevoSaldoIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str]:
+    _autorizar_pago(session, tenant_id, auth, datos.usuario_id)
+    if datos.periodo_mes.day != 1:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Use el primer día del mes")
+    duplicado = session.scalar(
+        select(SaldoCompraERP.id).where(
+            SaldoCompraERP.tenant_id == tenant_id,
+            SaldoCompraERP.usuario_id == datos.usuario_id,
+            SaldoCompraERP.periodo_mes == datos.periodo_mes,
+            SaldoCompraERP.moneda == datos.moneda,
+            SaldoCompraERP.monto == datos.monto,
+            SaldoCompraERP.detalle == datos.detalle.strip(),
+            SaldoCompraERP.pago_id.is_(None),
+        )
+    )
+    if duplicado is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ese saldo pendiente ya está registrado")
+    saldo = SaldoCompraERP(
+        tenant_id=tenant_id,
+        usuario_id=datos.usuario_id,
+        periodo_mes=datos.periodo_mes,
+        moneda=datos.moneda,
+        monto=datos.monto,
+        detalle=datos.detalle.strip(),
+        creado_por_cuenta_id=auth.cuenta_id,
+    )
+    session.add(saldo)
+    session.flush()
+    auditoria.registrar(
+        session, tenant_id, "SALDO_COMPRAS_AGREGADO", "saldo_compra", saldo.id,
+        {
+            "usuario_id": str(datos.usuario_id),
+            "periodo": datos.periodo_mes.isoformat(),
+            "monto": str(datos.monto),
+            "detalle": datos.detalle.strip(),
+            "actor": auth.codigo,
+        },
+    )
+    session.commit()
+    return {"id": str(saldo.id), "estado": "PENDIENTE"}
+
+
+@router.get("/pagos/adelantos")
+def listar_adelantos_pendientes(
+    usuario_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> list[dict[str, str]]:
+    _autorizar_pago(session, tenant_id, auth, usuario_id)
+    adelantos = session.scalars(
+        select(AdelantoERP).where(
+            AdelantoERP.tenant_id == tenant_id,
+            AdelantoERP.usuario_id == usuario_id,
+            AdelantoERP.aplicado.is_(False),
+        ).order_by(AdelantoERP.fecha)
+    )
+    return [
+        {
+            "id": str(a.id),
+            "fecha": a.fecha.isoformat(),
+            "moneda": a.moneda,
+            "monto": str(a.monto),
+            "descripcion": a.descripcion or "",
+        }
+        for a in adelantos
+    ]
 
 
 @router.post("/pagos/cotizar")
@@ -102,15 +300,24 @@ def cotizar_pago_usuario(
     session: SessionDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
-) -> dict[str, str]:
-    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
-    _usuario_del_responsable(session, tenant_id, auth.miembro_id, datos.usuario_id)
-    produccion, tasa, bruto, _ = _base_pago_usuario(session, tenant_id, datos)
+) -> dict[str, str | int]:
+    _autorizar_pago(session, tenant_id, auth, datos.usuario_id)
+    produccion, tasa, _, _ = _base_pago_usuario(session, tenant_id, datos)
+    saldos, adelantos, total_pendientes = _componentes_pendientes(session, tenant_id, datos)
+    saldos_total = sum((Decimal(s.monto) for s in saldos), Decimal("0"))
+    adelantos_total = sum((Decimal(a.monto) for a in adelantos), Decimal("0"))
+    base = produccion + saldos_total
+    bruto = (base * tasa / Decimal("100")).quantize(Decimal("0.01"))
+    neto = bruto - adelantos_total
     return {
         "produccion": str(produccion),
+        "saldos_agregados": str(saldos_total),
+        "base_global": str(base),
         "porcentaje": str(tasa),
         "bruto": str(bruto),
+        "adelantos": str(adelantos_total),
+        "neto": str(neto),
+        "adelantos_pendientes": total_pendientes,
         "moneda": datos.moneda,
     }
 
@@ -122,9 +329,7 @@ def programar_pago_usuario(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> dict[str, str]:
-    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
-    _usuario_del_responsable(session, tenant_id, auth.miembro_id, datos.usuario_id)
+    _autorizar_pago(session, tenant_id, auth, datos.usuario_id)
     anterior = session.scalar(
         select(PagoERP.id).where(
             PagoERP.tenant_id == tenant_id,
@@ -136,7 +341,26 @@ def programar_pago_usuario(
     )
     if anterior is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Existe una liquidación que se solapa")
-    produccion, tasa, bruto, plan_id = _base_pago_usuario(session, tenant_id, datos)
+    produccion, tasa, _, plan_id = _base_pago_usuario(session, tenant_id, datos)
+    saldos, adelantos, total_pendientes = _componentes_pendientes(session, tenant_id, datos)
+    omitidos = total_pendientes - len(adelantos)
+    if omitidos > 0 and (
+        not datos.observacion_adelantos or len(datos.observacion_adelantos.strip()) < 8
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Explique en observaciones por qué no se descuentan todos los adelantos",
+        )
+    saldos_total = sum((Decimal(s.monto) for s in saldos), Decimal("0"))
+    adelantos_total = sum((Decimal(a.monto) for a in adelantos), Decimal("0"))
+    base = produccion + saldos_total
+    bruto = (base * tasa / Decimal("100")).quantize(Decimal("0.01"))
+    neto = bruto - adelantos_total
+    if neto < 0:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Los adelantos seleccionados superan el importe de esta liquidación",
+        )
     pago = PagoERP(
         tenant_id=tenant_id,
         usuario_id=datos.usuario_id,
@@ -144,28 +368,92 @@ def programar_pago_usuario(
         periodo_desde=datos.desde,
         periodo_hasta=datos.hasta,
         moneda=datos.moneda,
-        produccion_total=produccion,
+        produccion_total=base,
         porcentaje=tasa,
         bruto=bruto,
-        adelantos=Decimal("0"),
+        adelantos=adelantos_total,
         ajustes=Decimal("0"),
-        saldo=bruto,
+        saldo=neto,
         estado="PROGRAMADO",
         conciliado=False,
         creado_por_cuenta_id=auth.cuenta_id,
+        observacion_adelantos=datos.observacion_adelantos,
     )
     session.add(pago)
-    session.flush()
+    try:
+        session.flush()
+        for saldo in saldos:
+            saldo.pago_id = pago.id
+        for adelanto in adelantos:
+            session.add(
+                AplicacionAdelantoERP(
+                    tenant_id=tenant_id,
+                    pago_id=pago.id,
+                    adelanto_id=adelanto.id,
+                    usuario_id=datos.usuario_id,
+                    monto=adelanto.monto,
+                    creado_por_cuenta_id=auth.cuenta_id,
+                )
+            )
+            adelanto.aplicado = True
+        session.flush()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Liquidación o adelanto ya utilizado"
+        ) from exc
     auditoria.registrar(
-        session,
-        tenant_id,
-        "PAGO_USUARIO_PROGRAMADO",
-        "pago_erp",
-        pago.id,
-        {"usuario_id": str(datos.usuario_id), "porcentaje": str(tasa), "saldo": str(bruto)},
+        session, tenant_id, "PAGO_USUARIO_PROGRAMADO", "pago_erp", pago.id,
+        {
+            "usuario_id": str(datos.usuario_id),
+            "produccion_periodo": str(produccion),
+            "saldos_adicionados": [
+                {"id": str(s.id), "mes": s.periodo_mes.isoformat(), "monto": str(s.monto)}
+                for s in saldos
+            ],
+            "adelantos_descontados": [
+                {"id": str(a.id), "monto": str(a.monto)} for a in adelantos
+            ],
+            "adelantos_omitidos": omitidos,
+            "observacion_adelantos": datos.observacion_adelantos,
+            "porcentaje": str(tasa),
+            "bruto": str(bruto),
+            "neto": str(neto),
+            "actor": auth.codigo,
+        },
     )
     session.commit()
-    return {"id": str(pago.id), "saldo": str(bruto)}
+    return {"id": str(pago.id), "saldo": str(neto)}
+
+
+@router.post("/pagos/{pago_id}/confirmar")
+def confirmar_pago_usuario(
+    pago_id: uuid.UUID,
+    datos: ConfirmarLiquidacionIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str]:
+    pago = session.get(PagoERP, pago_id)
+    if pago is None or pago.tenant_id != tenant_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
+    _autorizar_pago(session, tenant_id, auth, pago.usuario_id)
+    if pago.estado != "PROGRAMADO":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Liquidación ya pagada o anulada")
+    pago.estado = "PAGADO"
+    pago.fecha_pago = datos.fecha_pago
+    pago.referencia_pago = datos.referencia_pago.strip()
+    auditoria.registrar(
+        session, tenant_id, "PAGO_USUARIO_CONFIRMADO", "pago_erp", pago.id,
+        {
+            "fecha_pago": datos.fecha_pago.isoformat(),
+            "referencia": datos.referencia_pago.strip(),
+            "saldo": str(pago.saldo),
+            "actor": auth.codigo,
+        },
+    )
+    session.commit()
+    return {"id": str(pago.id), "estado": pago.estado}
 
 
 @router.delete("/pagos/{pago_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -175,27 +463,49 @@ def anular_pago_usuario(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> None:
-    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
     pago = session.get(PagoERP, pago_id)
     if pago is None or pago.tenant_id != tenant_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
-    _usuario_del_responsable(session, tenant_id, auth.miembro_id, pago.usuario_id)
+    _autorizar_pago(session, tenant_id, auth, pago.usuario_id)
     if (
         pago.estado != "PROGRAMADO"
         or pago.conciliado
         or pago.fecha_pago is not None
         or pago.voucher_documento_id is not None
-        or Decimal(pago.adelantos) != 0
     ):
-        raise HTTPException(status.HTTP_409_CONFLICT, "Liquidación ya aplicada o pagada")
+        raise HTTPException(status.HTTP_409_CONFLICT, "Liquidación ya pagada")
+    saldos = list(
+        session.scalars(
+            select(SaldoCompraERP).where(
+                SaldoCompraERP.tenant_id == tenant_id,
+                SaldoCompraERP.pago_id == pago.id,
+            ).with_for_update()
+        )
+    )
+    aplicaciones = list(
+        session.scalars(
+            select(AplicacionAdelantoERP).where(
+                AplicacionAdelantoERP.tenant_id == tenant_id,
+                AplicacionAdelantoERP.pago_id == pago.id,
+            ).with_for_update()
+        )
+    )
+    for s in saldos:
+        s.pago_id = None
+    for a in aplicaciones:
+        adelanto = session.get(AdelantoERP, a.adelanto_id)
+        if adelanto is not None and adelanto.tenant_id == tenant_id:
+            adelanto.aplicado = False
+        session.delete(a)
     auditoria.registrar(
-        session,
-        tenant_id,
-        "PAGO_USUARIO_PROGRAMACION_ANULADA",
-        "pago_erp",
-        pago.id,
-        {"usuario_id": str(pago.usuario_id), "saldo": str(pago.saldo)},
+        session, tenant_id, "PAGO_USUARIO_PROGRAMACION_ANULADA", "pago_erp", pago.id,
+        {
+            "usuario_id": str(pago.usuario_id),
+            "saldo": str(pago.saldo),
+            "saldos_liberados": [str(s.id) for s in saldos],
+            "adelantos_liberados": [str(a.adelanto_id) for a in aplicaciones],
+            "actor": auth.codigo,
+        },
     )
     session.delete(pago)
     session.commit()
