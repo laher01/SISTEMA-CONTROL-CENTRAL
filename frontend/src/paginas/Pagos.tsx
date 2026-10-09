@@ -132,7 +132,7 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
         />
       )}
 
-      {false && pestana === "COBROS" && (
+      {pestana === "COBROS" && sesion.rol === "ADMINISTRADOR" && (
         <CobrosClientes
           mes={mes}
           moneda={moneda}
