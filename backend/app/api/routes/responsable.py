@@ -192,6 +192,39 @@ def _base_pago_usuario(
     return produccion, tasa, bruto, plan.id if plan is not None else None
 
 
+@router.get("/pagos/liquidaciones")
+def listar_liquidaciones_de_usuario(
+    usuario_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> list[dict[str, str]]:
+    _autorizar_pago(session, tenant_id, auth, usuario_id)
+    pagos = session.scalars(
+        select(PagoERP)
+        .where(PagoERP.tenant_id == tenant_id, PagoERP.usuario_id == usuario_id)
+        .order_by(PagoERP.periodo_desde.desc())
+        .limit(60)
+    )
+    return [
+        {
+            "id": str(p.id),
+            "periodo_desde": p.periodo_desde.isoformat(),
+            "periodo_hasta": p.periodo_hasta.isoformat(),
+            "moneda": p.moneda,
+            "produccion_total": str(p.produccion_total),
+            "porcentaje": str(p.porcentaje),
+            "bruto": str(p.bruto),
+            "adelantos": str(p.adelantos),
+            "saldo": str(p.saldo),
+            "estado": p.estado,
+            "observacion_adelantos": p.observacion_adelantos or "",
+            "referencia_pago": p.referencia_pago or "",
+        }
+        for p in pagos
+    ]
+
+
 @router.get("/pagos/saldos")
 def listar_saldos_pendientes(
     usuario_id: uuid.UUID,
