@@ -69,6 +69,77 @@ def receptores_de_usuario(
     ]
 
 
+@router.get("/produccion-receptores")
+def produccion_por_receptor(
+    usuario_id: uuid.UUID,
+    desde: date,
+    hasta: date,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    moneda: Literal["PEN", "USD"] = "PEN",
+    gestor_id: uuid.UUID | None = None,
+) -> list[dict[str, str | int]]:
+    """Producción documental por cliente/receptor del usuario en el periodo."""
+    if hasta < desde:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Periodo inválido")
+    if auth.rol not in (
+        RolMiembro.SUPERADMIN,
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.RESPONSABLE,
+        RolMiembro.USUARIO,
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin acceso")
+    usuario = session.get(Miembro, usuario_id)
+    if usuario is None or usuario.tenant_id != tenant_id or usuario.rol != RolMiembro.USUARIO:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuario no encontrado")
+    if auth.rol == RolMiembro.RESPONSABLE and usuario.responsable_id != auth.miembro_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Fuera de su equipo")
+    if auth.rol == RolMiembro.USUARIO and auth.usuario_id != usuario_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Fuera de su equipo")
+    if auth.rol == RolMiembro.RESPONSABLE and gestor_id is not None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Gestor fuera de alcance")
+    if gestor_id is not None:
+        gestor = session.get(Gestor, gestor_id)
+        if gestor is None or gestor.tenant_id != tenant_id or gestor.usuario_id != usuario_id:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Gestor inválido")
+
+    filtros = [
+        Expediente.tenant_id == tenant_id,
+        Expediente.deleted_at.is_(None),
+        Expediente.usuario_id == usuario_id,
+        Expediente.fecha_emision >= desde,
+        Expediente.fecha_emision <= hasta,
+        Expediente.moneda == moneda,
+        Empresa.tenant_id == tenant_id,
+    ]
+    if gestor_id is not None:
+        filtros.append(Expediente.gestor_id == gestor_id)
+    consulta = (
+        select(
+            Empresa.id,
+            Empresa.ruc,
+            Empresa.razon_social,
+            func.count(Expediente.id),
+            func.coalesce(func.sum(Expediente.importe_total), 0),
+        )
+        .join(Expediente, Expediente.receptor_id == Empresa.id)
+        .where(*filtros)
+        .group_by(Empresa.id, Empresa.ruc, Empresa.razon_social)
+        .order_by(Empresa.razon_social, Empresa.ruc)
+    )
+    return [
+        {
+            "id": str(receptor_id),
+            "ruc": ruc,
+            "nombre": nombre,
+            "expedientes": cantidad,
+            "produccion": str(Decimal(total)),
+        }
+        for receptor_id, ruc, nombre, cantidad, total in session.execute(consulta)
+    ]
+
+
 @router.post("/simular")
 def simular(
     datos: ConsultaComision,
