@@ -120,10 +120,16 @@ def test_responsable_crea_usuario_en_su_equipo(
     assert creado["credencial"]["clave_temporal"]
     assert [x["codigo"] for x in client.get(ruta).json()] == ["EDA-001-US"]
     assert client.get("/api/v1/miembros").status_code == 403
-    assert client.post("/api/v1/miembros", json={
-        "nombre": "Gerente Fraude", "rol": "GERENTE"
-    }).status_code == 403
+    assert (
+        client.post(
+            "/api/v1/miembros", json={"nombre": "Gerente Fraude", "rol": "GERENTE"}
+        ).status_code
+        == 403
+    )
     assert client.post(ruta, json={"nombre": "  "}).status_code == 422
-    assert client.post(ruta, json={
-        "nombre": "Otro Usuario", "porcentaje_produccion": "120"
-    }).status_code == 422
+    assert (
+        client.post(
+            ruta, json={"nombre": "Otro Usuario", "porcentaje_produccion": "120"}
+        ).status_code
+        == 422
+    )
