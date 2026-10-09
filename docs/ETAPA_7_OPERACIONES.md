@@ -142,7 +142,7 @@ activaron canales externos, servicios de pago o despliegues productivos.
 
 ## Pendientes reales
 
-Validación Docker y restauración completa en staging; CI remoto; revisión visual/E2E
+Validación Docker y restauración completa en staging; publicación GHCR; revisión visual/E2E
 del panel; almacenamiento externo y retención; privilegios del agente; recuperación
 productiva de configuración/datos; migración de tenants; comprobación VPS/Cloudflare.
 MFA/IdP avanzado no está presente en la autenticación existente y no se declara resuelto.
@@ -158,14 +158,16 @@ PROBADO corresponde a código local, no certifica producción.
 | 7.3 Monitoreo | PROBADO | Reportes y recolector; Linux real pendiente |
 | 7.4 Versiones | PROBADO | SemVer, commit, imágenes y aprobación auditada |
 | 7.5 Despliegues | IMPLEMENTADO | Estados/leases/agente; Docker real pendiente |
-| 7.6 CI/CD | IMPLEMENTADO | Workflows y GHCR; ejecución remota pendiente |
+| 7.6 CI/CD | PROBADO | Backend/frontend remotos correctos; publicación GHCR pendiente |
 | 7.7 Progresivo | PROBADO | Lotes con parada ante fallos; flota real pendiente |
 | 7.8 Backups | IMPLEMENTADO | Bundle cifrado; almacenamiento/retención real pendientes |
 | 7.9 Rollback | IMPLEMENTADO | Imágenes compatibles; datos/config productivos pendientes |
-| 7.10 Migraciones | PROBADO | SQLite y SQL; PostgreSQL real pendiente |
+| 7.10 Migraciones | PROBADO | SQLite, SQL y ciclo PostgreSQL aislado en GitHub correctos |
 | 7.11 Tenants/nodos | PROBADO | Metadata sin acceso cruzado ni traslado de clientes |
 | 7.12 Seguridad | PROBADO | Sesión, SUPERADMIN, Origin y tokens; MFA/privilegios pendientes |
 | 7.13 Auditoría | PROBADO | Actor/correlación/inmutabilidad; privilegios VPS pendientes |
 | 7.14 Alertas | PROBADO | Umbrales, servicios, desconexión, fallos y versión |
 
-La etapa no se declara terminada sin staging, recuperación y CI remoto.
+GitHub aprobó backend y frontend del commit 434acf7, incluido el ciclo de migraciones
+en PostgreSQL aislado. Los cambios posteriores requieren sus propias comprobaciones.
+La etapa no se declara terminada sin staging y recuperación real.
