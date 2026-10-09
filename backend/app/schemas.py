@@ -108,6 +108,7 @@ class GestorIn(BaseModel):
 
 
 class GestorOut(Orm):
+    porcentaje_comision: Decimal | None = None
     id: uuid.UUID
     codigo: str
     nombre: str
@@ -115,6 +116,7 @@ class GestorOut(Orm):
 
 
 class GestorActualizar(BaseModel):
+    porcentaje_comision: Decimal | None = Field(default=None, ge=0, le=100, max_digits=7, decimal_places=4)
     codigo: str | None = Field(default=None, min_length=1, max_length=50)
     nombre: str | None = Field(default=None, min_length=1, max_length=200)
     usuario_id: uuid.UUID | None = None
