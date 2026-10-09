@@ -64,7 +64,7 @@ def test_produccion_aislada_por_gerente(
     pedidos_a = client.get("/api/v1/pagos/pedidos")
     assert pedidos_a.status_code == 200, pedidos_a.text
     assert len(pedidos_a.json()) == 1
-    assert pedidos_a.json()[0]["monto_ejecutado"] == "100"
+    assert Decimal(str(pedidos_a.json()[0]["monto_ejecutado"])) == Decimal("100")
 
     como(gerente_b)
     b = client.get("/api/v1/pagos-responsables/resumen", params=para)
@@ -73,4 +73,4 @@ def test_produccion_aislada_por_gerente(
     pedidos_b = client.get("/api/v1/pagos/pedidos")
     assert pedidos_b.status_code == 200, pedidos_b.text
     assert len(pedidos_b.json()) == 1
-    assert pedidos_b.json()[0]["monto_ejecutado"] == "300"
+    assert Decimal(str(pedidos_b.json()[0]["monto_ejecutado"])) == Decimal("300")
