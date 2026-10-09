@@ -130,6 +130,21 @@ export default function App() {
           <strong>{sesion.codigo}</strong>
           <span>{sesion.nombre}</span>
           <small>{sesion.rol}</small>
+          {(sesion.rol === "USUARIO" || sesion.rol === "GESTOR") && (
+            <div className="jerarquia-sesion" aria-label="Jerarquía de responsabilidad">
+              {(sesion.jerarquia ?? [])
+                .filter((persona, indice) => sesion.rol === "GESTOR" || indice > 0)
+                .map((persona) => (
+                  <div className="jerarquia-sesion-nodo" key={persona.codigo}>
+                    <span className="jerarquia-sesion-rol">{persona.rol}</span>
+                    <span className="jerarquia-sesion-nombre">{persona.codigo} · {persona.nombre}</span>
+                  </div>
+                ))}
+              {(!sesion.jerarquia || sesion.jerarquia.length <= (sesion.rol === "USUARIO" ? 1 : 0)) && (
+                <small className="jerarquia-sesion-vacia">Sin responsable asignado</small>
+              )}
+            </div>
+          )}
         </div>
         <nav>
           {menu.map((item) => (
