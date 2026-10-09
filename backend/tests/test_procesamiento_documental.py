@@ -568,7 +568,7 @@ def test_facturas_separadas_real_sunat_jose_no_es_ose(
         "Fecha de Emisión : 22/08/2026\n"
         f"Señor(es) : {receptor_nombre}\nRUC : {receptor_ruc}\n"
         "Tipo de Moneda : SOLES\nForma de pago: Contado\n"
-        f"Importe Total : S/ {total[: -3]}.{total[-2:]}\n"
+        f"Importe Total : S/ {total}\n"
         "Esta es una representación impresa de la factura electrónica, "
         "generada en el Sistema de SUNAT."
     )
