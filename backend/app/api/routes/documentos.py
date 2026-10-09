@@ -461,12 +461,18 @@ def _validar_ambito_documento(auth: OperativeAuthDep, documento: Documento) -> N
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Documento no encontrado")
     if auth.rol == RolMiembro.USUARIO and documento.usuario_id != auth.usuario_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Documento no encontrado")
+    if auth.rol == RolMiembro.GERENTE and (
+        documento.expediente is None or documento.expediente.gerente_id != auth.miembro_id
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Documento no encontrado")
 
 
 def _validar_ambito_expediente(auth: OperativeAuthDep, expediente: Expediente) -> None:
     if auth.rol == "GESTOR" and expediente.gestor_id != auth.gestor_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Expediente no encontrado")
     if auth.rol == RolMiembro.USUARIO and expediente.usuario_id != auth.usuario_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Expediente no encontrado")
+    if auth.rol == RolMiembro.GERENTE and expediente.gerente_id != auth.miembro_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Expediente no encontrado")
 
 
@@ -475,6 +481,10 @@ def _aplicar_ambito_documentos(consulta: Any, auth: OperativeAuthDep) -> Any:
         return consulta.where(Documento.gestor_id == auth.gestor_id)
     if auth.rol == RolMiembro.USUARIO:
         return consulta.where(Documento.usuario_id == auth.usuario_id)
+    if auth.rol == RolMiembro.GERENTE:
+        return consulta.where(
+            Documento.expediente.has(Expediente.gerente_id == auth.miembro_id)
+        )
     return consulta
 
 
@@ -845,6 +855,8 @@ def relaciones_sugeridas(
         sugerencias = [s for s in sugerencias if s.expediente.gestor_id == auth.gestor_id]
     elif auth.rol == RolMiembro.USUARIO:
         sugerencias = [s for s in sugerencias if s.expediente.usuario_id == auth.usuario_id]
+    elif auth.rol == RolMiembro.GERENTE:
+        sugerencias = [s for s in sugerencias if s.expediente.gerente_id == auth.miembro_id]
     return [
         RelacionSugeridaOut(
             expediente=sugerencia.expediente,
