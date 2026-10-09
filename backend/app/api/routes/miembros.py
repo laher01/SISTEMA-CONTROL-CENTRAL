@@ -104,13 +104,15 @@ def mis_usuarios_responsable(
         )
     return list(
         session.scalars(
-            select(Miembro).where(
+            select(Miembro)
+            .where(
                 Miembro.tenant_id == tenant_id,
                 Miembro.rol == RolMiembro.USUARIO,
                 Miembro.responsable_id == auth.miembro_id,
                 Miembro.deleted_at.is_(None),
                 Miembro.activo.is_(True),
-            ).order_by(Miembro.codigo)
+            )
+            .order_by(Miembro.codigo)
         )
     )
 
