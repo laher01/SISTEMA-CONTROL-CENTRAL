@@ -115,7 +115,12 @@ def aplicar_automaticamente(
 
     extraccion = procesamiento.get("extraccion_estructurada")
     campos, confianzas, candidatos = _leer_extraccion(extraccion)
-    _completar_rucs(campos, confianzas, candidatos, settings.tenant_ruc)
+    _completar_rucs(
+        campos,
+        confianzas,
+        candidatos,
+        settings.tenant_ruc if tipo == TipoDocumento.FACT else None,
+    )
 
     faltantes = [campo for campo in CAMPOS_FISCALES if campo not in campos]
     if faltantes:
