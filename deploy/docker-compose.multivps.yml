@@ -1,0 +1,10 @@
+# Use alongside docker-compose.production.yml on AMD64 deployment hosts.
+# Images are built by GitHub Actions; do not rebuild on low-memory VPS.
+services:
+  backend:
+    image: ghcr.io/laher01/fact-central-backend:${FC_IMAGE_TAG:?Set FC_IMAGE_TAG to sha-<40 character commit hash>}
+  frontend:
+    image: ghcr.io/laher01/fact-central-frontend:${FC_IMAGE_TAG:?Set FC_IMAGE_TAG to sha-<40 character commit hash>}
+  # The tunnel remains opt-in until Cloudflare Access and its token are configured.
+  tunnel:
+    profiles: ["tunnel"]
