@@ -52,6 +52,11 @@ def get_contexto_operativo(
         or (request.method == "POST" and request.url.path == "/api/v1/comisiones/simular")
         or (request.method == "GET" and request.url.path == "/api/v1/comisiones/receptores")
         or (request.method == "GET" and request.url.path == "/api/v1/responsable/resumen")
+        or (
+            request.method == "POST"
+            and request.url.path.startswith("/api/v1/responsable/pedidos/")
+            and request.url.path.endswith("/distribuir")
+        )
     )
     if contexto.rol == "RESPONSABLE" and not permitido_responsable:
         raise HTTPException(
