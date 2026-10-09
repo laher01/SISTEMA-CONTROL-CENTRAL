@@ -579,9 +579,12 @@ def _pedido_valido(
     pedido = session.get(PedidoGerencia, pedido_id)
     if pedido is None or pedido.tenant_id != tenant_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pedido de Gerencia no encontrado")
-    if auth is not None and auth.rol == RolMiembro.GERENTE:
-        if auth.miembro_id is None or pedido.gerente_id != auth.miembro_id:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Pedido no encontrado")
+    if (
+        auth is not None
+        and auth.rol == RolMiembro.GERENTE
+        and (auth.miembro_id is None or pedido.gerente_id != auth.miembro_id)
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pedido no encontrado")
     return pedido
 
 
