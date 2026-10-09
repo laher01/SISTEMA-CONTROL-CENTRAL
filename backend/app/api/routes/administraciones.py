@@ -92,13 +92,15 @@ def crear_administracion(
     if not re.fullmatch(r"[A-Z]{3}", sigla):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Iniciales inválidas")
     espacio = " ".join(datos.nombre_espacio.strip().split())
-    if session.scalar(
-        select(Tenant.id).where(func.lower(Tenant.nombre) == espacio.lower())
-    ) is not None:
+    if (
+        session.scalar(select(Tenant.id).where(func.lower(Tenant.nombre) == espacio.lower()))
+        is not None
+    ):
         raise HTTPException(status.HTTP_409_CONFLICT, "Nombre administrativo ya registrado")
-    if session.scalar(
-        select(Tenant.id).where(func.lower(Tenant.codigo) == espacio.lower())
-    ) is not None:
+    if (
+        session.scalar(select(Tenant.id).where(func.lower(Tenant.codigo) == espacio.lower()))
+        is not None
+    ):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             "El nombre administrativo coincide con un código de Administración",
@@ -120,9 +122,10 @@ def crear_administracion(
     if numero is None or numero > 999:
         raise HTTPException(status.HTTP_409_CONFLICT, "Numeración agotada")
     codigo = f"{sigla}-{numero:03d}-AD"
-    if session.scalar(
-        select(Tenant.id).where(func.lower(Tenant.nombre) == codigo.lower())
-    ) is not None:
+    if (
+        session.scalar(select(Tenant.id).where(func.lower(Tenant.nombre) == codigo.lower()))
+        is not None
+    ):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             "El código generado coincide con el nombre de otra Administración",
