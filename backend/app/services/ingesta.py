@@ -320,6 +320,7 @@ def _expediente_para_comprobante(
         )
         session.add(expediente)
         session.flush()
+        atribuir_gerencia_inequivoca(session, expediente)
         auditoria.registrar(session, tenant_id, "EXPEDIENTE_CREADO", "expediente", expediente.id)
         return expediente
 
