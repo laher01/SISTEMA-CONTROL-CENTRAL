@@ -21,6 +21,7 @@ from app.api.routes import (
     pagos,
     produccion,
     registros,
+    responsable,
 )
 from app.core.config import get_settings
 
@@ -58,6 +59,7 @@ for modulo in (
     dashboard,
     produccion,
     pagos,
+    responsable,
     configuracion,
     configuracion_acceso,
     mantenimiento,
