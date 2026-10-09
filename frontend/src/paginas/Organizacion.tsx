@@ -6,6 +6,7 @@ import type {
   AltaGestor,
   AltaMiembro,
   CredencialTemporal,
+  Empresa,
   Gestor,
   Miembro,
   RolMiembro,
@@ -24,11 +25,14 @@ export default function Organizacion({ sesion }: { sesion: SesionActual }) {
 }
 
 interface VinculoGerencia { id: string; gerente_id: string; responsable_id: string; activo: boolean }
+interface CarteraGerente { id: string; gerente_id: string; empresa_id: string; activo: boolean }
 
 function OrganizacionAdmin() {
   const { datos: miembros, error, cargando, recargar } = useDatos<Miembro[]>("/api/v1/miembros");
   const { datos: gestores, recargar: recargarGestores } = useDatos<Gestor[]>("/api/v1/gestores");
   const { datos: vinculos, recargar: recargarVinculos } = useDatos<VinculoGerencia[]>("/api/v1/gerencias/vinculos");
+  const { datos: cartera, recargar: recargarCartera } = useDatos<CarteraGerente[]>("/api/v1/gerencias/empresas");
+  const { datos: empresas } = useDatos<Empresa[]>("/api/v1/empresas");
   const [pestanaAdmin, setPestanaAdmin] = useState<"GERENTE" | "SECRETARIA" | "RESPONSABLE" | "USUARIO" | "GESTOR">("RESPONSABLE");
   const [codigo, setCodigo] = useState("");
   const [nombre, setNombre] = useState("");
@@ -64,6 +68,18 @@ function OrganizacionAdmin() {
       });
       recargar();
       setMensaje("Administración actualizada para " + responsable.codigo);
+    } catch (e) {
+      setMensaje(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const vincularEmpresa = async (gerenteId: string, empresaId: string, activo: boolean) => {
+    try {
+      await enviarJson<CarteraGerente>("/api/v1/gerencias/empresas", "PUT", {
+        gerente_id: gerenteId, empresa_id: empresaId, activo,
+      });
+      recargarCartera();
+      setMensaje("Cartera de Gerencia actualizada.");
     } catch (e) {
       setMensaje(e instanceof Error ? e.message : String(e));
     }
@@ -235,6 +251,29 @@ function OrganizacionAdmin() {
                   onChange={(e) => void vincularGerente(g.id, r.id, e.target.checked)} />
               </td>;
             })}
+          </tr>)}
+        </tbody></table></div>
+      </section>}
+      {pestanaAdmin === "GERENTE" && <section className="panel-configuracion">
+        <h3>Empresas por Gerente</h3>
+        <p className="tenue">Las empresas comparten su RUC, pero solo los Gerentes
+          autorizados pueden emitir pedidos de ellas.</p>
+        <div style={{ overflowX: "auto" }}><table><thead><tr>
+          <th>Empresa</th>
+          {gerentes.map((g) => <th key={g.id}>{g.codigo}</th>)}
+        </tr></thead><tbody>
+          {(empresas ?? []).map((e) => <tr key={e.id}>
+            <td>{e.ruc} · {e.razon_social}</td>
+            {gerentes.map((g) => <td key={g.id}>
+              <input
+                type="checkbox"
+                aria-label={`Permitir ${e.ruc} para ${g.codigo}`}
+                checked={cartera?.some((x) =>
+                  x.gerente_id === g.id && x.empresa_id === e.id && x.activo
+                ) ?? false}
+                onChange={(ev) => void vincularEmpresa(g.id, e.id, ev.target.checked)}
+              />
+            </td>)}
           </tr>)}
         </tbody></table></div>
       </section>}
