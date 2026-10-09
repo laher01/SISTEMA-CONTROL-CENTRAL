@@ -5,11 +5,13 @@ No concede acceso a los expedientes asignados a otras gerencias.
 """
 
 from sqlalchemy import or_
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.models import Expediente
+from app.security import ContextoAcceso
 
 
-def alcance_expedientes_gerente(auth):
+def alcance_expedientes_gerente(auth: ContextoAcceso) -> ColumnElement[bool]:
     if auth.codigo == "GRTEGLOBAL":
         return or_(
             Expediente.gerente_id == auth.miembro_id,
@@ -18,7 +20,7 @@ def alcance_expedientes_gerente(auth):
     return Expediente.gerente_id == auth.miembro_id
 
 
-def expediente_visible_gerente(expediente: Expediente, auth) -> bool:
+def expediente_visible_gerente(expediente: Expediente, auth: ContextoAcceso) -> bool:
     return expediente.gerente_id == auth.miembro_id or (
         auth.codigo == "GRTEGLOBAL" and expediente.gerente_id is None
     )
