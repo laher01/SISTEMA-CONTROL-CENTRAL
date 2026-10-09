@@ -565,6 +565,7 @@ class PagoERP(ConId, ConTenant, ConCreacion, Base):
     )
     conciliado: Mapped[bool] = mapped_column(default=False, server_default="false")
     referencia_pago: Mapped[str | None] = mapped_column(String(160))
+    observacion_adelantos: Mapped[str | None] = mapped_column(String(500))
 
 
 class PagoGestor(ConId, ConTenant, ConCreacion, Base):
