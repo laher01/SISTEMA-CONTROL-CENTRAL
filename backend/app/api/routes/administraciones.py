@@ -205,7 +205,10 @@ def crear_administracion_demo(
     if "@" not in datos.correo or datos.correo.startswith("@"):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Correo inválido")
     if not settings.tenant_domain:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Dominio de administraciones no configurado")
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Dominio de administraciones no configurado",
+        )
     alta = _provisionar_administracion(
         AltaAdministracionIn(
             nombre_administrador=datos.nombre_administrador,
