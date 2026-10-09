@@ -50,6 +50,7 @@ from app.services.ingesta import (
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 from app.services.relaciones_documentales import sugerir_relaciones
+from app.services.separador_pdf import analizar_paquete, extraer_fragmento
 from app.services.ubl import UblInvalido
 from app.storage import AlmacenLocal
 
@@ -105,6 +106,103 @@ def _comprobante_duplicado(
         )
         detalles["expediente_id"] = str(expediente.id)
     return HTTPException(status.HTTP_409_CONFLICT, detalles)
+
+
+@router.post("/paquete")
+async def importar_paquete_pdf(
+    session: SessionDep,
+    settings: SettingsDep,
+    almacen: AlmacenDep,
+    hoy: HoyDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    archivo: Annotated[UploadFile, File()],
+    confirmar: Annotated[bool, Form()] = False,
+) -> dict[str, object]:
+    """Primero previsualiza; únicamente con confirmar=true ingiere documentos.
+
+    Se mantiene la deduplicación existente por SHA y clave fiscal.
+    Cada comprobante tiene su propia transacción; un error no borra otros.
+    """
+    if auth.rol not in ("GESTOR", RolMiembro.USUARIO):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Solo Usuario o Gestor puede importar paquetes"
+        )
+    if auth.usuario_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "La sesión no tiene Usuario propietario")
+    limite = settings.max_upload_mb * 1024 * 1024
+    contenido = await archivo.read(limite + 1)
+    if len(contenido) > limite:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Paquete demasiado grande")
+    if not contenido.startswith(b"%PDF-"):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Se requiere un PDF válido")
+    try:
+        segmentos = analizar_paquete(contenido)
+    except DocumentoNoProcesable as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    if not confirmar:
+        return {
+            "modo": "vista_previa",
+            "total": len(segmentos),
+            "documentos": [segmento.descripcion() for segmento in segmentos],
+        }
+
+    resultados: list[dict[str, object]] = []
+    for segmento in segmentos:
+        clave = segmento.descripcion()
+        nombre = (
+            f"{segmento.ruc_emisor}-{segmento.tipo}-{segmento.serie}-{segmento.correlativo}.pdf"
+        )
+        try:
+            subido = ArchivoSubido(
+                nombre=nombre,
+                mime_type="application/pdf",
+                contenido=extraer_fragmento(contenido, segmento),
+            )
+            documento = ingerir_documento(
+                session,
+                almacen,
+                settings,
+                hoy,
+                tenant_id,
+                subido,
+                None,
+                None,
+                auth.gestor_id if auth.rol == "GESTOR" else None,
+                auth.usuario_id,
+                cuenta_administradora_responsable(session, auth),
+            )
+            if settings.procesamiento_automatico and _es_procesable(documento):
+                try:
+                    _procesar_y_aplicar(session, settings, almacen, hoy, documento)
+                except DocumentoNoProcesable as exc:
+                    registrar_fallo(session, documento, str(exc))
+            session.commit()
+            resultados.append(
+                {
+                    **clave,
+                    "estado": "relacionado" if documento.expediente_id else "revision",
+                    "documento_id": str(documento.id),
+                    "expediente_id": str(documento.expediente_id)
+                    if documento.expediente_id
+                    else None,
+                }
+            )
+        except (DocumentoDuplicado, ComprobanteYaRegistrado):
+            session.rollback()
+            resultados.append({**clave, "estado": "duplicado"})
+        except (IntegrityError, UblInvalido, DocumentoNoProcesable) as exc:
+            session.rollback()
+            resultados.append({**clave, "estado": "error", "detalle": str(exc)})
+    return {
+        "modo": "importado",
+        "total": len(segmentos),
+        "relacionados": sum(x["estado"] == "relacionado" for x in resultados),
+        "revision": sum(x["estado"] == "revision" for x in resultados),
+        "duplicados": sum(x["estado"] == "duplicado" for x in resultados),
+        "errores": sum(x["estado"] == "error" for x in resultados),
+        "documentos": resultados,
+    }
 
 
 @router.post("", response_model=DocumentoOut, status_code=status.HTTP_201_CREATED)

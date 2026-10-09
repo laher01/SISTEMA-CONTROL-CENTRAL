@@ -22,6 +22,28 @@ interface Fila {
 }
 
 export default function Subir({ sesion }: { sesion: SesionActual }) {
+  const [paquete, setPaquete] = useState<File | null>(null);
+  const [analizandoPaquete, setAnalizandoPaquete] = useState(false);
+  const [confirmandoPaquete, setConfirmandoPaquete] = useState(false);
+  const [informePaquete, setInformePaquete] = useState<{
+    modo: string;
+    total: number;
+    relacionados?: number;
+    revision?: number;
+    duplicados?: number;
+    errores?: number;
+    documentos: Array<{
+      pagina_inicio: number;
+      pagina_fin: number;
+      tipo: string;
+      serie: string;
+      correlativo: string;
+      ruc_emisor: string;
+      estado?: string;
+      detalle?: string;
+    }>;
+  } | null>(null);
+  const [errorPaquete, setErrorPaquete] = useState("");
   const [filas, setFilas] = useState<Fila[]>([]);
   const [arrastrando, setArrastrando] = useState(false);
   const entrada = useRef<HTMLInputElement>(null);
@@ -74,6 +96,27 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
     agregar(evento.dataTransfer.files);
   };
 
+  const ejecutarPaquete = async (confirmar: boolean) => {
+    if (!paquete) return;
+    if (confirmar) setConfirmandoPaquete(true);
+    else setAnalizandoPaquete(true);
+    setErrorPaquete("");
+    try {
+      const form = new FormData();
+      form.append("archivo", paquete);
+      form.append("confirmar", String(confirmar));
+      const respuesta = await enviarFormulario<NonNullable<typeof informePaquete>>(
+        "/api/v1/documentos/paquete", form,
+      );
+      setInformePaquete(respuesta);
+    } catch (e) {
+      setErrorPaquete(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAnalizandoPaquete(false);
+      setConfirmandoPaquete(false);
+    }
+  };
+
   const conteo = (estado: Resultado["estado"]) =>
     filas.filter((f) => f.resultado.estado === estado).length;
 
@@ -93,6 +136,62 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
   return (
     <>
       <h2>Subir documentos</h2>
+      <section className="resumen-carga" style={{ marginBottom: 20 }}>
+        <h3>Importar PDF empaquetado</h3>
+        <p>
+          Para paquetes que contienen varias facturas, guías o recibos. Primero se
+          identifican las páginas; la carga requiere una confirmación explícita.
+        </p>
+        <input
+          type="file"
+          accept=".pdf,application/pdf"
+          onChange={(e) => {
+            setPaquete(e.target.files?.[0] ?? null);
+            setInformePaquete(null);
+            setErrorPaquete("");
+          }}
+        />
+        <button
+          type="button"
+          disabled={!paquete || analizandoPaquete || confirmandoPaquete}
+          onClick={() => void ejecutarPaquete(false)}
+        >
+          {analizandoPaquete ? "Analizando…" : "Analizar paquete"}
+        </button>
+        {errorPaquete && <p role="alert">{errorPaquete}</p>}
+        {informePaquete && (
+          <div>
+            <p><strong>{informePaquete.total} documentos detectados</strong></p>
+            {informePaquete.modo === "vista_previa" && (
+              <button type="button" disabled={confirmandoPaquete} onClick={() => void ejecutarPaquete(true)}>
+                {confirmandoPaquete ? "Importando…" : "Confirmar importación"}
+              </button>
+            )}
+            {informePaquete.modo === "importado" && (
+              <p>
+                Relacionados: {informePaquete.relacionados} · Revisión: {informePaquete.revision}
+                {" · "}Duplicados: {informePaquete.duplicados} · Errores: {informePaquete.errores}
+              </p>
+            )}
+            <div style={{ maxHeight: 320, overflow: "auto" }}>
+              <table>
+                <thead><tr><th>Páginas</th><th>Tipo</th><th>RUC emisor</th><th>Comprobante</th><th>Resultado</th></tr></thead>
+                <tbody>
+                  {informePaquete.documentos.map((d, i) => (
+                    <tr key={i}>
+                      <td>{d.pagina_inicio}–{d.pagina_fin}</td>
+                      <td>{d.tipo}</td><td>{d.ruc_emisor}</td>
+                      <td>{d.serie}-{d.correlativo}</td>
+                      <td>{d.estado ?? "Detectado"} {d.detalle ?? ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </section>
+
       <div className="resumen-carga">
         <strong>Origen identificado por sesión:</strong>{" "}
         {sesion.rol === "GESTOR" ? "Gestor " : "Usuario "}
