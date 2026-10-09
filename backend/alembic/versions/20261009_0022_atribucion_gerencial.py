@@ -48,7 +48,7 @@ def upgrade() -> None:
             type_="unique",
         )
         batch.create_unique_constraint(
-            "uq_pagos_responsables_erp_tenant_id_gerente_id_responsable_id_periodo_desde_periodo_hasta_moneda",
+            "uq_pagos_resp_gerente_periodo_moneda",
             [
                 "tenant_id",
                 "gerente_id",
@@ -64,7 +64,7 @@ def downgrade() -> None:
     # No revertir si existen pagos de diferentes Gerentes en un mismo período.
     with op.batch_alter_table("pagos_responsables_erp") as batch:
         batch.drop_constraint(
-            "uq_pagos_responsables_erp_tenant_id_gerente_id_responsable_id_periodo_desde_periodo_hasta_moneda",
+            "uq_pagos_resp_gerente_periodo_moneda",
             type_="unique",
         )
         batch.create_unique_constraint(
