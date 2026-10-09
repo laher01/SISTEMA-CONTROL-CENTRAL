@@ -186,13 +186,6 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
                   setMensaje("Cuenta registrada.");
                 }}
               />
-              <ProgramarPagoForm
-                usuarioId={usuarioId}
-                alCrear={() => {
-                  recargarLiquidaciones();
-                  setMensaje("Pago programado con producción y adelantos calculados.");
-                }}
-              />
             </div>
           )}
 
@@ -905,56 +898,6 @@ function CuentaForm({ usuarioId, alCrear }: { usuarioId: string; alCrear: () => 
   );
 }
 
-function ProgramarPagoForm({
-  usuarioId,
-  alCrear,
-}: {
-  usuarioId: string;
-  alCrear: () => void;
-}) {
-  const hoy = new Date();
-  const primero = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
-  const [desde, setDesde] = useState(primero);
-  const [hasta, setHasta] = useState(hoy.toISOString().slice(0, 10));
-  const [moneda, setMoneda] = useState<"PEN" | "USD">("PEN");
-  const [ajustes, setAjustes] = useState("0");
-
-  const enviar = async (e: FormEvent) => {
-    e.preventDefault();
-    await enviarJson<PagoERP>("/api/v1/pagos", "POST", {
-      usuario_id: usuarioId,
-      periodo_desde: desde,
-      periodo_hasta: hasta,
-      moneda,
-      ajustes,
-      fecha_programada: null,
-    });
-    alCrear();
-  };
-
-  return (
-    <section>
-      <h3>Programar liquidación</h3>
-      <form onSubmit={enviar} className="formulario-pagos">
-        <label>Desde<input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} /></label>
-        <label>Hasta<input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} /></label>
-        <select value={moneda} onChange={(e) => setMoneda(e.target.value as "PEN" | "USD")}>
-          <option value="PEN">PEN</option>
-          <option value="USD">USD</option>
-        </select>
-        <input
-          type="number"
-          step="0.01"
-          value={ajustes}
-          onChange={(e) => setAjustes(e.target.value)}
-          placeholder="Ajustes"
-        />
-        <button type="submit">Calcular y programar</button>
-      </form>
-    </section>
-  );
-}
-
 function AccionesPago({
   pago,
   sesion,
@@ -990,23 +933,7 @@ function AccionesPago({
         </button>
       ))}
 
-      {(sesion.rol === "SUPERADMIN" || sesion.rol === "ADMINISTRADOR") &&
-        pago.estado !== "PAGADO" &&
-        pago.estado !== "CONCILIADO" &&
-        !pago.conciliado && (
-          <button
-            onClick={async () => {
-              const confirmar = window.confirm(
-                "¿Eliminar esta programación de pago? Esta acción quedará registrada en auditoría.",
-              );
-              if (!confirmar) return;
-              await eliminar("/api/v1/pagos/" + pago.id);
-              alCambiar();
-            }}
-          >
-            Eliminar
-          </button>
-        )}
+
     </div>
   );
 }
