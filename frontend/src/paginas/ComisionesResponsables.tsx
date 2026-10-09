@@ -38,6 +38,9 @@ type Pago = {
   estado: string;
   fecha_pago: string | null;
   referencia_pago: string | null;
+  abonado: string;
+  saldo: string;
+  fecha_reprogramada: string | null;
 };
 type Cambio = { fecha: string; datos: { actor?: string; anterior?: string; nuevo?: string; motivo?: string } };
 
@@ -76,6 +79,11 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
   const [mensaje, setMensaje] = useState("");
   const [procesando, setProcesando] = useState(false);
   const [referenciaPago, setReferenciaPago] = useState("");
+  const [comprobante, setComprobante] = useState<File | null>(null);
+  const [montoAdelanto, setMontoAdelanto] = useState("");
+  const [nuevaFecha, setNuevaFecha] = useState("");
+  const [motivoReprogramacion, setMotivoReprogramacion] = useState("");
+  const [movimientos, setMovimientos] = useState<Record<string, Array<{ id: string; fecha: string; monto: string; referencia: string }>>>({});
   const [fechaPago, setFechaPago] = useState(() => new Date().toLocaleDateString("en-CA"));
   const { datos, error, cargando, recargar } = useDatos<Resumen>(
     conParametros("/api/v1/pagos-responsables/resumen", { desde, hasta, moneda }),
@@ -124,25 +132,71 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
       setProcesando(false);
     }
   };
-  const pagar = async (pagoId: string) => {
-    if (!referenciaPago.trim() || !fechaPago) {
-      setMensaje("Indique fecha y referencia de pago.");
+  const pagar = async (pagoId: string, accion: "TOTAL" | "ADELANTO") => {
+    if (!referenciaPago.trim() || !fechaPago || !comprobante) {
+      setMensaje("Indique fecha, referencia y adjunte el comprobante.");
+      return;
+    }
+    if (accion === "ADELANTO" && !(Number(montoAdelanto) > 0)) {
+      setMensaje("Indique el importe positivo del adelanto.");
       return;
     }
     setProcesando(true);
     try {
-      await enviarJson(`/api/v1/pagos-responsables/${pagoId}/confirmar`, "POST", {
-        fecha_pago: fechaPago,
-        referencia_pago: referenciaPago.trim(),
+      const cuerpo = new FormData();
+      cuerpo.set("accion", accion);
+      cuerpo.set("fecha", fechaPago);
+      cuerpo.set("referencia", referenciaPago.trim());
+      cuerpo.set("comprobante", comprobante);
+      if (accion === "ADELANTO") cuerpo.set("monto", montoAdelanto);
+      const response = await fetch(`/api/v1/pagos-responsables/${pagoId}/abonar`, {
+        method: "POST", credentials: "same-origin", body: cuerpo,
       });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(typeof error.detail === "string" ? error.detail : "Error al registrar abono");
+      }
       pagos.recargar();
       setReferenciaPago("");
-      setMensaje("Pago registrado con referencia y auditoría.");
+      setMontoAdelanto("");
+      setComprobante(null);
+      setMensaje("Movimiento registrado con comprobante y saldo actualizado.");
     } catch (e) {
       setMensaje(e instanceof Error ? e.message : String(e));
     } finally {
       setProcesando(false);
     }
+  };
+
+  const reprogramar = async (pagoId: string) => {
+    if (!nuevaFecha || motivoReprogramacion.trim().length < 5) {
+      setMensaje("Indique nueva fecha y motivo de al menos cinco caracteres.");
+      return;
+    }
+    setProcesando(true);
+    try {
+      await enviarJson(`/api/v1/pagos-responsables/${pagoId}/reprogramar`, "POST", {
+        fecha: nuevaFecha, motivo: motivoReprogramacion.trim(),
+      });
+      pagos.recargar();
+      setMensaje("Fecha de pago reprogramada y registrada en auditoría.");
+    } catch (e) {
+      setMensaje(e instanceof Error ? e.message : String(e));
+    } finally {
+      setProcesando(false);
+    }
+  };
+
+  const verMovimientos = async (pagoId: string) => {
+    const response = await fetch(`/api/v1/pagos-responsables/${pagoId}/movimientos`, {
+      credentials: "same-origin",
+    });
+    if (!response.ok) {
+      setMensaje("No se pudo consultar el historial de abonos.");
+      return;
+    }
+    const datos = await response.json();
+    setMovimientos(actual => ({ ...actual, [pagoId]: datos }));
   };
 
   return <>
@@ -217,23 +271,41 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
       </p>;
     })}
     <h4>Pagos a Responsables</h4>
+    <p className="resumen-carga">Saldo global de las liquidaciones: {formatearMonto(moneda, (pagos.datos ?? []).filter(p => p.moneda === moneda).reduce((a, p) => a + Number(p.saldo ?? (p.estado === "PAGADO" ? 0 : p.comision_total)), 0))}</p>
     {puedePagar && <div className="filtros">
       <label>Fecha de pago <input type="date" value={fechaPago}
         onChange={(e) => setFechaPago(e.target.value)} /></label>
       <input aria-label="Referencia de pago" placeholder="Referencia bancaria / voucher"
         value={referenciaPago} onChange={(e) => setReferenciaPago(e.target.value)} />
+      <label>Adjuntar comprobante (PDF/JPG/PNG)
+        <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e => setComprobante(e.target.files?.[0] ?? null)} />
+      </label>
+      <input aria-label="Monto del adelanto" type="number" min="0.01" step="0.01"
+        placeholder="Monto adelanto" value={montoAdelanto} onChange={e => setMontoAdelanto(e.target.value)} />
+      <label>Nueva fecha <input type="date" value={nuevaFecha} onChange={e => setNuevaFecha(e.target.value)} /></label>
+      <input placeholder="Motivo reprogramación" value={motivoReprogramacion}
+        onChange={e => setMotivoReprogramacion(e.target.value)} />
     </div>}
     <div className="tabla-responsive"><table>
       <thead><tr><th>Responsable</th><th>Periodo</th><th>Comisión</th>
-        <th>Estado</th><th>Referencia</th><th>Acción</th></tr></thead>
+        <th>Abonado</th><th>Saldo</th><th>Estado</th><th>Referencia</th><th>Acción</th></tr></thead>
       <tbody>{(pagos.datos ?? []).map((p) => <tr key={p.id}>
         <td>{responsables.find(([id]) => id === p.responsable_id)?.[1] ?? p.responsable_id}</td>
         <td>{p.periodo_desde} al {p.periodo_hasta}</td>
         <td>{formatearMonto(p.moneda as "PEN" | "USD", p.comision_total)}</td>
-        <td>{p.estado}</td>
+        <td>{formatearMonto(p.moneda as "PEN" | "USD", p.abonado ?? "0")}</td>
+        <td>{formatearMonto(p.moneda as "PEN" | "USD", p.saldo ?? p.comision_total)}</td>
+        <td>{p.estado}{p.fecha_reprogramada ? ` · ${p.fecha_reprogramada}` : ""}</td>
         <td>{p.referencia_pago ?? "—"}</td>
-        <td>{puedePagar && p.estado === "PROGRAMADO" && <button disabled={procesando}
-          onClick={() => void pagar(p.id)}>Confirmar pago</button>}</td>
+        <td>
+          {puedePagar && !["PAGADO", "ANULADO"].includes(p.estado) && <>
+            <button disabled={procesando} onClick={() => void pagar(p.id, "TOTAL")}>Pagar todo</button>{" "}
+            <button disabled={procesando} onClick={() => void pagar(p.id, "ADELANTO")}>Hacer adelanto</button>{" "}
+            <button disabled={procesando} onClick={() => void reprogramar(p.id)}>Reprogramar</button>
+          </>}
+          <button onClick={() => void verMovimientos(p.id)}>Movimientos</button>
+          {(movimientos[p.id] ?? []).map(m => <div key={m.id}><a href={`/api/v1/pagos-responsables/${p.id}/movimientos/${m.id}/comprobante`} target="_blank" rel="noreferrer">{m.fecha} · {formatearMonto(p.moneda as "PEN" | "USD", m.monto)} · {m.referencia}</a></div>)}
+        </td>
       </tr>)}</tbody>
     </table></div>
   </>;
