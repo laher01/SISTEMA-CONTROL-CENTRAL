@@ -13,7 +13,14 @@ from app.models import (
     SolicitudAcceso,
     Tenant,
 )
-from app.schemas import CambioClaveIn, LoginIn, SesionOut, SolicitudAccesoIn, SolicitudAccesoOut
+from app.schemas import (
+    CambioClaveIn,
+    JerarquiaSesionOut,
+    LoginIn,
+    SesionOut,
+    SolicitudAccesoIn,
+    SolicitudAccesoOut,
+)
 from app.security import crear_sesion, hash_clave, revocar_sesion, verificar_clave
 from app.services import auditoria
 from app.tenant_host import tenant_de_host
@@ -305,11 +312,32 @@ def _rol_de_cuenta(session: SessionDep, cuenta: CuentaAcceso) -> str | None:
     return None
 
 
+def _cadena_de_responsabilidad(
+    session: SessionDep, cuenta: CuentaAcceso, usuario: Miembro | None,
+) -> list[JerarquiaSesionOut]:
+    """Solo miembros ascendentes del mismo tenant; nunca extrapola por nombre."""
+    cadena: list[JerarquiaSesionOut] = []
+    visitados: set[object] = set()
+    actual = usuario
+    while actual is not None and actual.id not in visitados and len(cadena) < 8:
+        visitados.add(actual.id)
+        if actual.tenant_id != cuenta.tenant_id or actual.deleted_at is not None:
+            break
+        cadena.append(
+            JerarquiaSesionOut(rol=actual.rol, codigo=actual.codigo, nombre=actual.nombre)
+        )
+        if actual.responsable_id is None:
+            break
+        actual = session.get(Miembro, actual.responsable_id)
+    return cadena
+
+
 def _salida_sesion(session: SessionDep, cuenta: CuentaAcceso, rol: str) -> SesionOut:
     if cuenta.gestor_id is not None:
         gestor = session.get(Gestor, cuenta.gestor_id)
         if gestor is None:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Gestor no disponible")
+        usuario = session.get(Miembro, gestor.usuario_id) if gestor.usuario_id else None
         return SesionOut(
             rol=rol,
             codigo=gestor.codigo,
@@ -317,6 +345,7 @@ def _salida_sesion(session: SessionDep, cuenta: CuentaAcceso, rol: str) -> Sesio
             miembro_id=None,
             gestor_id=gestor.id,
             usuario_id=gestor.usuario_id,
+            jerarquia=_cadena_de_responsabilidad(session, cuenta, usuario),
             cambio_clave_obligatorio=cuenta.cambio_clave_obligatorio,
         )
     miembro = session.get(Miembro, cuenta.miembro_id)
@@ -329,6 +358,8 @@ def _salida_sesion(session: SessionDep, cuenta: CuentaAcceso, rol: str) -> Sesio
         miembro_id=miembro.id,
         gestor_id=None,
         usuario_id=miembro.id if miembro.rol == "USUARIO" else None,
+        jerarquia=_cadena_de_responsabilidad(session, cuenta, miembro)
+        if miembro.rol == "USUARIO" else [],
         cambio_clave_obligatorio=cuenta.cambio_clave_obligatorio,
     )
 
