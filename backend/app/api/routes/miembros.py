@@ -191,6 +191,24 @@ def actualizar(
                 "Reasigne los gestores antes de cambiar el rol o desactivar al Usuario",
             )
 
+    if miembro.rol == RolMiembro.RESPONSABLE and (
+        (datos.rol is not None and datos.rol != RolMiembro.RESPONSABLE)
+        or datos.activo is False
+    ):
+        asignados = session.scalar(
+            select(Miembro.id).where(
+                Miembro.tenant_id == tenant_id,
+                Miembro.rol == RolMiembro.USUARIO,
+                Miembro.responsable_id == miembro.id,
+                Miembro.deleted_at.is_(None),
+            )
+        )
+        if asignados is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Reasigne los Usuarios antes de desactivar o cambiar el rol del Responsable",
+            )
+
     try:
         if datos.codigo is not None:
             actualizar_login_cuenta(
