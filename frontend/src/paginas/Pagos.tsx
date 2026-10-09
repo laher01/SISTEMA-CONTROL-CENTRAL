@@ -338,7 +338,7 @@ function PedidosGerencia({
                 <td>{p.estado}</td>
                 <td>
                   <button onClick={() => setSeleccionado(p.id)}>Detalle</button>{" "}
-                  {p.estado !== "ANULADO" && <button type="button" onClick={async () => {
+                  {p.estado !== "CANCELADO" && <button type="button" onClick={async () => {
                     const motivo = window.prompt("Motivo de anulación (mínimo 10 caracteres). No se permite anular pedidos ejecutados o con asignaciones.");
                     if (!motivo || motivo.trim().length < 10) return;
                     try {
