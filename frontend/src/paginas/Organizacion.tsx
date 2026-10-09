@@ -40,6 +40,7 @@ function OrganizacionAdmin() {
   const [credencial, setCredencial] = useState<CredencialTemporal | null>(null);
   const [mensaje, setMensaje] = useState("");
 
+  const administradores = (miembros ?? []).filter((m) => m.rol === "ADMINISTRADOR" || m.rol === "SUPERADMIN");
   const responsables = useMemo(
     () => (miembros ?? []).filter((m) => m.rol === "RESPONSABLE"),
     [miembros],
@@ -48,6 +49,18 @@ function OrganizacionAdmin() {
     () => (miembros ?? []).filter((m) => m.rol === "USUARIO"),
     [miembros],
   );
+
+  const asignarAdministrador = async (responsable: Miembro, administradorId: string) => {
+    try {
+      await enviarJson<Miembro>(`/api/v1/miembros/${responsable.id}/administrador`, "PUT", {
+        administrador_id: administradorId || null,
+      });
+      recargar();
+      setMensaje("Administración actualizada para " + responsable.codigo);
+    } catch (e) {
+      setMensaje(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const asignarResponsable = async (usuario: Miembro, responsableId: string) => {
     try {
@@ -161,6 +174,19 @@ function OrganizacionAdmin() {
           </button>
         ))}
       </div>
+      {pestanaAdmin === "RESPONSABLE" && <section className="panel-configuracion">
+        <h3>Asignación de Responsables a Administradores</h3>
+        <p className="tenue">Cada responsable tiene una cadena de Administración. El cambio no modifica pagos anteriores.</p>
+        <table><thead><tr><th>Responsable</th><th>Administrador asignado</th></tr></thead><tbody>
+          {responsables.map((r) => <tr key={r.id}><td>{r.codigo} · {r.nombre}</td><td>
+            <select aria-label={`Administrador de ${r.codigo}`} value={r.responsable_id ?? ""}
+              onChange={(e) => void asignarAdministrador(r, e.target.value)}>
+              <option value="">Sin administrador asignado</option>
+              {administradores.map((a) => <option key={a.id} value={a.id}>{a.codigo} · {a.nombre}</option>)}
+            </select>
+          </td></tr>)}
+        </tbody></table>
+      </section>}
       {pestanaAdmin === "USUARIO" && <section className="panel-configuracion">
         <h3>Asignación de Usuarios a Responsables</h3>
         <p className="tenue">La asignación se limita a esta Administración. No modifica los pagos históricos.</p>
