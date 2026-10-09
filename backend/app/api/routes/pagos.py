@@ -828,6 +828,8 @@ def actualizar_pedido_gerencia(
 ) -> PedidoGerenciaOut:
     _validar_acceso(auth.rol)
     pedido = _pedido_valido(session, tenant_id, pedido_id)
+    if pedido.estado == "CANCELADO":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Pedido cancelado; no puede reabrirse")
     if "responsable_id" in datos.model_fields_set:
         nuevo = session.get(Miembro, datos.responsable_id) if datos.responsable_id else None
         if datos.responsable_id is not None and (
