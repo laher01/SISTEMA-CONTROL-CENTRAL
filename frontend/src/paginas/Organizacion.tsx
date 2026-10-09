@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 
 import { enviarJson, useDatos } from "../api";
+import MiEquipoResponsable from "./MiEquipoResponsable";
 import type {
   AltaGestor,
   AltaMiembro,
@@ -17,6 +18,7 @@ export default function Organizacion({ sesion }: { sesion: SesionActual }) {
   if (sesion.rol === "SUPERADMIN" || sesion.rol === "ADMINISTRADOR") {
     return <OrganizacionAdmin />;
   }
+  if (sesion.rol === "RESPONSABLE") return <OrganizacionResponsable />;
   if (sesion.rol === "USUARIO") return <OrganizacionUsuario sesion={sesion} />;
   return <p>No tiene permiso para administrar la organización.</p>;
 }
@@ -24,9 +26,10 @@ export default function Organizacion({ sesion }: { sesion: SesionActual }) {
 function OrganizacionAdmin() {
   const { datos: miembros, error, cargando, recargar } = useDatos<Miembro[]>("/api/v1/miembros");
   const { datos: gestores, recargar: recargarGestores } = useDatos<Gestor[]>("/api/v1/gestores");
+  const [pestanaAdmin, setPestanaAdmin] = useState<"RESPONSABLE" | "USUARIO" | "GESTOR">("RESPONSABLE");
   const [codigo, setCodigo] = useState("");
   const [nombre, setNombre] = useState("");
-  const [rol, setRol] = useState<RolMiembro>("USUARIO");
+  const [rol, setRol] = useState<RolMiembro>("RESPONSABLE");
   const [porcentajeProduccion, setPorcentajeProduccion] = useState("1.5");
   const [miembroEditando, setMiembroEditando] = useState<string | null>(null);
   const [usuarioId, setUsuarioId] = useState("");
@@ -37,6 +40,7 @@ function OrganizacionAdmin() {
   const [credencial, setCredencial] = useState<CredencialTemporal | null>(null);
   const [mensaje, setMensaje] = useState("");
 
+  const administradores = (miembros ?? []).filter((m) => m.rol === "ADMINISTRADOR" || m.rol === "SUPERADMIN");
   const responsables = useMemo(
     () => (miembros ?? []).filter((m) => m.rol === "RESPONSABLE"),
     [miembros],
@@ -45,6 +49,18 @@ function OrganizacionAdmin() {
     () => (miembros ?? []).filter((m) => m.rol === "USUARIO"),
     [miembros],
   );
+
+  const asignarAdministrador = async (responsable: Miembro, administradorId: string) => {
+    try {
+      await enviarJson<Miembro>(`/api/v1/miembros/${responsable.id}/administrador`, "PUT", {
+        administrador_id: administradorId || null,
+      });
+      recargar();
+      setMensaje("Administración actualizada para " + responsable.codigo);
+    } catch (e) {
+      setMensaje(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const asignarResponsable = async (usuario: Miembro, responsableId: string) => {
     try {
@@ -83,7 +99,7 @@ function OrganizacionAdmin() {
       }
       setCodigo("");
       setNombre("");
-      setRol("USUARIO");
+      setRol(pestanaAdmin === "RESPONSABLE" ? "RESPONSABLE" : "USUARIO");
       setPorcentajeProduccion("1.5");
       setMiembroEditando(null);
       recargar();
@@ -150,7 +166,28 @@ function OrganizacionAdmin() {
       {error && <p className="error">{error}</p>}
       {cargando && <p>Cargando…</p>}
 
-      <section className="panel-configuracion">
+      <div className="acciones" role="tablist" aria-label="Niveles de la organización">
+        {(["RESPONSABLE", "USUARIO", "GESTOR"] as const).map((p) => (
+          <button key={p} type="button" role="tab" aria-selected={pestanaAdmin === p}
+            onClick={() => { setPestanaAdmin(p); setMiembroEditando(null); setGestorEditando(null); setRol(p === "RESPONSABLE" ? "RESPONSABLE" : "USUARIO"); }}>
+            {p === "RESPONSABLE" ? "Responsables" : p === "USUARIO" ? "Usuarios" : "Gestores"}
+          </button>
+        ))}
+      </div>
+      {pestanaAdmin === "RESPONSABLE" && <section className="panel-configuracion">
+        <h3>Asignación de Responsables a Administradores</h3>
+        <p className="tenue">Cada responsable tiene una cadena de Administración. El cambio no modifica pagos anteriores.</p>
+        <table><thead><tr><th>Responsable</th><th>Administrador asignado</th></tr></thead><tbody>
+          {responsables.map((r) => <tr key={r.id}><td>{r.codigo} · {r.nombre}</td><td>
+            <select aria-label={`Administrador de ${r.codigo}`} value={r.responsable_id ?? ""}
+              onChange={(e) => void asignarAdministrador(r, e.target.value)}>
+              <option value="">Sin administrador asignado</option>
+              {administradores.map((a) => <option key={a.id} value={a.id}>{a.codigo} · {a.nombre}</option>)}
+            </select>
+          </td></tr>)}
+        </tbody></table>
+      </section>}
+      {pestanaAdmin === "USUARIO" && <section className="panel-configuracion">
         <h3>Asignación de Usuarios a Responsables</h3>
         <p className="tenue">La asignación se limita a esta Administración. No modifica los pagos históricos.</p>
         <table>
@@ -165,9 +202,9 @@ function OrganizacionAdmin() {
             </tr>
           ))}</tbody>
         </table>
-      </section>
+      </section>}
       <div className="columnas">
-        <section>
+        {pestanaAdmin !== "GESTOR" && <section>
           <h3>{miembroEditando ? "Editar miembro" : "Crear miembro"}</h3>
           <form onSubmit={guardarMiembro} className="formulario-linea">
             <input
@@ -180,7 +217,7 @@ function OrganizacionAdmin() {
               value={rol}
               onChange={(e) => setRol(e.target.value as RolMiembro)}
             >
-              {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+              {ROLES.filter((r) => r === (pestanaAdmin === "RESPONSABLE" ? "RESPONSABLE" : "USUARIO")).map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
             {rol === "USUARIO" && (
               <label>
@@ -212,7 +249,7 @@ function OrganizacionAdmin() {
           <table>
             <thead><tr><th>Código</th><th>Nombre</th><th>Rol</th><th>% producción</th><th>Acciones</th></tr></thead>
             <tbody>
-              {miembros?.map((m) => (
+              {miembros?.filter((m) => m.rol === pestanaAdmin).map((m) => (
                 <tr key={m.id}>
                   <td>{m.codigo}</td><td>{m.nombre}</td><td>{m.rol}</td>
                   <td>{m.rol === "USUARIO" ? (m.porcentaje_produccion ?? "0") + "%" : "—"}</td>
@@ -232,9 +269,9 @@ function OrganizacionAdmin() {
               ))}
             </tbody>
           </table>
-        </section>
+        </section>}
 
-        <section>
+        {pestanaAdmin === "GESTOR" && <section>
           <h3>{gestorEditando ? "Editar gestor" : "Crear gestor"}</h3>
           <form onSubmit={guardarGestor} className="formulario-linea">
             <select value={usuarioId} onChange={(e) => setUsuarioId(e.target.value)} required>
@@ -279,10 +316,30 @@ function OrganizacionAdmin() {
             }}
             alRestablecer={(g) => void restablecerGestor(g)}
           />
-        </section>
+        </section>}
       </div>
     </>
   );
+}
+
+function OrganizacionResponsable() {
+  const [pestana, setPestana] = useState<"USUARIO" | "GESTOR">("USUARIO");
+  const { datos: gestores, error } = useDatos<Gestor[]>("/api/v1/gestores");
+  const { datos: usuarios } = useDatos<Miembro[]>("/api/v1/miembros/mis-usuarios");
+  return <>
+    <h2>Organización de mi equipo</h2>
+    <div className="acciones" role="tablist" aria-label="Mi organización">
+      <button type="button" role="tab" aria-selected={pestana === "USUARIO"} onClick={() => setPestana("USUARIO")}>Usuarios</button>
+      <button type="button" role="tab" aria-selected={pestana === "GESTOR"} onClick={() => setPestana("GESTOR")}>Gestores</button>
+    </div>
+    {pestana === "USUARIO" ? <MiEquipoResponsable /> : <>
+      <p className="tenue">Gestores vinculados a los usuarios de tu equipo. Las asignaciones se modifican desde Administración o desde el usuario propietario.</p>
+      {error && <p className="error">{error}</p>}
+      <table><thead><tr><th>Gestor</th><th>Usuario propietario</th></tr></thead><tbody>
+        {(gestores ?? []).map(g => { const u = (usuarios ?? []).find(u => u.id === g.usuario_id); return <tr key={g.id}><td>{g.codigo} · {g.nombre}</td><td>{u ? `${u.codigo} · ${u.nombre}` : "No disponible"}</td></tr>; })}
+      </tbody></table>
+    </>}
+  </>;
 }
 
 function OrganizacionUsuario({ sesion }: { sesion: SesionActual }) {

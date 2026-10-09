@@ -54,6 +54,11 @@ def crear(
             else None
         ),
         creado_por_cuenta_id=auth.cuenta_id,
+        responsable_id=(
+            auth.miembro_id
+            if datos.rol == RolMiembro.RESPONSABLE and auth.rol == RolMiembro.ADMINISTRADOR
+            else None
+        ),
     )
     session.add(miembro)
     try:
@@ -184,6 +189,45 @@ def crear_usuario_responsable(
         miembro=MiembroOut.model_validate(usuario),
         credencial=CredencialTemporalOut(login=usuario.codigo, clave_temporal=temporal),
     )
+
+
+class AsignacionAdministradorIn(BaseModel):
+    administrador_id: uuid.UUID | None
+
+
+@router.put("/{responsable_id}/administrador", response_model=MiembroOut)
+def asignar_administrador(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    responsable_id: uuid.UUID,
+    datos: AsignacionAdministradorIn,
+) -> Miembro:
+    _solo_admin(auth.rol)
+    responsable = session.get(Miembro, responsable_id)
+    if (
+        responsable is None
+        or responsable.tenant_id != tenant_id
+        or responsable.rol != RolMiembro.RESPONSABLE
+        or responsable.deleted_at is not None
+        or not responsable.activo
+    ):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Responsable inválido")
+    if datos.administrador_id is not None:
+        administrador = session.get(Miembro, datos.administrador_id)
+        if (
+            administrador is None
+            or administrador.tenant_id != tenant_id
+            or administrador.rol not in (RolMiembro.ADMINISTRADOR, RolMiembro.SUPERADMIN)
+            or administrador.deleted_at is not None
+            or not administrador.activo
+        ):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Administrador inválido")
+        if auth.rol == RolMiembro.ADMINISTRADOR and administrador.id != auth.miembro_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo puede asignar su Administración")
+    responsable.responsable_id = datos.administrador_id
+    session.commit()
+    return responsable
 
 
 @router.put("/{usuario_id}/responsable", response_model=MiembroOut)
