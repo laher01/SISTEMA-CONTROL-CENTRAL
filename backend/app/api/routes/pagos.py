@@ -275,6 +275,100 @@ def _cliente_valido(
     return cliente
 
 
+@router.get("/consolidado")
+def consolidado_compras(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    desde: date,
+    hasta: date,
+    moneda: str = "PEN",
+    agrupar: str = "CLIENTE",
+) -> dict[str, object]:
+    """Compras brutas del periodo, por receptor o Responsable; no son cobros bancarios."""
+    _validar_acceso(auth.rol)
+    if hasta < desde or (hasta - desde).days > 366:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Rango inválido")
+    if moneda not in ("PEN", "USD") or agrupar not in ("CLIENTE", "RESPONSABLE"):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Filtros inválidos")
+    if agrupar == "CLIENTE":
+        consulta = (
+            select(
+                Empresa.id,
+                Empresa.ruc,
+                Empresa.razon_social,
+                func.count(Expediente.id),
+                func.sum(Expediente.importe_total),
+            )
+            .join(Empresa, Expediente.receptor_id == Empresa.id)
+            .where(
+                Expediente.tenant_id == tenant_id,
+                Expediente.deleted_at.is_(None),
+                Expediente.fecha_emision.between(desde, hasta),
+                Expediente.moneda == moneda,
+                Empresa.tenant_id == tenant_id,
+                Empresa.deleted_at.is_(None),
+            )
+            .group_by(Empresa.id, Empresa.ruc, Empresa.razon_social)
+        )
+    else:
+        consulta = (
+            select(
+                Miembro.id,
+                Miembro.codigo,
+                Miembro.nombre,
+                func.count(Expediente.id),
+                func.sum(Expediente.importe_total),
+            )
+            .join(Miembro, Expediente.usuario_id == Miembro.id)
+            .where(
+                Expediente.tenant_id == tenant_id,
+                Expediente.deleted_at.is_(None),
+                Expediente.fecha_emision.between(desde, hasta),
+                Expediente.moneda == moneda,
+                Miembro.tenant_id == tenant_id,
+                Miembro.rol == RolMiembro.USUARIO,
+                Miembro.responsable_id.is_not(None),
+                Miembro.deleted_at.is_(None),
+            )
+        )
+        responsable = Miembro.__table__.alias("responsable")
+        consulta = (
+            consulta.join(responsable, Miembro.responsable_id == responsable.c.id)
+            .with_only_columns(
+                responsable.c.id,
+                responsable.c.codigo,
+                responsable.c.nombre,
+                func.count(Expediente.id),
+                func.sum(Expediente.importe_total),
+            )
+            .where(
+                responsable.c.tenant_id == tenant_id,
+                responsable.c.deleted_at.is_(None),
+                responsable.c.rol == RolMiembro.RESPONSABLE,
+            )
+            .group_by(responsable.c.id, responsable.c.codigo, responsable.c.nombre)
+        )
+    filas = [
+        {
+            "id": str(id_),
+            "codigo": codigo,
+            "nombre": nombre,
+            "registros": cantidad,
+            "monto": str(monto or 0),
+        }
+        for id_, codigo, nombre, cantidad, monto in session.execute(consulta)
+    ]
+    return {
+        "desde": desde.isoformat(),
+        "hasta": hasta.isoformat(),
+        "moneda": moneda,
+        "agrupar": agrupar,
+        "total": str(sum((Decimal(f["monto"]) for f in filas), Decimal("0"))),
+        "filas": filas,
+    }
+
+
 @router.get("/clientes/resumen", response_model=CarteraClientesResumen)
 def resumen_clientes(
     session: SessionDep,

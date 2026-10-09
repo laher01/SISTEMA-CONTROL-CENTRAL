@@ -1,3 +1,4 @@
+import ConsolidadoGerencia from "./ConsolidadoGerencia";
 import { useMemo, useState, type FormEvent } from "react";
 
 import { conParametros, eliminar, enviarJson, useDatos } from "../api";
@@ -78,7 +79,7 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
           className={pestana === "COBROS" ? "activo" : undefined}
           onClick={() => setPestana("COBROS")}
         >
-          Cobros de clientes
+          Consolidado
         </button>
         <button
           className={pestana === "RESPONSABLES" ? "activo" : undefined}
@@ -86,15 +87,15 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
         >
           Pago a Responsables
         </button>
-        <button
+        {sesion.rol !== "GERENTE" && <button
           className={pestana === "LIQUIDACIONES" ? "activo" : undefined}
           onClick={() => setPestana("LIQUIDACIONES")}
         >
           Liquidación de usuarios
-        </button>
+        </button>}
       </div>
 
-      {(pestana === "PEDIDOS" || pestana === "COBROS") && (
+      {pestana === "PEDIDOS" && (
         <div className="filtros">
           <label>
             Mes
@@ -131,7 +132,7 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
         />
       )}
 
-      {pestana === "COBROS" && (
+      {pestana === "COBROS" && sesion.rol === "ADMINISTRADOR" && (
         <CobrosClientes
           mes={mes}
           moneda={moneda}
@@ -146,9 +147,11 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
         />
       )}
 
+      {pestana === "COBROS" && <ConsolidadoGerencia />}
+
       {pestana === "RESPONSABLES" && <ComisionesResponsables sesion={sesion} />}
 
-      {pestana === "LIQUIDACIONES" && (
+      {pestana === "LIQUIDACIONES" && sesion.rol !== "GERENTE" && (
         <>
           <label>Mes a liquidar <input type="month" value={mesLiquidacion} onChange={(e) => setMesLiquidacion(e.target.value)} /></label>
           <div className="filtros">
