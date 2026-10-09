@@ -6,6 +6,7 @@ import Alertas from "./paginas/Alertas";
 import Configuracion from "./paginas/Configuracion";
 import Chat from "./paginas/Chat";
 import Comisiones from "./paginas/Comisiones";
+import ComisionesResponsables from "./paginas/ComisionesResponsables";
 import Dashboard from "./paginas/Dashboard";
 import Documentos from "./paginas/Documentos";
 import Empresas from "./paginas/Empresas";
@@ -31,6 +32,7 @@ const MENU: { a: string; texto: string; roles: RolSesion[] }[] = [
   { a: "/mi-equipo/pedidos", texto: "Pedidos", roles: ["RESPONSABLE"] },
   { a: "/mi-equipo/cobros", texto: "Cobros y clientes", roles: ["RESPONSABLE"] },
   { a: "/mi-equipo/pagos", texto: "Pago de Usuarios", roles: ["RESPONSABLE"] },
+  { a: "/comisiones-responsables", texto: "Comisiones de mi equipo", roles: ["RESPONSABLE"] },
   { a: "/pago-gestores", texto: "Pago de Gestores", roles: ["USUARIO"] },
   { a: "/comisiones", texto: "Simular comisiones", roles: ["RESPONSABLE", "USUARIO"] },
   {
@@ -178,6 +180,7 @@ export default function App() {
           <Route path="/organizacion" element={<Organizacion sesion={sesion} />} />
           <Route path="/produccion" element={<Produccion />} />
           <Route path="/pagos" element={<Pagos sesion={sesion} />} />
+          <Route path="/comisiones-responsables" element={<ComisionesResponsables sesion={sesion} />} />
           <Route path="/configuracion" element={<Configuracion sesion={sesion} />} />
           <Route path="*" element={<p>Página no encontrada.</p>} />
         </Routes>
