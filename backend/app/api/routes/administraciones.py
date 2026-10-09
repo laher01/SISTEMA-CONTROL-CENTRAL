@@ -1,13 +1,15 @@
 """Inventario global de espacios administrativos: exclusivo de SUPERADMIN."""
 
+import hmac
 import re
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
-from app.api.deps import OperativeAuthDep, SessionDep
+from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep
 from app.enums import RolMiembro
 from app.models import CuentaAcceso, Gestor, Miembro, Tenant
 from app.security import crear_o_restablecer_cuenta
@@ -87,6 +89,17 @@ def crear_administracion(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Exclusivo de SUPERADMIN")
     if datos.origen != "SUPERADMIN":
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Origen no autorizado")
+    return _provisionar_administracion(datos, session)
+
+
+def _provisionar_administracion(
+    datos: AltaAdministracionIn,
+    session: SessionDep,
+    *,
+    plan_demo: str | None = None,
+    correo_contacto: str | None = None,
+    dni_contacto: str | None = None,
+) -> dict[str, str]:
     nombre = " ".join(datos.nombre_administrador.strip().upper().split())
     partes = nombre.split()
     if len(partes) < 3:
@@ -141,7 +154,10 @@ def crear_administracion(
         nombre=espacio,
         codigo=codigo,
         subdominio=subdominio,
-        origen_alta="SUPERADMIN",
+        origen_alta="DEMO_AUTORIZADA" if plan_demo else "SUPERADMIN",
+        plan_demo=plan_demo,
+        correo_contacto=correo_contacto,
+        dni_contacto=dni_contacto,
         estado="ACTIVO",
     )
     session.add(tenant)
@@ -172,4 +188,50 @@ def crear_administracion(
         "login": administrador.codigo,
         "clave_temporal": temporal,
         "origen": "SUPERADMIN",
+    }
+
+
+class AltaDemoIn(BaseModel):
+    plan: Literal["inicial", "profesional", "full"]
+    nombre_administrador: str = Field(min_length=3, max_length=180)
+    correo: str = Field(min_length=5, max_length=200)
+    dni: str = Field(pattern=r"^[0-9]{8}$")
+    nombre_espacio: str = Field(min_length=3, max_length=200)
+    subdominio: str = Field(min_length=3, max_length=63)
+    clave_demo: str = Field(min_length=1)
+
+
+@router.post("/demo", status_code=status.HTTP_201_CREATED)
+def crear_administracion_demo(
+    datos: AltaDemoIn, session: SessionDep, settings: SettingsDep
+) -> dict[str, str]:
+    """Exclusivo de demos autorizadas. No equivale a confirmación de un pago."""
+    if (
+        not settings.demo_signup_key
+        or len(settings.demo_signup_key) < 32
+        or not hmac.compare_digest(datos.clave_demo, settings.demo_signup_key)
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Activación demo no autorizada")
+    if "@" not in datos.correo or datos.correo.startswith("@"):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Correo inválido")
+    if not settings.tenant_domain:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Dominio de administraciones no configurado",
+        )
+    alta = _provisionar_administracion(
+        AltaAdministracionIn(
+            nombre_administrador=datos.nombre_administrador,
+            nombre_espacio=datos.nombre_espacio,
+            subdominio=datos.subdominio,
+        ),
+        session,
+        plan_demo=datos.plan,
+        correo_contacto=datos.correo.strip().lower(),
+        dni_contacto=datos.dni,
+    )
+    return {
+        **alta,
+        "plan_demo": datos.plan,
+        "url": f"https://{alta['subdominio']}.{settings.tenant_domain}/ingresar",
     }

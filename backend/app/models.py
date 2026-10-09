@@ -64,6 +64,9 @@ class Tenant(ConId, ConCreacion, Base):
     codigo: Mapped[str | None] = mapped_column(String(40), unique=True, index=True)
     subdominio: Mapped[str | None] = mapped_column(String(63), unique=True, index=True)
     origen_alta: Mapped[str] = mapped_column(String(25), default="LEGADO", server_default="LEGADO")
+    plan_demo: Mapped[str | None] = mapped_column(String(24))
+    correo_contacto: Mapped[str | None] = mapped_column(String(200))
+    dni_contacto: Mapped[str | None] = mapped_column(String(8))
     estado: Mapped[str] = mapped_column(String(20), default="ACTIVO", server_default="ACTIVO")
 
 
