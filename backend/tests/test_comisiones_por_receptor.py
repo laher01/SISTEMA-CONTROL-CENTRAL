@@ -27,9 +27,7 @@ def test_tarifa_faltante_no_usa_cero_automatico() -> None:
 def test_no_admite_importes_negativos_ni_tasas_erroneas() -> None:
     cliente = uuid.uuid4()
     with pytest.raises(ValueError):
-        calcular_comisiones_por_receptor(
-            {cliente: Decimal("-1")}, porcentaje_global=Decimal("2")
-        )
+        calcular_comisiones_por_receptor({cliente: Decimal("-1")}, porcentaje_global=Decimal("2"))
     with pytest.raises(ValueError):
         calcular_comisiones_por_receptor(
             {cliente: Decimal("100")}, porcentaje_global=Decimal("101")
