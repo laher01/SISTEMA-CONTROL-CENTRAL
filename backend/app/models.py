@@ -512,6 +512,7 @@ class PagoResponsableERP(ConId, ConTenant, ConCreacion, Base):
     pagado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("cuentas_acceso.id")
     )
+    referencia_pago: Mapped[str | None] = mapped_column(String(160))
 
 
 class PagoERP(ConId, ConTenant, ConCreacion, Base):
