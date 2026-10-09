@@ -11,7 +11,7 @@ from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.enums import Moneda, RolMiembro, TipoDocumento
 from app.models import Empresa, Expediente, Gestor, Miembro
 from app.schemas import FiltroOpcion, RegistroFila, RegistroOpciones, RegistroResumen
-from app.services.ambito_gerencia import alcance_expedientes_gerente, expediente_visible_gerente
+from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.expedientes import documentos_faltantes, documentos_principales, tipos_presentes
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 
