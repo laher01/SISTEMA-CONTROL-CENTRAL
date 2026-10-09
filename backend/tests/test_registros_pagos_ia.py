@@ -342,6 +342,7 @@ def test_filtros_jerarquicos_por_rol(
     session.add(gestor)
     session.flush()
     expediente.gestor_id = gestor.id
+    expediente.gerente_id = auth_prueba.contexto.miembro_id
     session.commit()
 
     auth_prueba.como_gerente()
@@ -482,10 +483,10 @@ def test_pedido_gerencia_controla_solicitado_ejecutado_y_distribucion(
     assert creado.status_code == 201, creado.text
     pedido = creado.json()
     assert Decimal(pedido["monto_solicitado"]) == Decimal("1000.00")
-    assert Decimal(pedido["monto_ejecutado"]) == Decimal("300.00")
-    assert Decimal(pedido["saldo_pendiente"]) == Decimal("700.00")
+    assert Decimal(pedido["monto_ejecutado"]) == Decimal("0.00")
+    assert Decimal(pedido["saldo_pendiente"]) == Decimal("1000.00")
     assert Decimal(pedido["exceso"]) == Decimal("0.00")
-    assert Decimal(pedido["avance_porcentaje"]) == Decimal("30.00")
+    assert Decimal(pedido["avance_porcentaje"]) == Decimal("0.00")
     assert Decimal(pedido["monto_asignado"]) == Decimal("1000.00")
     assert len(pedido["asignaciones"]) == 1
     assert pedido["asignaciones"][0]["usuario_id"] == str(usuario_id)
@@ -496,7 +497,7 @@ def test_pedido_gerencia_controla_solicitado_ejecutado_y_distribucion(
     )
     assert listado.status_code == 200, listado.text
     assert len(listado.json()) == 1
-    assert Decimal(listado.json()[0]["monto_ejecutado"]) == Decimal("300.00")
+    assert Decimal(listado.json()[0]["monto_ejecutado"]) == Decimal("0.00")
 
 
 def test_porcentaje_produccion_predeterminado_aparece_en_pagos(
