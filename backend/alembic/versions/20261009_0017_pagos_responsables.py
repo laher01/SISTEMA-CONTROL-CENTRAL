@@ -8,9 +8,9 @@ Create Date: 2026-10-09
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
 
 from alembic import op
-from sqlalchemy.dialects.postgresql import JSONB
 
 revision: str = "0017"
 down_revision: str | None = "0016"
@@ -57,7 +57,11 @@ def upgrade() -> None:
         "comisiones_responsable_reglas",
         ["responsable_id"],
     )
-    op.create_index("ix_comisiones_responsable_reglas_cliente_id", "comisiones_responsable_reglas", ["cliente_id"])
+    op.create_index(
+        "ix_comisiones_responsable_reglas_cliente_id",
+        "comisiones_responsable_reglas",
+        ["cliente_id"],
+    )
     op.create_index(
         "ix_comisiones_responsable_reglas_tenant_id",
         "comisiones_responsable_reglas",
@@ -101,8 +105,6 @@ def upgrade() -> None:
         ["responsable_id"],
     )
     op.create_index("ix_pagos_responsables_erp_estado", "pagos_responsables_erp", ["estado"])
-
-
     op.create_index(
         "ix_pagos_responsables_erp_tenant_id", "pagos_responsables_erp", ["tenant_id"]
     )
@@ -110,10 +112,19 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_pagos_responsables_erp_tenant_id", table_name="pagos_responsables_erp")
-    op.drop_index("ix_pagos_responsables_estado", table_name="pagos_responsables_erp")
-    op.drop_index("ix_pagos_responsables_responsable_id", table_name="pagos_responsables_erp")
+    op.drop_index("ix_pagos_responsables_erp_estado", table_name="pagos_responsables_erp")
+    op.drop_index(
+        "ix_pagos_responsables_erp_responsable_id", table_name="pagos_responsables_erp"
+    )
     op.drop_table("pagos_responsables_erp")
-    op.drop_index("ix_comision_regla_cliente_id", table_name="comisiones_responsable_reglas")
-    op.drop_index("ix_comision_regla_responsable_id", table_name="comisiones_responsable_reglas")
-    op.drop_index("ix_comisiones_responsable_reglas_tenant_id", table_name="comisiones_responsable_reglas")
+    op.drop_index(
+        "ix_comisiones_responsable_reglas_cliente_id", table_name="comisiones_responsable_reglas"
+    )
+    op.drop_index(
+        "ix_comisiones_responsable_reglas_responsable_id",
+        table_name="comisiones_responsable_reglas",
+    )
+    op.drop_index(
+        "ix_comisiones_responsable_reglas_tenant_id", table_name="comisiones_responsable_reglas"
+    )
     op.drop_table("comisiones_responsable_reglas")
