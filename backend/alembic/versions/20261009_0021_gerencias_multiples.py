@@ -62,7 +62,7 @@ def upgrade() -> None:
             type_="unique",
         )
         batch.create_unique_constraint(
-            "uq_pedidos_gerencia_tenant_id_gerente_id_cliente_id_periodo_mes_moneda",
+            "uq_pedidos_gerente_cliente_mes_moneda",
             ["tenant_id", "gerente_id", "cliente_id", "periodo_mes", "moneda"],
         )
 
@@ -72,7 +72,7 @@ def downgrade() -> None:
     # del mismo Cliente, mes y moneda.
     with op.batch_alter_table("pedidos_gerencia") as batch:
         batch.drop_constraint(
-            "uq_pedidos_gerencia_tenant_id_gerente_id_cliente_id_periodo_mes_moneda",
+            "uq_pedidos_gerente_cliente_mes_moneda",
             type_="unique",
         )
         batch.create_unique_constraint(
