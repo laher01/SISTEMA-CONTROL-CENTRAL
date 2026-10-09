@@ -114,8 +114,7 @@ def cotizar(
 
 @router.post("/programar", status_code=status.HTTP_201_CREATED)
 def programar(
-    datos: SolicitudGestor, session: SessionDep, tenant_id: TenantDep,
-    auth: OperativeAuthDep
+    datos: SolicitudGestor, session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
 ) -> dict[str, str]:
     if auth.rol != RolMiembro.USUARIO or auth.usuario_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Usuario")
