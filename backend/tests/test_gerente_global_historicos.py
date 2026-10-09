@@ -2,12 +2,11 @@
 
 from datetime import date
 from decimal import Decimal
-from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models import Empresa, Expediente
+from app.models import Empresa, Expediente, Miembro
 from app.security import ContextoAcceso
 from tests.conftest import AuthPrueba
 
@@ -16,8 +15,16 @@ def test_gerente_global_ve_historicos_sin_ver_otros_gerentes(
     client: TestClient, session: Session, auth_prueba: AuthPrueba
 ) -> None:
     tenant_id = auth_prueba.contexto.tenant_id
-    gerente_global = uuid4()
-    otro_gerente = uuid4()
+    global_miembro = Miembro(
+        tenant_id=tenant_id, codigo="GRTEGLOBAL", nombre="Gerente global", rol="GERENTE"
+    )
+    otro_miembro = Miembro(
+        tenant_id=tenant_id, codigo="GERENTE02", nombre="Gerente Dos", rol="GERENTE"
+    )
+    session.add_all([global_miembro, otro_miembro])
+    session.flush()
+    gerente_global = global_miembro.id
+    otro_gerente = otro_miembro.id
     empresa = Empresa(
         tenant_id=tenant_id, ruc="20995556666",
         razon_social="CLIENTE HISTORICO", tipo_relacion="CLIENTE"
