@@ -4,8 +4,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models import Miembro
-from tests.conftest import AuthPrueba
 from app.security import ContextoAcceso
+from tests.conftest import AuthPrueba
 
 
 def test_responsable_solo_ve_sus_usuarios(
