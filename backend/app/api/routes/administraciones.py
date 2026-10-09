@@ -12,6 +12,7 @@ from app.enums import RolMiembro
 from app.models import CuentaAcceso, Gestor, Miembro, Tenant
 from app.security import crear_o_restablecer_cuenta
 
+
 class AltaAdministracionIn(BaseModel):
     nombre_administrador: str = Field(min_length=3, max_length=180)
     nombre_espacio: str = Field(min_length=3, max_length=200)
