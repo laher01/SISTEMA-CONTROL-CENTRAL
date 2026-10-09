@@ -117,7 +117,7 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
 
       {pestana === "PEDIDOS" && (
         <PedidosGerencia
-          gerentes={(miembros.datos ?? []).filter((m) => m.rol === "GERENTE").map((m) => ({ id: m.id, codigo: m.codigo, nombre: m.nombre }))}
+          gerentes={(miembros.datos ?? []).filter((m) => m.rol === "GERENTE").map((m) => ({ id: m.id, codigo: m.codigo, nombre: m.nombre, usuario_id: null, porcentaje_produccion: null }))}
           esGerente={sesion.rol === "GERENTE"}
           mes={mes}
           moneda={moneda}
