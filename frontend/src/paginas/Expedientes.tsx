@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { conParametros, imprimirExpedientes, obtener, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
+import { conParametros, descargarPdfExpedientes, imprimirExpedientes, obtener, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
 import { Estado, Paginacion, Semaforo } from "../componentes";
 import FiltroJerarquia from "../componentes/FiltroJerarquia";
 import { ETIQUETA_ESTADO, formatearFecha, formatearMonto, numeroExpediente } from "../formato";
@@ -15,6 +15,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
   const [mensaje, setMensaje] = useState("");
   const [imprimiendo, setImprimiendo] = useState(false);
+  const [descargando, setDescargando] = useState(false);
 
   const usuarioId = parametros.get("usuario_id") ?? "";
   const gestorId = parametros.get("gestor_id") ?? "";
@@ -121,6 +122,26 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
     }
   };
 
+  const descargarSeleccion = async () => {
+    if (seleccionados.size === 0) return;
+    setDescargando(true);
+    setMensaje("");
+    try {
+      const ordenFiltro = await obtener<string[]>(rutaIds);
+      const idsOrdenados = ordenFiltro.filter((id) => seleccionados.has(id));
+      if (idsOrdenados.length === 0) throw new Error("No hay expedientes seleccionados en el filtro actual.");
+      const resultado = await descargarPdfExpedientes(idsOrdenados);
+      setMensaje(
+        `Descarga preparada: ${resultado.expedientes} expediente(s), ${resultado.pdfs} PDF(s)` +
+          (resultado.sinPdf > 0 ? ` · sin PDF: ${resultado.sinPdf}` : ""),
+      );
+    } catch (e) {
+      setMensaje(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDescargando(false);
+    }
+  };
+
   return (
     <>
       <h2>Expedientes</h2>
@@ -176,6 +197,12 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
           onClick={() => void imprimirSeleccion()}
         >
           {imprimiendo ? "Preparando impresión…" : `Imprimir seleccionados (${seleccionados.size})`}
+        </button>
+        <button
+          disabled={seleccionados.size === 0 || descargando || imprimiendo}
+          onClick={() => void descargarSeleccion()}
+        >
+          {descargando ? "Preparando PDF…" : `Descargar PDF (${seleccionados.size})`}
         </button>
         {seleccionados.size > 0 && (
           <button onClick={() => setSeleccionados(new Set())}>Limpiar selección</button>
