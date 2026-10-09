@@ -83,8 +83,8 @@ def detalle_secretaria(
     filas: list[dict[str, object]] = []
     for e in expedientes:
         totales[e.moneda] = totales.get(e.moneda, Decimal("0")) + e.importe_total
-        usuario = usuarios.get(e.usuario_id)
-        gestor = gestores.get(e.gestor_id)
+        usuario = usuarios.get(e.usuario_id) if e.usuario_id is not None else None
+        gestor = gestores.get(e.gestor_id) if e.gestor_id is not None else None
         faltantes = [tipo.value for tipo in documentos_faltantes(e, settings)]
         filas.append(
             {
