@@ -201,7 +201,7 @@ function Procesar({
         "POST",
       );
       setResultado(actualizado);
-      await buscarRelaciones();
+      if (obtenerTipoSugerido(actualizado) !== "RHE") await buscarRelaciones();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -242,12 +242,12 @@ function Procesar({
         <button onClick={procesar} disabled={procesando}>
           {procesando ? "Procesando…" : "Reprocesar"}
         </button>
-        <button
+        {lectura.tipoSugerido !== "RHE" && <button
           onClick={() => buscarRelaciones().catch((e: unknown) => setError(String(e)))}
           disabled={procesando}
         >
           Buscar expedientes
-        </button>
+        </button>}
         {lectura.tipoSugerido === "RHE" && <small className="tenue">El recibo por honorarios constituye su propio expediente. No lo relaciones con facturas sugeridas por importe o RUC: completa sus datos fiscales y utiliza «Crear o asociar expediente».</small>}
         {relaciones.length > 0 && lectura.tipoSugerido !== "RHE" && (
           <ul>
