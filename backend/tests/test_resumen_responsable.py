@@ -19,7 +19,9 @@ def test_responsable_solo_consulta_su_equipo(
     client: TestClient, auth_prueba: AuthPrueba, session: Session
 ) -> None:
     tid = auth_prueba.contexto.tenant_id
-    responsable = Miembro(tenant_id=tid, codigo="RESP1", nombre="Resp", rol="RESPONSABLE", activo=True)
+    responsable = Miembro(
+        tenant_id=tid, codigo="RESP1", nombre="Resp", rol="RESPONSABLE", activo=True
+    )
     propio = Miembro(tenant_id=tid, codigo="US1", nombre="Propio", rol="USUARIO", activo=True)
     ajeno = Miembro(tenant_id=tid, codigo="US2", nombre="Ajeno", rol="USUARIO", activo=True)
     session.add_all([responsable, propio, ajeno])
