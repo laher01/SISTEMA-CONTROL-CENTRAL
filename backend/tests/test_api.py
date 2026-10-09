@@ -1023,3 +1023,58 @@ Fecha de emisión: 18/09/2026 Moneda: SOLES TOTAL S/ 200.00""",
 
     pdf = PdfReader(io.BytesIO(respuesta.content))
     assert len(pdf.pages) == 2
+
+
+def test_tres_rhe_sunat_generan_expedientes_diferentes_aunque_tenant_sea_otro(
+    client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings.tenant_ruc = RECEPTOR
+    textos = iter(
+        f"""RECIBO POR HONORARIOS ELECTRONICO
+R.U.C. 10753246920
+Nro: E001- {correlativo}
+AYALA AREVALO ELVIS EDUARDO
+Recibí de: {razon}
+Identificado con RUC número {ruc}
+La suma de: UN MIL QUINIENTOS Y 00/100 SOLES
+Por concepto de EL SERVICIO DE ASESORIA Y DOCUMENTACION-PAITA
+{dia} de Setiembre del 2026
+1,500.00
+(0.00)
+1,500.00
+SOLES
+Total por honorarios:
+Retención (8 %) IR:
+Total Neto Recibido:
+Fecha de emisión"""
+        for correlativo, razon, ruc, dia in (
+            ("37", "MAIK FISHING SOCIEDAD ANONIMA CERRADA", "20609762030", "23"),
+            ("38", "INVERSIONES YATAMURI E.I.R.L.", "20492560601", "24"),
+            ("39", "FRUTTI DEL PAESE E.I.R.L.", "20611909234", "23"),
+        )
+    )
+
+    def procesar_rhe(*_: object) -> ResultadoProcesamiento:
+        texto = next(textos)
+        return ResultadoProcesamiento(
+            texto=texto,
+            metodo="TEXTO_PDF",
+            motor="prueba",
+            paginas=1,
+            confianza=1.0,
+            sugerencia=sugerir_tipo(texto),
+        )
+
+    monkeypatch.setattr(documentos_routes, "procesar", procesar_rhe)
+    ids: set[str] = set()
+    for numero in ("37", "38", "39"):
+        documento = subir(client, f"RHE-{numero}.pdf", pdf_vacio() + numero.encode())
+        assert documento["estado"] == "RELACIONADO", documento
+        assert documento["tipo_documento"] == "RHE"
+        assert documento["expediente_id"] is not None
+        detalle = expediente(client, documento["expediente_id"])
+        assert detalle["correlativo"] == numero
+        assert detalle["emisor"]["ruc"] == "10753246920"
+        assert detalle["importe_total"] == "1500.00"
+        ids.add(str(documento["expediente_id"]))
+    assert len(ids) == 3
