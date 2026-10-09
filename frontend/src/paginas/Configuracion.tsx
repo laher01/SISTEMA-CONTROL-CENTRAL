@@ -800,6 +800,7 @@ function EmpresasRegistradasPanel() {
 
 
 interface AdministracionGlobal {
+  subdominio: string;
   id: string;
   nombre: string;
   administradores: number;
