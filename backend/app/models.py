@@ -59,6 +59,9 @@ class Tenant(ConId, ConCreacion, Base):
     __tablename__ = "tenants"
 
     nombre: Mapped[str] = mapped_column(String(200), unique=True)
+    codigo: Mapped[str | None] = mapped_column(String(40), unique=True, index=True)
+    origen_alta: Mapped[str] = mapped_column(String(25), default="LEGADO", server_default="LEGADO")
+    estado: Mapped[str] = mapped_column(String(20), default="ACTIVO", server_default="ACTIVO")
 
 
 class Empresa(ConId, ConTenant, ConCreacion, Base):
