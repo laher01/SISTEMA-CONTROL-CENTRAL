@@ -35,7 +35,7 @@ def _paquete(paginas: list[str]) -> bytes:
             operadores.append(f"({linea}) Tj 0 -20 Td")
         operadores.append("ET")
         stream = DecodedStreamObject()
-        stream.set_data("\\n".join(operadores).encode("ascii"))
+        stream.set_data("\n".join(operadores).encode("ascii"))
         hoja[NameObject("/Contents")] = salida._add_object(stream)
     memoria_final = io.BytesIO()
     salida.write(memoria_final)
