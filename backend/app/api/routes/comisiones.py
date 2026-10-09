@@ -46,12 +46,13 @@ def simular(
     usuario = session.get(Miembro, datos.usuario_id)
     if usuario is None or usuario.tenant_id != tenant_id or usuario.rol != RolMiembro.USUARIO:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Usuario inválido")
-    if auth.rol == RolMiembro.RESPONSABLE:
-        if usuario.responsable_id != auth.miembro_id or datos.gestor_id is not None:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN,
-                "Responsable solo puede calcular el resultado de sus Usuarios",
-            )
+    if auth.rol == RolMiembro.RESPONSABLE and (
+        usuario.responsable_id != auth.miembro_id or datos.gestor_id is not None
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Responsable solo puede calcular el resultado de sus Usuarios",
+        )
     if datos.gestor_id is not None:
         gestor = session.get(Gestor, datos.gestor_id)
         if gestor is None or gestor.tenant_id != tenant_id or gestor.usuario_id != usuario.id:
