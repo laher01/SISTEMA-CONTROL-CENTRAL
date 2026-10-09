@@ -524,7 +524,8 @@ def anular_pago_usuario(
         raise HTTPException(status.HTTP_409_CONFLICT, "Liquidación ya pagada")
     saldos = list(
         session.scalars(
-            select(SaldoCompraERP).where(
+            select(SaldoCompraERP)
+            .where(
                 SaldoCompraERP.tenant_id == tenant_id,
                 SaldoCompraERP.pago_id == pago.id,
             )
@@ -537,7 +538,8 @@ def anular_pago_usuario(
             .where(
                 AplicacionAdelantoERP.tenant_id == tenant_id,
                 AplicacionAdelantoERP.pago_id == pago.id,
-            ).with_for_update()
+            )
+            .with_for_update()
         )
     )
     for s in saldos:
