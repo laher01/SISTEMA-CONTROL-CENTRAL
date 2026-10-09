@@ -7,7 +7,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
-from app.services.ambito_gerencia import alcance_expedientes_gerente, expediente_visible_gerente
+from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.models import Empresa, Expediente, Gestor, Miembro
 from app.schemas import ComprasProveedorFila, ProduccionFila, ProduccionResumen
 
