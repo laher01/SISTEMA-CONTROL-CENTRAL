@@ -136,12 +136,14 @@ def responsables_pedido(
     return [
         FiltroOpcion(id=r.id, codigo=r.codigo, nombre=r.nombre)
         for r in session.scalars(
-            select(Miembro).where(
+            select(Miembro)
+            .where(
                 Miembro.tenant_id == tenant_id,
                 Miembro.rol == RolMiembro.RESPONSABLE,
                 Miembro.activo.is_(True),
                 Miembro.deleted_at.is_(None),
-            ).order_by(Miembro.codigo)
+            )
+            .order_by(Miembro.codigo)
         )
     ]
 
@@ -775,26 +777,30 @@ def actualizar_pedido_gerencia(
     if "responsable_id" in datos.model_fields_set:
         nuevo = session.get(Miembro, datos.responsable_id) if datos.responsable_id else None
         if datos.responsable_id is not None and (
-            nuevo is None or nuevo.tenant_id != tenant_id
-            or nuevo.rol != RolMiembro.RESPONSABLE or not nuevo.activo
+            nuevo is None
+            or nuevo.tenant_id != tenant_id
+            or nuevo.rol != RolMiembro.RESPONSABLE
+            or not nuevo.activo
             or nuevo.deleted_at is not None
         ):
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Responsable inválido")
         if pedido.responsable_id != datos.responsable_id:
-            tiene_asignaciones = session.scalar(select(AsignacionPedidoGerencia.id).where(
-                AsignacionPedidoGerencia.tenant_id == tenant_id,
-                AsignacionPedidoGerencia.pedido_id == pedido.id,
-            ))
+            tiene_asignaciones = session.scalar(
+                select(AsignacionPedidoGerencia.id).where(
+                    AsignacionPedidoGerencia.tenant_id == tenant_id,
+                    AsignacionPedidoGerencia.pedido_id == pedido.id,
+                )
+            )
             if tiene_asignaciones is not None:
                 raise HTTPException(
                     status.HTTP_409_CONFLICT,
                     "Quite asignaciones anteriores antes de transferir",
                 )
         pedido.responsable_id = datos.responsable_id
-    if (
-        pedido.responsable_id is not None
-        and datos.modo_distribucion in {"SEMIASISTIDA", "AUTOMATICA"}
-    ):
+    if pedido.responsable_id is not None and datos.modo_distribucion in {
+        "SEMIASISTIDA",
+        "AUTOMATICA",
+    }:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "Distribución reservada al Responsable"
         )
@@ -817,7 +823,8 @@ def actualizar_pedido_gerencia(
         pedido.observacion = datos.observacion.strip() if datos.observacion else None
 
     if pedido.responsable_id is None and (
-        datos.modo_distribucion in {"SEMIASISTIDA", "AUTOMATICA"} or (
+        datos.modo_distribucion in {"SEMIASISTIDA", "AUTOMATICA"}
+        or (
             datos.monto_solicitado is not None
             and pedido.modo_distribucion in {"SEMIASISTIDA", "AUTOMATICA"}
         )
