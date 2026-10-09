@@ -426,7 +426,6 @@ class AdelantoERP(ConId, ConTenant, ConCreacion, Base):
     aplicado: Mapped[bool] = mapped_column(default=False, server_default="false")
 
 
-
 class SaldoCompraERP(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "saldos_compras_erp"
 
