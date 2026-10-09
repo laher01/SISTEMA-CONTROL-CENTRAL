@@ -501,17 +501,33 @@ Fecha de emisión"""
 @pytest.mark.parametrize(
     ("emisor_nombre", "emisor_ruc", "numero", "receptor_nombre", "receptor_ruc", "total"),
     [
-        ("COMERCIAL RAWIRA E.I.R.L.", "20615177424", "4015", "CORPORACION LATINOAMERICANO EL NORTE E.I.R.L.", "20524049245", "1994.00"),
-        ("COMERCIAL RAWIRA E.I.R.L.", "20615177424", "3964", "FRUTTI DEL PAESE E.I.R.L.", "20611909234", "1499.20"),
-        ("COMERCIAL RAWIRA E.I.R.L.", "20615177424", "3999", "B2C MUSA E.I.R.L.", "20614966174", "1994.00"),
-        ("COMERCIAL RAWIRA E.I.R.L.", "20615177424", "3981", "CAVIA PORCELLUS URBINA E.I.R.L.", "20613213008", "1958.00"),
-        ("COMERCIAL RAWIRA E.I.R.L.", "20615177424", "3927", "INVERSIONES Y NEGOCIACIONES MAREUF E.I.R.L.", "20538821374", "1944.00"),
-        ("RAYYAN ZAYD E.I.R.L.", "20615191249", "3568", "INVERSIONES Y NEGOCIACIONES MAREUF E.I.R.L.", "20538821374", "1985.00"),
+        (
+            "COMERCIAL RAWIRA E.I.R.L.", "20615177424", "4015", "CORPORACION LATINOAMERICANO EL NORTE E.I.R.L.", "20524049245", "1994.00",
+        ),
+        (
+            "COMERCIAL RAWIRA E.I.R.L.", "20615177424", "3964", "FRUTTI DEL PAESE E.I.R.L.", "20611909234", "1499.20",
+        ),
+        (
+            "COMERCIAL RAWIRA E.I.R.L.", "20615177424", "3999", "B2C MUSA E.I.R.L.", "20614966174", "1994.00",
+        ),
+        (
+            "COMERCIAL RAWIRA E.I.R.L.", "20615177424", "3981", "CAVIA PORCELLUS URBINA E.I.R.L.", "20613213008", "1958.00",
+        ),
+        (
+            "COMERCIAL RAWIRA E.I.R.L.", "20615177424", "3927", "INVERSIONES Y NEGOCIACIONES MAREUF E.I.R.L.", "20538821374", "1944.00",
+        ),
+        (
+            "RAYYAN ZAYD E.I.R.L.", "20615191249", "3568", "INVERSIONES Y NEGOCIACIONES MAREUF E.I.R.L.", "20538821374", "1985.00",
+        ),
     ],
 )
 def test_facturas_separadas_real_sunat_jose_no_es_ose(
-    emisor_nombre: str, emisor_ruc: str, numero: str,
-    receptor_nombre: str, receptor_ruc: str, total: str,
+    emisor_nombre: str,
+    emisor_ruc: str,
+    numero: str,
+    receptor_nombre: str,
+    receptor_ruc: str,
+    total: str,
 ) -> None:
     # Misma distribución y campos del texto pypdf de facturas originales
     # extraídas del paquete; no usar el nombre de archivo como fuente fiscal.
