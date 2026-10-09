@@ -1,5 +1,5 @@
 from fastapi.testclient import TestClient
-from sqlalchemy import select, text
+from sqlalchemy import Engine, select, text
 from sqlalchemy.orm import Session
 
 from app.models import Miembro, Tenant
@@ -7,10 +7,11 @@ from tests.conftest import AuthPrueba
 
 
 def test_alta_administrador_desde_superadmin(
-    client: TestClient, auth_prueba: AuthPrueba, session: Session
+    client: TestClient, auth_prueba: AuthPrueba, session: Session, engine: Engine
 ) -> None:
-    session.execute(text("CREATE SEQUENCE IF NOT EXISTS secuencia_administraciones"))
-    session.commit()
+    if engine.dialect.name == "postgresql":
+        with engine.begin() as conexion:
+            conexion.execute(text("CREATE SEQUENCE IF NOT EXISTS secuencia_administraciones"))
     datos = {
         "nombre_administrador": "Luis Arevalo Herrera",
         "nombre_espacio": "Administración Luis Arévalo Herrera",

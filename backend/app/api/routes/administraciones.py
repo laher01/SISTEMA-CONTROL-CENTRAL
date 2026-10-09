@@ -92,12 +92,44 @@ def crear_administracion(
     if not re.fullmatch(r"[A-Z]{3}", sigla):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Iniciales inválidas")
     espacio = " ".join(datos.nombre_espacio.strip().split())
-    if session.scalar(select(Tenant.id).where(Tenant.nombre == espacio)) is not None:
+    if (
+        session.scalar(select(Tenant.id).where(func.lower(Tenant.nombre) == espacio.lower()))
+        is not None
+    ):
         raise HTTPException(status.HTTP_409_CONFLICT, "Nombre administrativo ya registrado")
-    numero = session.scalar(select(func.nextval("secuencia_administraciones")))
+    if (
+        session.scalar(select(Tenant.id).where(func.lower(Tenant.codigo) == espacio.lower()))
+        is not None
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "El nombre administrativo coincide con un código de Administración",
+        )
+
+    if session.bind is not None and session.bind.dialect.name == "postgresql":
+        numero = session.scalar(select(func.nextval("secuencia_administraciones")))
+    else:
+        codigos = session.scalars(select(Tenant.codigo).where(Tenant.codigo.is_not(None))).all()
+        numeros = []
+        for existente in codigos:
+            if existente is None:
+                continue
+            coincidencia = re.fullmatch(r"[A-Z]{3}-(\d{3})-AD", existente.upper())
+            if coincidencia:
+                numeros.append(int(coincidencia.group(1)))
+        numero = max(numeros, default=0) + 1
+
     if numero is None or numero > 999:
         raise HTTPException(status.HTTP_409_CONFLICT, "Numeración agotada")
     codigo = f"{sigla}-{numero:03d}-AD"
+    if (
+        session.scalar(select(Tenant.id).where(func.lower(Tenant.nombre) == codigo.lower()))
+        is not None
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "El código generado coincide con el nombre de otra Administración",
+        )
     tenant = Tenant(nombre=espacio, codigo=codigo, origen_alta="SUPERADMIN", estado="ACTIVO")
     session.add(tenant)
     try:

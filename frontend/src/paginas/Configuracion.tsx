@@ -825,7 +825,6 @@ function AdministracionesPanel() {
   const [mensaje, setMensaje] = useState("");
   const crear = async (evento: FormEvent) => {
     evento.preventDefault();
-    setNuevaCuenta(null);
     setMensaje("");
     if (!window.confirm(`¿Crear una Administración independiente para ${nombreAdministrador}?`)) return;
     try {
