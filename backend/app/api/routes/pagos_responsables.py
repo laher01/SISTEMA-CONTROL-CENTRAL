@@ -100,6 +100,7 @@ def _calculo(
     hasta: date,
     moneda: str,
     responsable_id: uuid.UUID | None,
+    gerente_id: uuid.UUID | None = None,
 ) -> dict[str, object]:
     _periodo(desde, hasta, moneda)
     usuario = Miembro
@@ -130,6 +131,11 @@ def _calculo(
     )
     if responsable_id is not None:
         consulta = consulta.where(usuario.responsable_id == responsable_id)
+    if gerente_id is not None:
+        consulta = consulta.where(Expediente.gerente_id == gerente_id)
+    else:
+        # Los expedientes sin atribución no se liquidan por aproximación.
+        consulta = consulta.where(Expediente.gerente_id.is_not(None))
     consulta = consulta.group_by(
         usuario.responsable_id,
         Empresa.id,
@@ -173,6 +179,8 @@ def _calculo(
             PedidoGerencia.periodo_mes <= ultimo_mes,
             PedidoGerencia.moneda == moneda,
             PedidoGerencia.estado != "CANCELADO",
+            PedidoGerencia.gerente_id == gerente_id if gerente_id is not None
+            else PedidoGerencia.gerente_id.is_not(None),
         )
     ):
         llave = (pedido_item.responsable_id, pedido_item.cliente_id)
@@ -234,7 +242,10 @@ def resumen(
 ) -> dict[str, object]:
     _ambito(auth)
     responsable_id = auth.miembro_id if auth.rol == RolMiembro.RESPONSABLE else None
-    return _calculo(session, tenant_id, desde, hasta, moneda, responsable_id)
+    gerente_id = auth.miembro_id if auth.rol == RolMiembro.GERENTE else None
+    if auth.rol == RolMiembro.GERENTE and gerente_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Gerente sin identidad")
+    return _calculo(session, tenant_id, desde, hasta, moneda, responsable_id, gerente_id)
 
 
 @router.put("/comision")
@@ -335,6 +346,11 @@ def programar(
     if auth.rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.GERENTE):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "No puede programar pagos a Responsables")
     _responsable(session, tenant_id, datos.responsable_id)
+    if auth.rol != RolMiembro.GERENTE or auth.miembro_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "La liquidación de Gerencia requiere Gerente pagador identificado",
+        )
     resumen_calculado = _calculo(
         session,
         tenant_id,
@@ -342,6 +358,7 @@ def programar(
         datos.hasta,
         datos.moneda,
         datos.responsable_id,
+        auth.miembro_id,
     )
     filas = resumen_calculado["filas"]
     assert isinstance(filas, list)
@@ -352,6 +369,7 @@ def programar(
         select(PagoResponsableERP.id).where(
             PagoResponsableERP.tenant_id == tenant_id,
             PagoResponsableERP.responsable_id == datos.responsable_id,
+            PagoResponsableERP.gerente_id == auth.miembro_id,
             PagoResponsableERP.moneda == datos.moneda,
             PagoResponsableERP.periodo_desde <= datos.hasta,
             PagoResponsableERP.periodo_hasta >= datos.desde,
@@ -362,6 +380,7 @@ def programar(
         raise HTTPException(status.HTTP_409_CONFLICT, "Ya existe pago en periodo solapado")
     pago = PagoResponsableERP(
         tenant_id=tenant_id,
+        gerente_id=auth.miembro_id,
         responsable_id=datos.responsable_id,
         periodo_desde=datos.desde,
         periodo_hasta=datos.hasta,
@@ -406,6 +425,8 @@ def listar_pagos(
     consulta = select(PagoResponsableERP).where(PagoResponsableERP.tenant_id == tenant_id)
     if auth.rol == RolMiembro.RESPONSABLE:
         consulta = consulta.where(PagoResponsableERP.responsable_id == auth.miembro_id)
+    if auth.rol == RolMiembro.GERENTE:
+        consulta = consulta.where(PagoResponsableERP.gerente_id == auth.miembro_id)
     pagos = list(
         session.scalars(consulta.order_by(PagoResponsableERP.created_at.desc()).limit(150))
     )
@@ -428,6 +449,7 @@ def listar_pagos(
         {
             "id": str(p.id),
             "responsable_id": str(p.responsable_id),
+            "gerente_id": str(p.gerente_id) if p.gerente_id else None,
             "periodo_desde": p.periodo_desde.isoformat(),
             "periodo_hasta": p.periodo_hasta.isoformat(),
             "moneda": p.moneda,
@@ -464,6 +486,8 @@ def confirmar(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Gerencia confirma pagos")
     pago = session.get(PagoResponsableERP, pago_id)
     if pago is None or pago.tenant_id != tenant_id:
+    if auth.rol == RolMiembro.GERENTE and pago is not None and pago.gerente_id != auth.miembro_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pago no encontrado")
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pago no encontrado")
     if pago.estado != "PROGRAMADO":
         raise HTTPException(status.HTTP_409_CONFLICT, "Pago ya registrado o anulado")
@@ -505,6 +529,8 @@ def reprogramar_pago(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Gerencia reprograma")
     pago = session.get(PagoResponsableERP, pago_id)
     if pago is None or pago.tenant_id != tenant_id:
+    if auth.rol == RolMiembro.GERENTE and pago is not None and pago.gerente_id != auth.miembro_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pago no encontrado")
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
     if pago.estado in ("PAGADO", "ANULADO"):
         raise HTTPException(status.HTTP_409_CONFLICT, "Liquidación cerrada")
@@ -552,6 +578,8 @@ async def abonar_responsable(
         .with_for_update()
     )
     if pago is None:
+    if auth.rol == RolMiembro.GERENTE and pago is not None and pago.gerente_id != auth.miembro_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pago no encontrado")
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
     if pago.estado in ("PAGADO", "ANULADO"):
         raise HTTPException(status.HTTP_409_CONFLICT, "Liquidación cerrada")
@@ -652,6 +680,8 @@ def movimientos_responsable(
     _ambito(auth)
     pago = session.get(PagoResponsableERP, pago_id)
     if pago is None or pago.tenant_id != tenant_id:
+    if auth.rol == RolMiembro.GERENTE and pago is not None and pago.gerente_id != auth.miembro_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pago no encontrado")
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
     _ambito(auth, pago.responsable_id)
     movimientos = session.scalars(
@@ -685,6 +715,8 @@ def descargar_comprobante_responsable(
     _ambito(auth)
     pago = session.get(PagoResponsableERP, pago_id)
     if pago is None or pago.tenant_id != tenant_id:
+    if auth.rol == RolMiembro.GERENTE and pago is not None and pago.gerente_id != auth.miembro_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pago no encontrado")
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
     _ambito(auth, pago.responsable_id)
     movimiento = session.get(MovimientoPagoResponsable, movimiento_id)
