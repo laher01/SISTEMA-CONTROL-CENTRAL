@@ -592,8 +592,8 @@ async def abonar_responsable(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Comprobante vacío o muy grande")
     firma_valida = (
         (extension == ".pdf" and datos_archivo.startswith(b"%PDF-"))
-        or (extension == ".png" and datos_archivo.startswith(b"\\x89PNG\\r\\n\\x1a\\n"))
-        or (extension == ".jpg" and datos_archivo.startswith(b"\\xff\\xd8\\xff"))
+        or (extension == ".png" and datos_archivo.startswith(b"\x89PNG\r\n\x1a\n"))
+        or (extension == ".jpg" and datos_archivo.startswith(b"\xff\xd8\xff"))
     )
     if not firma_valida:
         raise HTTPException(
