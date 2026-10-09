@@ -42,7 +42,7 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
         <button onClick={() => setSeccion("permisos")}>Permisos operativos</button>
         {sesion.rol === "SUPERADMIN" && (
           <>
-            <button onClick={() => setSeccion("administraciones")}>Administraciones SaaS</button>
+            <button onClick={() => setSeccion("administraciones")}>Administradores</button>
             <button onClick={() => setSeccion("acceso")}>Configuración de acceso</button>
             <button onClick={() => setSeccion("empresas")}>Empresas registradas</button>
             <button onClick={() => setSeccion("mantenimiento")}>Mantenimiento</button>
@@ -809,6 +809,9 @@ interface AdministracionGlobal {
   gestores: number;
   cuentas_activas: number;
   estado_suscripcion: string;
+  codigo: string;
+  origen: string;
+  estado: string;
 }
 
 function AdministracionesPanel() {
@@ -816,12 +819,52 @@ function AdministracionesPanel() {
     "/api/v1/configuracion/administraciones",
   );
   const [texto, setTexto] = useState("");
+  const [nombreAdministrador, setNombreAdministrador] = useState("Luis Arevalo Herrera");
+  const [nombreEspacio, setNombreEspacio] = useState("Administración Luis Arévalo Herrera");
+  const [nuevaCuenta, setNuevaCuenta] = useState<{ codigo: string; login: string; clave_temporal: string } | null>(null);
+  const [mensaje, setMensaje] = useState("");
+  const crear = async (evento: FormEvent) => {
+    evento.preventDefault();
+    setNuevaCuenta(null);
+    setMensaje("");
+    if (!window.confirm(`¿Crear una Administración independiente para ${nombreAdministrador}?`)) return;
+    try {
+      const r = await enviarJson<{ codigo: string; login: string; clave_temporal: string }>(
+        "/api/v1/configuracion/administraciones", "POST", {
+          nombre_administrador: nombreAdministrador,
+          nombre_espacio: nombreEspacio,
+          origen: "SUPERADMIN",
+        },
+      );
+      setNuevaCuenta(r);
+      recargar();
+    } catch (error) {
+      setMensaje(error instanceof Error ? error.message : String(error));
+    }
+  };
   const visibles = (datos ?? []).filter((a) =>
     a.nombre.toLowerCase().includes(texto.toLowerCase()) || a.id.includes(texto),
   );
   return (
     <section className="panel-configuracion">
-      <h3>Inventario global de Administraciones</h3>
+      <h3>Administradores / Administraciones SaaS</h3>
+      <form onSubmit={(e) => void crear(e)} className="filtros">
+        <label>Nombre del Administrador
+          <input required value={nombreAdministrador} onChange={(e) => setNombreAdministrador(e.target.value)} />
+        </label>
+        <label>Nombre del espacio
+          <input required value={nombreEspacio} onChange={(e) => setNombreEspacio(e.target.value)} />
+        </label>
+        <button type="submit">Crear Administración independiente</button>
+      </form>
+      {mensaje && <p role="alert">{mensaje}</p>}
+      {nuevaCuenta && <div className="panel-configuracion">
+        <h4>Credenciales temporales — guárdalas ahora</h4>
+        <p>Código: <strong>{nuevaCuenta.codigo}</strong></p>
+        <p>Usuario: <strong>{nuevaCuenta.login}</strong></p>
+        <p>Contraseña temporal: <strong>{nuevaCuenta.clave_temporal}</strong></p>
+        <p className="tenue">La contraseña no volverá a mostrarse. Se exigirá cambiarla al ingresar.</p>
+      </div>}
       <p className="tenue">
         Exclusivo de SUPERADMIN. Cada Administración conserva su propio espacio y datos.
         Las cuentas activas son credenciales habilitadas, no sesiones conectadas actualmente.
@@ -835,10 +878,10 @@ function AdministracionesPanel() {
       {error && <p role="alert">{error}</p>}
       <p>Total de Administraciones registradas: <strong>{datos?.length ?? 0}</strong></p>
       <table>
-        <thead><tr><th>Administración</th><th>Identificador</th><th>Administradores</th><th>Gerentes</th><th>Secretaría</th><th>Usuarios</th><th>Gestores</th><th>Cuentas habilitadas</th></tr></thead>
+        <thead><tr><th>Administración</th><th>Código</th><th>Origen</th><th>Estado</th><th>Identificador</th><th>Administradores</th><th>Gerentes</th><th>Secretaría</th><th>Usuarios</th><th>Gestores</th><th>Cuentas habilitadas</th></tr></thead>
         <tbody>{visibles.map((a) => (
           <tr key={a.id}>
-            <td>{a.nombre}</td><td>{a.id}</td><td>{a.administradores}</td>
+            <td>{a.nombre}</td><td>{a.codigo || "Legado"}</td><td>{a.origen}</td><td>{a.estado}</td><td>{a.id}</td><td>{a.administradores}</td>
             <td>{a.gerentes}</td><td>{a.secretarias}</td><td>{a.usuarios}</td>
             <td>{a.gestores}</td><td>{a.cuentas_activas}</td>
           </tr>
