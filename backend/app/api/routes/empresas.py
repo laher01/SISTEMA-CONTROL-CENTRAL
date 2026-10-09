@@ -1,8 +1,7 @@
 import uuid
 
-from pydantic import BaseModel, Field
-
 from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy import exists, or_, select
 from sqlalchemy.exc import IntegrityError
 
@@ -182,7 +181,10 @@ def notificar_clasificacion(
                 tenant_id=tenant_id,
                 remitente_cuenta_id=auth.cuenta_id,
                 destinatario_cuenta_id=destinatario.id,
-                texto=f"Solicitud de autorización y clasificación de empresas por {auth.codigo}: {detalles}"[:2000],
+                texto=(
+                    f"Solicitud de autorización y clasificación de empresas "
+                    f"por {auth.codigo}: {detalles}"
+                )[:2000],
             )
         )
     auditoria.registrar(
