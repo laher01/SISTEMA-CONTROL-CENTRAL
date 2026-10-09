@@ -69,7 +69,8 @@ def simular(
         filtros.append(Expediente.gestor_id == datos.gestor_id)
     filas = session.execute(
         select(Expediente.receptor_id, func.sum(Expediente.importe_total))
-        .where(*filtros).group_by(Expediente.receptor_id)
+        .where(*filtros)
+        .group_by(Expediente.receptor_id)
     )
     try:
         resultado = calcular_comisiones_por_receptor(
@@ -88,7 +89,6 @@ def simular(
         "detalle": resultado["detalle"],
         "simulacion": True,
         "aviso": (
-            "No registra, aprueba ni realiza pagos. "
-            "Validar producción y tarifas antes de liquidar."
+            "No registra, aprueba ni realiza pagos. Validar producción y tarifas antes de liquidar."
         ),
     }
