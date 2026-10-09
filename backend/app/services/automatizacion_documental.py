@@ -9,12 +9,14 @@ import uuid
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
+import re
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, TipoComprobante, TipoDocumento
-from app.models import Documento
+from app.models import Documento, Expediente
 from app.services import auditoria
 from app.services.expedientes import buscar_expediente, obtener_o_crear_empresa
 from app.services.extraccion_campos import razon_social_confiable
@@ -107,6 +109,18 @@ def aplicar_automaticamente(
     else:
         documento.tipo_documento = tipo
         documento.estado = EstadoDocumento.PENDIENTE_RELACION
+
+    if tipo in (TipoDocumento.GRR, TipoDocumento.GRT) and not motivos:
+        vinculado = _vincular_guia_por_factura_referenciada(
+            session, settings, hoy, documento, procesamiento, tipo
+        )
+        if vinculado is not None:
+            return vinculado
+        return _revision(
+            documento,
+            ["No se encontró una factura única mediante documento relacionado; "
+             "verifique la referencia y vincule manualmente"],
+        )
 
     if tipo not in (TipoDocumento.FACT, TipoDocumento.RHE):
         if tipo is not None and not motivos:
@@ -244,6 +258,58 @@ def aplicar_automaticamente(
         documento.id,
         {"expediente_id": str(expediente.id), "expediente_creado": creado},
     )
+    return ResultadoAutomatizacion("COMPLETADO", relacionado=True, expediente_id=expediente.id)
+
+
+def _vincular_guia_por_factura_referenciada(
+    session: Session,
+    settings: Settings,
+    hoy: date,
+    documento: Documento,
+    procesamiento: dict[str, object],
+    tipo: TipoDocumento,
+) -> ResultadoAutomatizacion | None:
+    """Vincula una GRE solo con factura expresamente referenciada e inequívoca."""
+    texto = procesamiento.get("texto")
+    if not isinstance(texto, str):
+        return None
+    # Una serie propia de GRE no constituye referencia a la factura.
+    # Se exige una etiqueta explícita de documento vinculado/referenciado.
+    patron = re.compile(
+        r"(?:DOCUMENTO(?:S)?\s+(?:RELACIONADO(?:S)?|REFERENCIADO(?:S)?)|"
+        r"FACTURA\s+(?:RELACIONADA|REFERENCIADA))"
+        r"\s*[:#-]?\s*(?:FACTURA(?:\s+ELECTRONICA)?\s*[:#-]?\s*)?"
+        r"([FE][0-9]{3})\s*[-–—]\s*0*([0-9]{1,8})\b",
+        re.IGNORECASE,
+    )
+    referencias = {
+        (m.group(1).upper(), str(int(m.group(2))))
+        for m in patron.finditer(texto)
+        if m.group(1).upper().startswith("F")
+    }
+    if len(referencias) != 1:
+        return None
+    serie, numero = next(iter(referencias))
+    consulta = select(Expediente).where(
+        Expediente.tenant_id == documento.tenant_id,
+        Expediente.deleted_at.is_(None),
+        Expediente.tipo_comprobante == TipoComprobante.FACT,
+        Expediente.serie == serie,
+        Expediente.correlativo == numero,
+    )
+    if documento.usuario_id is not None:
+        consulta = consulta.where(Expediente.usuario_id == documento.usuario_id)
+    candidatos = list(session.scalars(consulta.limit(2)))
+    if len(candidatos) != 1:
+        return None
+    expediente = candidatos[0]
+    vincular_documento(session, settings, hoy, documento, expediente.id, tipo)
+    auditoria.registrar(
+        session, documento.tenant_id, "GRE_VINCULADA_POR_DOCUMENTO_REFERENCIADO",
+        "documento", documento.id,
+        {"expediente_id": str(expediente.id), "factura": f"{serie}-{numero}"},
+    )
+    _guardar_estado(documento, "COMPLETADO", expediente_id=expediente.id)
     return ResultadoAutomatizacion("COMPLETADO", relacionado=True, expediente_id=expediente.id)
 
 
