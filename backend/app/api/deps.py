@@ -49,7 +49,9 @@ def get_contexto_operativo(
         )
     permitido_responsable = (
         request.method == "GET" and request.url.path == "/api/v1/miembros/mis-usuarios"
-    ) or (request.method == "POST" and request.url.path == "/api/v1/comisiones/simular")
+    ) or (request.method == "POST" and request.url.path == "/api/v1/comisiones/simular") or (
+        request.method == "GET" and request.url.path == "/api/v1/comisiones/receptores"
+    )
     if contexto.rol == "RESPONSABLE" and not permitido_responsable:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
