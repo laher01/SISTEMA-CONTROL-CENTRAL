@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import date
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
@@ -78,7 +78,9 @@ def _responsable(session: SessionDep, tenant_id: uuid.UUID, responsable_id: uuid
 
 def _periodo(desde: date, hasta: date, moneda: str) -> None:
     if hasta < desde or (hasta - desde).days > 366:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Periodo inválido: máximo 367 días")
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Periodo inválido: máximo 367 días"
+        )
     if moneda not in MONEDAS:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Moneda inválida")
 
