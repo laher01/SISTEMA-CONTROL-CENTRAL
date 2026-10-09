@@ -52,15 +52,19 @@ def receptores_de_usuario(
     return [
         {"id": str(item.id), "ruc": item.ruc, "nombre": item.razon_social}
         for item in session.scalars(
-            select(Empresa).join(
+            select(Empresa)
+            .join(
                 Expediente,
                 Expediente.receptor_id == Empresa.id,
-            ).where(
+            )
+            .where(
                 Empresa.tenant_id == tenant_id,
                 Expediente.tenant_id == tenant_id,
                 Expediente.usuario_id == usuario_id,
                 Expediente.deleted_at.is_(None),
-            ).distinct().order_by(Empresa.razon_social)
+            )
+            .distinct()
+            .order_by(Empresa.razon_social)
         )
     ]
 
