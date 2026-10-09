@@ -122,6 +122,70 @@ def mis_usuarios_responsable(
     )
 
 
+class AltaUsuarioResponsableIn(BaseModel):
+    nombre: str
+    porcentaje_produccion: Decimal | None = None
+
+
+@router.post(
+    "/mis-usuarios",
+    response_model=AltaMiembroOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def crear_usuario_responsable(
+    datos: AltaUsuarioResponsableIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> AltaMiembroOut:
+    """Un Responsable crea únicamente Usuarios de su propio equipo."""
+    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
+    responsable = session.get(Miembro, auth.miembro_id)
+    if (
+        responsable is None
+        or responsable.tenant_id != tenant_id
+        or responsable.rol != RolMiembro.RESPONSABLE
+        or not responsable.activo
+        or responsable.deleted_at is not None
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Responsable no habilitado")
+    nombre = " ".join(datos.nombre.strip().split())
+    if len(nombre) < 3 or len(nombre) > 200:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Nombre inválido")
+    porcentaje = (
+        datos.porcentaje_produccion
+        if datos.porcentaje_produccion is not None
+        else Decimal("1.5000")
+    )
+    if porcentaje < 0 or porcentaje > 100:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Porcentaje inválido")
+    usuario = Miembro(
+        tenant_id=tenant_id,
+        codigo=codigo_automatico(session, tenant_id, nombre, RolMiembro.USUARIO),
+        nombre=nombre,
+        rol=RolMiembro.USUARIO,
+        responsable_id=responsable.id,
+        porcentaje_produccion=porcentaje,
+        activo=True,
+        creado_por_cuenta_id=auth.cuenta_id,
+    )
+    session.add(usuario)
+    try:
+        session.flush()
+        _, temporal = crear_o_restablecer_cuenta(
+            session, tenant_id, usuario.codigo, miembro_id=usuario.id
+        )
+        session.commit()
+    except (IntegrityError, ValueError) as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "No se pudo crear el Usuario") from exc
+    return AltaMiembroOut(
+        miembro=MiembroOut.model_validate(usuario),
+        credencial=CredencialTemporalOut(login=usuario.codigo, clave_temporal=temporal),
+    )
+
+
 @router.put("/{usuario_id}/responsable", response_model=MiembroOut)
 def asignar_responsable(
     session: SessionDep,
