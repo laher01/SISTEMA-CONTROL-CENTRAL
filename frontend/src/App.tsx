@@ -183,7 +183,7 @@ export default function App() {
           </div>
         </header>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={sesion.es_administracion_demo && sesion.rol === "ADMINISTRADOR" ? <Navigate to="/organizacion" replace /> : <Dashboard />} />
           <Route path="/ingresar" element={<Navigate to="/" replace />} />
           <Route path="/subir" element={<Subir sesion={sesion} />} />
           <Route path="/registros" element={<Registros sesion={sesion} />} />
