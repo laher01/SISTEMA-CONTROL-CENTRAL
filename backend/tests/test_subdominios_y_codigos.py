@@ -54,7 +54,8 @@ def test_codigos_automaticos_sin_reutilizar_login(session: Session) -> None:
 
 
 def test_alta_miembro_generando_codigo(
-    client: TestClient, auth_prueba: AuthPrueba,
+    client: TestClient,
+    auth_prueba: AuthPrueba,
 ) -> None:
     auth_prueba.como_admin()
     respuesta = client.post("/api/v1/miembros", json={"nombre": "Eduardo Ayala", "rol": "USUARIO"})
