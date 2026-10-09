@@ -61,4 +61,4 @@ def test_produccion_por_receptor_usa_documentos_del_usuario_y_periodo(
         "/api/v1/comisiones/produccion-receptores",
         params={**parametros, "usuario_id": "00000000-0000-0000-0000-000000000001"},
     )
-    assert invalido.status_code == 403
+    assert invalido.status_code == 404
