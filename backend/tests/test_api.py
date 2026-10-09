@@ -171,6 +171,17 @@ def test_crear_expediente_manual_rhe_sin_guia(client: TestClient) -> None:
     assert detalle["faltantes"] == ["RHE"]
     assert client.post("/api/v1/expedientes", json=datos).status_code == 409
 
+    # El receptor no redefine la identidad de un RHE ya emitido.
+    # Mismo emisor + RHE + serie + correlativo debe seguir siendo el mismo
+    # comprobante, incluso si llega con un receptor contradictorio.
+    datos_otro_receptor = {
+        **datos,
+        "receptor": {"ruc": "20609762030", "razon_social": "MAIK FISHING S.A.C."},
+    }
+    conflicto = client.post("/api/v1/expedientes", json=datos_otro_receptor)
+    assert conflicto.status_code == 409
+    assert conflicto.json()["detail"]["expediente_id"] == creado["id"]
+
 
 def test_alertas_y_dashboard(client: TestClient) -> None:
     subir(client, "f1.xml", factura())
