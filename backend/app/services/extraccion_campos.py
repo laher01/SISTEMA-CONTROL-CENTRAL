@@ -1100,7 +1100,7 @@ def detectar_formato_documental(texto: str) -> str:
         return "OSE_FACTUHOST"
     if "EFACT" in normalizado or "WWW.EFACT.PE" in normalizado:
         return "OSE_EFACT"
-    if "OSE" in normalizado or any(
+    if re.search(r"\bOSE\b", normalizado) or any(
         marca in normalizado for marca in ("NUBEFACT", "BIZLINK", "DIGIFLOW")
     ):
         return "OSE"
