@@ -60,6 +60,49 @@ body {
   min-width: 0;
 }
 
+.contexto-sistema {
+  margin: -1.5rem -2rem 1.5rem;
+  background: #153f68;
+  color: #f8fbff;
+  border-bottom: 1px solid #0f3152;
+}
+
+.contexto-ruta {
+  padding: 0.65rem 1rem 0.5rem;
+  color: #ffd43b;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+}
+
+.contexto-cadena {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.55rem 1rem;
+  background: #1c4e80;
+  font-size: 0.84rem;
+}
+
+.contexto-nodo strong,
+.contexto-administracion strong {
+  color: #ffd43b;
+}
+
+.contexto-flecha {
+  color: #b9d7ef;
+  font-weight: 700;
+}
+
+.contexto-administracion {
+  padding: 0.45rem 1rem 0.6rem;
+  background: #153f68;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 0.8rem;
+}
+
+
 h2 {
   margin-top: 0;
   display: flex;
@@ -440,6 +483,19 @@ button.peligro {
 
   .contenido {
     padding: 1rem;
+  }
+
+  .contexto-sistema {
+    margin: -1rem -1rem 1rem;
+  }
+
+  .contexto-cadena {
+    display: grid;
+    gap: 0.3rem;
+  }
+
+  .contexto-flecha {
+    display: none;
   }
 
   .encabezado-pagina {
