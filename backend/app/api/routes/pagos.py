@@ -18,6 +18,7 @@ from app.models import (
     Empresa,
     Expediente,
     GerenteEmpresa,
+    GerenteResponsable,
     Gestor,
     Miembro,
     PagoERP,
@@ -134,17 +135,24 @@ def responsables_pedido(
     session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
 ) -> list[FiltroOpcion]:
     _validar_acceso(auth.rol)
+    consulta = select(Miembro).where(
+        Miembro.tenant_id == tenant_id,
+        Miembro.rol == RolMiembro.RESPONSABLE,
+        Miembro.activo.is_(True),
+        Miembro.deleted_at.is_(None),
+    )
+    if auth.rol == RolMiembro.GERENTE:
+        consulta = consulta.join(
+            GerenteResponsable, GerenteResponsable.responsable_id == Miembro.id
+        ).where(
+            GerenteResponsable.tenant_id == tenant_id,
+            GerenteResponsable.gerente_id == auth.miembro_id,
+            GerenteResponsable.activo.is_(True),
+        )
     return [
         FiltroOpcion(id=r.id, codigo=r.codigo, nombre=r.nombre)
         for r in session.scalars(
-            select(Miembro)
-            .where(
-                Miembro.tenant_id == tenant_id,
-                Miembro.rol == RolMiembro.RESPONSABLE,
-                Miembro.activo.is_(True),
-                Miembro.deleted_at.is_(None),
-            )
-            .order_by(Miembro.codigo)
+            consulta.order_by(Miembro.codigo)
         )
     ]
 
@@ -156,6 +164,8 @@ def usuarios_pago(
     auth: OperativeAuthDep,
 ) -> list[FiltroOpcion]:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        return []
     return [
         FiltroOpcion(
             id=u.id,
@@ -211,6 +221,8 @@ def proveedores_pago(
     auth: OperativeAuthDep,
 ) -> list[FiltroOpcion]:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        return []
     return [
         FiltroOpcion(id=e.id, codigo=e.ruc, nombre=e.razon_social)
         for e in session.scalars(
@@ -232,6 +244,8 @@ def gestores_pago(
     auth: OperativeAuthDep,
 ) -> list[FiltroOpcion]:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        return []
     return [
         FiltroOpcion(
             id=g.id,
