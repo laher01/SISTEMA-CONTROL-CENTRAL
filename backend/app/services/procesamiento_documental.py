@@ -246,6 +246,10 @@ def sugerir_tipo(texto: str) -> SugerenciaClasificacion | None:
     normalizado = _normalizar(texto)
     reglas: tuple[tuple[TipoDocumento, tuple[str, ...]], ...] = (
         (TipoDocumento.RET, ("COMPROBANTE DE RETENCION", "CONSTANCIA DE RETENCION")),
+        (
+            TipoDocumento.GRT,
+            ("GUIA DE REMISION TRANSPORTISTA", "GUIA DE REMISION ELECTRONICA TRANSPORTISTA"),
+        ),
         (TipoDocumento.GRR, ("GUIA DE REMISION REMITENTE", "GUIA DE REMISION ELECTRONICA")),
         (TipoDocumento.RHE, ("RECIBO POR HONORARIOS",)),
         (TipoDocumento.FACT, ("FACTURA ELECTRONICA", "FACTURA DE VENTA")),
