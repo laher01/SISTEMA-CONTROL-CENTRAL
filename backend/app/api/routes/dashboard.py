@@ -33,7 +33,9 @@ def detalle_secretaria(
     from fastapi import HTTPException, status
 
     if auth.rol not in (
-        RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.SECRETARIA,
+        RolMiembro.SUPERADMIN,
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.SECRETARIA,
     ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Acceso exclusivo de Secretaría")
     if hasta < desde:
@@ -55,13 +57,13 @@ def detalle_secretaria(
         .order_by(Expediente.fecha_emision.desc(), Expediente.id)
     )
     if emisor_ruc:
-        consulta = consulta.join(
-            Empresa, Expediente.emisor_id == Empresa.id
-        ).where(Empresa.ruc == emisor_ruc)
+        consulta = consulta.join(Empresa, Expediente.emisor_id == Empresa.id).where(
+            Empresa.ruc == emisor_ruc
+        )
     if receptor_ruc:
-        consulta = consulta.join(
-            Empresa, Expediente.receptor_id == Empresa.id
-        ).where(Empresa.ruc == receptor_ruc)
+        consulta = consulta.join(Empresa, Expediente.receptor_id == Empresa.id).where(
+            Empresa.ruc == receptor_ruc
+        )
     if estado is not None:
         consulta = consulta.where(Expediente.estado == estado)
     expedientes = list(session.scalars(consulta))
@@ -84,7 +86,8 @@ def detalle_secretaria(
         usuario = usuarios.get(e.usuario_id)
         gestor = gestores.get(e.gestor_id)
         faltantes = [tipo.value for tipo in documentos_faltantes(e, settings)]
-        filas.append({
+        filas.append(
+            {
             "id": str(e.id),
             "serie": e.serie,
             "correlativo": e.correlativo,
@@ -102,8 +105,9 @@ def detalle_secretaria(
             "gestor": gestor.nombre if gestor else "Sin asignar",
             "gestor_codigo": gestor.codigo if gestor else "",
             "faltantes": faltantes,
-            "documentos": sum(d.deleted_at is None for d in e.documentos),
-        })
+                "documentos": sum(d.deleted_at is None for d in e.documentos),
+            }
+        )
     return {
         "total_expedientes": len(filas),
         "total_pen": str(totales["PEN"]),
