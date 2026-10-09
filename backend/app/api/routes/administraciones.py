@@ -92,7 +92,14 @@ def crear_administracion(
     return _provisionar_administracion(datos, session)
 
 
-def _provisionar_administracion(datos: AltaAdministracionIn, session: SessionDep) -> dict[str, str]:
+def _provisionar_administracion(
+    datos: AltaAdministracionIn,
+    session: SessionDep,
+    *,
+    plan_demo: str | None = None,
+    correo_contacto: str | None = None,
+    dni_contacto: str | None = None,
+) -> dict[str, str]:
     nombre = " ".join(datos.nombre_administrador.strip().upper().split())
     partes = nombre.split()
     if len(partes) < 3:
@@ -147,7 +154,10 @@ def _provisionar_administracion(datos: AltaAdministracionIn, session: SessionDep
         nombre=espacio,
         codigo=codigo,
         subdominio=subdominio,
-        origen_alta="SUPERADMIN",
+        origen_alta="DEMO_AUTORIZADA" if plan_demo else "SUPERADMIN",
+        plan_demo=plan_demo,
+        correo_contacto=correo_contacto,
+        dni_contacto=dni_contacto,
         estado="ACTIVO",
     )
     session.add(tenant)
@@ -216,6 +226,9 @@ def crear_administracion_demo(
             subdominio=datos.subdominio,
         ),
         session,
+        plan_demo=datos.plan,
+        correo_contacto=datos.correo.strip().lower(),
+        dni_contacto=datos.dni,
     )
     return {
         **alta,
