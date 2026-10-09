@@ -686,7 +686,10 @@ def crear_pedido_gerencia(
         ):
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Responsable inválido")
         if datos.modo_distribucion != "MANUAL":
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "El Responsable distribuye el pedido manualmente")
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "El Responsable distribuye el pedido manualmente",
+            )
     periodo = datos.periodo_mes.replace(day=1)
     pedido = PedidoGerencia(
         tenant_id=tenant_id,
@@ -783,10 +786,18 @@ def actualizar_pedido_gerencia(
                 AsignacionPedidoGerencia.pedido_id == pedido.id,
             ))
             if tiene_asignaciones is not None:
-                raise HTTPException(status.HTTP_409_CONFLICT, "Quite asignaciones anteriores antes de transferir")
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    "Quite asignaciones anteriores antes de transferir",
+                )
         pedido.responsable_id = datos.responsable_id
-    if pedido.responsable_id is not None and datos.modo_distribucion in {"SEMIASISTIDA", "AUTOMATICA"}:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Distribución reservada al Responsable")
+    if (
+        pedido.responsable_id is not None
+        and datos.modo_distribucion in {"SEMIASISTIDA", "AUTOMATICA"}
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Distribución reservada al Responsable"
+        )
     anterior = {
         "monto_solicitado": str(pedido.monto_solicitado),
         "modalidad": pedido.modalidad,
@@ -843,7 +854,9 @@ def agregar_asignacion_pedido(
     _validar_acceso(auth.rol)
     pedido = _pedido_valido(session, tenant_id, pedido_id)
     if pedido.responsable_id is not None:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "El pedido corresponde al Responsable asignado")
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "El pedido corresponde al Responsable asignado"
+        )
     usuario = _usuario_valido(session, tenant_id, datos.usuario_id)
 
     gestor = None
