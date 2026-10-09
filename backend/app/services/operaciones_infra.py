@@ -9,7 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.models_infraestructura import NodoInfraestructura, VersionInfraestructura
+from app.models_infraestructura import (
+    EventoInfraestructura,
+    NodoInfraestructura,
+    VersionInfraestructura,
+)
 from app.models_operaciones_infra import BackupInfra, OperacionInfra
 from app.schemas_operaciones_infra import (
     BackupIn,
@@ -272,14 +276,19 @@ class OperacionesInfraService(InfraestructuraService):
 
     def reclamar(self, nodo: NodoInfraestructura) -> dict[str, object] | None:
         self.habilitar(nodo)
+        hash_admitido = nodo.token_hash
         # Bloqueo por nodo: PostgreSQL serializa trabajadores concurrentes de un mismo agente.
-        self.session.scalar(
+        bloqueado = self.session.scalar(
             select(NodoInfraestructura)
             .where(
                 NodoInfraestructura.id == nodo.id,
             )
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
+        if bloqueado is None or bloqueado.token_hash != hash_admitido:
+            raise HTTPException(401, "La credencial fue revocada mientras se reclamaba")
+        self.habilitar(bloqueado)
         fallos = self.session.scalars(
             select(OperacionInfra).where(
                 OperacionInfra.nodo_id == nodo.id,
@@ -312,6 +321,7 @@ class OperacionesInfraService(InfraestructuraService):
                     operacion.estado = "FALLO"
                     operacion.resultado = {"codigo_error": "LEASE_VENCIDA"}
                     operacion.finalizada_at = datetime.now(UTC)
+                    self.session.add(evento_operacion(operacion))
                     self.guardar()
                 return None  # Nunca volver a ejecutar automáticamente un comando incierto.
         for operacion in pendientes:
@@ -333,6 +343,7 @@ class OperacionesInfraService(InfraestructuraService):
                 operacion.estado = "FALLO"
                 operacion.resultado = {"codigo_error": "ESTADO_NODO_CAMBIO"}
                 operacion.finalizada_at = datetime.now(UTC)
+                self.session.add(evento_operacion(operacion))
                 self.guardar()
                 return None
             lease = secrets.token_urlsafe(48)
@@ -420,14 +431,12 @@ class OperacionesInfraService(InfraestructuraService):
         operacion.estado = datos.estado
         operacion.resultado = resultado
         operacion.finalizada_at = datetime.now(UTC)
-        self.session.add(EventoOperacion(operacion))
+        self.session.add(evento_operacion(operacion))
         self.guardar()
         return operacion
 
 
-def EventoOperacion(operacion: OperacionInfra) -> object:
-    from app.models_infraestructura import EventoInfraestructura
-
+def evento_operacion(operacion: OperacionInfra) -> EventoInfraestructura:
     return EventoInfraestructura(
         actor_cuenta_id=operacion.actor_cuenta_id,
         correlacion_id=operacion.solicitud_id,

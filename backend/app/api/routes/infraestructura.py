@@ -14,7 +14,14 @@ from app.schemas_infraestructura import NodoIn, ReporteIn, TenantNodoIn, Version
 from app.security import ContextoAcceso
 from app.services.infraestructura import InfraestructuraService, en_utc
 
-router = APIRouter(prefix="/infraestructura", tags=["infraestructura"])
+
+def sin_cache(response: Response) -> None:
+    response.headers["Cache-Control"] = "no-store"
+
+
+router = APIRouter(
+    prefix="/infraestructura", tags=["infraestructura"], dependencies=[Depends(sin_cache)]
+)
 bearer = HTTPBearer(auto_error=False)
 
 

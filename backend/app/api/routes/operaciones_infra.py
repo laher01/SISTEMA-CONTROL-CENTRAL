@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import inspect, select, text
 
 from app.api.deps import SessionDep, SettingsDep
@@ -9,6 +9,7 @@ from app.api.routes.infraestructura import (
     AgenteDep,
     CorrelacionDep,
     SuperadminDep,
+    sin_cache,
     version_publica,
 )
 from app.models_operaciones_infra import BackupInfra, OperacionInfra
@@ -22,7 +23,11 @@ from app.schemas_operaciones_infra import (
 )
 from app.services.operaciones_infra import OperacionesInfraService
 
-router = APIRouter(prefix="/infraestructura", tags=["operaciones-infraestructura"])
+router = APIRouter(
+    prefix="/infraestructura",
+    tags=["operaciones-infraestructura"],
+    dependencies=[Depends(sin_cache)],
+)
 
 
 @router.get("/agentes/{nodo_id}/identidad")
