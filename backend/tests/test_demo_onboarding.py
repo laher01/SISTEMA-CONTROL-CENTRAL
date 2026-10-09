@@ -42,5 +42,8 @@ def test_demo_autorizada_crea_tenant_aislado(session: Session) -> None:
     assert resultado["url"] == "https://carlos-juarez.factcentral.online/ingresar"
     tenant = session.scalar(select(Tenant).where(Tenant.subdominio == "carlos-juarez"))
     assert tenant is not None
+    assert tenant.plan_demo == "profesional"
+    assert tenant.correo_contacto == "carlos@example.com"
+    assert tenant.dni_contacto == "12345678"
     miembro = session.scalar(select(Miembro).where(Miembro.tenant_id == tenant.id))
     assert miembro is not None and miembro.rol == "ADMINISTRADOR"
