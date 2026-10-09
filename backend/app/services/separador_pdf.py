@@ -80,12 +80,19 @@ def analizar_paquete(contenido: bytes, max_paginas: int = 200) -> list[Fragmento
             if segmentos:
                 anterior = segmentos[-1]
                 if (tipo, serie, correlativo, ruc) == (
-                    anterior.tipo, anterior.serie, anterior.correlativo, anterior.ruc_emisor
+                    anterior.tipo,
+                    anterior.serie,
+                    anterior.correlativo,
+                    anterior.ruc_emisor,
                 ):
                     continue
                 segmentos[-1] = Fragmento(
-                    anterior.inicio, i, anterior.tipo, anterior.serie,
-                    anterior.correlativo, anterior.ruc_emisor
+                    anterior.inicio,
+                    i,
+                    anterior.tipo,
+                    anterior.serie,
+                    anterior.correlativo,
+                    anterior.ruc_emisor,
                 )
             segmentos.append(Fragmento(i, cantidad, tipo, serie, correlativo, ruc))
         if len(segmentos) < 2:
