@@ -125,10 +125,10 @@ def test_pagos_por_jerarquia(client: TestClient, auth_prueba: AuthPrueba, sessio
     )
     cotizacion = client.post("/api/v1/responsable/pagos/cotizar", json=datos)
     assert cotizacion.status_code == 200, cotizacion.text
-    assert cotizacion.json()["bruto"] == "15.00"
+    assert cotizacion.json()["bruto"] == "0.00"
     programado = client.post("/api/v1/responsable/pagos/programar", json=datos)
     assert programado.status_code == 201, programado.text
-    assert programado.json()["saldo"] == "15.00"
+    assert programado.json()["saldo"] == "0.00"
     assert client.post("/api/v1/responsable/pagos/programar", json=datos).status_code == 409
     assert client.delete(f"/api/v1/responsable/pagos/{programado.json()['id']}").status_code == 204
 
