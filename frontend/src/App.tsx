@@ -19,6 +19,7 @@ import Organizacion from "./paginas/Organizacion";
 import MiEquipoResponsable from "./paginas/MiEquipoResponsable";
 import Pagos from "./paginas/Pagos";
 import PagoGestores from "./paginas/PagoGestores";
+import RepartoMultiple from "./paginas/RepartoMultiple";
 import Pendientes from "./paginas/Pendientes";
 import Produccion from "./paginas/Produccion";
 import Registros from "./paginas/Registros";
@@ -35,6 +36,7 @@ const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = 
   { a: "/mi-equipo/pagos", texto: "Pago de Usuarios", icono: "▣", roles: ["RESPONSABLE"] },
   { a: "/comisiones-responsables", texto: "Comisiones de mi equipo", icono: "▥", roles: ["RESPONSABLE"] },
   { a: "/pago-gestores", texto: "Pago de Gestores", icono: "▣", roles: ["USUARIO"] },
+  { a: "/reparto-multiple", texto: "Simular reparto múltiple", icono: "▤", roles: ["USUARIO"] },
   { a: "/comisiones", texto: "Simular comisiones", icono: "◉", roles: ["RESPONSABLE", "USUARIO"] },
   {
     a: "/",
@@ -200,6 +202,7 @@ export default function App() {
           <Route path="/mi-equipo/cobros" element={<MiEquipoResponsable inicial="COBROS" />} />
           <Route path="/mi-equipo/pagos" element={<MiEquipoResponsable inicial="PAGOS" />} />
           <Route path="/pago-gestores" element={<PagoGestores />} />
+          <Route path="/reparto-multiple" element={sesion.rol === "USUARIO" ? <RepartoMultiple /> : <Navigate to="/" replace />} />
           <Route path="/comisiones" element={<Comisiones sesion={sesion} />} />
           <Route path="/organizacion" element={<Organizacion sesion={sesion} />} />
           <Route path="/produccion" element={<Produccion />} />
