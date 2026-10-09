@@ -1,5 +1,3 @@
-import uuid
-
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -48,7 +46,7 @@ def test_codigos_automaticos_sin_reutilizar_login(session: Session) -> None:
     tenant = Tenant(nombre="Prueba código", codigo="PCC-003-AD")
     session.add(tenant)
     session.flush()
-    assert iniciales("Eduardo Ayala") == "EAX"
+    assert iniciales("Eduardo Ayala") == "EDA"
     assert codigo_automatico(session, tenant.id, "Eduardo Ayala", "USUARIO") == "EAX-001-US"
     session.add(Miembro(tenant_id=tenant.id, codigo="EAX-001-US", nombre="Eduardo", rol="USUARIO"))
     session.flush()
