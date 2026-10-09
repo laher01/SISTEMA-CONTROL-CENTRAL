@@ -143,6 +143,8 @@ def _scope(auth: OperativeAuthDep) -> tuple[ColumnElement[bool], ...]:
         return (Expediente.gestor_id == auth.gestor_id,)
     if auth.rol == RolMiembro.USUARIO:
         return (Expediente.usuario_id == auth.usuario_id,)
+    if auth.rol == RolMiembro.GERENTE:
+        return (Expediente.gerente_id == auth.miembro_id,)
     return ()
 
 
