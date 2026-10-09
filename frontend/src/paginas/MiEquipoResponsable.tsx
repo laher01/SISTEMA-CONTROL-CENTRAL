@@ -31,8 +31,8 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const [mensaje, setMensaje] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [usuarioPago, setUsuarioPago] = useState("");
-  const [desdePago, setDesdePago] = useState("2026-10-01");
-  const [hastaPago, setHastaPago] = useState("2026-10-31");
+  const [desdePago, setDesdePago] = useState(new Date().toISOString().slice(0, 7) + "-01");
+  const [hastaPago, setHastaPago] = useState(new Date().toISOString().slice(0, 10));
   const [cotizacion, setCotizacion] = useState<{ produccion: string; porcentaje: string; bruto: string } | null>(null);
   const [errorPago, setErrorPago] = useState("");
   const parametrosPago = { usuario_id: usuarioPago, desde: desdePago, hasta: hastaPago, moneda };
@@ -90,7 +90,7 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
       <div className="filtros">
         <button type="button" onClick={() => { recargar(); recargarEquipo(); }}>Actualizar</button>
         {pestana !== "USUARIOS" && <label>Moneda{" "}
-          <select value={moneda} onChange={(e) => setMoneda(e.target.value as "PEN" | "USD")}>
+          <select value={moneda} onChange={(e) => { setMoneda(e.target.value as "PEN" | "USD"); setCotizacion(null); }}>
             <option value="PEN">Soles</option><option value="USD">Dólares</option>
           </select>
         </label>}
