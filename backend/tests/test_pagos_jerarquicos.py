@@ -107,7 +107,11 @@ def test_pagos_por_jerarquia(client: TestClient, auth_prueba: AuthPrueba, sessio
         "moneda": "PEN",
     }
     auth_prueba.como_admin()
-    assert client.post("/api/v1/responsable/pagos/programar", json=datos).status_code == 403
+    # Administración puede intervenir excepcionalmente y liberar la liquidación.
+    programado_admin = client.post("/api/v1/responsable/pagos/programar", json=datos)
+    assert programado_admin.status_code == 201, programado_admin.text
+    pago_admin_id = programado_admin.json()["id"]
+    assert client.delete(f"/api/v1/responsable/pagos/{pago_admin_id}").status_code == 204
     auth_prueba.contexto = ContextoAcceso(
         cuenta_id=auth_prueba.contexto.cuenta_id,
         tenant_id=tid,
