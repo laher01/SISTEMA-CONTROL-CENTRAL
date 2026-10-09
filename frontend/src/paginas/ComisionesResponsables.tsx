@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { conParametros, enviarJson, useDatos } from "../api";
 import { formatearMonto } from "../formato";
-import type { SesionActual } from "../tipos";
+import type { FiltroOpcion, SesionActual } from "../tipos";
 
 type Fila = {
   responsable_id: string;
@@ -91,12 +91,13 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
     conParametros("/api/v1/pagos-responsables/resumen", { desde, hasta, moneda }),
   );
   const pagos = useDatos<Pago[]>("/api/v1/pagos-responsables");
+  const opcionesResponsables = useDatos<FiltroOpcion[]>("/api/v1/pagos/responsables");
   const pagosFiltrados = (pagos.datos ?? []).filter(p =>
     p.moneda === moneda && p.periodo_desde >= desde && p.periodo_hasta <= hasta
   );
   const filas = datos?.filas ?? [];
   const responsables = Array.from(
-    new Map([...(filas.map((f) => [f.responsable_id, f.responsable_nombre] as const)), ...(pagos.datos ?? []).map((p) => [p.responsable_id, p.responsable_id] as const)]).entries(),
+    new Map([...(opcionesResponsables.datos ?? []).map((r) => [r.id, `${r.codigo} · ${r.nombre}`] as const), ...filas.map((f) => [f.responsable_id, `${f.responsable_codigo} · ${f.responsable_nombre}`] as const)]).entries(),
   );
   const filasSeleccionadas = filas.filter(f => f.responsable_id === responsableSeleccionado);
   const pagosSeleccionados = pagosFiltrados.filter(p => p.responsable_id === responsableSeleccionado);
