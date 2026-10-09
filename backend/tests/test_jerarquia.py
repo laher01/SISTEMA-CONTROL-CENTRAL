@@ -3,6 +3,7 @@ import uuid
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.models import Miembro
 from tests.conftest import AuthPrueba
 from tests.xml import RECEPTOR, factura
 
@@ -54,8 +55,8 @@ def test_auth_me_devuelve_arbol_usuario_responsable_administrador(
         json={"codigo": "JAVIER01", "nombre": "Javier", "usuario_id": usuario["id"]},
     ).json()["gestor"]
 
-    responsable_db = session.get(__import__("app.models", fromlist=["Miembro"]).Miembro, uuid.UUID(responsable["id"]))
-    usuario_db = session.get(__import__("app.models", fromlist=["Miembro"]).Miembro, uuid.UUID(usuario["id"]))
+    responsable_db = session.get(Miembro, uuid.UUID(responsable["id"]))
+    usuario_db = session.get(Miembro, uuid.UUID(usuario["id"]))
     assert responsable_db is not None
     assert usuario_db is not None
     responsable_db.responsable_id = uuid.UUID(administrador["id"])
