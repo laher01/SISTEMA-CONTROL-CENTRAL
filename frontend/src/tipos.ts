@@ -12,7 +12,7 @@ export type TipoAlerta =
   | "RECEPTOR_NO_AUTORIZADO"
   | "EXPEDIENTE_VENCIDO";
 export type TipoComprobante = "FACT" | "RHE";
-export type RolMiembro = "SUPERADMIN" | "ADMINISTRADOR" | "GERENTE" | "SECRETARIA" | "USUARIO";
+export type RolMiembro = "SUPERADMIN" | "ADMINISTRADOR" | "GERENTE" | "SECRETARIA" | "RESPONSABLE" | "USUARIO";
 
 export const TIPOS_DOCUMENTO = [
   "FACT",
