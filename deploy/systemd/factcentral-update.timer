@@ -1,0 +1,11 @@
+[Unit]
+Description=FACT CENTRAL - actualizaciones desde main cada 10 minutos
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=10min
+Persistent=true
+Unit=factcentral-update.service
+
+[Install]
+WantedBy=timers.target
