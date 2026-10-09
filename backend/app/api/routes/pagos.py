@@ -574,10 +574,14 @@ def _pedido_valido(
     session: SessionDep,
     tenant_id: uuid.UUID,
     pedido_id: uuid.UUID,
+    auth: OperativeAuthDep | None = None,
 ) -> PedidoGerencia:
     pedido = session.get(PedidoGerencia, pedido_id)
     if pedido is None or pedido.tenant_id != tenant_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pedido de Gerencia no encontrado")
+    if auth is not None and auth.rol == RolMiembro.GERENTE:
+        if auth.miembro_id is None or pedido.gerente_id != auth.miembro_id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Pedido no encontrado")
     return pedido
 
 
@@ -771,6 +775,8 @@ def crear_pedido_gerencia(
 ) -> PedidoGerenciaOut:
     _validar_acceso(auth.rol)
     cliente = _cliente_valido(session, tenant_id, datos.cliente_id)
+    if auth.rol == RolMiembro.GERENTE and auth.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Gerente sin identidad")
     if datos.responsable_id is not None:
         responsable = session.get(Miembro, datos.responsable_id)
         if (
@@ -781,6 +787,19 @@ def crear_pedido_gerencia(
             or responsable.deleted_at is not None
         ):
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Responsable inválido")
+        if auth.rol == RolMiembro.GERENTE:
+            from app.models import GerenteResponsable
+
+            vinculo = session.scalar(
+                select(GerenteResponsable.id).where(
+                    GerenteResponsable.tenant_id == tenant_id,
+                    GerenteResponsable.gerente_id == auth.miembro_id,
+                    GerenteResponsable.responsable_id == datos.responsable_id,
+                    GerenteResponsable.activo.is_(True),
+                )
+            )
+            if vinculo is None:
+                raise HTTPException(status.HTTP_403_FORBIDDEN, "Responsable no vinculado")
         if datos.modo_distribucion != "MANUAL":
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -789,6 +808,7 @@ def crear_pedido_gerencia(
     periodo = datos.periodo_mes.replace(day=1)
     pedido = PedidoGerencia(
         tenant_id=tenant_id,
+        gerente_id=auth.miembro_id if auth.rol == RolMiembro.GERENTE else None,
         cliente_id=cliente.id,
         responsable_id=datos.responsable_id,
         periodo_mes=periodo,
@@ -843,6 +863,10 @@ def listar_pedidos_gerencia(
 ) -> list[PedidoGerenciaOut]:
     _validar_acceso(auth.rol)
     consulta = select(PedidoGerencia).where(PedidoGerencia.tenant_id == tenant_id)
+    if auth.rol == RolMiembro.GERENTE:
+        if auth.miembro_id is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Gerente sin identidad")
+        consulta = consulta.where(PedidoGerencia.gerente_id == auth.miembro_id)
     if mes:
         desde, _ = _rango_mes(mes)
         consulta = consulta.where(PedidoGerencia.periodo_mes == desde)
@@ -867,7 +891,7 @@ def eliminar_pedido_sin_movimientos(
 ) -> None:
     """Elimina un pedido sin asignaciones ni ejecución, conservando auditoría."""
     _validar_acceso(auth.rol)
-    pedido = _pedido_valido(session, tenant_id, pedido_id)
+    pedido = _pedido_valido(session, tenant_id, pedido_id, auth)
     asignacion = session.scalar(
         select(AsignacionPedidoGerencia.id)
         .where(
