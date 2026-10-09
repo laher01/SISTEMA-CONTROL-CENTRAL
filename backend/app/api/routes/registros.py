@@ -11,6 +11,7 @@ from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.enums import Moneda, RolMiembro, TipoDocumento
 from app.models import Empresa, Expediente, Gestor, Miembro
 from app.schemas import FiltroOpcion, RegistroFila, RegistroOpciones, RegistroResumen
+from app.services.ambito_gerencia import alcance_expedientes_gerente, expediente_visible_gerente
 from app.services.expedientes import documentos_faltantes, documentos_principales, tipos_presentes
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 
@@ -85,7 +86,7 @@ def opciones(
             session.scalars(
                 select(Expediente.usuario_id).where(
                     Expediente.tenant_id == tenant_id,
-                    Expediente.gerente_id == auth.miembro_id,
+                    alcance_expedientes_gerente(auth),
                     Expediente.deleted_at.is_(None),
                 )
             )
@@ -94,7 +95,7 @@ def opciones(
             session.scalars(
                 select(Expediente.gestor_id).where(
                     Expediente.tenant_id == tenant_id,
-                    Expediente.gerente_id == auth.miembro_id,
+                    alcance_expedientes_gerente(auth),
                     Expediente.deleted_at.is_(None),
                 )
             )
@@ -293,7 +294,7 @@ def _aplicar_ambito(consulta: Any, auth: OperativeAuthDep) -> Any:
     if auth.rol == RolMiembro.USUARIO:
         return consulta.where(Expediente.usuario_id == auth.usuario_id)
     if auth.rol == RolMiembro.GERENTE:
-        return consulta.where(Expediente.gerente_id == auth.miembro_id)
+        return consulta.where(alcance_expedientes_gerente(auth))
     return consulta
 
 
