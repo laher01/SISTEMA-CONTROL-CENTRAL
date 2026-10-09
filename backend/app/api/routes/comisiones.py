@@ -34,13 +34,24 @@ def simular(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> dict[str, object]:
-    if auth.rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.USUARIO):
+    if auth.rol not in (
+        RolMiembro.SUPERADMIN,
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.RESPONSABLE,
+        RolMiembro.USUARIO,
+    ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "No puede consultar comisiones subordinadas")
     if auth.rol == RolMiembro.USUARIO and auth.usuario_id != datos.usuario_id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Usuario fuera de alcance")
     usuario = session.get(Miembro, datos.usuario_id)
     if usuario is None or usuario.tenant_id != tenant_id or usuario.rol != RolMiembro.USUARIO:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Usuario inválido")
+    if auth.rol == RolMiembro.RESPONSABLE:
+        if usuario.responsable_id != auth.miembro_id or datos.gestor_id is not None:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Responsable solo puede calcular el resultado de sus Usuarios",
+            )
     if datos.gestor_id is not None:
         gestor = session.get(Gestor, datos.gestor_id)
         if gestor is None or gestor.tenant_id != tenant_id or gestor.usuario_id != usuario.id:
