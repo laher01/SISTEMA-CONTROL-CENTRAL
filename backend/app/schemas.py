@@ -313,6 +313,12 @@ class LoginIn(BaseModel):
     clave: str = Field(min_length=8, max_length=200)
 
 
+class JerarquiaSesionOut(BaseModel):
+    rol: str
+    codigo: str
+    nombre: str
+
+
 class SesionOut(BaseModel):
     rol: str
     codigo: str
@@ -321,6 +327,7 @@ class SesionOut(BaseModel):
     gestor_id: uuid.UUID | None
     usuario_id: uuid.UUID | None
     cambio_clave_obligatorio: bool
+    jerarquia: list[JerarquiaSesionOut] = Field(default_factory=list)
 
 
 class CambioClaveIn(BaseModel):
