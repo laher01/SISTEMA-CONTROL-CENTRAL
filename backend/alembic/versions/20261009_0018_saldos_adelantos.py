@@ -19,6 +19,9 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     op.add_column("pagos_erp", sa.Column("referencia_pago", sa.String(160), nullable=True))
+    op.add_column(
+        "pagos_erp", sa.Column("observacion_adelantos", sa.String(500), nullable=True)
+    )
     op.create_table(
         "saldos_compras_erp",
         sa.Column("id", sa.Uuid(), primary_key=True),
@@ -82,4 +85,5 @@ def downgrade() -> None:
             f"ix_saldos_compras_erp_{nombre}", table_name="saldos_compras_erp"
         )
     op.drop_table("saldos_compras_erp")
+    op.drop_column("pagos_erp", "observacion_adelantos")
     op.drop_column("pagos_erp", "referencia_pago")
