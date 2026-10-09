@@ -486,8 +486,8 @@ def confirmar(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Gerencia confirma pagos")
     pago = session.get(PagoResponsableERP, pago_id)
     if pago is None or pago.tenant_id != tenant_id:
-    if auth.rol == RolMiembro.GERENTE and pago is not None and pago.gerente_id != auth.miembro_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pago no encontrado")
+    if auth.rol == RolMiembro.GERENTE and pago.gerente_id != auth.miembro_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pago no encontrado")
     if pago.estado != "PROGRAMADO":
         raise HTTPException(status.HTTP_409_CONFLICT, "Pago ya registrado o anulado")
@@ -529,8 +529,8 @@ def reprogramar_pago(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Gerencia reprograma")
     pago = session.get(PagoResponsableERP, pago_id)
     if pago is None or pago.tenant_id != tenant_id:
-    if auth.rol == RolMiembro.GERENTE and pago is not None and pago.gerente_id != auth.miembro_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pago no encontrado")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
+    if auth.rol == RolMiembro.GERENTE and pago.gerente_id != auth.miembro_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
     if pago.estado in ("PAGADO", "ANULADO"):
         raise HTTPException(status.HTTP_409_CONFLICT, "Liquidación cerrada")
@@ -578,8 +578,8 @@ async def abonar_responsable(
         .with_for_update()
     )
     if pago is None:
-    if auth.rol == RolMiembro.GERENTE and pago is not None and pago.gerente_id != auth.miembro_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pago no encontrado")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
+    if auth.rol == RolMiembro.GERENTE and pago.gerente_id != auth.miembro_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
     if pago.estado in ("PAGADO", "ANULADO"):
         raise HTTPException(status.HTTP_409_CONFLICT, "Liquidación cerrada")
@@ -680,8 +680,8 @@ def movimientos_responsable(
     _ambito(auth)
     pago = session.get(PagoResponsableERP, pago_id)
     if pago is None or pago.tenant_id != tenant_id:
-    if auth.rol == RolMiembro.GERENTE and pago is not None and pago.gerente_id != auth.miembro_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pago no encontrado")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
+    if auth.rol == RolMiembro.GERENTE and pago.gerente_id != auth.miembro_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
     _ambito(auth, pago.responsable_id)
     movimientos = session.scalars(
@@ -715,8 +715,8 @@ def descargar_comprobante_responsable(
     _ambito(auth)
     pago = session.get(PagoResponsableERP, pago_id)
     if pago is None or pago.tenant_id != tenant_id:
-    if auth.rol == RolMiembro.GERENTE and pago is not None and pago.gerente_id != auth.miembro_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pago no encontrado")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
+    if auth.rol == RolMiembro.GERENTE and pago.gerente_id != auth.miembro_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
     _ambito(auth, pago.responsable_id)
     movimiento = session.get(MovimientoPagoResponsable, movimiento_id)
