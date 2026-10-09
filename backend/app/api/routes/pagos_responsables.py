@@ -256,6 +256,11 @@ def modificar_comision(
     auth: OperativeAuthDep,
 ) -> dict[str, str]:
     _ambito(auth, datos.responsable_id)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Las comisiones personalizadas globales requieren Administración",
+        )
     _responsable(session, tenant_id, datos.responsable_id)
     cliente = session.get(Empresa, datos.cliente_id)
     if cliente is None or cliente.tenant_id != tenant_id or cliente.deleted_at is not None:
@@ -314,6 +319,8 @@ def historial_comision(
     auth: OperativeAuthDep,
 ) -> list[dict[str, object]]:
     _ambito(auth, responsable_id)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Historial reservado a Administración")
     regla = session.scalar(
         select(ComisionResponsableRegla).where(
             ComisionResponsableRegla.tenant_id == tenant_id,
