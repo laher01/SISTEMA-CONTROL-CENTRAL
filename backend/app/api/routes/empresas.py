@@ -1,13 +1,14 @@
 import uuid
 
 from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy import exists, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado
 from app.enums import RolMiembro
-from app.models import Empresa, Expediente, Miembro, ahora
+from app.models import ChatMensaje, CuentaAcceso, Empresa, Expediente, Miembro, ahora
 from app.schemas import (
     EmpresaActualizar,
     EmpresaListadoOut,
@@ -28,6 +29,8 @@ def listar(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
     autorizada: bool | None = None,
+    sin_clasificar: bool = False,
+    ruc: str | None = None,
 ) -> list[EmpresaListadoOut]:
     consulta = select(Empresa).where(Empresa.tenant_id == tenant_id, Empresa.deleted_at.is_(None))
     if auth.rol == "GESTOR":
@@ -50,6 +53,16 @@ def listar(
         )
     if autorizada is not None:
         consulta = consulta.where(Empresa.autorizada == autorizada)
+    if sin_clasificar:
+        consulta = consulta.where(
+            or_(
+                Empresa.tipo_relacion == "SIN_CLASIFICAR",
+                (Empresa.tipo_relacion.in_(["PROVEEDOR", "AMBOS"]))
+                & (Empresa.clasificacion_proveedor.is_(None)),
+            )
+        )
+    if ruc:
+        consulta = consulta.where(Empresa.ruc == ruc)
 
     empresas = list(session.scalars(consulta.order_by(Empresa.razon_social)))
     salida: list[EmpresaListadoOut] = []
@@ -85,6 +98,108 @@ def listar(
             )
         )
     return salida
+
+
+class SolicitudClasificacionIn(BaseModel):
+    empresa_ids: list[uuid.UUID] = Field(min_length=1, max_length=50)
+
+
+@router.post("/notificar-clasificacion")
+def notificar_clasificacion(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    datos: SolicitudClasificacionIn,
+) -> dict[str, int]:
+    """Solicita revisión al administrador, sin conceder autorización."""
+    if auth.rol not in (
+        RolMiembro.SUPERADMIN,
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.SECRETARIA,
+        RolMiembro.USUARIO,
+        "GESTOR",
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin permiso para solicitar clasificación")
+    empresas = list(
+        session.scalars(
+            select(Empresa).where(
+                Empresa.tenant_id == tenant_id,
+                Empresa.deleted_at.is_(None),
+                Empresa.id.in_(datos.empresa_ids),
+                or_(
+                    Empresa.tipo_relacion == "SIN_CLASIFICAR",
+                    (Empresa.tipo_relacion.in_(["PROVEEDOR", "AMBOS"]))
+                    & (Empresa.clasificacion_proveedor.is_(None)),
+                ),
+            )
+        )
+    )
+    if not empresas:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "No hay empresas pendientes")
+    if auth.rol in (RolMiembro.USUARIO, "GESTOR"):
+        filtro = (
+            Expediente.usuario_id == auth.usuario_id
+            if auth.rol == RolMiembro.USUARIO
+            else Expediente.gestor_id == auth.gestor_id
+        )
+        permitidas = set(
+            session.scalars(
+                select(Empresa.id).where(
+                    Empresa.id.in_([e.id for e in empresas]),
+                    exists().where(
+                        Expediente.tenant_id == tenant_id,
+                        Expediente.deleted_at.is_(None),
+                        filtro,
+                        or_(
+                            Expediente.emisor_id == Empresa.id,
+                            Expediente.receptor_id == Empresa.id,
+                        ),
+                    ),
+                )
+            )
+        )
+        if any(e.id not in permitidas for e in empresas):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Empresa fuera de su ámbito")
+    destinatarios = list(
+        session.scalars(
+            select(CuentaAcceso)
+            .join(Miembro, CuentaAcceso.miembro_id == Miembro.id)
+            .where(
+                CuentaAcceso.tenant_id == tenant_id,
+                CuentaAcceso.activo.is_(True),
+                CuentaAcceso.deleted_at.is_(None),
+                Miembro.rol.in_([RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR]),
+                Miembro.activo.is_(True),
+                Miembro.deleted_at.is_(None),
+                CuentaAcceso.id != auth.cuenta_id,
+            )
+        )
+    )
+    if not destinatarios:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Sin administrador destinatario")
+    detalles = ", ".join(f"{e.ruc} ({e.razon_social})" for e in empresas)
+    for destinatario in destinatarios:
+        session.add(
+            ChatMensaje(
+                tenant_id=tenant_id,
+                remitente_cuenta_id=auth.cuenta_id,
+                destinatario_cuenta_id=destinatario.id,
+                texto=(
+                    f"Solicitud de autorización y clasificación de empresas "
+                    f"por {auth.codigo}: {detalles}"
+                )[:2000],
+            )
+        )
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "CLASIFICACION_SOLICITADA",
+        "empresa",
+        empresas[0].id,
+        {"empresa_ids": [str(e.id) for e in empresas], "actor": auth.codigo},
+    )
+    session.commit()
+    return {"empresas": len(empresas), "administradores": len(destinatarios)}
 
 
 @router.patch("/{empresa_id}", response_model=EmpresaOut)

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { enviarJson, useDatos } from "../api";
 import { Estado } from "../componentes";
@@ -6,14 +7,24 @@ import type {
   ClasificacionProveedor,
   Empresa,
   TipoRelacionEmpresa,
+  SesionActual,
 } from "../tipos";
 
 type Campo = "autorizada" | "agente_retencion";
 type PestanaEmpresa = "PROVEEDORES" | "CLIENTES";
 
-export default function Empresas() {
+export default function Empresas({ sesion }: { sesion: SesionActual }) {
+  const puedeClasificar = sesion.rol === "SUPERADMIN" || sesion.rol === "ADMINISTRADOR";
   const { datos, error, cargando, recargar } = useDatos<Empresa[]>("/api/v1/empresas");
-  const [pestana, setPestana] = useState<PestanaEmpresa>("PROVEEDORES");
+  const [params] = useSearchParams();
+  const rucFiltro = params.get("ruc") ?? "";
+  const [pestana, setPestana] = useState<PestanaEmpresa | "SIN_CLASIFICAR">(
+    params.get("pendientes") === "1" ? "SIN_CLASIFICAR" : "PROVEEDORES",
+  );
+  const [seleccion, setSeleccion] = useState<string[]>([]);
+  const [clasificacionMasiva, setClasificacionMasiva] = useState<"A" | "B">("B");
+  const [operando, setOperando] = useState(false);
+  const [mensaje, setMensaje] = useState("");
   const [errorCambio, setErrorCambio] = useState("");
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [rucEditado, setRucEditado] = useState("");
@@ -34,8 +45,46 @@ export default function Empresas() {
     ) ?? [];
   const sinClasificar =
     datos?.filter((empresa) => empresa.tipo_relacion === "SIN_CLASIFICAR") ?? [];
-  const empresasVisibles = pestana === "PROVEEDORES" ? proveedores : clientes;
-  const esProveedor = pestana === "PROVEEDORES";
+  const empresasVisibles = (pestana === "PROVEEDORES" ? proveedores : pestana === "CLIENTES" ? clientes :
+    datos?.filter((e) => e.tipo_relacion === "SIN_CLASIFICAR" ||
+      ((e.tipo_relacion === "PROVEEDOR" || e.tipo_relacion === "AMBOS") && !e.clasificacion_proveedor)) ?? []
+  ).filter((e) => !rucFiltro || e.ruc === rucFiltro);
+  const esProveedor = pestana !== "CLIENTES";
+  const pendientes = empresasVisibles.filter((e) => e.tipo_relacion === "SIN_CLASIFICAR" ||
+    ((e.tipo_relacion === "PROVEEDOR" || e.tipo_relacion === "AMBOS") && !e.clasificacion_proveedor));
+
+  const notificar = async () => {
+    if (!seleccion.length) return;
+    setOperando(true);
+    setErrorCambio("");
+    try {
+      const respuesta = await enviarJson<{ empresas: number; administradores: number }>(
+        "/api/v1/empresas/notificar-clasificacion", "POST", { empresa_ids: seleccion },
+      );
+      setMensaje(`Aviso enviado: ${respuesta.empresas} empresa(s) a ${respuesta.administradores} administrador(es).`);
+    } catch (e) { setErrorCambio(e instanceof Error ? e.message : String(e)); }
+    finally { setOperando(false); }
+  };
+
+  const actualizarSeleccionadas = async () => {
+    if (!seleccion.length) return;
+    setOperando(true);
+    setErrorCambio("");
+    let actualizadas = 0;
+    try {
+      for (const empresa of pendientes.filter((e) => seleccion.includes(e.id))) {
+        await enviarJson(`/api/v1/empresas/${empresa.id}`, "PATCH", {
+          tipo_relacion: empresa.tipo_relacion === "SIN_CLASIFICAR" ? "PROVEEDOR" : empresa.tipo_relacion,
+          clasificacion_proveedor: clasificacionMasiva,
+        });
+        actualizadas += 1;
+      }
+      setMensaje(`${actualizadas} empresa(s) clasificadas; autorización pendiente de revisión individual.`);
+      setSeleccion([]);
+      recargar();
+    } catch (e) { setErrorCambio(`Actualizadas ${actualizadas}; error: ${e instanceof Error ? e.message : String(e)}`); recargar(); }
+    finally { setOperando(false); }
+  };
 
   const cambiar = async (empresa: Empresa, campo: Campo, valor: boolean) => {
     setErrorCambio("");
@@ -132,6 +181,26 @@ export default function Empresas() {
         </button>
       </div>
 
+      <div className="acciones">
+        <button type="button" className={pestana === "SIN_CLASIFICAR" ? "activo" : undefined}
+          onClick={() => { setPestana("SIN_CLASIFICAR"); setSeleccion([]); cancelarEdicion(); }}>
+          Sin clasificar ({(datos ?? []).filter((e) => e.tipo_relacion === "SIN_CLASIFICAR" ||
+            ((e.tipo_relacion === "PROVEEDOR" || e.tipo_relacion === "AMBOS") && !e.clasificacion_proveedor)).length})
+        </button>
+        <button type="button" disabled={!seleccion.length || operando} onClick={() => void notificar()}>
+          Notificar inmediatamente a Administrador ({seleccion.length})
+        </button>
+        {pestana === "SIN_CLASIFICAR" && puedeClasificar && <>
+          <select aria-label="Clasificación a aplicar" value={clasificacionMasiva}
+            onChange={(e) => setClasificacionMasiva(e.target.value as "A" | "B")}>
+            <option value="A">Tipo A</option><option value="B">Tipo B</option>
+          </select>
+          <button type="button" disabled={!seleccion.length || operando} onClick={() => void actualizarSeleccionadas()}>
+            Actualizar solo seleccionadas ({seleccion.length})
+          </button>
+        </>}
+      </div>
+      {mensaje && <p role="status">{mensaje}</p>}
       {sinClasificar.length > 0 && (
         <p className="tenue">
           Hay {sinClasificar.length} empresa(s) sin clasificar. Puedes asignarles su relación desde
@@ -145,6 +214,9 @@ export default function Empresas() {
         <table>
           <thead>
             <tr>
+              <th><input type="checkbox" aria-label="Seleccionar pendientes visibles"
+                checked={pendientes.length > 0 && pendientes.every((e) => seleccion.includes(e.id))}
+                onChange={(ev) => setSeleccion(ev.target.checked ? pendientes.map((e) => e.id) : [])}/></th>
               <th>RUC</th>
               <th>Razón social</th>
               <th>Usuario</th>
@@ -163,6 +235,10 @@ export default function Empresas() {
 
               return (
                 <tr key={empresa.id}>
+                  <td><input type="checkbox" aria-label={`Seleccionar ${empresa.ruc}`}
+                    disabled={!pendientes.some((e) => e.id === empresa.id)}
+                    checked={seleccion.includes(empresa.id)}
+                    onChange={(ev) => setSeleccion((prev) => ev.target.checked ? [...prev, empresa.id] : prev.filter((id) => id !== empresa.id))}/></td>
                   <td>
                     {editando ? (
                       <input
@@ -187,6 +263,7 @@ export default function Empresas() {
                     ) : (
                       <>
                         {empresa.razon_social}
+                        {!empresa.clasificacion_proveedor && (empresa.tipo_relacion === "PROVEEDOR" || empresa.tipo_relacion === "AMBOS" || empresa.tipo_relacion === "SIN_CLASIFICAR") && <span className="etiqueta">Sin clasificar</span>}
                         {empresa.tipo_relacion === "AMBOS" && (
                           <span className="etiqueta">Proveedor y cliente</span>
                         )}
@@ -240,15 +317,16 @@ export default function Empresas() {
                         <button onClick={() => void guardarEdicion(empresa)}>Guardar</button>
                         <button onClick={cancelarEdicion}>Cancelar</button>
                       </div>
-                    ) : (
+                    ) : puedeClasificar ? (
                       <button onClick={() => iniciarEdicion(empresa)}>Editar</button>
-                    )}
+                    ) : "Solo Administración"}
                   </td>
                   <td>
                     <input
                       type="checkbox"
                       aria-label={`Autorizada ${empresa.ruc}`}
                       checked={empresa.autorizada}
+                      disabled={!puedeClasificar}
                       onChange={(ev) => cambiar(empresa, "autorizada", ev.target.checked)}
                     />
                   </td>
@@ -257,6 +335,7 @@ export default function Empresas() {
                       type="checkbox"
                       aria-label={`Agente de retención ${empresa.ruc}`}
                       checked={empresa.agente_retencion}
+                      disabled={!puedeClasificar}
                       onChange={(ev) => cambiar(empresa, "agente_retencion", ev.target.checked)}
                     />
                   </td>
