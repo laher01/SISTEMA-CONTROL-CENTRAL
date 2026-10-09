@@ -30,9 +30,7 @@ def iniciales(nombre: str) -> str:
     return (partes[0][:3] if partes else "XXX").ljust(3, "X")
 
 
-def codigo_automatico(
-    session: Session, tenant_id: uuid.UUID, nombre: str, rol: str
-) -> str:
+def codigo_automatico(session: Session, tenant_id: uuid.UUID, nombre: str, rol: str) -> str:
     prefijo = iniciales(nombre)
     sufijo = SUFIJOS[rol]
     # Comparar también cuentas de Gestor para no reutilizar logins dentro del tenant.
