@@ -476,7 +476,9 @@ class GerenteEmpresa(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "gerentes_empresas"
     __table_args__ = (
         UniqueConstraint(
-            "tenant_id", "gerente_id", "empresa_id",
+            "tenant_id",
+            "gerente_id",
+            "empresa_id",
             name="uq_gerentes_empresas_tenant_gerente_empresa",
         ),
     )
@@ -501,7 +503,11 @@ class PedidoGerencia(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "pedidos_gerencia"
     __table_args__ = (
         UniqueConstraint(
-            "tenant_id", "gerente_id", "cliente_id", "periodo_mes", "moneda",
+            "tenant_id",
+            "gerente_id",
+            "cliente_id",
+            "periodo_mes",
+            "moneda",
             name="uq_pedidos_gerente_cliente_mes_moneda",
         ),
     )
