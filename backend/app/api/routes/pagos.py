@@ -357,6 +357,8 @@ def consolidado_compras(
             )
             .group_by(responsable.c.id, responsable.c.codigo, responsable.c.nombre)
         )
+    if auth.rol == RolMiembro.GERENTE:
+        consulta = consulta.where(Expediente.gerente_id == auth.miembro_id)
     filas = [
         {
             "id": str(id_),
@@ -386,6 +388,11 @@ def resumen_clientes(
     moneda: str = "PEN",
 ) -> CarteraClientesResumen:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     if moneda not in {"PEN", "USD"}:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Moneda inválida")
     desde, hasta = _rango_mes(mes)
@@ -504,6 +511,11 @@ def registrar_abono_cliente(
     datos: AbonoClienteERPIn,
 ) -> AbonoClienteERP:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     cliente = _cliente_valido(session, tenant_id, datos.cliente_id)
     abono = AbonoClienteERP(
         tenant_id=tenant_id,
@@ -543,6 +555,11 @@ def listar_abonos_cliente(
     cliente_id: uuid.UUID | None = None,
 ) -> list[AbonoClienteERP]:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     consulta = select(AbonoClienteERP).where(AbonoClienteERP.tenant_id == tenant_id)
     if cliente_id is not None:
         consulta = consulta.where(AbonoClienteERP.cliente_id == cliente_id)
@@ -558,6 +575,11 @@ def actualizar_agente_retencion(
     datos: AgenteRetencionIn,
 ) -> bool:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     cliente = _cliente_valido(session, tenant_id, cliente_id)
     anterior = cliente.agente_retencion
     cliente.agente_retencion = datos.agente_retencion
@@ -1220,6 +1242,11 @@ def crear_plan(
     datos: PlanLiquidacionIn,
 ) -> PlanLiquidacion:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     _usuario_valido(session, tenant_id, datos.usuario_id)
     plan = PlanLiquidacion(
         tenant_id=tenant_id,
@@ -1243,6 +1270,11 @@ def listar_planes(
     auth: OperativeAuthDep,
 ) -> list[PlanLiquidacion]:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     return list(
         session.scalars(
             select(PlanLiquidacion)
@@ -1260,6 +1292,11 @@ def crear_cuenta(
     datos: CuentaPagoERPIn,
 ) -> CuentaPagoERP:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     _usuario_valido(session, tenant_id, datos.usuario_id)
     cuenta = CuentaPagoERP(
         tenant_id=tenant_id,
@@ -1286,6 +1323,11 @@ def listar_cuentas(
     auth: OperativeAuthDep,
 ) -> list[CuentaPagoERP]:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     return list(
         session.scalars(
             select(CuentaPagoERP)
@@ -1303,6 +1345,11 @@ def crear_adelanto(
     datos: AdelantoERPIn,
 ) -> AdelantoERP:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     _usuario_valido(session, tenant_id, datos.usuario_id)
     adelanto = AdelantoERP(
         tenant_id=tenant_id,
@@ -1326,6 +1373,11 @@ def listar_adelantos(
     auth: OperativeAuthDep,
 ) -> list[AdelantoERP]:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     return list(
         session.scalars(
             select(AdelantoERP)
@@ -1355,6 +1407,11 @@ def listar_pagos(
     auth: OperativeAuthDep,
 ) -> list[PagoERP]:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     return list(
         session.scalars(
             select(PagoERP)
@@ -1373,6 +1430,11 @@ def actualizar_pago(
     datos: PagoERPActualizarIn,
 ) -> PagoERP:
     _validar_acceso(auth.rol)
+    if auth.rol == RolMiembro.GERENTE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Operación fuera de las atribuciones financieras de Gerencia",
+        )
     pago = session.get(PagoERP, pago_id)
     if pago is None or pago.tenant_id != tenant_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pago no encontrado")
