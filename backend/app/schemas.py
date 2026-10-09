@@ -327,6 +327,7 @@ class SesionOut(BaseModel):
     gestor_id: uuid.UUID | None
     usuario_id: uuid.UUID | None
     cambio_clave_obligatorio: bool
+    es_administracion_demo: bool = False
     jerarquia: list[JerarquiaSesionOut] = Field(default_factory=list)
 
 
