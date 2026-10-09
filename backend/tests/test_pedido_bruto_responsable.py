@@ -13,19 +13,30 @@ def test_gerencia_entrega_bruto_y_responsable_distribuye(
 ) -> None:
     tenant_id = auth_prueba.contexto.tenant_id
     resp = Miembro(
-        tenant_id=tenant_id, codigo="RESPBRUTO", nombre="Responsable",
-        rol="RESPONSABLE", activo=True,
+        tenant_id=tenant_id,
+        codigo="RESPBRUTO",
+        nombre="Responsable",
+        rol="RESPONSABLE",
+        activo=True,
     )
     propio = Miembro(
-        tenant_id=tenant_id, codigo="USBRUTO", nombre="Usuario propio",
-        rol="USUARIO", activo=True,
+        tenant_id=tenant_id,
+        codigo="USBRUTO",
+        nombre="Usuario propio",
+        rol="USUARIO",
+        activo=True,
     )
     ajeno = Miembro(
-        tenant_id=tenant_id, codigo="USAJENO", nombre="Usuario ajeno",
-        rol="USUARIO", activo=True,
+        tenant_id=tenant_id,
+        codigo="USAJENO",
+        nombre="Usuario ajeno",
+        rol="USUARIO",
+        activo=True,
     )
     cliente = Empresa(
-        tenant_id=tenant_id, ruc="20599990001", razon_social="Cliente presupuesto",
+        tenant_id=tenant_id,
+        ruc="20599990001",
+        razon_social="Cliente presupuesto",
         tipo_relacion="CLIENTE",
     )
     session.add_all([resp, propio, ajeno, cliente])
@@ -64,9 +75,13 @@ def test_gerencia_entrega_bruto_y_responsable_distribuye(
 
     auth_prueba.contexto = ContextoAcceso(
         cuenta_id=auth_prueba.contexto.cuenta_id,
-        tenant_id=tenant_id, rol="RESPONSABLE",
-        miembro_id=resp.id, gestor_id=None, usuario_id=None,
-        codigo=resp.codigo, nombre=resp.nombre,
+        tenant_id=tenant_id,
+        rol="RESPONSABLE",
+        miembro_id=resp.id,
+        gestor_id=None,
+        usuario_id=None,
+        codigo=resp.codigo,
+        nombre=resp.nombre,
         cambio_clave_obligatorio=False,
     )
     resumen = client.get("/api/v1/responsable/resumen")
