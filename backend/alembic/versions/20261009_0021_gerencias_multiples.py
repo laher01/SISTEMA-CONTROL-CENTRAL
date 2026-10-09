@@ -56,7 +56,10 @@ def upgrade() -> None:
     # individual y auditada; no se adjudican al Gerente equivocado.
     with op.batch_alter_table("pedidos_gerencia") as batch:
         batch.drop_constraint(
-            _restriccion_única("pedidos_gerencia", {"tenant_id","cliente_id","periodo_mes","moneda"}),
+            _restriccion_única(
+                "pedidos_gerencia",
+                {"tenant_id", "cliente_id", "periodo_mes", "moneda"},
+            ),
             type_="unique",
         )
         batch.create_unique_constraint(
