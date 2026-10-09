@@ -782,6 +782,7 @@ def _resumen_pedido(
 
     return PedidoGerenciaOut(
         id=pedido.id,
+        gerente_id=pedido.gerente_id,
         responsable_id=pedido.responsable_id,
         cliente_id=pedido.cliente_id,
         cliente_ruc=cliente.ruc,
@@ -817,13 +818,25 @@ def crear_pedido_gerencia(
 ) -> PedidoGerenciaOut:
     _validar_acceso(auth.rol)
     cliente = _cliente_valido(session, tenant_id, datos.cliente_id)
-    if auth.rol == RolMiembro.GERENTE:
-        if auth.miembro_id is None:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Gerente sin identidad")
+    gerente_id = auth.miembro_id if auth.rol == RolMiembro.GERENTE else datos.gerente_id
+    if auth.rol == RolMiembro.GERENTE and datos.gerente_id not in (None, auth.miembro_id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No puede crear pedidos de otro Gerente")
+    if auth.rol == RolMiembro.GERENTE and gerente_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Gerente sin identidad")
+    if gerente_id is not None:
+        gerente = session.get(Miembro, gerente_id)
+        if (
+            gerente is None
+            or gerente.tenant_id != tenant_id
+            or gerente.rol != RolMiembro.GERENTE
+            or gerente.deleted_at is not None
+            or not gerente.activo
+        ):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Gerente inválido")
         cartera = session.scalar(
             select(GerenteEmpresa.id).where(
                 GerenteEmpresa.tenant_id == tenant_id,
-                GerenteEmpresa.gerente_id == auth.miembro_id,
+                GerenteEmpresa.gerente_id == gerente_id,
                 GerenteEmpresa.empresa_id == cliente.id,
                 GerenteEmpresa.activo.is_(True),
             )
@@ -840,13 +853,11 @@ def crear_pedido_gerencia(
             or responsable.deleted_at is not None
         ):
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Responsable inválido")
-        if auth.rol == RolMiembro.GERENTE:
-            from app.models import GerenteResponsable
-
+        if gerente_id is not None:
             vinculo = session.scalar(
                 select(GerenteResponsable.id).where(
                     GerenteResponsable.tenant_id == tenant_id,
-                    GerenteResponsable.gerente_id == auth.miembro_id,
+                    GerenteResponsable.gerente_id == gerente_id,
                     GerenteResponsable.responsable_id == datos.responsable_id,
                     GerenteResponsable.activo.is_(True),
                 )
@@ -861,7 +872,7 @@ def crear_pedido_gerencia(
     periodo = datos.periodo_mes.replace(day=1)
     pedido = PedidoGerencia(
         tenant_id=tenant_id,
-        gerente_id=auth.miembro_id if auth.rol == RolMiembro.GERENTE else None,
+        gerente_id=gerente_id,
         cliente_id=cliente.id,
         responsable_id=datos.responsable_id,
         periodo_mes=periodo,
