@@ -127,7 +127,11 @@ def aplicar_automaticamente(
     ]
     if baja_confianza:
         motivos.append("Campos con baja confianza: " + ", ".join(baja_confianza))
-    if settings.tenant_ruc and campos.get("ruc_receptor") not in (None, settings.tenant_ruc):
+    if (
+        tipo == TipoDocumento.FACT
+        and settings.tenant_ruc
+        and campos.get("ruc_receptor") not in (None, settings.tenant_ruc)
+    ):
         motivos.append("El RUC receptor no coincide con el RUC configurado para la empresa")
     if campos.get("ruc_emisor") == campos.get("ruc_receptor") and campos.get("ruc_emisor"):
         motivos.append("El RUC emisor y receptor no pueden ser iguales")
