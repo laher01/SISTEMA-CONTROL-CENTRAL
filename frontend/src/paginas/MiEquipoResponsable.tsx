@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { useDatos } from "../api";
+import { enviarJson, useDatos } from "../api";
 import { formatearMonto } from "../formato";
 
 interface UsuarioResponsable {
@@ -13,7 +13,7 @@ interface UsuarioResponsable {
 interface Equipo {
   usuarios: { id: string; codigo: string; nombre: string }[];
   clientes: { usuario_id: string; receptor_id: string; ruc: string; razon_social: string; moneda: string; expedientes: number; produccion: string }[];
-  pedidos: { usuario_id: string; cliente: string; periodo: string; moneda: string; monto_asignado: string; estado: string }[];
+  pedidos: { id: string; cliente: string; ruc: string; periodo: string; moneda: string; monto_solicitado: string; monto_asignado: string; pendiente_distribuir: string; estado: string; asignaciones: { usuario_id: string; monto: string }[] }[];
   pagos: { usuario_id: string; periodo_desde: string; periodo_hasta: string; moneda: string; produccion: string; bruto: string; adelantos: string; saldo: string; estado: string }[];
 }
 type Pestana = "USUARIOS" | "PEDIDOS" | "COBROS" | "PAGOS";
@@ -26,6 +26,25 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const { datos: equipo, error: errorEquipo, cargando: cargandoEquipo, recargar: recargarEquipo } =
     useDatos<Equipo>("/api/v1/responsable/resumen");
   const [moneda, setMoneda] = useState<"PEN" | "USD">("PEN");
+  const [usuarioDestino, setUsuarioDestino] = useState<Record<string, string>>({});
+  const [montos, setMontos] = useState<Record<string, string>>({});
+  const [mensaje, setMensaje] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const distribuir = async (pedidoId: string) => {
+    setGuardando(true);
+    setMensaje("");
+    try {
+      await enviarJson(`/api/v1/responsable/pedidos/${pedidoId}/distribuir`, "POST", {
+        usuario_id: usuarioDestino[pedidoId], monto: montos[pedidoId],
+      });
+      recargarEquipo();
+      setMensaje("Distribución guardada.");
+    } catch (error) {
+      setMensaje(error instanceof Error ? error.message : String(error));
+    } finally {
+      setGuardando(false);
+    }
+  };
   const nombreUsuario = (id: string) =>
     equipo?.usuarios.find((u) => u.id === id)?.codigo ?? "Usuario";
   const pedidos = (equipo?.pedidos ?? []).filter((p) => p.moneda === moneda);
@@ -67,15 +86,43 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
         ))}</tbody>
       </table>}
       {pestana === "PEDIDOS" && <>
-        <h3>Pedidos asignados por Gerencia a mis Usuarios</h3>
-        <p>Importe asignado: <strong>{formatearMonto(moneda, sumar(pedidos.map((p) => p.monto_asignado)))}</strong></p>
-        <p className="tenue">No se incluye ningún pedido sin asignación a un Usuario del equipo.</p>
-        <table><thead><tr><th>Usuario</th><th>Cliente</th><th>Mes</th><th>Asignado</th><th>Estado</th></tr></thead>
-          <tbody>{pedidos.map((p, i) => <tr key={i}><td>{nombreUsuario(p.usuario_id)}</td>
-            <td>{p.cliente}</td><td>{p.periodo}</td>
-            <td>{formatearMonto(moneda, p.monto_asignado)}</td><td>{p.estado}</td></tr>)}</tbody>
+        <h3>Presupuestos brutos recibidos de Gerencia</h3>
+        <p>Total solicitado: <strong>{formatearMonto(moneda, sumar(pedidos.map((p) => p.monto_solicitado)))}</strong></p>
+        <p className="tenue">Gerencia indica el cliente y el presupuesto. Tú decides qué Usuario atenderá el pedido y cuánto se le asigna, sin superar el total recibido.</p>
+        {mensaje && <p role="status">{mensaje}</p>}
+        <table>
+          <thead><tr><th>Cliente</th><th>Mes</th><th>Presupuesto bruto</th><th>Distribuido</th><th>Disponible</th><th>Estado</th></tr></thead>
+          <tbody>{pedidos.map((p) => (
+            <tr key={p.id}><td>{p.ruc} · {p.cliente}</td><td>{p.periodo}</td>
+              <td>{formatearMonto(moneda, p.monto_solicitado)}</td>
+              <td>{formatearMonto(moneda, p.monto_asignado)}</td>
+              <td>{formatearMonto(moneda, p.pendiente_distribuir)}</td><td>{p.estado}</td></tr>
+          ))}</tbody>
         </table>
-        {pedidos.length === 0 && <p>No hay pedidos distribuidos a tus Usuarios en esta moneda.</p>}
+        {pedidos.map((p) => (
+          <section key={p.id} className="panel-configuracion">
+            <h3>Distribuir presupuesto: {p.cliente} ({p.periodo})</h3>
+            <div className="filtros">
+              <label>Usuario de mi equipo
+                <select value={usuarioDestino[p.id] ?? ""} onChange={(e) => setUsuarioDestino((prev) => ({ ...prev, [p.id]: e.target.value }))}>
+                  <option value="">Seleccionar Usuario</option>
+                  {(equipo?.usuarios ?? []).map((u) => <option key={u.id} value={u.id}>{u.codigo} · {u.nombre}</option>)}
+                </select>
+              </label>
+              <label>Monto
+                <input type="number" min="0.01" step="0.01" value={montos[p.id] ?? ""} onChange={(e) => setMontos((prev) => ({ ...prev, [p.id]: e.target.value }))} />
+              </label>
+              <button type="button" disabled={guardando || p.estado !== "ACTIVO" || !usuarioDestino[p.id] || !montos[p.id]}
+                onClick={() => void distribuir(p.id)}>Asignar / actualizar</button>
+            </div>
+            <table><thead><tr><th>Usuario asignado</th><th>Monto</th></tr></thead>
+              <tbody>{p.asignaciones.map((a) => (
+                <tr key={a.usuario_id}><td>{nombreUsuario(a.usuario_id)}</td><td>{formatearMonto(moneda, a.monto)}</td></tr>
+              ))}</tbody>
+            </table>
+          </section>
+        ))}
+        {pedidos.length === 0 && <p>Gerencia aún no te ha asignado pedidos brutos en esta moneda.</p>}
       </>}
       {pestana === "COBROS" && <>
         <h3>Clientes y producción documentada del equipo</h3>
