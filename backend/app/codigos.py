@@ -27,7 +27,8 @@ def iniciales(nombre: str) -> str:
         return "".join(parte[0] for parte in partes[:3])
     if len(partes) == 2:
         return (partes[0][:2] + partes[1][:1]).ljust(3, "X")
-    return (partes[0][:3] if partes else "XXX").ljust(3, "X")
+    base: str = partes[0][:3] if partes else "XXX"
+    return base.ljust(3, "X")
 
 
 def codigo_automatico(session: Session, tenant_id: uuid.UUID, nombre: str, rol: str) -> str:
