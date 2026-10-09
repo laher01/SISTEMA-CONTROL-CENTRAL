@@ -39,12 +39,20 @@ def get_contexto_actual(
 
 
 def get_contexto_operativo(
+    request: Request,
     contexto: Annotated[ContextoAcceso, Depends(get_contexto_actual)],
 ) -> ContextoAcceso:
     if contexto.cambio_clave_obligatorio:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "Debe cambiar la clave temporal antes de continuar",
+        )
+    if contexto.rol == "RESPONSABLE" and not (
+        request.method == "GET" and request.url.path == "/api/v1/miembros/mis-usuarios"
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "El rol Responsable solo tiene habilitada su cartera de Usuarios en esta etapa",
         )
     return contexto
 
