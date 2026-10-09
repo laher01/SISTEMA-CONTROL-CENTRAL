@@ -11,7 +11,7 @@ import type {
   SesionActual,
 } from "../tipos";
 
-const ROLES: RolMiembro[] = ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO"];
+const ROLES: RolMiembro[] = ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO"];
 
 export default function Organizacion({ sesion }: { sesion: SesionActual }) {
   if (sesion.rol === "SUPERADMIN" || sesion.rol === "ADMINISTRADOR") {
@@ -36,10 +36,26 @@ function OrganizacionAdmin() {
   const [credencial, setCredencial] = useState<CredencialTemporal | null>(null);
   const [mensaje, setMensaje] = useState("");
 
+  const responsables = useMemo(
+    () => (miembros ?? []).filter((m) => m.rol === "RESPONSABLE"),
+    [miembros],
+  );
   const usuarios = useMemo(
     () => (miembros ?? []).filter((m) => m.rol === "USUARIO"),
     [miembros],
   );
+
+  const asignarResponsable = async (usuario: Miembro, responsableId: string) => {
+    try {
+      await enviarJson<Miembro>(`/api/v1/miembros/${usuario.id}/responsable`, "PUT", {
+        responsable_id: responsableId || null,
+      });
+      recargar();
+      setMensaje("Responsable actualizado para " + usuario.codigo);
+    } catch (e) {
+      setMensaje(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const guardarMiembro = async (e: FormEvent) => {
     e.preventDefault();
@@ -130,6 +146,22 @@ function OrganizacionAdmin() {
       {error && <p className="error">{error}</p>}
       {cargando && <p>Cargando…</p>}
 
+      <section className="panel-configuracion">
+        <h3>Asignación de Usuarios a Responsables</h3>
+        <p className="tenue">La asignación se limita a esta Administración. No modifica los pagos históricos.</p>
+        <table>
+          <thead><tr><th>Usuario</th><th>Responsable asignado</th></tr></thead>
+          <tbody>{usuarios.map((u) => (
+            <tr key={u.id}>
+              <td>{u.codigo} · {u.nombre}</td>
+              <td><select value={u.responsable_id ?? ""} onChange={(e) => void asignarResponsable(u, e.target.value)}>
+                <option value="">Sin asignar</option>
+                {responsables.map((r) => <option key={r.id} value={r.id}>{r.codigo} · {r.nombre}</option>)}
+              </select></td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </section>
       <div className="columnas">
         <section>
           <h3>{miembroEditando ? "Editar miembro" : "Crear miembro"}</h3>
