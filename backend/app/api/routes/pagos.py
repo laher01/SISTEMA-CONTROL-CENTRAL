@@ -17,6 +17,7 @@ from app.models import (
     CuentaPagoERP,
     Empresa,
     Expediente,
+    GerenteEmpresa,
     Gestor,
     Miembro,
     PagoERP,
@@ -182,16 +183,23 @@ def clientes_pago(
     auth: OperativeAuthDep,
 ) -> list[FiltroOpcion]:
     _validar_acceso(auth.rol)
+    consulta = select(Empresa).where(
+        Empresa.tenant_id == tenant_id,
+        Empresa.deleted_at.is_(None),
+        Empresa.tipo_relacion.in_(["CLIENTE", "AMBOS"]),
+    )
+    if auth.rol == RolMiembro.GERENTE:
+        consulta = consulta.join(
+            GerenteEmpresa, GerenteEmpresa.empresa_id == Empresa.id
+        ).where(
+            GerenteEmpresa.tenant_id == tenant_id,
+            GerenteEmpresa.gerente_id == auth.miembro_id,
+            GerenteEmpresa.activo.is_(True),
+        )
     return [
         FiltroOpcion(id=e.id, codigo=e.ruc, nombre=e.razon_social)
         for e in session.scalars(
-            select(Empresa)
-            .where(
-                Empresa.tenant_id == tenant_id,
-                Empresa.deleted_at.is_(None),
-                Empresa.tipo_relacion.in_(["CLIENTE", "AMBOS"]),
-            )
-            .order_by(Empresa.razon_social)
+            consulta.order_by(Empresa.razon_social)
         )
     ]
 
@@ -779,8 +787,19 @@ def crear_pedido_gerencia(
 ) -> PedidoGerenciaOut:
     _validar_acceso(auth.rol)
     cliente = _cliente_valido(session, tenant_id, datos.cliente_id)
-    if auth.rol == RolMiembro.GERENTE and auth.miembro_id is None:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Gerente sin identidad")
+    if auth.rol == RolMiembro.GERENTE:
+        if auth.miembro_id is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Gerente sin identidad")
+        cartera = session.scalar(
+            select(GerenteEmpresa.id).where(
+                GerenteEmpresa.tenant_id == tenant_id,
+                GerenteEmpresa.gerente_id == auth.miembro_id,
+                GerenteEmpresa.empresa_id == cliente.id,
+                GerenteEmpresa.activo.is_(True),
+            )
+        )
+        if cartera is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Cliente no asignado a Gerencia")
     if datos.responsable_id is not None:
         responsable = session.get(Miembro, datos.responsable_id)
         if (
