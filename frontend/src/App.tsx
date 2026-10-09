@@ -12,6 +12,7 @@ import Empresas from "./paginas/Empresas";
 import ExpedienteDetalle from "./paginas/ExpedienteDetalle";
 import Expedientes from "./paginas/Expedientes";
 import { CambiarClave, Login } from "./paginas/Login";
+import Presentacion from "./paginas/Presentacion";
 import Organizacion from "./paginas/Organizacion";
 import MiEquipoResponsable from "./paginas/MiEquipoResponsable";
 import Pagos from "./paginas/Pagos";
@@ -100,7 +101,13 @@ export default function App() {
   const { datos: sesion, error, cargando, recargar } = useDatos<SesionActual>("/api/v1/auth/me");
 
   if (cargando) return <main className="contenido"><p>Cargando sesión…</p></main>;
-  if (!sesion || error) return <Login alIngresar={recargar} />;
+  if (!sesion || error) {
+    const esPortalOracle = window.location.hostname === "factcentral.online";
+    const esIngreso = window.location.pathname === "/ingresar";
+    return esPortalOracle && !esIngreso
+      ? <Presentacion />
+      : <Login alIngresar={recargar} />;
+  }
   if (sesion.cambio_clave_obligatorio) {
     return <CambiarClave sesion={sesion} alCambiar={recargar} />;
   }
