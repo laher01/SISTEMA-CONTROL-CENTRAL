@@ -448,6 +448,7 @@ class AplicacionAdelantoERP(ConId, ConTenant, ConCreacion, Base):
     monto: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     creado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
 
+
 class AbonoClienteERP(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "abonos_cliente_erp"
 
