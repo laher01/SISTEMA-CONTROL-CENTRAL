@@ -120,6 +120,41 @@ export function useDatos<T>(ruta: string) {
 }
 
 
+export async function descargarPdfExpedientes(
+  expedienteIds: string[],
+): Promise<{ expedientes: number; pdfs: number; sinPdf: number }> {
+  const respuesta = await fetch(`${BASE}/api/v1/expedientes/imprimir-lote`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expediente_ids: expedienteIds }),
+  });
+  if (!respuesta.ok) {
+    const cuerpo: unknown = respuesta.headers.get("content-type")?.includes("json")
+      ? await respuesta.json()
+      : await respuesta.text();
+    const detalle = cuerpo && typeof cuerpo === "object" && "detail" in cuerpo ? cuerpo.detail : cuerpo;
+    throw new ErrorApi(respuesta.status, detalle);
+  }
+  const blob = await respuesta.blob();
+  const url = URL.createObjectURL(blob);
+  const enlace = document.createElement("a");
+  enlace.href = url;
+  enlace.download = "fact-central-expedientes.pdf";
+  document.body.appendChild(enlace);
+  try {
+    enlace.click();
+  } finally {
+    enlace.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+  return {
+    expedientes: Number(respuesta.headers.get("X-Expedientes-Impresos") ?? "0"),
+    pdfs: Number(respuesta.headers.get("X-Pdfs-Impresos") ?? "0"),
+    sinPdf: Number(respuesta.headers.get("X-Expedientes-Sin-Pdf") ?? "0"),
+  };
+}
+
 export async function imprimirExpedientes(
   expedienteIds: string[],
 ): Promise<{ expedientes: number; pdfs: number; sinPdf: number }> {
