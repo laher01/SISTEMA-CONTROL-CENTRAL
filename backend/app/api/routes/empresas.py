@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from app.api.deps import HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado
 from app.enums import RolMiembro
-from app.models import ChatMensaje, CuentaAcceso, Empresa, Expediente, Miembro, ahora
+from app.models import ChatMensaje, CuentaAcceso, Empresa, Expediente, GerenteEmpresa, Miembro, ahora
 from app.schemas import (
     EmpresaActualizar,
     EmpresaListadoOut,
@@ -40,6 +40,23 @@ def listar(
                 Expediente.deleted_at.is_(None),
                 Expediente.gestor_id == auth.gestor_id,
                 or_(Expediente.emisor_id == Empresa.id, Expediente.receptor_id == Empresa.id),
+            )
+        )
+    elif auth.rol == RolMiembro.GERENTE:
+        consulta = consulta.where(
+            or_(
+                exists().where(
+                    GerenteEmpresa.tenant_id == tenant_id,
+                    GerenteEmpresa.gerente_id == auth.miembro_id,
+                    GerenteEmpresa.empresa_id == Empresa.id,
+                    GerenteEmpresa.activo.is_(True),
+                ),
+                exists().where(
+                    Expediente.tenant_id == tenant_id,
+                    Expediente.gerente_id == auth.miembro_id,
+                    Expediente.deleted_at.is_(None),
+                    or_(Expediente.emisor_id == Empresa.id, Expediente.receptor_id == Empresa.id),
+                ),
             )
         )
     elif auth.rol == RolMiembro.USUARIO:
@@ -84,6 +101,8 @@ def listar(
         )
         if auth.rol == "GESTOR":
             usuarios_q = usuarios_q.where(Expediente.gestor_id == auth.gestor_id)
+        elif auth.rol == RolMiembro.GERENTE:
+            usuarios_q = usuarios_q.where(Expediente.gerente_id == auth.miembro_id)
         elif auth.rol == RolMiembro.USUARIO:
             usuarios_q = usuarios_q.where(Expediente.usuario_id == auth.usuario_id)
 
