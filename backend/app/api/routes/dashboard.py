@@ -63,9 +63,9 @@ def detalle_secretaria(
         )
     if receptor_ruc:
         receptor_empresa = aliased(Empresa)
-        consulta = consulta.join(receptor_empresa, Expediente.receptor_id == receptor_empresa.id).where(
-            receptor_empresa.ruc == receptor_ruc
-        )
+        consulta = consulta.join(
+            receptor_empresa, Expediente.receptor_id == receptor_empresa.id
+        ).where(receptor_empresa.ruc == receptor_ruc)
     if estado is not None:
         consulta = consulta.where(Expediente.estado == estado)
     expedientes = list(session.scalars(consulta))
