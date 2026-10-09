@@ -857,3 +857,7 @@ button.peligro {
 @media (prefers-reduced-motion: reduce) {
   .menu-ajustable { transition: none; }
 }
+
+/* Ruta jerárquica: identificadores legibles y alertas de asignaciones pendientes. */
+.ruta-codigo { color: #dbeafe; font-size: 0.76rem; }
+.ruta-advertencia { margin: 0; color: #fff1b8; font-size: 0.78rem; font-weight: 600; }
