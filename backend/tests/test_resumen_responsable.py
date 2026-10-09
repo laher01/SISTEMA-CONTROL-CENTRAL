@@ -49,6 +49,7 @@ def test_responsable_solo_consulta_su_equipo(
     pedido = PedidoGerencia(
         tenant_id=tid,
         cliente_id=cliente.id,
+        responsable_id=responsable.id,
         periodo_mes=date(2026, 10, 1),
         moneda="PEN",
         monto_solicitado=Decimal("200.00"),
