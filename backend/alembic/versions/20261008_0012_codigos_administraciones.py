@@ -27,11 +27,13 @@ def upgrade() -> None:
         sa.Column("estado", sa.String(length=20), nullable=False, server_default="ACTIVO"),
     )
     op.create_index("ix_tenants_codigo", "tenants", ["codigo"], unique=True)
-    op.execute("CREATE SEQUENCE secuencia_administraciones START WITH 1 INCREMENT BY 1")
+    if op.get_bind().dialect.name == "postgresql":
+        op.execute("CREATE SEQUENCE secuencia_administraciones START WITH 1 INCREMENT BY 1")
 
 
 def downgrade() -> None:
-    op.execute("DROP SEQUENCE secuencia_administraciones")
+    if op.get_bind().dialect.name == "postgresql":
+        op.execute("DROP SEQUENCE secuencia_administraciones")
     op.drop_index("ix_tenants_codigo", table_name="tenants")
     op.drop_column("tenants", "estado")
     op.drop_column("tenants", "origen_alta")
