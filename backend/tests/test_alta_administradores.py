@@ -25,7 +25,10 @@ def test_alta_administrador_desde_superadmin(
     tenant = session.scalar(select(Tenant).where(Tenant.codigo == "LAH-001-AD"))
     assert tenant is not None
     assert tenant.id != auth_prueba.contexto.tenant_id
-    assert session.scalar(
-        select(Miembro).where(Miembro.tenant_id == tenant.id, Miembro.rol == "ADMINISTRADOR")
-    ) is not None
+    assert (
+        session.scalar(
+            select(Miembro).where(Miembro.tenant_id == tenant.id, Miembro.rol == "ADMINISTRADOR")
+        )
+        is not None
+    )
     assert client.post("/api/v1/configuracion/administraciones", json=datos).status_code == 409
