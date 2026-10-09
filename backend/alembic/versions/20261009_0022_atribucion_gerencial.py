@@ -15,6 +15,14 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+
+def _restriccion_única(tabla: str, columnas: set[str]) -> str:
+    for restriccion in sa.inspect(op.get_bind()).get_unique_constraints(tabla):
+        if set(restriccion["column_names"]) == columnas and restriccion.get("name"):
+            return str(restriccion["name"])
+    raise RuntimeError(f"Restricción única esperada no encontrada en {tabla}")
+
+
 def upgrade() -> None:
     # NULL conserva como no asignadas las facturas y liquidaciones anteriores.
     op.add_column(
@@ -35,7 +43,7 @@ def upgrade() -> None:
     )
     with op.batch_alter_table("pagos_responsables_erp") as batch:
         batch.drop_constraint(
-            "uq_pagos_responsables_erp_tenant_id_responsable_id_periodo_desde_periodo_hasta_moneda",
+            _restriccion_única("pagos_responsables_erp", {"tenant_id","responsable_id","periodo_desde","periodo_hasta","moneda"}),
             type_="unique",
         )
         batch.create_unique_constraint(
