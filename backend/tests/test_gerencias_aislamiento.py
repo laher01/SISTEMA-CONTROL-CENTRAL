@@ -6,8 +6,9 @@ from decimal import Decimal
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models import Empresa, Expediente, Miembro, PedidoGerencia
+from app.models import Empresa, Expediente, GerenteEmpresa, GerenteResponsable, Miembro, PedidoGerencia
 from app.security import ContextoAcceso
+from app.services.ingesta import atribuir_gerencia_inequivoca
 from tests.conftest import AuthPrueba
 
 
@@ -101,3 +102,57 @@ def test_produccion_aislada_por_gerente(
     assert pedidos_b.status_code == 200, pedidos_b.text
     assert len(pedidos_b.json()) == 1
     assert Decimal(str(pedidos_b.json()[0]["monto_ejecutado"])) == Decimal("300")
+
+
+def test_atribucion_automatica_requiere_unico_pedido(
+    session: Session, auth_prueba: AuthPrueba
+) -> None:
+    tenant = auth_prueba.contexto.tenant_id
+    g1 = Miembro(tenant_id=tenant, codigo="A-01", nombre="Gerente Uno", rol="GERENTE")
+    g2 = Miembro(tenant_id=tenant, codigo="B-02", nombre="Gerente Dos", rol="GERENTE")
+    responsable = Miembro(
+        tenant_id=tenant, codigo="RESP-99", nombre="Responsable", rol="RESPONSABLE"
+    )
+    usuario = Miembro(tenant_id=tenant, codigo="US-99", nombre="Usuario", rol="USUARIO")
+    cliente = Empresa(
+        tenant_id=tenant, ruc="20995550001", razon_social="CLIENTE COMPARTIDO",
+        tipo_relacion="CLIENTE",
+    )
+    session.add_all([g1, g2, responsable, usuario, cliente])
+    session.flush()
+    usuario.responsable_id = responsable.id
+    v2 = None
+    for gerente in (g1, g2):
+        session.add(GerenteEmpresa(
+            tenant_id=tenant, gerente_id=gerente.id, empresa_id=cliente.id, activo=True,
+        ))
+        vinculo = GerenteResponsable(
+            tenant_id=tenant, gerente_id=gerente.id,
+            responsable_id=responsable.id, activo=True,
+        )
+        session.add(vinculo)
+        if gerente == g2:
+            v2 = vinculo
+        session.add(PedidoGerencia(
+            tenant_id=tenant, gerente_id=gerente.id,
+            responsable_id=responsable.id, cliente_id=cliente.id,
+            periodo_mes=date(2026, 10, 1), moneda="PEN",
+            monto_solicitado=Decimal("1000"), estado="ACTIVO",
+        ))
+    factura = Expediente(
+        tenant_id=tenant, receptor_id=cliente.id, emisor_id=cliente.id,
+        tipo_comprobante="FACT", serie="F001", correlativo="889",
+        fecha_emision=date(2026, 10, 9), moneda="PEN",
+        importe_total=Decimal("100"), usuario_id=usuario.id,
+    )
+    session.add(factura)
+    session.flush()
+    atribuir_gerencia_inequivoca(session, factura)
+    assert factura.gerente_id is None
+    assert factura.pedido_gerencia_id is None
+    assert v2 is not None
+    v2.activo = False
+    session.flush()
+    atribuir_gerencia_inequivoca(session, factura)
+    assert factura.gerente_id == g1.id
+    assert factura.pedido_gerencia_id is not None
