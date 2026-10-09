@@ -148,7 +148,6 @@ export default function App() {
     : sesion.rol === "USUARIO"
       ? (sesion.jerarquia?.length ? sesion.jerarquia : [{ rol: "USUARIO", codigo: sesion.codigo, nombre: sesion.nombre }])
       : [{ rol: sesion.rol, codigo: sesion.codigo, nombre: sesion.nombre }];
-  const haySuperior = cadena.some((n) => n.rol === "RESPONSABLE" || n.rol === "ADMINISTRADOR" || n.rol === "SUPERADMIN");
   const dominio = window.location.hostname;
 
   return (
