@@ -11,16 +11,16 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
-from app.services import auditoria
 from app.models import (
     AsignacionPedidoGerencia,
     Empresa,
     Expediente,
     Miembro,
     PagoERP,
-    PlanLiquidacion,
     PedidoGerencia,
+    PlanLiquidacion,
 )
+from app.services import auditoria
 
 router = APIRouter(prefix="/responsable", tags=["responsable"])
 
