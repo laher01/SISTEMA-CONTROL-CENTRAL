@@ -5,7 +5,7 @@ from typing import Literal
 
 from fastapi import APIRouter
 from sqlalchemy import case, func, select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
@@ -57,12 +57,14 @@ def detalle_secretaria(
         .order_by(Expediente.fecha_emision.desc(), Expediente.id)
     )
     if emisor_ruc:
-        consulta = consulta.join(Empresa, Expediente.emisor_id == Empresa.id).where(
-            Empresa.ruc == emisor_ruc
+        emisor_empresa = aliased(Empresa)
+        consulta = consulta.join(emisor_empresa, Expediente.emisor_id == emisor_empresa.id).where(
+            emisor_empresa.ruc == emisor_ruc
         )
     if receptor_ruc:
-        consulta = consulta.join(Empresa, Expediente.receptor_id == Empresa.id).where(
-            Empresa.ruc == receptor_ruc
+        receptor_empresa = aliased(Empresa)
+        consulta = consulta.join(receptor_empresa, Expediente.receptor_id == receptor_empresa.id).where(
+            receptor_empresa.ruc == receptor_ruc
         )
     if estado is not None:
         consulta = consulta.where(Expediente.estado == estado)
