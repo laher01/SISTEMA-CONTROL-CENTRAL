@@ -168,7 +168,7 @@ export default function App() {
           <Route path="/expedientes/:id" element={<ExpedienteDetalle />} />
           <Route path="/pendientes" element={<Pendientes />} />
           <Route path="/alertas" element={<Alertas sesion={sesion} />} />
-          <Route path="/empresas" element={<Empresas />} />
+          <Route path="/empresas" element={<Empresas sesion={sesion} />} />
           <Route path="/mi-equipo" element={<MiEquipoResponsable />} />
           <Route path="/mi-equipo/pedidos" element={<MiEquipoResponsable inicial="PEDIDOS" />} />
           <Route path="/mi-equipo/cobros" element={<MiEquipoResponsable inicial="COBROS" />} />
