@@ -23,9 +23,12 @@ export default function Organizacion({ sesion }: { sesion: SesionActual }) {
   return <p>No tiene permiso para administrar la organización.</p>;
 }
 
+interface VinculoGerencia { id: string; gerente_id: string; responsable_id: string; activo: boolean }
+
 function OrganizacionAdmin() {
   const { datos: miembros, error, cargando, recargar } = useDatos<Miembro[]>("/api/v1/miembros");
   const { datos: gestores, recargar: recargarGestores } = useDatos<Gestor[]>("/api/v1/gestores");
+  const { datos: vinculos, recargar: recargarVinculos } = useDatos<VinculoGerencia[]>("/api/v1/gerencias/vinculos");
   const [pestanaAdmin, setPestanaAdmin] = useState<"GERENTE" | "SECRETARIA" | "RESPONSABLE" | "USUARIO" | "GESTOR">("RESPONSABLE");
   const [codigo, setCodigo] = useState("");
   const [nombre, setNombre] = useState("");
@@ -41,6 +44,10 @@ function OrganizacionAdmin() {
   const [mensaje, setMensaje] = useState("");
 
   const administradores = (miembros ?? []).filter((m) => m.rol === "ADMINISTRADOR" || m.rol === "SUPERADMIN");
+  const gerentes = useMemo(
+    () => (miembros ?? []).filter((m) => m.rol === "GERENTE"),
+    [miembros],
+  );
   const responsables = useMemo(
     () => (miembros ?? []).filter((m) => m.rol === "RESPONSABLE"),
     [miembros],
@@ -57,6 +64,18 @@ function OrganizacionAdmin() {
       });
       recargar();
       setMensaje("Administración actualizada para " + responsable.codigo);
+    } catch (e) {
+      setMensaje(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const vincularGerente = async (gerenteId: string, responsableId: string, activo: boolean) => {
+    try {
+      await enviarJson<VinculoGerencia>("/api/v1/gerencias/vinculos", "PUT", {
+        gerente_id: gerenteId, responsable_id: responsableId, activo,
+      });
+      recargarVinculos();
+      setMensaje("Vínculo entre Gerencia y Responsable actualizado.");
     } catch (e) {
       setMensaje(e instanceof Error ? e.message : String(e));
     }
@@ -193,6 +212,31 @@ function OrganizacionAdmin() {
             </select>
           </td></tr>)}
         </tbody></table>
+      </section>}
+      {pestanaAdmin === "GERENTE" && <section className="panel-configuracion">
+        <h3>Gerentes y Responsables compartidos</h3>
+        <p className="tenue">
+          Un Responsable puede trabajar con varios Gerentes y conserva su propio equipo de
+          Usuarios y Gestores. Active las relaciones autorizadas por la Administración.
+        </p>
+        <div className="tabla-responsive"><table><thead><tr>
+          <th>Responsable</th>
+          {gerentes.map((g) => <th key={g.id}>{g.codigo}</th>)}
+        </tr></thead><tbody>
+          {responsables.map((r) => <tr key={r.id}>
+            <td>{r.codigo} · {r.nombre}</td>
+            {gerentes.map((g) => {
+              const activo = vinculos?.some(
+                (v) => v.gerente_id === g.id && v.responsable_id === r.id && v.activo
+              ) ?? false;
+              return <td key={g.id}>
+                <input type="checkbox" aria-label={`Asignar ${r.codigo} a ${g.codigo}`}
+                  checked={activo}
+                  onChange={(e) => void vincularGerente(g.id, r.id, e.target.checked)} />
+              </td>;
+            })}
+          </tr>)}
+        </tbody></table></div>
       </section>}
       {pestanaAdmin === "USUARIO" && <section className="panel-configuracion">
         <h3>Asignación de Usuarios a Responsables</h3>
