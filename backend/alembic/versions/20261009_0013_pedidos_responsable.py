@@ -3,6 +3,7 @@
 Revision ID: 0013
 Revises: 0012
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -20,14 +21,18 @@ def upgrade() -> None:
     op.create_index("ix_pedidos_gerencia_responsable_id", "pedidos_gerencia", ["responsable_id"])
     op.create_foreign_key(
         "fk_pedidos_gerencia_responsable_id_miembros",
-        "pedidos_gerencia", "miembros", ["responsable_id"], ["id"],
+        "pedidos_gerencia",
+        "miembros",
+        ["responsable_id"],
+        ["id"],
     )
 
 
 def downgrade() -> None:
     op.drop_constraint(
         "fk_pedidos_gerencia_responsable_id_miembros",
-        "pedidos_gerencia", type_="foreignkey",
+        "pedidos_gerencia",
+        type_="foreignkey",
     )
     op.drop_index("ix_pedidos_gerencia_responsable_id", table_name="pedidos_gerencia")
     op.drop_column("pedidos_gerencia", "responsable_id")
