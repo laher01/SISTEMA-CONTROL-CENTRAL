@@ -70,6 +70,8 @@ function Historial({ fila }: { fila: Fila }) {
 export default function ComisionesResponsables({ sesion }: { sesion: SesionActual }) {
   const inicial = mesActual();
   const [desde, setDesde] = useState(inicial.desde);
+  const [mesFiltro, setMesFiltro] = useState(inicial.desde.slice(0, 7));
+  const [responsableSeleccionado, setResponsableSeleccionado] = useState("");
   const [hasta, setHasta] = useState(inicial.hasta);
   const [moneda, setMoneda] = useState<"PEN" | "USD">("PEN");
   const [editando, setEditando] = useState("");
@@ -94,8 +96,18 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
   );
   const filas = datos?.filas ?? [];
   const responsables = Array.from(
-    new Map(filas.map((f) => [f.responsable_id, f.responsable_nombre])).entries(),
+    new Map([...(filas.map((f) => [f.responsable_id, f.responsable_nombre] as const)), ...(pagos.datos ?? []).map((p) => [p.responsable_id, p.responsable_id] as const)]).entries(),
   );
+  const filasSeleccionadas = filas.filter(f => f.responsable_id === responsableSeleccionado);
+  const pagosSeleccionados = pagosFiltrados.filter(p => p.responsable_id === responsableSeleccionado);
+  const cambiarMes = (nuevoMes: string) => {
+    if (!/^\d{4}-\d{2}$/.test(nuevoMes)) return;
+    const [anio, mes] = nuevoMes.split("-").map(Number);
+    const ultimo = new Date(anio, mes, 0).getDate();
+    setMesFiltro(nuevoMes);
+    setDesde(`${nuevoMes}-01`);
+    setHasta(`${nuevoMes}-${String(ultimo).padStart(2, "0")}`);
+  };
   const puedeProgramar = ["SUPERADMIN", "ADMINISTRADOR", "GERENTE"].includes(sesion.rol);
   const puedePagar = sesion.rol === "GERENTE";
 
@@ -210,27 +222,33 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
       cuando el rango es parcial. Exceder un pedido genera aviso y no impide el pago.
     </p>
     <div className="filtros">
+      <label>Responsable <select value={responsableSeleccionado} onChange={e => setResponsableSeleccionado(e.target.value)}>
+        <option value="">Seleccione un Responsable</option>
+        {responsables.map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
+      </select></label>
+      <label>Mes <input type="month" value={mesFiltro} onChange={e => cambiarMes(e.target.value)} /></label>
       <label>Desde <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} /></label>
       <label>Hasta <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} /></label>
       <label>Moneda <select value={moneda} onChange={(e) => setMoneda(e.target.value as "PEN" | "USD")}>
         <option value="PEN">PEN</option><option value="USD">USD</option>
       </select></label>
     </div>
-    {cargando && <p>Cargando producción…</p>}
+    {!responsableSeleccionado && <p className="tenue">Seleccione un Responsable para consultar sus empresas, comisiones y pagos.</p>}
+    {responsableSeleccionado && cargando && <p>Cargando producción…</p>}
     {error && <p role="alert">{error}</p>}
-    <div className="resumen-carga">
-      <strong>Producción total: {formatearMonto(moneda, datos?.total_produccion ?? "0")}</strong>
+    {responsableSeleccionado && <div className="resumen-carga">
+      <strong>Producción total: {formatearMonto(moneda, filasSeleccionadas.reduce((total, fila) => total + Number(fila.produccion), 0))}</strong>
       {" · "}
-      <strong>Total a pagar por comisiones: {formatearMonto(moneda, datos?.total_comisiones ?? "0")}</strong>
-    </div>
+      <strong>Total a pagar por comisiones: {formatearMonto(moneda, filasSeleccionadas.reduce((total, fila) => total + Number(fila.comision), 0))}</strong>
+    </div>}
     {mensaje && <p role="status">{mensaje}</p>}
-    <div className="tabla-responsive"><table>
+    {responsableSeleccionado && <div className="tabla-responsive"><table>
       <thead><tr>
         <th>Responsable</th><th>Empresa receptora / Cliente</th><th>Producción</th>
         <th>% Comisión</th><th>Agente de retención</th><th>Total comisión</th>
         <th>Pedido</th><th>Exceso</th><th>Acciones</th>
       </tr></thead>
-      <tbody>{filas.map((fila) => {
+      <tbody>{filasSeleccionadas.map((fila) => {
         const llave = `${fila.responsable_id}:${fila.cliente_id}`;
         const editar = editando === llave;
         return <tr key={llave}>
@@ -261,8 +279,8 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
           </td>
         </tr>;
       })}</tbody>
-    </table></div>
-    {puedeProgramar && responsables.map(([id, nombre]) => {
+    </table></div>}
+    {responsableSeleccionado && puedeProgramar && responsables.filter(([id]) => id === responsableSeleccionado).map(([id, nombre]) => {
       const f = filas.filter((fila) => fila.responsable_id === id);
       const produccion = f.reduce((total, fila) => total + Number(fila.produccion), 0);
       const comision = f.reduce((total, fila) => total + Number(fila.comision), 0);
@@ -273,8 +291,8 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
         </button>
       </p>;
     })}
-    <h4>Pagos a Responsables</h4>
-    <p className="resumen-carga">Saldo global de las liquidaciones: {formatearMonto(moneda, pagosFiltrados.reduce((a, p) => a + Number(p.saldo ?? (p.estado === "PAGADO" ? 0 : p.comision_total)), 0))}</p>
+    {responsableSeleccionado && <><h4>Pagos a Responsables</h4>
+    <p className="resumen-carga">Saldo global de las liquidaciones: {formatearMonto(moneda, pagosSeleccionados.reduce((a, p) => a + Number(p.saldo ?? (p.estado === "PAGADO" ? 0 : p.comision_total)), 0))}</p>
     {puedePagar && <div className="filtros">
       <label>Fecha de pago <input type="date" value={fechaPago}
         onChange={(e) => setFechaPago(e.target.value)} /></label>
@@ -292,7 +310,7 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
     <div className="tabla-responsive"><table>
       <thead><tr><th>Responsable</th><th>Periodo</th><th>Comisión</th>
         <th>Abonado</th><th>Saldo</th><th>Estado</th><th>Referencia</th><th>Acción</th></tr></thead>
-      <tbody>{pagosFiltrados.map((p) => <tr key={p.id}>
+      <tbody>{pagosSeleccionados.map((p) => <tr key={p.id}>
         <td>{responsables.find(([id]) => id === p.responsable_id)?.[1] ?? p.responsable_id}</td>
         <td>{p.periodo_desde} al {p.periodo_hasta}</td>
         <td>{formatearMonto(p.moneda as "PEN" | "USD", p.comision_total)}</td>
@@ -310,6 +328,6 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
           {(movimientos[p.id] ?? []).map(m => <div key={m.id}><a href={`/api/v1/pagos-responsables/${p.id}/movimientos/${m.id}/comprobante`} target="_blank" rel="noreferrer">{m.fecha} · {formatearMonto(p.moneda as "PEN" | "USD", m.monto)} · {m.referencia}</a></div>)}
         </td>
       </tr>)}</tbody>
-    </table></div>
+    </table></div></>}
   </>;
 }
