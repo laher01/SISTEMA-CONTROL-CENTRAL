@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from "react";
 
 import { conParametros, eliminar, enviarJson, useDatos } from "../api";
 import { formatearFecha, formatearMonto } from "../formato";
+import LiquidacionMultimes from "./LiquidacionMultimes";
 import ComisionesResponsables from "./ComisionesResponsables";
 import type {
   AbonoClienteERP,
@@ -163,6 +164,14 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
               </span>
             )}
           </div>
+
+          {usuarioId && <LiquidacionMultimes
+            key={usuarioId + moneda}
+            usuarioId={usuarioId}
+            moneda={moneda}
+            porcentajeInicial={porcentajePredeterminado}
+            alCambiar={() => { pagos.recargar(); adelantos.recargar(); }}
+          />}
 
           {usuarioId && (
             <div className="columnas">
