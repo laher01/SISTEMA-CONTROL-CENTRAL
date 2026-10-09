@@ -530,14 +530,11 @@ class PagoResponsableERP(ConId, ConTenant, ConCreacion, Base):
     referencia_pago: Mapped[str | None] = mapped_column(String(160))
 
 
-
 class MovimientoPagoResponsable(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "movimientos_pagos_responsables"
     __table_args__ = (UniqueConstraint("pago_id", "referencia"),)
 
-    pago_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("pagos_responsables_erp.id"), index=True
-    )
+    pago_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pagos_responsables_erp.id"), index=True)
     monto: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     fecha: Mapped[date] = mapped_column(Date)
     referencia: Mapped[str] = mapped_column(String(160))
