@@ -779,7 +779,7 @@ def anular_pedido_gerencia(
     """Anula sin borrado físico, con motivo y sin afectar pedidos ejecutados."""
     _validar_acceso(auth.rol)
     pedido = _pedido_valido(session, tenant_id, pedido_id)
-    if pedido.estado == "ANULADO":
+    if pedido.estado == "CANCELADO":
         raise HTTPException(status.HTTP_409_CONFLICT, "Pedido ya anulado")
     if pedido.estado not in ("ACTIVO", "CERRADO"):
         raise HTTPException(status.HTTP_409_CONFLICT, "Estado incompatible con anulación")
@@ -800,13 +800,18 @@ def anular_pedido_gerencia(
             status.HTTP_409_CONFLICT,
             "No se puede anular un pedido con ejecución. Requiere regularización contable.",
         )
-    pedido.estado = "ANULADO"
+    pedido.estado = "CANCELADO"
     pedido.observacion = (
         (pedido.observacion + " | " if pedido.observacion else "")
-        + "ANULACIÓN: " + datos.motivo.strip()
+        + "ANULACIÓN: "
+        + datos.motivo.strip()
     )[:500]
     auditoria.registrar(
-        session, tenant_id, "PEDIDO_GERENCIA_ANULADO", "pedido_gerencia", pedido.id,
+        session,
+        tenant_id,
+        "PEDIDO_GERENCIA_ANULADO",
+        "pedido_gerencia",
+        pedido.id,
         {"motivo": datos.motivo.strip(), "actor": auth.codigo},
     )
     session.commit()
