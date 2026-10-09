@@ -127,10 +127,7 @@ def resumen_equipo(
         )
     ]
     return {
-        "usuarios": [
-            {"id": str(u.id), "codigo": u.codigo, "nombre": u.nombre}
-            for u in usuarios
-        ],
+        "usuarios": [{"id": str(u.id), "codigo": u.codigo, "nombre": u.nombre} for u in usuarios],
         "clientes": clientes,
         "pedidos": pedidos,
         "pagos": pagos,
