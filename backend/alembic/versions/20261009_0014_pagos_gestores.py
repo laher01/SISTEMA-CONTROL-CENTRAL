@@ -17,9 +17,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "gestores", sa.Column("porcentaje_comision", sa.Numeric(7, 4), nullable=True)
-    )
+    op.add_column("gestores", sa.Column("porcentaje_comision", sa.Numeric(7, 4), nullable=True))
     op.create_table(
         "pagos_gestores",
         sa.Column("id", sa.Uuid(), primary_key=True),
@@ -40,7 +38,11 @@ def upgrade() -> None:
             server_default=sa.func.now(),
         ),
         sa.UniqueConstraint(
-            "tenant_id", "gestor_id", "periodo_desde", "periodo_hasta", "moneda",
+            "tenant_id",
+            "gestor_id",
+            "periodo_desde",
+            "periodo_hasta",
+            "moneda",
             name="uq_pagos_gestores_periodo",
         ),
     )
