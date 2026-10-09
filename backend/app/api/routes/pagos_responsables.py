@@ -440,7 +440,8 @@ def listar_pagos(
                 p.comision_total if p.estado == "PAGADO" else abonos.get(p.id, Decimal("0"))
             ),
             "saldo": str(
-                Decimal("0") if p.estado == "PAGADO"
+                Decimal("0")
+                if p.estado == "PAGADO"
                 else max(Decimal("0"), p.comision_total - abonos.get(p.id, Decimal("0")))
             ),
             "fecha_reprogramada": (
@@ -516,8 +517,11 @@ def reprogramar_pago(
     pago.observacion = datos.motivo
     pago.estado = "REPROGRAMADO"
     auditoria.registrar(
-        session, tenant_id, "PAGO_RESPONSABLE_REPROGRAMADO",
-        "pago_responsable", pago.id,
+        session,
+        tenant_id,
+        "PAGO_RESPONSABLE_REPROGRAMADO",
+        "pago_responsable",
+        pago.id,
         {"fecha": datos.fecha.isoformat(), "motivo": datos.motivo, "actor": auth.codigo},
     )
     session.commit()
@@ -540,10 +544,12 @@ async def abonar_responsable(
     if auth.rol != RolMiembro.GERENTE:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Gerencia registra abonos")
     pago = session.scalar(
-        select(PagoResponsableERP).where(
+        select(PagoResponsableERP)
+        .where(
             PagoResponsableERP.id == pago_id,
             PagoResponsableERP.tenant_id == tenant_id,
-        ).with_for_update()
+        )
+        .with_for_update()
     )
     if pago is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
@@ -555,7 +561,8 @@ async def abonar_responsable(
                 MovimientoPagoResponsable.tenant_id == tenant_id,
                 MovimientoPagoResponsable.pago_id == pago.id,
             )
-        ) or 0
+        )
+        or 0
     )
     saldo = pago.comision_total - abonado
     valor = saldo if accion == "TOTAL" else monto
@@ -599,8 +606,12 @@ async def abonar_responsable(
     ruta.write_bytes(datos_archivo)
     try:
         movimiento = MovimientoPagoResponsable(
-            tenant_id=tenant_id, pago_id=pago.id, monto=valor, fecha=fecha,
-            referencia=referencia, comprobante_archivo=archivo,
+            tenant_id=tenant_id,
+            pago_id=pago.id,
+            monto=valor,
+            fecha=fecha,
+            referencia=referencia,
+            comprobante_archivo=archivo,
             creado_por_cuenta_id=auth.cuenta_id,
         )
         session.add(movimiento)
@@ -611,8 +622,11 @@ async def abonar_responsable(
             pago.referencia_pago = referencia
             pago.pagado_por_cuenta_id = auth.cuenta_id
         auditoria.registrar(
-            session, tenant_id, "PAGO_RESPONSABLE_ABONADO",
-            "pago_responsable", pago.id,
+            session,
+            tenant_id,
+            "PAGO_RESPONSABLE_ABONADO",
+            "pago_responsable",
+            pago.id,
             {"monto": str(valor), "saldo": str(saldo - valor), "actor": auth.codigo},
         )
         session.commit()
@@ -621,8 +635,10 @@ async def abonar_responsable(
         ruta.unlink(missing_ok=True)
         raise
     return {
-        "id": str(pago.id), "estado": pago.estado,
-        "abonado": str(abonado + valor), "saldo": str(saldo - valor),
+        "id": str(pago.id),
+        "estado": pago.estado,
+        "abonado": str(abonado + valor),
+        "saldo": str(saldo - valor),
     }
 
 
@@ -639,14 +655,20 @@ def movimientos_responsable(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
     _ambito(auth, pago.responsable_id)
     movimientos = session.scalars(
-        select(MovimientoPagoResponsable).where(
+        select(MovimientoPagoResponsable)
+        .where(
             MovimientoPagoResponsable.tenant_id == tenant_id,
             MovimientoPagoResponsable.pago_id == pago_id,
-        ).order_by(MovimientoPagoResponsable.created_at)
+        )
+        .order_by(MovimientoPagoResponsable.created_at)
     )
     return [
-        {"id": str(m.id), "fecha": m.fecha.isoformat(), "monto": str(m.monto),
-         "referencia": m.referencia}
+        {
+            "id": str(m.id),
+            "fecha": m.fecha.isoformat(),
+            "monto": str(m.monto),
+            "referencia": m.referencia,
+        }
         for m in movimientos
     ]
 
@@ -666,10 +688,7 @@ def descargar_comprobante_responsable(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
     _ambito(auth, pago.responsable_id)
     movimiento = session.get(MovimientoPagoResponsable, movimiento_id)
-    if (
-        movimiento is None or movimiento.tenant_id != tenant_id
-        or movimiento.pago_id != pago.id
-    ):
+    if movimiento is None or movimiento.tenant_id != tenant_id or movimiento.pago_id != pago.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Movimiento no encontrado")
     archivo = Path(settings.storage_dir) / "pagos-responsables" / str(tenant_id)
     ruta = archivo / str(pago.id) / movimiento.comprobante_archivo
