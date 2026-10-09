@@ -133,9 +133,8 @@ def resumen_secretaria_clientes(
         RolMiembro.SUPERADMIN,
         RolMiembro.ADMINISTRADOR,
         RolMiembro.SECRETARIA,
-        RolMiembro.GERENTE,
     ):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Acceso exclusivo de Secretaría y Gerencia")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Acceso exclusivo de Secretaría")
     if hasta < desde:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Periodo inválido")
     consulta = (
