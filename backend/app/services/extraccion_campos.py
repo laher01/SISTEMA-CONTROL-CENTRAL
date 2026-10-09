@@ -708,10 +708,10 @@ def _extraer_campos_fiscales_rhe(
     # retención (0.00) como importe; si bruto y neto difieren, se usa bruto.
     if "importe_total" not in campos:
         patron_monto = re.compile(r"(?<![\\d.,])(?:\\d{1,3}(?:,\\d{3})+|\\d{1,8})\\.\\d{2}(?!\\d)")
-        montos = [
-            (m.group(0), _normalizar_importe(m.group(0)))
-            for m in patron_monto.finditer(texto)
-        ]
+        montos: list[tuple[str, Decimal | None]] = []
+        for coincidencia in patron_monto.finditer(texto):
+            bruto = coincidencia.group(0)
+            montos.append((bruto, _normalizar_importe(bruto)))
         positivos = [(origen, valor) for origen, valor in montos if valor is not None and valor > 0]
         cantidades = {valor for _, valor in positivos}
         if len(cantidades) == 1 and (
