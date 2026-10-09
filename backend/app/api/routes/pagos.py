@@ -1096,6 +1096,10 @@ def programar_pago(
     auth: OperativeAuthDep,
     datos: PagoERPProgramarIn,
 ) -> PagoERP:
+    raise HTTPException(
+        status.HTTP_403_FORBIDDEN,
+        "Los pagos de Usuarios solo pueden programarse desde su Responsable",
+    )
     _validar_acceso(auth.rol)
     _usuario_valido(session, tenant_id, datos.usuario_id)
     if datos.periodo_hasta < datos.periodo_desde:
@@ -1275,6 +1279,10 @@ def eliminar_programacion(
     auth: OperativeAuthDep,
     pago_id: uuid.UUID,
 ) -> None:
+    raise HTTPException(
+        status.HTTP_403_FORBIDDEN,
+        "Solo el Responsable puede anular programaciones de sus Usuarios",
+    )
     if auth.rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
