@@ -27,6 +27,7 @@ from app.schemas import (
 )
 from app.security import cuenta_administradora_responsable
 from app.services import auditoria
+from app.services.ambito_gerencia import alcance_expedientes_gerente, expediente_visible_gerente
 from app.services.aprendizaje_documental import (
     aplicar_perfiles_aprendidos,
     registrar_correccion_y_aprender,
@@ -462,7 +463,7 @@ def _validar_ambito_documento(auth: OperativeAuthDep, documento: Documento) -> N
     if auth.rol == RolMiembro.USUARIO and documento.usuario_id != auth.usuario_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Documento no encontrado")
     if auth.rol == RolMiembro.GERENTE and (
-        documento.expediente is None or documento.expediente.gerente_id != auth.miembro_id
+        documento.expediente is None or not expediente_visible_gerente(documento.expediente, auth)
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Documento no encontrado")
 
@@ -472,7 +473,7 @@ def _validar_ambito_expediente(auth: OperativeAuthDep, expediente: Expediente) -
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Expediente no encontrado")
     if auth.rol == RolMiembro.USUARIO and expediente.usuario_id != auth.usuario_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Expediente no encontrado")
-    if auth.rol == RolMiembro.GERENTE and expediente.gerente_id != auth.miembro_id:
+    if auth.rol == RolMiembro.GERENTE and not expediente_visible_gerente(expediente, auth):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Expediente no encontrado")
 
 
@@ -482,7 +483,7 @@ def _aplicar_ambito_documentos(consulta: Any, auth: OperativeAuthDep) -> Any:
     if auth.rol == RolMiembro.USUARIO:
         return consulta.where(Documento.usuario_id == auth.usuario_id)
     if auth.rol == RolMiembro.GERENTE:
-        return consulta.where(Documento.expediente.has(Expediente.gerente_id == auth.miembro_id))
+        return consulta.where(Documento.expediente.has(alcance_expedientes_gerente(auth)))
     return consulta
 
 
@@ -854,7 +855,7 @@ def relaciones_sugeridas(
     elif auth.rol == RolMiembro.USUARIO:
         sugerencias = [s for s in sugerencias if s.expediente.usuario_id == auth.usuario_id]
     elif auth.rol == RolMiembro.GERENTE:
-        sugerencias = [s for s in sugerencias if s.expediente.gerente_id == auth.miembro_id]
+        sugerencias = [s for s in sugerencias if expediente_visible_gerente(s.expediente, auth)]
     return [
         RelacionSugeridaOut(
             expediente=sugerencia.expediente,
