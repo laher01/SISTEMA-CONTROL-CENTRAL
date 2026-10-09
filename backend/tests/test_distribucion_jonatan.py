@@ -2,7 +2,9 @@ from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
+from app.models import Tenant
 from app.services.distribucion_jonatan import TasasJonatan, calcular_distribucion_jonatan
 from tests.conftest import AuthPrueba
 
@@ -50,13 +52,22 @@ def test_tasas_personalizadas_y_validaciones() -> None:
         )
 
 
-def test_endpoint_simulacion_autorizada(client: TestClient, auth_prueba: AuthPrueba) -> None:
+def test_endpoint_simulacion_autorizada(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
     solicitud = {
         "total_emitido": "1114897.76",
         "base_autorizada": "380000.00",
     }
     assert client.post("/api/v1/pagos/simular-jonatan", json=solicitud).status_code == 403
     auth_prueba.como_admin()
+    assert client.post("/api/v1/pagos/simular-jonatan", json=solicitud).status_code == 403
+
+    tenant = session.get(Tenant, auth_prueba.contexto.tenant_id)
+    assert tenant is not None
+    tenant.codigo = "LAH-001-AD"
+    session.commit()
+
     respuesta = client.post("/api/v1/pagos/simular-jonatan", json=solicitud)
     assert respuesta.status_code == 200, respuesta.text
     datos = respuesta.json()
