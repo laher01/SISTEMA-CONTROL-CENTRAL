@@ -1,7 +1,7 @@
 """Motor de cálculo de comisiones, sin efectos contables."""
 
-from decimal import Decimal, ROUND_HALF_UP
 import uuid
+from decimal import ROUND_HALF_UP, Decimal
 
 CENTIMO = Decimal("0.01")
 
