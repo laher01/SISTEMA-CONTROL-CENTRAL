@@ -1,8 +1,7 @@
 """Inventario global de espacios administrativos: exclusivo de SUPERADMIN."""
 
-import re
 import hmac
-
+import re
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
