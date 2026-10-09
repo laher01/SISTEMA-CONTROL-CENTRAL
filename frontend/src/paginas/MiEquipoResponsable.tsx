@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { enviarJson, useDatos } from "../api";
+import { eliminar, enviarJson, useDatos } from "../api";
 import { formatearMonto } from "../formato";
 
 interface UsuarioResponsable {
@@ -14,7 +14,7 @@ interface Equipo {
   usuarios: { id: string; codigo: string; nombre: string }[];
   clientes: { usuario_id: string; receptor_id: string; ruc: string; razon_social: string; moneda: string; expedientes: number; produccion: string }[];
   pedidos: { id: string; cliente: string; ruc: string; periodo: string; moneda: string; monto_solicitado: string; monto_asignado: string; pendiente_distribuir: string; estado: string; asignaciones: { usuario_id: string; monto: string }[] }[];
-  pagos: { usuario_id: string; periodo_desde: string; periodo_hasta: string; moneda: string; produccion: string; bruto: string; adelantos: string; saldo: string; estado: string }[];
+  pagos: { id: string; porcentaje: string; usuario_id: string; periodo_desde: string; periodo_hasta: string; moneda: string; produccion: string; bruto: string; adelantos: string; saldo: string; estado: string }[];
 }
 type Pestana = "USUARIOS" | "PEDIDOS" | "COBROS" | "PAGOS";
 
@@ -30,6 +30,34 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const [montos, setMontos] = useState<Record<string, string>>({});
   const [mensaje, setMensaje] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const [usuarioPago, setUsuarioPago] = useState("");
+  const [desdePago, setDesdePago] = useState("2026-10-01");
+  const [hastaPago, setHastaPago] = useState("2026-10-31");
+  const [cotizacion, setCotizacion] = useState<{ produccion: string; porcentaje: string; bruto: string } | null>(null);
+  const [errorPago, setErrorPago] = useState("");
+  const parametrosPago = { usuario_id: usuarioPago, desde: desdePago, hasta: hastaPago, moneda };
+  const cotizarPago = async () => {
+    setCotizacion(null); setErrorPago("");
+    try {
+      setCotizacion(await enviarJson<{ produccion: string; porcentaje: string; bruto: string }>(
+        "/api/v1/responsable/pagos/cotizar", "POST", parametrosPago,
+      ));
+    } catch (e) { setErrorPago(String(e)); }
+  };
+  const programarPago = async () => {
+    setErrorPago("");
+    try {
+      await enviarJson("/api/v1/responsable/pagos/programar", "POST", parametrosPago);
+      recargarEquipo(); setCotizacion(null); setMensaje("Pago programado.");
+    } catch (e) { setErrorPago(String(e)); }
+  };
+  const anularPago = async (id: string) => {
+    if (!window.confirm("¿Anular programación pendiente? La auditoría conservará el movimiento.")) return;
+    try {
+      await eliminar("/api/v1/responsable/pagos/" + id);
+      recargarEquipo(); setMensaje("Programación anulada.");
+    } catch (e) { setErrorPago(String(e)); }
+  };
   const distribuir = async (pedidoId: string) => {
     setGuardando(true);
     setMensaje("");
@@ -129,16 +157,25 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
         {clientes.length === 0 && <p>No hay expedientes vinculados a tus Usuarios en esta moneda.</p>}
       </>}
       {pestana === "PAGOS" && <>
-        <h3>Liquidaciones de mis Usuarios</h3>
-        <p>Saldo registrado a Usuarios: <strong>{formatearMonto(moneda, sumar(pagos.filter((p) => p.estado !== "PAGADO").map((p) => p.saldo)))}</strong></p>
-        <p className="tenue">Solo se incluyen liquidaciones programadas en el ERP. La remuneración propia del Responsable requiere un plan o liquidación específica y no se calcula de forma automática.</p>
-        <table><thead><tr><th>Usuario</th><th>Desde</th><th>Hasta</th><th>Bruto</th><th>Adelantos</th><th>Saldo</th><th>Estado</th></tr></thead>
-          <tbody>{pagos.map((p, i) => <tr key={i}><td>{nombreUsuario(p.usuario_id)}</td>
-            <td>{p.periodo_desde}</td><td>{p.periodo_hasta}</td>
-            <td>{formatearMonto(moneda, p.bruto)}</td><td>{formatearMonto(moneda, p.adelantos)}</td>
-            <td>{formatearMonto(moneda, p.saldo)}</td><td>{p.estado}</td></tr>)}</tbody>
+        <h3>Pago de Usuarios</h3>
+        <p>Saldo programado: <strong>{formatearMonto(moneda, sumar(pagos.filter((p) => p.estado === "PROGRAMADO").map((p) => p.saldo)))}</strong></p>
+        <p className="tenue">La base es la producción registrada por Usuario, multiplicada por el porcentaje de su plan vigente. Programar no equivale a pagar.</p>
+        <div className="filtros">
+          <label>Usuario <select value={usuarioPago} onChange={(e) => { setUsuarioPago(e.target.value); setCotizacion(null); }}>
+            <option value="">Seleccionar Usuario</option>
+            {(equipo?.usuarios ?? []).map((u) => <option key={u.id} value={u.id}>{u.codigo} · {u.nombre}</option>)}
+          </select></label>
+          <label>Desde <input type="date" value={desdePago} onChange={(e) => { setDesdePago(e.target.value); setCotizacion(null); }} /></label>
+          <label>Hasta <input type="date" value={hastaPago} onChange={(e) => { setHastaPago(e.target.value); setCotizacion(null); }} /></label>
+          <button type="button" disabled={!usuarioPago} onClick={() => void cotizarPago()}>Calcular pago</button>
+        </div>
+        {cotizacion && <p>Producción: {formatearMonto(moneda, cotizacion.produccion)} · Porcentaje: {cotizacion.porcentaje}% · <strong>Importe: {formatearMonto(moneda, cotizacion.bruto)}</strong> <button type="button" onClick={() => void programarPago()}>Programar</button></p>}
+        {errorPago && <p role="alert">{errorPago}</p>}
+        {mensaje && <p role="status">{mensaje}</p>}
+        <table><thead><tr><th>Usuario</th><th>Desde</th><th>Hasta</th><th>Producción</th><th>%</th><th>Bruto</th><th>Adelantos</th><th>Saldo</th><th>Estado</th><th>Acción</th></tr></thead>
+          <tbody>{pagos.map((p) => <tr key={p.id}><td>{nombreUsuario(p.usuario_id)}</td><td>{p.periodo_desde}</td><td>{p.periodo_hasta}</td><td>{formatearMonto(moneda, p.produccion)}</td><td>{p.porcentaje}%</td><td>{formatearMonto(moneda, p.bruto)}</td><td>{formatearMonto(moneda, p.adelantos)}</td><td>{formatearMonto(moneda, p.saldo)}</td><td>{p.estado}</td><td>{p.estado === "PROGRAMADO" && Number(p.adelantos) === 0 && <button type="button" onClick={() => void anularPago(p.id)}>Anular</button>}</td></tr>)}</tbody>
         </table>
-        {pagos.length === 0 && <p>No existen liquidaciones programadas para tu equipo en esta moneda.</p>}
+        {pagos.length === 0 && <p>No hay pagos programados en esta moneda.</p>}
       </>}
     </>
   );
