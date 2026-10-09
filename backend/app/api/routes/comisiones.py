@@ -48,7 +48,9 @@ def simular(
     if datos.hasta < datos.desde:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Periodo inválido")
     if datos.porcentaje_global is not None and datos.porcentajes_por_receptor:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Elija tasa global o tasas por receptor")
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Elija tasa global o tasas por receptor"
+        )
     if datos.porcentaje_global is not None and not (0 <= datos.porcentaje_global <= 100):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Tasa inválida")
     for receptor_id, tasa in datos.porcentajes_por_receptor.items():
@@ -85,5 +87,8 @@ def simular(
         "comision_total": str(resultado["comision_total"]),
         "detalle": resultado["detalle"],
         "simulacion": True,
-        "aviso": "No registra, aprueba ni realiza pagos. Validar producción y tarifas antes de liquidar.",
+        "aviso": (
+            "No registra, aprueba ni realiza pagos. "
+            "Validar producción y tarifas antes de liquidar."
+        ),
     }
