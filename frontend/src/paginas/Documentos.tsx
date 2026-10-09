@@ -187,7 +187,8 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
                 <th>Estado</th>
                 <th>Archivo</th>
                 <th>Tipo</th>
-                <th>Subido</th>
+                <th>Fecha de emisión</th>
+                <th>Fecha de carga</th>
                 <th>Lectura</th>
                 <th>Emisor</th>
                 <th>Receptor</th>
@@ -273,6 +274,7 @@ function FilaDocumento({
           ? ETIQUETA_TIPO_DOCUMENTO[documento.tipo_documento as TipoDocumento]
           : "Sin clasificar"}
       </td>
+      <td>{documento.fecha_emision ? formatearFecha(documento.fecha_emision) : "—"}</td>
       <td>{formatearFecha(documento.created_at)}</td>
       <td>
         {lectura ? (
