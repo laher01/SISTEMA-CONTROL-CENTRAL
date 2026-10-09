@@ -121,6 +121,22 @@ def login(
     return _salida_sesion(session, cuenta, rol)
 
 
+@router.get("/administracion-publica")
+def administracion_publica(
+    request: Request,
+    session: SessionDep,
+    settings: SettingsDep,
+) -> dict[str, str | bool]:
+    tenant = tenant_de_host(request, session, settings)
+    if tenant is None:
+        return {"por_subdominio": False, "nombre": "", "codigo": ""}
+    return {
+        "por_subdominio": True,
+        "nombre": tenant.nombre,
+        "codigo": tenant.codigo or "",
+    }
+
+
 @router.get("/acceso-publico")
 def acceso_publico(
     session: SessionDep,
