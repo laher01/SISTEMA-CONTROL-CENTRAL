@@ -27,7 +27,7 @@ def test_demo_autorizada_crea_tenant_aislado(session: Session) -> None:
 
     datos = AltaDemoIn(
         plan="profesional",
-        nombre_administrador="Carlos Juarez Perez",
+        nombre_administrador="Carlos Juarez",
         correo="carlos@example.com",
         dni="12345678",
         nombre_espacio="Administracion Carlos Juarez",

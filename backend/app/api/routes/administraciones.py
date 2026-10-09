@@ -102,9 +102,11 @@ def _provisionar_administracion(
 ) -> dict[str, str]:
     nombre = " ".join(datos.nombre_administrador.strip().upper().split())
     partes = nombre.split()
-    if len(partes) < 3:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Indique tres nombres/apellidos")
+    if len(partes) < 2:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Indique nombre y apellido")
     sigla = "".join(parte[0] for parte in partes[:3])
+    if len(partes) == 2:
+        sigla = (sigla + partes[-1][1:])[:3]
     if not re.fullmatch(r"[A-Z]{3}", sigla):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Iniciales inválidas")
     espacio = " ".join(datos.nombre_espacio.strip().split())
