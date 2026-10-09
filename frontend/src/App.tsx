@@ -133,7 +133,7 @@ export default function App() {
           {(sesion.rol === "USUARIO" || sesion.rol === "GESTOR") && (
             <div className="jerarquia-sesion" aria-label="Jerarquía de responsabilidad">
               {(sesion.jerarquia ?? [])
-                .filter((persona, indice) => sesion.rol === "GESTOR" || indice > 0)
+                .filter((_, indice) => sesion.rol === "GESTOR" || indice > 0)
                 .map((persona) => (
                   <div className="jerarquia-sesion-nodo" key={persona.codigo}>
                     <span className="jerarquia-sesion-rol">{persona.rol}</span>
