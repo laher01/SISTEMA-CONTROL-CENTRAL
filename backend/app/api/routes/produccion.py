@@ -7,9 +7,9 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
-from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.models import Empresa, Expediente, Gestor, Miembro
 from app.schemas import ComprasProveedorFila, ProduccionFila, ProduccionResumen
+from app.services.ambito_gerencia import alcance_expedientes_gerente
 
 router = APIRouter(prefix="/produccion", tags=["produccion"])
 
