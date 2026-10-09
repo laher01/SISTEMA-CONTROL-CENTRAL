@@ -1096,110 +1096,10 @@ def programar_pago(
     auth: OperativeAuthDep,
     datos: PagoERPProgramarIn,
 ) -> PagoERP:
-    _validar_acceso(auth.rol)
-    _usuario_valido(session, tenant_id, datos.usuario_id)
-    if datos.periodo_hasta < datos.periodo_desde:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "El periodo final no puede ser anterior al inicial",
-        )
-
-    existente = session.scalar(
-        select(PagoERP).where(
-            PagoERP.tenant_id == tenant_id,
-            PagoERP.usuario_id == datos.usuario_id,
-            PagoERP.periodo_desde == datos.periodo_desde,
-            PagoERP.periodo_hasta == datos.periodo_hasta,
-            PagoERP.moneda == datos.moneda,
-        )
+    raise HTTPException(
+        status.HTTP_403_FORBIDDEN,
+        "La programación corresponde exclusivamente al Responsable del Usuario",
     )
-    if existente is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Ya existe un pago para ese periodo")
-
-    plan = session.scalar(
-        select(PlanLiquidacion)
-        .where(
-            PlanLiquidacion.tenant_id == tenant_id,
-            PlanLiquidacion.usuario_id == datos.usuario_id,
-            PlanLiquidacion.activo.is_(True),
-            PlanLiquidacion.vigencia_desde <= datos.periodo_hasta,
-            (
-                (PlanLiquidacion.vigencia_hasta.is_(None))
-                | (PlanLiquidacion.vigencia_hasta >= datos.periodo_desde)
-            ),
-        )
-        .order_by(PlanLiquidacion.vigencia_desde.desc())
-        .limit(1)
-    )
-    if plan is None:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "El Usuario no tiene un Plan de Liquidación vigente",
-        )
-
-    produccion = session.scalar(
-        select(func.coalesce(func.sum(Expediente.importe_total), 0)).where(
-            Expediente.tenant_id == tenant_id,
-            Expediente.deleted_at.is_(None),
-            Expediente.usuario_id == datos.usuario_id,
-            Expediente.moneda == datos.moneda,
-            Expediente.fecha_emision >= datos.periodo_desde,
-            Expediente.fecha_emision <= datos.periodo_hasta,
-        )
-    )
-    produccion_total = Decimal(produccion or 0)
-    bruto = (produccion_total * Decimal(plan.porcentaje) / Decimal("100")).quantize(Decimal("0.01"))
-
-    adelantos = list(
-        session.scalars(
-            select(AdelantoERP).where(
-                AdelantoERP.tenant_id == tenant_id,
-                AdelantoERP.usuario_id == datos.usuario_id,
-                AdelantoERP.moneda == datos.moneda,
-                AdelantoERP.fecha <= datos.periodo_hasta,
-                AdelantoERP.aplicado.is_(False),
-            )
-        )
-    )
-    total_adelantos = sum((Decimal(a.monto) for a in adelantos), Decimal("0"))
-    saldo = bruto - total_adelantos + Decimal(datos.ajustes)
-
-    pago = PagoERP(
-        tenant_id=tenant_id,
-        usuario_id=datos.usuario_id,
-        plan_id=plan.id,
-        periodo_desde=datos.periodo_desde,
-        periodo_hasta=datos.periodo_hasta,
-        moneda=datos.moneda,
-        produccion_total=produccion_total,
-        porcentaje=plan.porcentaje,
-        bruto=bruto,
-        adelantos=total_adelantos,
-        ajustes=datos.ajustes,
-        saldo=saldo,
-        estado="PROGRAMADO",
-        fecha_programada=datos.fecha_programada,
-        conciliado=False,
-        creado_por_cuenta_id=cuenta_administradora_responsable(session, auth),
-    )
-    session.add(pago)
-    for adelanto in adelantos:
-        adelanto.aplicado = True
-    session.flush()
-    auditoria.registrar(
-        session,
-        tenant_id,
-        "PAGO_ERP_PROGRAMADO",
-        "pago_erp",
-        pago.id,
-        {
-            "usuario_id": str(datos.usuario_id),
-            "produccion_total": str(produccion_total),
-            "saldo": str(saldo),
-        },
-    )
-    session.commit()
-    return pago
 
 
 @router.get("", response_model=list[PagoERPOut])
@@ -1275,43 +1175,7 @@ def eliminar_programacion(
     auth: OperativeAuthDep,
     pago_id: uuid.UUID,
 ) -> None:
-    if auth.rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR):
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            "Solo SUPERADMIN o Administración pueden eliminar programaciones",
-        )
-
-    pago = session.get(PagoERP, pago_id)
-    if pago is None or pago.tenant_id != tenant_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pago no encontrado")
-
-    if pago.estado in {"PAGADO", "CONCILIADO"} or pago.conciliado:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "No se puede eliminar una programación pagada o conciliada",
-        )
-
-    if Decimal(pago.adelantos) != Decimal("0"):
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "No se puede eliminar automáticamente una programación que ya aplicó adelantos",
-        )
-
-    auditoria.registrar(
-        session,
-        tenant_id,
-        "PAGO_ERP_PROGRAMACION_ELIMINADA",
-        "pago_erp",
-        pago.id,
-        {
-            "usuario_id": str(pago.usuario_id),
-            "periodo_desde": pago.periodo_desde.isoformat(),
-            "periodo_hasta": pago.periodo_hasta.isoformat(),
-            "moneda": str(pago.moneda),
-            "produccion_total": str(pago.produccion_total),
-            "saldo": str(pago.saldo),
-            "estado": pago.estado,
-        },
+    raise HTTPException(
+        status.HTTP_403_FORBIDDEN,
+        "La anulación corresponde exclusivamente al Responsable del Usuario",
     )
-    session.delete(pago)
-    session.commit()

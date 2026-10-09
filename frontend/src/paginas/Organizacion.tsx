@@ -32,6 +32,7 @@ function OrganizacionAdmin() {
   const [usuarioId, setUsuarioId] = useState("");
   const [codigoGestor, setCodigoGestor] = useState("");
   const [nombreGestor, setNombreGestor] = useState("");
+  const [porcentajeGestor, setPorcentajeGestor] = useState("");
   const [gestorEditando, setGestorEditando] = useState<string | null>(null);
   const [credencial, setCredencial] = useState<CredencialTemporal | null>(null);
   const [mensaje, setMensaje] = useState("");
@@ -109,7 +110,9 @@ function OrganizacionAdmin() {
     try {
       const datos = { codigo: codigoGestor, nombre: nombreGestor, usuario_id: usuarioId };
       if (gestorEditando) {
-        await enviarJson<Gestor>("/api/v1/gestores/" + gestorEditando, "PATCH", datos);
+        await enviarJson<Gestor>("/api/v1/gestores/" + gestorEditando, "PATCH", {
+          ...datos, porcentaje_comision: porcentajeGestor === "" ? null : porcentajeGestor,
+        });
         setMensaje("Gestor actualizado.");
       } else {
         const alta = await enviarJson<AltaGestor>("/api/v1/gestores", "POST", datos);
@@ -118,6 +121,7 @@ function OrganizacionAdmin() {
       }
       setCodigoGestor("");
       setNombreGestor("");
+      setPorcentajeGestor("");
       setGestorEditando(null);
       recargarGestores();
     } catch (e) {
@@ -250,6 +254,12 @@ function OrganizacionAdmin() {
               onChange={(e) => setNombreGestor(e.target.value)}
               required
             />
+            {gestorEditando && <label>Tasa Gestor (%)
+              <input type="number" min="0" max="100" step="0.0001"
+                placeholder="Porcentaje de comisión"
+                value={porcentajeGestor}
+                onChange={(e) => setPorcentajeGestor(e.target.value)} />
+            </label>}
             <button type="submit">{gestorEditando ? "Guardar gestor" : "Crear y generar clave"}</button>
             {gestorEditando && (
               <button type="button" onClick={() => {
@@ -267,6 +277,7 @@ function OrganizacionAdmin() {
               setUsuarioId(g.usuario_id ?? "");
               setCodigoGestor(g.codigo);
               setNombreGestor(g.nombre);
+              setPorcentajeGestor(g.porcentaje_comision ?? "");
             }}
             alRestablecer={(g) => void restablecerGestor(g)}
           />
@@ -389,6 +400,7 @@ function TablaGestores({
         <thead>
           <tr>
             <th>Gestor</th>
+            <th>Comisión</th>
             {!ocultarUsuario && <th>Usuario</th>}
             <th>Acciones</th>
           </tr>
@@ -399,6 +411,7 @@ function TablaGestores({
             return (
               <tr key={g.id}>
                 <td>{g.codigo} · {g.nombre}</td>
+                <td>{g.porcentaje_comision != null ? g.porcentaje_comision + "%" : "Sin configurar"}</td>
                 {!ocultarUsuario && <td>{usuario ? usuario.codigo + " · " + usuario.nombre : "Sin usuario"}</td>}
                 <td>
                   <button type="button" onClick={() => alEditar(g)}>Editar</button>{" "}

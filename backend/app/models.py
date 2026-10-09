@@ -156,6 +156,7 @@ class Gestor(ConId, ConTenant, ConCreacion, Base):
     codigo: Mapped[str] = mapped_column(String(50))
     nombre: Mapped[str] = mapped_column(String(200))
     usuario_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
+    porcentaje_comision: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
     creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("cuentas_acceso.id"), index=True
     )
@@ -491,6 +492,34 @@ class PagoERP(ConId, ConTenant, ConCreacion, Base):
         ForeignKey("documentos.id"), index=True
     )
     conciliado: Mapped[bool] = mapped_column(default=False, server_default="false")
+
+
+class PagoGestor(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "pagos_gestores"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "gestor_id",
+            "periodo_desde",
+            "periodo_hasta",
+            "moneda",
+            name="uq_pagos_gestores_periodo",
+        ),
+    )
+
+    gestor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("gestores.id"), index=True)
+    usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_acceso.id"), index=True
+    )
+    periodo_desde: Mapped[date] = mapped_column(Date)
+    periodo_hasta: Mapped[date] = mapped_column(Date)
+    moneda: Mapped[str] = mapped_column(String(3))
+    produccion_total: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    porcentaje: Mapped[Decimal] = mapped_column(Numeric(7, 4))
+    bruto: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    saldo: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    estado: Mapped[str] = mapped_column(String(20), default="PROGRAMADO")
 
 
 class Auditoria(ConId, ConTenant, ConCreacion, Base):

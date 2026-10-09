@@ -98,12 +98,8 @@ def test_pago_erp_calcula_produccion_adelanto_y_saldo(
             "fecha_programada": None,
         },
     )
-    assert pago.status_code == 201, pago.text
-    datos = pago.json()
-    assert Decimal(datos["produccion_total"]) == Decimal("1500.00")
-    assert Decimal(datos["bruto"]) == Decimal("22.50")
-    assert Decimal(datos["adelantos"]) == Decimal("5.00")
-    assert Decimal(datos["saldo"]) == Decimal("18.50")
+    assert pago.status_code == 403
+    assert "Responsable" in pago.json()["detail"]
 
 
 def test_alerta_manual_llega_al_usuario_destinatario(
@@ -258,29 +254,14 @@ def test_no_infiere_ruc_por_orden_si_hay_mas_de_dos_candidatos() -> None:
     assert "ruc_receptor" not in campos
 
 
-def test_admin_puede_eliminar_programacion_sin_adelantos(
+def test_admin_no_puede_programar_ni_eliminar_pago_usuario(
     client: TestClient,
     auth_prueba: AuthPrueba,
 ) -> None:
     usuario_id = auth_prueba.contexto.usuario_id
     assert usuario_id is not None
-
-    _subir_factura(client, "F001-00000096", "400.00")
     auth_prueba.como_admin()
-
-    plan = client.post(
-        "/api/v1/pagos/planes",
-        json={
-            "usuario_id": str(usuario_id),
-            "nombre": "Plan eliminar",
-            "porcentaje": "2.2",
-            "vigencia_desde": "2026-10-01",
-            "vigencia_hasta": None,
-        },
-    )
-    assert plan.status_code == 201, plan.text
-
-    pago = client.post(
+    intento = client.post(
         "/api/v1/pagos",
         json={
             "usuario_id": str(usuario_id),
@@ -291,65 +272,10 @@ def test_admin_puede_eliminar_programacion_sin_adelantos(
             "fecha_programada": None,
         },
     )
-    assert pago.status_code == 201, pago.text
-    pago_id = pago.json()["id"]
+    assert intento.status_code == 403
+    from uuid import uuid4
 
-    eliminado = client.delete(f"/api/v1/pagos/{pago_id}")
-    assert eliminado.status_code == 204, eliminado.text
-
-    pagos = client.get("/api/v1/pagos")
-    assert pagos.status_code == 200, pagos.text
-    assert all(item["id"] != pago_id for item in pagos.json())
-
-
-def test_no_elimina_programacion_que_aplico_adelantos(
-    client: TestClient,
-    auth_prueba: AuthPrueba,
-) -> None:
-    usuario_id = auth_prueba.contexto.usuario_id
-    assert usuario_id is not None
-    auth_prueba.como_admin()
-
-    plan = client.post(
-        "/api/v1/pagos/planes",
-        json={
-            "usuario_id": str(usuario_id),
-            "nombre": "Plan con adelanto",
-            "porcentaje": "2.2",
-            "vigencia_desde": "2026-11-01",
-            "vigencia_hasta": None,
-        },
-    )
-    assert plan.status_code == 201, plan.text
-
-    adelanto = client.post(
-        "/api/v1/pagos/adelantos",
-        json={
-            "usuario_id": str(usuario_id),
-            "fecha": "2026-11-05",
-            "moneda": "PEN",
-            "monto": "10.00",
-            "descripcion": "Protección eliminación",
-        },
-    )
-    assert adelanto.status_code == 201, adelanto.text
-
-    pago = client.post(
-        "/api/v1/pagos",
-        json={
-            "usuario_id": str(usuario_id),
-            "periodo_desde": "2026-11-01",
-            "periodo_hasta": "2026-11-30",
-            "moneda": "PEN",
-            "ajustes": "0",
-            "fecha_programada": None,
-        },
-    )
-    assert pago.status_code == 201, pago.text
-    assert Decimal(pago.json()["adelantos"]) == Decimal("10.00")
-
-    eliminado = client.delete(f"/api/v1/pagos/{pago.json()['id']}")
-    assert eliminado.status_code == 409
+    assert client.delete(f"/api/v1/pagos/{uuid4()}").status_code == 403
 
 
 def test_registros_totalizan_por_receptor_dia_y_mes(client: TestClient) -> None:
