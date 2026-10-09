@@ -49,7 +49,7 @@ def test_gerente_global_ve_historicos_sin_ver_otros_gerentes(
     assert {f["correlativo"] for f in registros.json()["filas"]} == {"100", "101"}
     expedientes = client.get("/api/v1/expedientes")
     assert expedientes.status_code == 200, expedientes.text
-    assert expedientes.json()["total_registros"] == 2
+    assert len(expedientes.json()) == 2
 
     ingresar("GERENTE02", otro_gerente)
     registros_otros = client.get("/api/v1/registros")
