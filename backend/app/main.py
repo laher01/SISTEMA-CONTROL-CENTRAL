@@ -2,6 +2,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
+    administraciones,
     alertas,
     auth,
     chat,
@@ -41,6 +42,7 @@ if cors_origins:
 api = APIRouter(prefix="/api/v1")
 api.include_router(auth.router)
 for modulo in (
+    administraciones,
     documentos,
     chat,
     expedientes,

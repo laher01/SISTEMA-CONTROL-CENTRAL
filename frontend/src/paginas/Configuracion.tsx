@@ -21,7 +21,7 @@ const PERMISO = "ELIMINAR_REGISTROS";
 
 export default function Configuracion({ sesion }: { sesion: SesionActual }) {
   const [seccion, setSeccion] = useState<
-    "permisos" | "acceso" | "empresas" | "mantenimiento"
+    "permisos" | "acceso" | "empresas" | "mantenimiento" | "administraciones"
   >("permisos");
   const { datos, error, cargando, recargar } = useDatos<PermisoConfigurado[]>(
     "/api/v1/configuracion/permisos",
@@ -42,6 +42,7 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
         <button onClick={() => setSeccion("permisos")}>Permisos operativos</button>
         {sesion.rol === "SUPERADMIN" && (
           <>
+            <button onClick={() => setSeccion("administraciones")}>Administraciones SaaS</button>
             <button onClick={() => setSeccion("acceso")}>Configuración de acceso</button>
             <button onClick={() => setSeccion("empresas")}>Empresas registradas</button>
             <button onClick={() => setSeccion("mantenimiento")}>Mantenimiento</button>
@@ -58,6 +59,17 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
           {cargando && <p>Cargando…</p>}
           {error && <p className="error">{error}</p>}
           <section className="panel-configuracion">
+            <h3>Catálogo de roles y responsabilidades</h3>
+            <p className="tenue">Este catálogo muestra capacidades actuales y objetivos pendientes; el control efectivo depende siempre del backend.</p>
+            <table><thead><tr><th>Rol</th><th>Ámbito de acceso</th><th>Estado técnico</th></tr></thead><tbody>
+              <tr><td>SUPERADMIN</td><td>Inventario global SaaS; operación según sesión de tenant</td><td>Implementado parcialmente</td></tr>
+              <tr><td>ADMINISTRADOR</td><td>Su propia Administración</td><td>Implementado</td></tr>
+              <tr><td>GERENTE</td><td>Presupuestos y cobros del tenant</td><td>Falta restringir detalle subordinado</td></tr>
+              <tr><td>SECRETARIA</td><td>Control documental transversal del tenant</td><td>Implementado parcialmente</td></tr>
+              <tr><td>RESPONSABLE</td><td>Sus Usuarios y sus pedidos</td><td>Pendiente de implementar</td></tr>
+              <tr><td>USUARIO</td><td>Sus Gestores y operaciones</td><td>Implementado parcialmente</td></tr>
+              <tr><td>GESTOR</td><td>Sus documentos y asignaciones</td><td>Acceso independiente implementado</td></tr>
+            </tbody></table>
             <h3>Eliminar registros</h3>
             <table>
               <thead><tr><th>Rol</th><th>Permiso</th></tr></thead>
@@ -93,6 +105,7 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
         </>
       )}
 
+      {seccion === "administraciones" && sesion.rol === "SUPERADMIN" && <AdministracionesPanel />}
       {seccion === "acceso" && sesion.rol === "SUPERADMIN" && <ConfiguracionAccesoPanel />}
       {seccion === "empresas" && sesion.rol === "SUPERADMIN" && <EmpresasRegistradasPanel />}
       {seccion === "mantenimiento" && sesion.rol === "SUPERADMIN" && <MantenimientoPanel />}
@@ -781,6 +794,61 @@ function EmpresasRegistradasPanel() {
           ))}
         </tbody>
       </table>
+    </section>
+  );
+}
+
+
+interface AdministracionGlobal {
+  id: string;
+  nombre: string;
+  administradores: number;
+  gerentes: number;
+  secretarias: number;
+  usuarios: number;
+  gestores: number;
+  cuentas_activas: number;
+  estado_suscripcion: string;
+}
+
+function AdministracionesPanel() {
+  const { datos, error, cargando, recargar } = useDatos<AdministracionGlobal[]>(
+    "/api/v1/configuracion/administraciones",
+  );
+  const [texto, setTexto] = useState("");
+  const visibles = (datos ?? []).filter((a) =>
+    a.nombre.toLowerCase().includes(texto.toLowerCase()) || a.id.includes(texto),
+  );
+  return (
+    <section className="panel-configuracion">
+      <h3>Inventario global de Administraciones</h3>
+      <p className="tenue">
+        Exclusivo de SUPERADMIN. Cada Administración conserva su propio espacio y datos.
+        Las cuentas activas son credenciales habilitadas, no sesiones conectadas actualmente.
+        El estado comercial de suscripción todavía no está implementado.
+      </p>
+      <div className="acciones">
+        <input value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Buscar Administración o UUID" />
+        <button onClick={() => recargar()}>Actualizar</button>
+      </div>
+      {cargando && <p>Cargando Administraciones…</p>}
+      {error && <p role="alert">{error}</p>}
+      <p>Total de Administraciones registradas: <strong>{datos?.length ?? 0}</strong></p>
+      <table>
+        <thead><tr><th>Administración</th><th>Identificador</th><th>Administradores</th><th>Gerentes</th><th>Secretaría</th><th>Usuarios</th><th>Gestores</th><th>Cuentas habilitadas</th></tr></thead>
+        <tbody>{visibles.map((a) => (
+          <tr key={a.id}>
+            <td>{a.nombre}</td><td>{a.id}</td><td>{a.administradores}</td>
+            <td>{a.gerentes}</td><td>{a.secretarias}</td><td>{a.usuarios}</td>
+            <td>{a.gestores}</td><td>{a.cuentas_activas}</td>
+          </tr>
+        ))}</tbody>
+      </table>
+      <p className="tenue">
+        La edición, suspensión, creación y eliminación de Administraciones requiere
+        incorporar estados de tenant, respaldo y auditoría. No se permite borrar
+        información de otros espacios desde esta vista.
+      </p>
     </section>
   );
 }
