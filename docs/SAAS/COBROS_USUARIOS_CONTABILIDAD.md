@@ -1,87 +1,72 @@
-# Cobros del Responsable al Usuario y Contabilidad del Usuario
+# Motor financiero jerárquico — especificación corregida 09/10/2026
 
-Estado: especificación técnica para implementación en rama de trabajo; **no desplegar sin pruebas**.
+**Estado: diseño en rama, no desplegado.** Sustituye íntegramente el planteamiento anterior que confundía cobros del Responsable al Usuario.
 
-## Alcance y jerarquía
-`RESPONSABLE -> USUARIO -> GESTOR`. La cartera solo se consulta o modifica dentro del mismo tenant. Cada Responsable administra el porcentaje de PAGO exclusivamente de Usuarios cuyo `responsable_id` sea su propio `miembro_id`. El porcentaje de COBRO del Responsable no es ese campo: se calcula por factura según agente de retención. La cuenta Usuario solo lee las tasas y sus movimientos; Gestor no accede a esta contabilidad. Administración supervisa con permisos explícitos y auditoría. El porcentaje del Usuario (`Miembro.porcentaje_produccion`) NO es el porcentaje de comisión del Gestor (`Gestor.porcentaje_comision`).
+## Cadena económica y límites de información
 
-La página `/pago-gestores` existente es una obligación del Usuario hacia sus Gestores, y no equivale a cobros del Responsable ni a ingresos recibidos.
+1. GERENTE **paga al RESPONSABLE**, quien **cobra de Gerencia**. El cálculo vigente se encuentra en `backend/app/api/routes/pagos_responsables.py` y usa 3 % si el receptor es agente de retención y 3,5 % en otro caso, salvo las reglas personalizadas existentes aprobadas. Reutilizar `PagoResponsableERP` y nunca crear cobro duplicado.
+2. RESPONSABLE **paga al USUARIO** por el porcentaje que el Responsable define sobre la producción introducida por los Gestores de ese Usuario. Reutilizar `PagoERP` y `Miembro.porcentaje_produccion` / planes vigentes. Solo el Responsable puede fijar/modificar el porcentaje de su Usuario.
+3. USUARIO **paga a GESTORES u otros beneficiarios** que autorice en su dominio, con porcentajes configurados por el propio Usuario cuando liquida. Los porcentajes se aplican sobre el total de producción que corresponda a cada liquidación/beneficiario. Puede incluir varias personas en una misma liquidación, incluso quien no sea Gestor, con concepto, identificación y sustento verificable.
+4. GESTOR **solo conoce sus expedientes, su producción atribuida, el porcentaje propio, cuánto cobrará, sus depósitos y saldos**. No ve porcentajes ni importes de Usuario, Responsable o Gerencia, ni pagos a otros Gestores.
 
-## Base económica
-Para cada Usuario, mes calendario y moneda:
-- **Fuente única de producción y comisiones**: TODOS los expedientes/facturas ingresados al sistema por Gestores del Usuario, con importe real y sin duplicaciones. Agrupar por `Expediente.gestor_id`, `Expediente.usuario_id`, período, moneda y receptor. No usar pedidos proyectados ni limitar a documentos ya cobrados como base de comisión; no computar carga repetida de una factura.
-- **Clasificación de cada factura**: comprobar si la empresa receptora es agente de retención en el contexto operativo pertinente. El modelo `Empresa.agente_retencion` existe, pero antes de calcular se debe validar el criterio de identificación, la vigencia y la fuente del dato para el período facturado. Conservar clasificación snapshot en la liquidación.
-- **Cobro del Responsable al Usuario**: sumatoria de importes de facturas cuyo receptor es agente de retención × **3,00 %** + sumatoria de importes de facturas cuyos receptores NO son agentes de retención × **3,50 %**. La tasa se aplica por factura, no sobre un total indiferenciado. Responsable no usa aquí `Miembro.porcentaje_produccion`.
-- **Pago del Responsable al Usuario**: base de la producción ingresada por sus Gestores × porcentaje previamente asignado al Usuario por Responsable en el sistema existente (`Miembro.porcentaje_produccion`, o regla de plan vigente cuando corresponda). Solo Responsable modifica esa tasa y se guarda snapshot de liquidación. No mezclar con cobro del Responsable.
-- **Pago del Usuario a Gestores**: producción ingresada por cada Gestor × porcentaje de comisión asignado a ese Gestor conforme a la regla actual, manteniendo la autorización de edición vigente hasta revisión expresa.
-- **Separación contable**: el Responsable **cobra** al Usuario con 3 %/3,5 % y, por otro movimiento independiente, **paga** al Usuario según porcentaje asignado. Nunca efectuar compensación automática.
-- **Cobrado**: SUMA de abonos confirmados, nunca de comprobantes adjuntados sin validar.
-- **Saldo por cobrar**: cobro devengado – cobrado; no negativo, excedentes requieren ajuste separado.
-- **Pagado a Gestores**: suma de transferencias CONFIRMADAS a Gestores, no de programaciones.
-- **Resultado de caja del Usuario** (referencial): cobros efectivamente ingresados al Usuario – pagos efectivamente efectuados al Responsable – pagos a Gestores – otros egresos registrados. No presentar `producción bruta - pagos` como efectivo remanente.
+**Privacidad estricta:** USUARIO no sabe cuánto cobra el Responsable de Gerencia; GESTOR no sabe cuánto cobra Usuario del Responsable ni Responsable de Gerencia. No mostrar datos por frontend, API, exportaciones, reportes, chat automático, eventos, respuestas de error, auditores sin acceso o descarga de vouchers. Autorización RBAC con scope por tenant y propietario; pruebas directas por endpoint y UUID ajeno.
 
-La palabra *cobrado* debe mostrar **quién cobró a quién**; evitar confusión entre dinero del cliente al Usuario y dinero del Usuario al Responsable. Conciliar con comprobantes separados.
+## Navegación definitiva por rol
 
-## Estados del cobro
-`PENDIENTE`: sin abonos confirmados. `PARCIAL`: uno o más abonos y saldo positivo. `PAGADO`: saldo cero y abonos confirmados. `POSTERGADO`: hay nueva fecha compromiso; no modifica el saldo devengado. `PROGRAMADO`: plan de pago registrado, sin transferencia aún. `EN_REVISION`: voucher adjunto esperando conciliación. `ANULADO`: reversión formal auditada, no borrar movimientos.
-
-Cada prórroga registra fecha inicial, fecha nueva, motivo, autor y sello horario. Cada prorrateo registra cuotas (monto, vencimiento, moneda, estado), suma exacta = saldo al momento de generar plan. Abonos parciales consumen cuotas y saldo transaccionalmente.
-
-## Modelo incremental propuesto (migración 0015 o siguiente libre)
-1. `cobros_usuarios`: UUID id/tenant/responsable/usuario, inicio/fin, moneda, produccion_bruta, porcentaje_snapshot, monto_devengado, monto_pagado, saldo, estado, timestamps, revision. Unicidad tenant+usuario+período+moneda con control de solapamientos.
-2. `cuotas_cobro_usuario`: UUID, cobro_id, número de cuota, fecha_compromiso, importe, saldo, estado, observación.
-3. `abonos_cobro_usuario`: UUID, cobro_id, cuota_id opcional, fecha_operación, monto, referencia bancaria, estado conciliación, realizado_por, creado_at, idempotency_key.
-4. `evidencias_abono_usuario`: UUID, abono_id, nombre, MIME permitido, ruta_storage protegida, SHA256, tamaño, fecha, cargado_por. Guardar archivo en almacenamiento privado y servir mediante autorización, no URL pública.
-5. `historial_cobro_usuario`: entidad, acción, estado anterior/nuevo, actor, rol, timestamp, motivo, detalles JSON (sin datos bancarios sensibles ni rutas públicas).
-6. `tasas_usuario_historial`: usuario_id, tasa de PAGO al Usuario, vigencia_desde/hasta, asignada_por (Responsable), timestamp. Evitar cambios retroactivos.\n7. `detalle_cobro_usuario`: cobro_id, expediente_id, receptor_id, snapshot de condición agente_retencion, tasa 3.00/3.50, base y comisión. Unicidad cobro_id+expediente_id; conservar trazabilidad por factura.
-
-Todos los IDs deben verificarse con tenant + vínculo Responsable–Usuario; el identificador pasado por el navegador nunca da acceso por sí mismo.
-
-## API propuesta
-- `GET /api/v1/usuario/contabilidad?mes=YYYY-MM&moneda=PEN`: solo Usuario autenticado, resumen + series mensuales + detalle de sus Gestores.
-- `GET /api/v1/usuario/cobros`: tasa vigente en solo lectura, liquidaciones y calendario de pagos al Responsable.
-- `GET /api/v1/responsable/cobros-usuarios?usuario_id=...&mes=...`: solo Responsable propietario.
-- `PATCH /api/v1/responsable/usuarios/{id}/porcentaje`: porcentaje de PAGO al Usuario, solo Responsable del Usuario; rango 0..100, Decimal y auditoría; nunca confiar en rol declarado por cliente.
-- `POST /api/v1/responsable/cobros-usuarios/cerrar-mes`: operación idempotente, snapshot de base/tasa y exclusión de períodos duplicados.
-- `POST /api/v1/responsable/cobros-usuarios/{id}/cuotas`: programar o prorrogar con motivo y validación de sumas.
-- `POST /api/v1/responsable/cobros-usuarios/{id}/abonos`: registrar abono pendiente de conciliación; confirmación explícita autorizada, no asumir dinero recibido.
-- `POST /api/v1/responsable/cobros-usuarios/abonos/{id}/evidencia`: multipart, MIME JPG/PNG/PDF, análisis de tamaño, SHA256; nunca ejecutar archivos.
-- `POST /api/v1/responsable/cobros-usuarios/abonos/{id}/confirmar`: idempotente; transacción con bloqueo de fila para actualizar saldos y estados.
-
-## Navegación
-**USUARIO**: `Cobros` (obligación calculada con tasas 3 % agente de retención / 3,5 % no agente, solo lectura), `Pago de Gestores` (obligaciones propias), `Contabilidad` (mes, año, moneda, producción, cobrado a clientes, pagado al Responsable, pagado a Gestores, saldos y resultado). Tabla con estados, próximos vencimientos, botón para visualizar vouchers autorizados, exportar reporte.
-
-**RESPONSABLE**: `Mis Usuarios` incorpora exclusivamente la tasa editable del PAGO a Usuarios y fecha de vigencia; nueva sección `Cobros a Usuarios` con liquidación mensual, cuotas, vencimientos, vouchers y confirmaciones. Conservar `Cobros y clientes` existente: es distinto porque allí se exhibe producción por receptor. Conservar `Pago de Usuarios` como liquidación de pagos a favor de Usuario hasta clarificar su efecto económico; jamás compensar automáticamente cobros y pagos entre las partes.
-
-## Matriz estricta de permisos financieros
-| Rol | Cobros | Pagos | Comisiones y producción |
+| Rol | Cobros | Pagos | Vista de comisiones |
 | --- | --- | --- | --- |
-| SUPERADMIN / ADMINISTRADOR | Supervisión auditada según permisos | Supervisión auditada | Consulta según ámbito |
-| RESPONSABLE | Cobros a sus Usuarios: 3 % / 3,5 % por facturas | Pagos a sus Usuarios con tasa configurada | Producción de Gestores de sus Usuarios |
-| USUARIO | Consulta de los cobros que le registra Responsable | Pago a sus Gestores | Su producción y contabilidad mensual |
-| GERENTE | **Sin sección ni endpoint de Cobros** | **Solo Pagos**, dentro de su ámbito | Consulta según permisos de negocio |
-| SECRETARIA | **Sin Cobros** | **Sin Pagos** | Solo operaciones documentales autorizadas |
-| GESTOR | Sin Cobros | Sin Pagos | Solo sus registros de producción |
+| GERENTE | Sin apartado Cobros | Pagos a Responsables | Solo datos necesarios de sus pagos |
+| RESPONSABLE | Cobros recibidos de Gerencia (sus propios pagos) | Pagos a Usuarios propios | Producción de Usuarios/Gestores de su equipo; no pagos privados de Usuario a terceros |
+| USUARIO | Solo cobros recibidos del Responsable (ingreso a favor suyo); sin conocer ingresos del Responsable | Liquidación múltiple a Gestores y otros beneficiarios | Solo sus márgenes, pagos y producción |
+| GESTOR | Su saldo a cobrar | Sin pagos ajenos | Solo su liquidación individual |
+| SECRETARIA | Ninguno | Ninguno | Solo control documental |
+| ADMINISTRADOR/SUPERADMIN | Supervisión excepcional auditada, limitada al tenant | Supervisión auditada | Permisos explícitos |
 
-No basta con ocultar el menú: validar autorización en cada endpoint y en consultas por tenant, rol y responsable. En el menú actual de Gerente hay `/pagos` y no `/mi-equipo/cobros`; Secretaría ya no tiene menú financiero. Revisar que las APIs y otros accesos directos cumplan exactamente esta matriz.
+Eliminar la sugerencia de pestaña «Cobros del Responsable al Usuario»: es conceptualmente incorrecta. Para Gerencia el menú será «Pagos», Responsable «Mis cobros» (solo dinero que Gerencia le debe o ha pagado) + «Pago a Usuarios», Usuario «Mis ingresos» + «Liquidar y pagar» + «Contabilidad», Gestor «Mi liquidación».
 
-## Pruebas obligatorias antes del VPS
-- Responsable A no puede consultar ni modificar Usuario de Responsable B, incluso si conoce UUID.
-- Usuario no puede editar porcentaje ni confirmar abonos.
-- Cambio de tasa de PAGO al Usuario no altera períodos cerrados.\n- Facturas de agente de retención usan exactamente 3 %; facturas no agentes exactamente 3,5 %, aunque ambas pertenezcan al mismo Gestor/Usuario.\n- La suma base incluye TODOS los expedientes ingresados por Gestores sin duplicados, independientemente de su cobro.\n- Gerente solo puede acceder a Pagos; Secretaría tiene 403 para Cobros y Pagos por acceso directo a API.
-- Misma factura cargada varias veces cuenta una sola vez.
-- Separación PEN y USD, sin sumar monedas.
-- Dos solicitudes simultáneas de abono con misma idempotency_key acreditan una sola vez.
-- Abono parcial → saldo exacto; prórroga y cuotas conservan saldo; abono excesivo rechaza.
-- Voucher pendiente NO implica `PAGADO`; guardar/descargar restringido al tenant y rol.
-- Mes sin movimientos da ceros y muestra estado apropiado.
-- Migración `alembic upgrade head`, pruebas pytest, frontend typecheck/build y smoke tests RBAC.
+## Base de producción
 
-## Verificaciones del código actual (09/10/2026)
-- `frontend/src/App.tsx` presenta `/pago-gestores` a Usuario, pero carece de Cobros y Contabilidad de Usuario.
-- `backend/app/api/routes/pagos_gestores.py` programa pagos de Gestores y calcula la tasa del Gestor sobre sus expedientes.
-- `backend/app/models.py` contiene `Miembro.porcentaje_produccion` y `Gestor.porcentaje_comision`.
-- `frontend/src/paginas/MiEquipoResponsable.tsx` ofrece los paneles Responsable de producción de clientes y pago a Usuarios, que no sustituyen el nuevo cobro de Responsable a Usuario.
-- `backend/app/api/deps.py` limita explícitamente los endpoints del rol Responsable: habrá que ampliar su lista de acceso y probarla.
+Todas las facturas/expedientes distintos ingresados por los Gestores, atribuidos por `Expediente.gestor_id` y `Expediente.usuario_id`, forman la base de comisiones, independientemente de si se han cobrado. Excluir documentos anulados o eliminados y evitar contabilizar re-subidas del mismo comprobante; **no** usar pedidos previstos como ingreso.
 
-**Pendiente:** implementación backend/frontend, migración, validación CI, despliegue staging y recién después producción VPS con respaldo y rollback probado.
+La clasificación agente de retención procede de `Empresa.agente_retencion`, con control histórico cuando se cierre una liquidación. El cálculo en `pagos_responsables.py` ya contiene las reglas por cliente y los valores predeterminados 3 / 3,5 %: conservar compatibilidad y evitar una segunda fuente de verdad.
+
+### Liquidación múltiple del Usuario
+
+- Cabecera de período, moneda, alcance, producción total, total de comisiones asignadas, saldo aún no distribuido, estado y Usuario propietario.
+- Partidas: beneficiario tipo `GESTOR` o `EXTERNO`, nombre/identificador, Gestor relacionado opcional, base de cálculo documentada, porcentaje individual, comisión = base × porcentaje / 100, cantidad a pagar, saldo, motivo del pago.
+- Si el beneficiario es Gestor, por defecto la base es la producción de ese Gestor dentro del período, con posibilidad de seleccionar un conjunto verificable de facturas/expedientes, sin doble asignación cuando el modelo económico lo requiera. Para otros beneficiarios el Usuario selecciona la base atribuible y justifica la naturaleza del servicio; no atribuir documentos arbitrariamente a un tercero.
+- La suma de partidas debe respetar el monto de la comisión/disponibilidad del Usuario cuando haya una referencia económica confirmada; no crear un «saldo ganado» artificial a partir de facturas no cobradas. Si el Usuario acuerda pagos superiores a su ingreso, registrar obligación y advertencia expresa sin ocultar el saldo negativo.
+- Permitir 2, 3, 10 o más destinatarios; validación previa de monto, porcentaje, moneda, período y saldo, y vista previa antes de programar.
+- Cada partida puede estar `PROGRAMADO`, `PENDIENTE`, `POSTERGADO`, `PARCIAL`, `EN_REVISION` o `PAGADO`. Separar el compromiso de pago de un depósito real.
+- Abonos múltiples con fecha, cuota, monto, referencia, voucher privado, carga JPG/PNG/PDF, conciliación explícita, vencimientos y prórrogas; nunca marcar pagado solo por subir voucher.
+- Historial inmutable de cambios, tasas y confirmaciones. No borrar pagos confirmados; utilizar reversión auditada.
+
+## Modelo y API por implementar
+
+Nuevas tablas propuestas `liquidaciones_usuario`, `liquidaciones_usuario_destinatarios`, `liquidaciones_usuario_abonos`, `liquidaciones_usuario_archivos` y `liquidaciones_usuario_eventos`, con claves UUID, `tenant_id`, `usuario_id`, restricciones de unicidad, índices por tenant y propietario, y snapshot de base/tasa por partida.
+
+- `GET /api/v1/usuario/liquidaciones`: solo propias, sin datos de niveles superiores.
+- `POST /api/v1/usuario/liquidaciones/cotizar`: partidas, porcentajes, bases, sumas, advertencias, sin escritura.
+- `POST /api/v1/usuario/liquidaciones`: crear en una transacción, con clave de idempotencia.
+- `POST /api/v1/usuario/liquidaciones/{id}/abonos`: registrar abono a partida y evidencia.
+- `POST /api/v1/usuario/liquidaciones/{id}/conciliar`: confirmar conciliación de sus propias salidas con reglas de autorización.
+- `GET /api/v1/gestor/mi-liquidacion`: solo partidas dirigidas al Gestor autenticado, exclusivamente campos de su propia comisión y pagos.
+- `GET /api/v1/usuario/contabilidad`: ingresos de su Responsable (sin tasa ni producción del Responsable), obligaciones con Gestores/externos, total recibido/pagado/saldo y producción de sus Gestores.
+
+## Cambios de permisos obligatorios
+
+El rol GERENTE puede acceder a las rutas de `pagos_responsables` que le corresponden; **nunca** a un módulo genérico de cobros. El rol SECRETARIA no tendrá ni Cobros ni Pagos. En `pagos_responsables.py` solo GERENTE confirma un pago a Responsable. Los pagos de Responsable a Usuario se autorizan en `responsable.py`. Nunca retornar la comisión de Gerencia a Usuario ni Gestor.
+
+## Inspección del código del repositorio
+
+- `backend/app/api/routes/pagos_responsables.py` ya implementa el flujo Gerencia → Responsable (predeterminadas 3 y 3,5 %), reglas personalizadas y conciliación.
+- `backend/app/api/routes/responsable.py` ya programa y confirma flujo Responsable → Usuario con porcentaje de Usuario.
+- `backend/app/api/routes/pagos_gestores.py` solo maneja un Gestor por programación. Debe evolucionar a distribución múltiple y beneficiarios externos sin romper liquidaciones históricas.
+- `frontend/src/paginas/PagoGestores.tsx` requiere formulario de múltiples destinatarios; `frontend/src/App.tsx` debe ocultar opciones no autorizadas.
+- La seguridad necesita pruebas de acceso directo a API, porque ocultar menú no basta.
+
+## Pruebas y despliegue
+
+Pruebas de aislamiento cruzado Responsable / Usuario / Gestor, auditoría de comisiones ocultas en respuestas y exportaciones, duplicados, moneda, tasas, suma de partidas, redondeo, abonos parciales, cuotas/prórrogas, concurrencia, tenant ajeno, factura duplicada, migración y rollback.
+
+Antes de subir a `main`: backend pytest + migración Alembic, frontend npm build, tests RBAC y verificación del workflow staging. El despliegue actual de `main` puede afectar una VPS existente; la Oracle usa configuración de destino distinta. No activar producción ni declarar éxito sin ejecución verificable y respaldo.
