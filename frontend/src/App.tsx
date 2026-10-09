@@ -26,6 +26,9 @@ type RolSesion = SesionActual["rol"];
 
 const MENU: { a: string; texto: string; roles: RolSesion[] }[] = [
   { a: "/mi-equipo", texto: "Mis Usuarios", roles: ["RESPONSABLE"] },
+  { a: "/mi-equipo/pedidos", texto: "Pedidos", roles: ["RESPONSABLE"] },
+  { a: "/mi-equipo/cobros", texto: "Cobros y clientes", roles: ["RESPONSABLE"] },
+  { a: "/mi-equipo/pagos", texto: "Pago de Usuarios", roles: ["RESPONSABLE"] },
   { a: "/comisiones", texto: "Simular comisiones", roles: ["SUPERADMIN", "ADMINISTRADOR", "RESPONSABLE", "USUARIO"] },
   {
     a: "/",
@@ -142,6 +145,9 @@ export default function App() {
           <Route path="/alertas" element={<Alertas sesion={sesion} />} />
           <Route path="/empresas" element={<Empresas />} />
           <Route path="/mi-equipo" element={<MiEquipoResponsable />} />
+          <Route path="/mi-equipo/pedidos" element={<MiEquipoResponsable inicial="PEDIDOS" />} />
+          <Route path="/mi-equipo/cobros" element={<MiEquipoResponsable inicial="COBROS" />} />
+          <Route path="/mi-equipo/pagos" element={<MiEquipoResponsable inicial="PAGOS" />} />
           <Route path="/comisiones" element={<Comisiones sesion={sesion} />} />
           <Route path="/organizacion" element={<Organizacion sesion={sesion} />} />
           <Route path="/produccion" element={<Produccion />} />
