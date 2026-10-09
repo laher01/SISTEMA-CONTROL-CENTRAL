@@ -438,3 +438,61 @@ Fecha de emisión"""
     assert campos["fecha_emision"]["valor"] == f"2026-09-{dia}"
     assert campos["importe_total"]["valor"] == "1500.00"
     assert campos["moneda"]["valor"] == "PEN"
+
+
+@pytest.mark.parametrize(
+    ("numero", "receptor", "ruc_receptor", "dia"),
+    [
+        ("37", "MAIK FISHING SOCIEDAD ANONIMA CERRADA", "20609762030", "23"),
+        ("38", "INVERSIONES YATAMURI E.I.R.L.", "20492560601", "24"),
+        ("39", "FRUTTI DEL PAESE E.I.R.L.", "20611909234", "23"),
+    ],
+)
+def test_rhe_pypdf_originales_sunat_serie_invertida(
+    numero: str, receptor: str, ruc_receptor: str, dia: str
+) -> None:
+    # Orden y separación observados al ejecutar PdfReader.extract_text()
+    # sobre los tres PDF originales SUNAT (no su disposición visual).
+    texto = f"""DEL ARTÍCULO 33 DE LA LEY DEL IMPUESTO A LA RENTA
+Recibí de:
+Identificado con
+Observación
+Inciso
+La suma de:
+Total por honorarios:
+Retención (
+R.U.C.
+RECIBO POR HONORARIOS ELECTRONICO
+Nro:
+10753246920
+-E001 {numero}
+AYALA AREVALO ELVIS EDUARDO
+MZA. H LOTE. 9 A.H. JUAN VALER SANDOVAL PIURA - PAITA - PAITA
+-TELÉFONO:
+número
+Por concepto de
+de del
+Total Neto Recibido:
+{receptor}
+RUC {ruc_receptor}
+ UN MIL QUINIENTOS Y 00/100 SOLES
+EL SERVICIO DE ASESORIA Y DOCUMENTACION-PAITA
+-
+A
+{dia} Setiembre 2026
+1,500.00
+(0.00)
+1,500.00
+SOLES
+%) IR:8
+Fecha de emisión"""
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    campos = resultado["campos"]
+    assert campos["serie"]["valor"] == "E001"
+    assert campos["correlativo"]["valor"] == numero
+    assert campos["ruc_emisor"]["valor"] == "10753246920"
+    assert campos["ruc_receptor"]["valor"] == ruc_receptor
+    assert campos["fecha_emision"]["valor"] == f"2026-09-{dia}"
+    assert campos["importe_total"]["valor"] == "1500.00"
+    assert campos["moneda"]["valor"] == "PEN"
