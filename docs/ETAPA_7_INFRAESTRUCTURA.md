@@ -85,4 +85,5 @@ El inventario PostgreSQL/Redis de la VPS no se ha verificado: Redis figura NO_CO
 en salud local porque no existe en el Compose actual.
 
 No se declara completa la Etapa 7 ni se asigna un porcentaje sin evidencia de staging,
-recuperación real y CI remoto. El siguiente bloque desarrolla agente y despliegues.
+recuperación real y CI remoto. El bloque de agente/despliegues y la matriz de estado
+se documentan en `ETAPA_7_OPERACIONES.md`.
