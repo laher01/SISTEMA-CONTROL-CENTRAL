@@ -294,8 +294,11 @@ def consolidado_compras(
     if agrupar == "CLIENTE":
         consulta = (
             select(
-                Empresa.id, Empresa.ruc, Empresa.razon_social,
-                func.count(Expediente.id), func.sum(Expediente.importe_total),
+                Empresa.id,
+                Empresa.ruc,
+                Empresa.razon_social,
+                func.count(Expediente.id),
+                func.sum(Expediente.importe_total),
             )
             .join(Empresa, Expediente.receptor_id == Empresa.id)
             .where(
@@ -311,8 +314,11 @@ def consolidado_compras(
     else:
         consulta = (
             select(
-                Miembro.id, Miembro.codigo, Miembro.nombre,
-                func.count(Expediente.id), func.sum(Expediente.importe_total),
+                Miembro.id,
+                Miembro.codigo,
+                Miembro.nombre,
+                func.count(Expediente.id),
+                func.sum(Expediente.importe_total),
             )
             .join(Miembro, Expediente.usuario_id == Miembro.id)
             .where(
@@ -330,8 +336,11 @@ def consolidado_compras(
         consulta = (
             consulta.join(responsable, Miembro.responsable_id == responsable.c.id)
             .with_only_columns(
-                responsable.c.id, responsable.c.codigo, responsable.c.nombre,
-                func.count(Expediente.id), func.sum(Expediente.importe_total),
+                responsable.c.id,
+                responsable.c.codigo,
+                responsable.c.nombre,
+                func.count(Expediente.id),
+                func.sum(Expediente.importe_total),
             )
             .where(
                 responsable.c.tenant_id == tenant_id,
@@ -342,14 +351,19 @@ def consolidado_compras(
         )
     filas = [
         {
-            "id": str(id_), "codigo": codigo, "nombre": nombre,
-            "registros": cantidad, "monto": str(monto or 0),
+            "id": str(id_),
+            "codigo": codigo,
+            "nombre": nombre,
+            "registros": cantidad,
+            "monto": str(monto or 0),
         }
         for id_, codigo, nombre, cantidad, monto in session.execute(consulta)
     ]
     return {
-        "desde": desde.isoformat(), "hasta": hasta.isoformat(),
-        "moneda": moneda, "agrupar": agrupar,
+        "desde": desde.isoformat(),
+        "hasta": hasta.isoformat(),
+        "moneda": moneda,
+        "agrupar": agrupar,
         "total": str(sum((Decimal(f["monto"]) for f in filas), Decimal("0"))),
         "filas": filas,
     }
