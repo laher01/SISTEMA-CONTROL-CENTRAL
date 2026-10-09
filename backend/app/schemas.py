@@ -83,6 +83,7 @@ class MiembroIn(BaseModel):
 
 class MiembroOut(Orm):
     id: uuid.UUID
+    responsable_id: uuid.UUID | None
     codigo: str
     nombre: str
     rol: RolMiembro
