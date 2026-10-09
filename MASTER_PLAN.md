@@ -6,6 +6,13 @@
 
 # MASTER PLAN
 
+## Etapa 7 — Infraestructura, versiones y despliegues
+
+En desarrollo por autorización del propietario el 2026-10-09.
+Diagnóstico, diseño y estado verificable: `docs/ETAPA_7_INFRAESTRUCTURA.md`.
+Instalación, operaciones y matriz de módulos: `docs/ETAPA_7_OPERACIONES.md`.
+Se preserva el plan histórico; sus porcentajes no representan el código actual.
+
 Versión: 2.0
 
 Estado: Arquitectura Funcional (Pre-Desarrollo)

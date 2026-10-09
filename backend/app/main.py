@@ -14,10 +14,12 @@ from app.api.routes import (
     empresas,
     expedientes,
     gestores,
+    infraestructura,
     mantenimiento,
     mensajes_alerta,
     miembros,
     nexus,
+    operaciones_infra,
     pagos,
     pagos_gestores,
     produccion,
@@ -46,6 +48,8 @@ api = APIRouter(prefix="/api/v1")
 api.include_router(auth.router)
 for modulo in (
     administraciones,
+    infraestructura,
+    operaciones_infra,
     documentos,
     chat,
     comisiones,

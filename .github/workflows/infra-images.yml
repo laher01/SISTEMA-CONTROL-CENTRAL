@@ -1,0 +1,134 @@
+name: infrastructure-images
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Versión semántica de staging
+        required: true
+        type: string
+      migracion_desde:
+        description: Revisión Alembic instalada en el nodo de staging
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fact-central-images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify-backend:
+    uses: ./.github/workflows/backend.yml
+  verify-frontend:
+    uses: ./.github/workflows/frontend.yml
+  publish:
+    needs: [verify-backend, verify-frontend]
+    runs-on: ubuntu-latest
+    environment: staging-images
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar versión y registrar metadata
+        id: metadata
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          COMMIT: ${{ github.sha }}
+          OWNER: ${{ github.repository_owner }}
+          MIGRATION_FROM: ${{ inputs.migracion_desde }}
+        run: |
+          if [[ ! "$RELEASE_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Versión semántica inválida"
+            exit 1
+          fi
+          echo "version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "backend=ghcr.io/${OWNER,,}/fact-central-backend" >> "$GITHUB_OUTPUT"
+          echo "frontend=ghcr.io/${OWNER,,}/fact-central-frontend" >> "$GITHUB_OUTPUT"
+          python - <<'PY'
+          import ast, os, re
+          from pathlib import Path
+          source = os.environ["MIGRATION_FROM"]
+          if not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", source):
+              raise SystemExit("Revisión de origen inválida")
+          revisions, previous = set(), set()
+          for file in Path("backend/alembic/versions").glob("*.py"):
+              for node in ast.parse(file.read_text()).body:
+                  if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id in {"revision", "down_revision"}:
+                      value = ast.literal_eval(node.value)
+                      if value is not None:
+                          (revisions if node.target.id == "revision" else previous).add(value)
+          heads = revisions - previous
+          if len(heads) != 1:
+              raise SystemExit("La construcción requiere un único Alembic head")
+          if source not in revisions:
+              raise SystemExit("Migración de origen desconocida")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"migration_from={source}\nmigration_to={heads.pop()}\n")
+          PY
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        id: backend
+        with:
+          context: .
+          file: deploy/backend.Dockerfile
+          push: true
+          tags: |
+            ${{ steps.metadata.outputs.backend }}:staging-${{ steps.metadata.outputs.version }}
+            ${{ steps.metadata.outputs.backend }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.metadata.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          provenance: true
+          sbom: true
+      - uses: docker/build-push-action@v6
+        id: frontend
+        with:
+          context: .
+          file: deploy/frontend.Dockerfile
+          push: true
+          tags: |
+            ${{ steps.metadata.outputs.frontend }}:staging-${{ steps.metadata.outputs.version }}
+            ${{ steps.metadata.outputs.frontend }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.metadata.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          provenance: true
+          sbom: true
+      - name: Guardar registro de versiones
+        env:
+          RELEASE_VERSION: ${{ steps.metadata.outputs.version }}
+          COMMIT: ${{ github.sha }}
+          BUILT_AT: ${{ steps.metadata.outputs.built_at }}
+          BACKEND: ${{ steps.metadata.outputs.backend }}
+          FRONTEND: ${{ steps.metadata.outputs.frontend }}
+          BACKEND_DIGEST: ${{ steps.backend.outputs.digest }}
+          FRONTEND_DIGEST: ${{ steps.frontend.outputs.digest }}
+          MIGRATION_FROM: ${{ steps.metadata.outputs.migration_from }}
+          MIGRATION_TO: ${{ steps.metadata.outputs.migration_to }}
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = {
+              "version": os.environ["RELEASE_VERSION"], "commit_git": os.environ["COMMIT"],
+              "construida_at": os.environ["BUILT_AT"], "entorno": "staging",
+              "imagen_docker": os.environ["BACKEND"], "digest": os.environ["BACKEND_DIGEST"],
+              "imagen_frontend": os.environ["FRONTEND"], "digest_frontend": os.environ["FRONTEND_DIGEST"],
+              "migracion_desde": os.environ["MIGRATION_FROM"], "migracion_hasta": os.environ["MIGRATION_TO"], "migracion_reversible": False,
+          }
+          Path("version-staging.json").write_text(json.dumps(data, indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: version-staging-${{ steps.metadata.outputs.version }}
+          path: version-staging.json

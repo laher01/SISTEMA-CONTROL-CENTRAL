@@ -4,6 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,6 +34,13 @@ class Settings(BaseSettings):
     nexus_search_url: str | None = None
     nexus_search_token: str | None = None
     nexus_external_timeout_seconds: int = 10
+    infra_desconexion_segundos: int = Field(default=180, ge=30, le=86400)
+    infra_cpu_umbral: float = Field(default=90, ge=0, le=100)
+    infra_ram_umbral: float = Field(default=90, ge=0, le=100)
+    infra_disco_umbral: float = Field(default=85, ge=0, le=100)
+    infra_operaciones_habilitadas: bool = False
+    infra_produccion_habilitada: bool = False
+    infra_lease_segundos: int = Field(default=3600, ge=60, le=3600)
 
     def hoy(self) -> date:
         return datetime.now(ZoneInfo(self.zona_horaria)).date()

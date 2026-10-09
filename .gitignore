@@ -1,3 +1,9 @@
 deploy/.env.production
 deploy/backups/
 deploy/.deploy.lock
+
+.uv-cache/
+.npm-cache/
+.verification/
+deploy/.env.agent-staging
+deploy/infra-agent.env

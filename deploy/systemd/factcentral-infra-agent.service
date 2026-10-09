@@ -1,0 +1,23 @@
+[Unit]
+Description=Agente de infraestructura FACT CENTRAL (staging aislado)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=factcentral-agent
+Group=factcentral-agent
+EnvironmentFile=/etc/factcentral/infra-agent.env
+WorkingDirectory=/opt/factcentral/backend
+ExecStart=/opt/factcentral/backend/.venv/bin/python -m app.infra_agent
+Restart=on-failure
+RestartSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/factcentral-agent /mnt/factcentral-backups
+
+[Install]
+WantedBy=multi-user.target

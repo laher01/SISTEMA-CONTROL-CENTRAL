@@ -1,6 +1,7 @@
 name: backend
 
 on:
+  workflow_call:
   push:
     branches: [main]
   pull_request:
@@ -38,3 +39,15 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run mypy app
       - run: uv run pytest
+      - name: Auditar dependencias runtime
+        run: |
+          uv export --locked --no-dev --format requirements-txt --output-file runtime-requirements.txt
+          uv run --locked --with pip-audit pip-audit --require-hashes --no-deps -r runtime-requirements.txt
+      - name: Validar migraciones en PostgreSQL aislado
+        run: |
+          uv run python -c "import psycopg; c=psycopg.connect('postgresql://fact:fact@localhost:5432/postgres', autocommit=True); c.execute('CREATE DATABASE fact_central_migrations'); c.close()"
+          uv run alembic upgrade head
+          uv run alembic downgrade 0015
+          uv run alembic upgrade head
+        env:
+          FC_DATABASE_URL: postgresql+psycopg://fact:fact@localhost:5432/fact_central_migrations
