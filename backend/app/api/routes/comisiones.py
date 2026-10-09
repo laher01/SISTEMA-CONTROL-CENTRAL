@@ -27,6 +27,44 @@ class ConsultaComision(BaseModel):
     porcentaje_global: Decimal | None = None
 
 
+@router.get("/receptores")
+def receptores_de_usuario(
+    usuario_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> list[dict[str, str]]:
+    """Receptores realmente asociados al Usuario; sin revelar otros equipos."""
+    usuario = session.get(Miembro, usuario_id)
+    if usuario is None or usuario.tenant_id != tenant_id or usuario.rol != RolMiembro.USUARIO:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuario no encontrado")
+    if auth.rol == RolMiembro.RESPONSABLE and usuario.responsable_id != auth.miembro_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Fuera de su equipo")
+    if auth.rol == RolMiembro.USUARIO and auth.usuario_id != usuario_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Fuera de su equipo")
+    if auth.rol not in (
+        RolMiembro.SUPERADMIN,
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.RESPONSABLE,
+        RolMiembro.USUARIO,
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin acceso")
+    return [
+        {"id": str(item.id), "ruc": item.ruc, "nombre": item.razon_social}
+        for item in session.scalars(
+            select(Empresa).join(
+                Expediente,
+                Expediente.receptor_id == Empresa.id,
+            ).where(
+                Empresa.tenant_id == tenant_id,
+                Expediente.tenant_id == tenant_id,
+                Expediente.usuario_id == usuario_id,
+                Expediente.deleted_at.is_(None),
+            ).distinct().order_by(Empresa.razon_social)
+        )
+    ]
+
+
 @router.post("/simular")
 def simular(
     datos: ConsultaComision,
