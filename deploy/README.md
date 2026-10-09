@@ -57,3 +57,38 @@ docker compose --env-file deploy/.env.production \
 ```
 
 Los respaldos automáticos se guardan en `deploy/backups` y se conservan 14 días.
+
+
+## Nota de operación: túnel Oracle (octubre 2026)
+
+La VPS Oracle (Ubuntu 24.04, x86_64) usa el **mismo repositorio y Compose** con un túnel
+Cloudflare **independiente** `fact-central-oracle` y dominio `factcentral.online`.
+El túnel anterior `fact-central-staging` corresponde a otra VPS y **no debe alterarse**.
+
+Incidencia diagnosticada en Oracle: `cloudflared` reiniciaba porque el comando se ejecutaba
+sin un valor tras `--token`. El archivo `deploy/.env.production` contenía un token
+no vacío, pero la sesión Bash había exportado `CLOUDFLARE_TUNNEL_TOKEN` como variable
+**vacía**; esa variable prevalecía sobre `--env-file` al interpolar Compose.
+
+Solución validada en Oracle:
+
+1. `unset CLOUDFLARE_TUNNEL_TOKEN` en la sesión que ejecuta Compose.
+2. Mantener `CLOUDFLARE_TUNNEL_TOKEN=<token real>` solo en `deploy/.env.production`,
+   con permisos `600`, sin subir jamás ese archivo al repositorio.
+3. La instrucción de Compose es `tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN:?...}`:
+   `cloudflared` ya aporta su entrypoint `--no-autoupdate`, y la interpolación
+   requerida evita iniciar con un token vacío.
+4. Iniciar solo el túnel (cuando el frontend esté listo) con
+   `docker compose --env-file deploy/.env.production -f deploy/docker-compose.production.yml up -d --no-deps --force-recreate tunnel`.
+5. Verificar `docker ps`, `docker logs --tail 20 fact-central-staging-tunnel-1`
+   (censurando secretos) y el estado del túnel en Cloudflare One.
+
+**Estado observado:** Cloudflare One muestra ambos túneles en estado **Óptimo**.
+Esto prueba la conexión del túnel, **no** que FastAPI, React o `factcentral.online`
+estén operativos; el backend/frontend y la protección Access deben verificarse.
+
+**Pendiente:** configurar y validar el despliegue automático de Oracle desde GitHub Actions.
+El workflow `deploy-staging.yml` actual apunta solo al entorno `staging`;
+haber creado secretos en `oracle-production` no activa ese segundo destino.
+No fusionar cambios a `main` sin comprobar su efecto en la VPS anterior,
+los permisos SSH desde GitHub y el comportamiento de `deploy/deploy.sh`.
