@@ -34,7 +34,9 @@ def upgrade() -> None:
         sa.Column("saldo", sa.Numeric(14, 2), nullable=False),
         sa.Column("estado", sa.String(20), nullable=False),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.func.now(),
         ),
         sa.UniqueConstraint(
