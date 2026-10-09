@@ -128,6 +128,24 @@ def simular_jonatan(
     )
 
 
+@router.get("/responsables", response_model=list[FiltroOpcion])
+def responsables_pedido(
+    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
+) -> list[FiltroOpcion]:
+    _validar_acceso(auth.rol)
+    return [
+        FiltroOpcion(id=r.id, codigo=r.codigo, nombre=r.nombre)
+        for r in session.scalars(
+            select(Miembro).where(
+                Miembro.tenant_id == tenant_id,
+                Miembro.rol == RolMiembro.RESPONSABLE,
+                Miembro.activo.is_(True),
+                Miembro.deleted_at.is_(None),
+            ).order_by(Miembro.codigo)
+        )
+    ]
+
+
 @router.get("/usuarios", response_model=list[FiltroOpcion])
 def usuarios_pago(
     session: SessionDep,
