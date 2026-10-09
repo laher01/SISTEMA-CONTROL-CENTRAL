@@ -123,9 +123,6 @@ def resumen_equipo(
         )
     )
     ids = [u.id for u in usuarios]
-    if not ids:
-        return {"usuarios": [], "clientes": [], "pedidos": [], "pagos": []}
-
     clientes = [
         {
             "usuario_id": str(uid),
