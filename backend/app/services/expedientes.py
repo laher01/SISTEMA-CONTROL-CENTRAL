@@ -89,7 +89,12 @@ def buscar_expediente(
             emisor.c.ruc == emisor_ruc,
         )
     )
-    if receptor_ruc is not None:
+    # En RHE la identidad fiscal del comprobante pertenece al emisor:
+    # tenant/administración + RUC emisor + RHE + serie + correlativo.
+    # El receptor se conserva para validación, pero no forma parte de la
+    # identidad canónica; si cambia, debe tratarse como contradicción del
+    # mismo RHE y no como un expediente nuevo.
+    if receptor_ruc is not None and tipo_comprobante != TipoComprobante.RHE:
         consulta = consulta.where(receptor.c.ruc == receptor_ruc)
     return session.scalars(consulta).first()
 
