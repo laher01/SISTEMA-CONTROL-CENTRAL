@@ -53,8 +53,8 @@ const MENU: { a: string; texto: string; roles: RolSesion[] }[] = [
   },
   {
     a: "/secretaria",
-    texto: "Control de Secretaría",
-    roles: ["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA"],
+    texto: "Control documental",
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA", "GERENTE"],
   },
   {
     a: "/documentos",
