@@ -35,7 +35,10 @@ def upgrade() -> None:
         sa.Column("bruto", sa.Numeric(14, 2), nullable=False),
         sa.Column("saldo", sa.Numeric(14, 2), nullable=False),
         sa.Column("estado", sa.String(20), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False,
+            server_default=sa.func.now(),
+        ),
         sa.UniqueConstraint(
             "tenant_id", "gestor_id", "periodo_desde", "periodo_hasta", "moneda",
             name="uq_pagos_gestores_periodo",
