@@ -47,6 +47,7 @@ def test_consolidado_clientes_y_responsables(
                 moneda="PEN",
                 importe_total=Decimal(monto),
                 usuario_id=usuario.id,
+                gerente_id=auth_prueba.contexto.miembro_id,
             )
         )
     session.commit()
