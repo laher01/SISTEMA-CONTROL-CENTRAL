@@ -1,14 +1,13 @@
 """Tarifas contractuales de comisión por Receptor, para Usuarios y Gestores."""
 
+import uuid
 from datetime import date
 from decimal import Decimal
 from typing import Literal
-import uuid
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
