@@ -8,6 +8,8 @@ interface Receptor {
   id: string;
   ruc: string;
   nombre: string;
+  expedientes: number;
+  produccion: string;
 }
 
 interface SimulacionComisiones {
@@ -35,22 +37,24 @@ export default function Comisiones({ sesion }: { sesion: SesionActual }) {
   const { datos: disponibles } = useDatos<Miembro[]>(esUsuario ? "" : ruta);
   const [usuarioElegido, setUsuarioElegido] = useState("");
   const usuarioId = esUsuario ? (sesion.usuario_id ?? "") : usuarioElegido;
-  const { datos: receptores } = useDatos<Receptor[]>(
-    usuarioId ? `/api/v1/comisiones/receptores?usuario_id=${usuarioId}` : "",
-  );
-  const { datos: gestores } = useDatos<Gestor[]>(
-    usuarioId && !esResponsable ? `/api/v1/gestores?usuario_id=${usuarioId}` : "",
-  );
-  const [gestorId, setGestorId] = useState("");
   const [desde, setDesde] = useState(hoyMes()[0]);
   const [hasta, setHasta] = useState(hoyMes()[1]);
   const [moneda, setMoneda] = useState<"PEN" | "USD">("PEN");
+  const [gestorId, setGestorId] = useState("");
   const [tipoTasa, setTipoTasa] = useState<"GLOBAL" | "RECEPTOR">("GLOBAL");
   const [tasaGlobal, setTasaGlobal] = useState("1.5");
   const [tasas, setTasas] = useState<Record<string, string>>({});
   const [resultado, setResultado] = useState<SimulacionComisiones | null>(null);
   const [mensaje, setMensaje] = useState("");
   const [cargando, setCargando] = useState(false);
+  const filtrosProduccion = usuarioId && desde && hasta
+    ? `/api/v1/comisiones/produccion-receptores?usuario_id=${encodeURIComponent(usuarioId)}&desde=${desde}&hasta=${hasta}&moneda=${moneda}${gestorId && !esResponsable ? `&gestor_id=${encodeURIComponent(gestorId)}` : ""}`
+    : "";
+  const { datos: receptores, error: errorReceptores } = useDatos<Receptor[]>(filtrosProduccion);
+  const { datos: gestores } = useDatos<Gestor[]>(
+    usuarioId && !esResponsable ? `/api/v1/gestores?usuario_id=${usuarioId}` : "",
+  );
+
 
   const calcular = async (e: FormEvent) => {
     e.preventDefault();
@@ -127,14 +131,19 @@ export default function Comisiones({ sesion }: { sesion: SesionActual }) {
             <input type="number" min="0" max="100" step="0.0001" required value={tasaGlobal} onChange={(e) => setTasaGlobal(e.target.value)} />
           </label>}
         </div>
-        {tipoTasa === "RECEPTOR" && (
+        {usuarioId && <p className="tenue">
+          Clientes vinculados con producción documentada en el periodo seleccionado: <strong>{receptores?.length ?? 0}</strong>.
+          {receptores && receptores.length === 0 ? " Sin expedientes asociados para los filtros indicados. Revise la asignación del Usuario y la fecha de emisión." : ""}
+        </p>}
+        {errorReceptores && <p role="alert">{String(errorReceptores)}</p>}
+        {usuarioId && (
           <table>
-            <thead><tr><th>RUC</th><th>Cliente/Receptor con producción</th><th>% aplicado</th></tr></thead>
+            <thead><tr><th>RUC</th><th>Cliente/Receptor</th><th>Expedientes</th><th>Producción</th>{tipoTasa === "RECEPTOR" && <th>% aplicado</th>}</tr></thead>
             <tbody>{(receptores ?? []).map((r) => (
               <tr key={r.id}>
-                <td>{r.ruc}</td><td>{r.nombre}</td>
-                <td><input type="number" min="0" max="100" step="0.0001" required
-                  value={tasas[r.id] ?? ""} onChange={(e) => setTasas((prev) => ({ ...prev, [r.id]: e.target.value }))} /></td>
+                <td>{r.ruc}</td><td>{r.nombre}</td><td>{r.expedientes}</td><td>{formatearMonto(moneda, r.produccion)}</td>
+                {tipoTasa === "RECEPTOR" && <td><input type="number" min="0" max="100" step="0.0001" required
+                  value={tasas[r.id] ?? ""} onChange={(e) => setTasas((prev) => ({ ...prev, [r.id]: e.target.value }))} /></td>}
               </tr>
             ))}</tbody>
           </table>
