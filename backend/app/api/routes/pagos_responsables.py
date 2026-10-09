@@ -161,19 +161,8 @@ def _calculo(
     # igualmente el pedido mensual, explicitado en el frontend.
     primer_mes = desde.replace(day=1)
     ultimo_mes = hasta.replace(day=1)
-    pedidos = {
-        (p.responsable_id, p.cliente_id): Decimal("0")
-        for p in session.scalars(
-            select(PedidoGerencia).where(
-                PedidoGerencia.tenant_id == tenant_id,
-                PedidoGerencia.periodo_mes >= primer_mes,
-                PedidoGerencia.periodo_mes <= ultimo_mes,
-                PedidoGerencia.moneda == moneda,
-                PedidoGerencia.estado != "CANCELADO",
-            )
-        )
-    }
-    for pedido in session.scalars(
+    pedidos: dict[tuple[uuid.UUID | None, uuid.UUID], Decimal] = {}
+    for pedido_item in session.scalars(
         select(PedidoGerencia).where(
             PedidoGerencia.tenant_id == tenant_id,
             PedidoGerencia.periodo_mes >= primer_mes,
@@ -182,8 +171,10 @@ def _calculo(
             PedidoGerencia.estado != "CANCELADO",
         )
     ):
-        llave = (pedido.responsable_id, pedido.cliente_id)
-        pedidos[llave] = pedidos.get(llave, Decimal("0")) + Decimal(pedido.monto_solicitado)
+        llave = (pedido_item.responsable_id, pedido_item.cliente_id)
+        pedidos[llave] = pedidos.get(llave, Decimal("0")) + Decimal(
+            pedido_item.monto_solicitado
+        )
     filas: list[dict[str, object]] = []
     total_produccion = Decimal("0")
     total_comisiones = Decimal("0")
@@ -199,8 +190,8 @@ def _calculo(
             else (Decimal("3.0") if es_agente else Decimal("3.5"))
         )
         comision = _redondear(importe * porcentaje / Decimal("100"))
-        pedido = pedidos.get((rid, cid), Decimal("0"))
-        exceso = max(importe - pedido, Decimal("0"))
+        pedido_base = pedidos.get((rid, cid), Decimal("0"))
+        exceso = max(importe - pedido_base, Decimal("0"))
         filas.append(
             {
                 "responsable_id": str(rid),
@@ -214,7 +205,7 @@ def _calculo(
                 "porcentaje": str(porcentaje),
                 "porcentaje_personalizado": regla is not None,
                 "comision": str(comision),
-                "pedido": str(_redondear(pedido)),
+                "pedido": str(_redondear(pedido_base)),
                 "exceso": str(_redondear(exceso)),
             }
         )
