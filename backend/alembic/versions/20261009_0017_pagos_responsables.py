@@ -10,6 +10,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 
 from alembic import op
+from sqlalchemy.dialects.postgresql import JSONB
 
 revision: str = "0017"
 down_revision: str | None = "0016"
@@ -52,11 +53,16 @@ def upgrade() -> None:
         sa.UniqueConstraint("tenant_id", "responsable_id", "cliente_id"),
     )
     op.create_index(
-        "ix_comision_regla_responsable_id",
+        "ix_comisiones_responsable_reglas_responsable_id",
         "comisiones_responsable_reglas",
         ["responsable_id"],
     )
-    op.create_index("ix_comision_regla_cliente_id", "comisiones_responsable_reglas", ["cliente_id"])
+    op.create_index("ix_comisiones_responsable_reglas_cliente_id", "comisiones_responsable_reglas", ["cliente_id"])
+    op.create_index(
+        "ix_comisiones_responsable_reglas_tenant_id",
+        "comisiones_responsable_reglas",
+        ["tenant_id"],
+    )
     op.create_table(
         "pagos_responsables_erp",
         sa.Column("id", sa.Uuid(), primary_key=True),
@@ -68,7 +74,7 @@ def upgrade() -> None:
         sa.Column("moneda", sa.String(3), nullable=False),
         sa.Column("produccion_total", sa.Numeric(14, 2), nullable=False),
         sa.Column("comision_total", sa.Numeric(14, 2), nullable=False),
-        sa.Column("detalle", sa.JSON(), nullable=False),
+        sa.Column("detalle", sa.JSON().with_variant(JSONB(), "postgresql"), nullable=False),
         sa.Column("estado", sa.String(20), nullable=False),
         sa.Column("fecha_pago", sa.Date(), nullable=True),
         sa.Column("observacion", sa.String(500), nullable=True),
@@ -90,17 +96,24 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
-        "ix_pagos_responsables_responsable_id",
+        "ix_pagos_responsables_erp_responsable_id",
         "pagos_responsables_erp",
         ["responsable_id"],
     )
-    op.create_index("ix_pagos_responsables_estado", "pagos_responsables_erp", ["estado"])
+    op.create_index("ix_pagos_responsables_erp_estado", "pagos_responsables_erp", ["estado"])
+
+
+    op.create_index(
+        "ix_pagos_responsables_erp_tenant_id", "pagos_responsables_erp", ["tenant_id"]
+    )
 
 
 def downgrade() -> None:
+    op.drop_index("ix_pagos_responsables_erp_tenant_id", table_name="pagos_responsables_erp")
     op.drop_index("ix_pagos_responsables_estado", table_name="pagos_responsables_erp")
     op.drop_index("ix_pagos_responsables_responsable_id", table_name="pagos_responsables_erp")
     op.drop_table("pagos_responsables_erp")
     op.drop_index("ix_comision_regla_cliente_id", table_name="comisiones_responsable_reglas")
     op.drop_index("ix_comision_regla_responsable_id", table_name="comisiones_responsable_reglas")
+    op.drop_index("ix_comisiones_responsable_reglas_tenant_id", table_name="comisiones_responsable_reglas")
     op.drop_table("comisiones_responsable_reglas")
