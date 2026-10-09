@@ -4,7 +4,7 @@ from decimal import Decimal
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models import Empresa, Expediente
+from app.models import Empresa, Expediente, Miembro
 from tests.conftest import AuthPrueba
 
 
@@ -57,8 +57,13 @@ def test_produccion_por_receptor_usa_documentos_del_usuario_y_periodo(
     )
     assert fuera.status_code == 200
     assert fuera.json() == []
+    otro_usuario = Miembro(
+        tenant_id=tenant_id, codigo="OTROUSR", nombre="Otro usuario", rol="USUARIO", activo=True
+    )
+    session.add(otro_usuario)
+    session.commit()
     invalido = client.get(
         "/api/v1/comisiones/produccion-receptores",
-        params={**parametros, "usuario_id": "00000000-0000-0000-0000-000000000001"},
+        params={**parametros, "usuario_id": str(otro_usuario.id)},
     )
-    assert invalido.status_code == 404
+    assert invalido.status_code == 403
