@@ -8,21 +8,31 @@ from app.services.separador_pdf import analizar_paquete, extraer_fragmento
 
 
 def _paquete(paginas: list[str]) -> bytes:
-    # Pruebas de división sin redes ni datos privados: PdfWriter añade
-    # anotaciones de texto como contenido de páginas mediante reportlab.
-    from reportlab.pdfgen import canvas
+    from pypdf.generic import (
+        DecodedStreamObject,
+        DictionaryObject,
+        NameObject,
+    )
 
     salida = PdfWriter()
     for contenido in paginas:
-        memoria = io.BytesIO()
-        hoja = canvas.Canvas(memoria)
-        for indice, linea in enumerate(contenido.splitlines()):
-            hoja.drawString(20, 780 - 20 * indice, linea)
-        hoja.save()
-        memoria.seek(0)
-        from pypdf import PdfReader
-
-        salida.add_page(PdfReader(memoria).pages[0])
+        hoja = salida.add_blank_page(width=595, height=842)
+        fuente = DictionaryObject({
+            NameObject("/F1"): DictionaryObject({
+                NameObject("/Type"): NameObject("/Font"),
+                NameObject("/Subtype"): NameObject("/Type1"),
+                NameObject("/BaseFont"): NameObject("/Helvetica"),
+            }),
+        })
+        hoja[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): fuente})
+        lineas = contenido.splitlines()
+        operadores = ["BT /F1 10 Tf 20 780 Td"]
+        for linea in lineas:
+            operadores.append(f"({linea}) Tj 0 -20 Td")
+        operadores.append("ET")
+        stream = DecodedStreamObject()
+        stream.set_data("\\n".join(operadores).encode("ascii"))
+        hoja[NameObject("/Contents")] = salida._add_object(stream)
     memoria_final = io.BytesIO()
     salida.write(memoria_final)
     return memoria_final.getvalue()
