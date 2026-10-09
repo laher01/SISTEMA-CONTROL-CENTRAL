@@ -11,14 +11,14 @@ from sqlalchemy.exc import IntegrityError
 from app.models import Base, CuentaAcceso, Tenant
 
 
-def test_migracion_0016_expande_y_conserva_datos(tmp_path: Path) -> None:
+def test_migracion_0017_expande_y_conserva_datos(tmp_path: Path) -> None:
     motor = create_engine(f"sqlite:///{tmp_path / 'migracion.db'}")
     tablas_previas = [t for t in Base.metadata.sorted_tables if not t.name.startswith("infra_")]
     Base.metadata.create_all(motor, tables=tablas_previas)
     migracion = runpy.run_path(
-        str(Path(__file__).parents[1] / "alembic/versions/20261009_0016_infraestructura.py")
+        str(Path(__file__).parents[1] / "alembic/versions/20261009_0017_infraestructura.py")
     )
-    assert migracion["down_revision"] == "0015"
+    assert migracion["down_revision"] == "0016"
     with motor.begin() as connection:
         connection.execute(Tenant.__table__.insert().values(nombre="Datos anteriores"))
         previas = set(inspect(connection).get_table_names())
@@ -40,13 +40,13 @@ def test_migracion_0016_expande_y_conserva_datos(tmp_path: Path) -> None:
     motor.dispose()
 
 
-def test_migracion_0017_protege_auditoria_y_downgrade_aislado(tmp_path: Path) -> None:
+def test_migracion_0018_protege_auditoria_y_downgrade_aislado(tmp_path: Path) -> None:
     motor = create_engine(f"sqlite:///{tmp_path / 'operaciones.db'}")
     tablas_previas = [t for t in Base.metadata.sorted_tables if not t.name.startswith("infra_")]
     Base.metadata.create_all(motor, tables=tablas_previas)
     carpeta = Path(__file__).parents[1] / "alembic/versions"
-    anterior = runpy.run_path(str(carpeta / "20261009_0016_infraestructura.py"))
-    actual = runpy.run_path(str(carpeta / "20261009_0017_operaciones_infra.py"))
+    anterior = runpy.run_path(str(carpeta / "20261009_0017_infraestructura.py"))
+    actual = runpy.run_path(str(carpeta / "20261009_0018_operaciones_infra.py"))
     with motor.begin() as connection:
         with Operations.context(MigrationContext.configure(connection)):
             anterior["upgrade"]()
