@@ -152,6 +152,7 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
     );
     for (let i = 0; i < candidatos.length; i += 1) {
       const fila = candidatos[i];
+      if (!fila) continue;
       setProgresoPaquetes(`${confirmar ? "Importando" : "Analizando"} paquete ${i + 1} de ${candidatos.length}: ${fila.archivo.name}`);
       actualizarPaquetes(
         paquetesRef.current.map((p) =>
