@@ -42,10 +42,12 @@ def _usuario_del_responsable(
 ) -> Miembro:
     usuario = session.get(Miembro, usuario_id)
     if (
-        usuario is None or usuario.tenant_id != tenant_id
+        usuario is None
+        or usuario.tenant_id != tenant_id
         or usuario.responsable_id != responsable_id
         or usuario.rol != RolMiembro.USUARIO
-        or not usuario.activo or usuario.deleted_at is not None
+        or not usuario.activo
+        or usuario.deleted_at is not None
     ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Usuario fuera del equipo")
     return usuario
@@ -86,7 +88,8 @@ def _base_pago_usuario(
                 Expediente.fecha_emision >= datos.desde,
                 Expediente.fecha_emision <= datos.hasta,
             )
-        ) or 0
+        )
+        or 0
     )
     tasa = Decimal(plan.porcentaje)
     bruto = (produccion * tasa / Decimal("100")).quantize(Decimal("0.01"))
@@ -105,8 +108,10 @@ def cotizar_pago_usuario(
     _usuario_del_responsable(session, tenant_id, auth.miembro_id, datos.usuario_id)
     produccion, tasa, bruto, _ = _base_pago_usuario(session, tenant_id, datos)
     return {
-        "produccion": str(produccion), "porcentaje": str(tasa),
-        "bruto": str(bruto), "moneda": datos.moneda,
+        "produccion": str(produccion),
+        "porcentaje": str(tasa),
+        "bruto": str(bruto),
+        "moneda": datos.moneda,
     }
 
 
@@ -152,7 +157,11 @@ def programar_pago_usuario(
     session.add(pago)
     session.flush()
     auditoria.registrar(
-        session, tenant_id, "PAGO_USUARIO_PROGRAMADO", "pago_erp", pago.id,
+        session,
+        tenant_id,
+        "PAGO_USUARIO_PROGRAMADO",
+        "pago_erp",
+        pago.id,
         {"usuario_id": str(datos.usuario_id), "porcentaje": str(tasa), "saldo": str(bruto)},
     )
     session.commit()
@@ -173,12 +182,19 @@ def anular_pago_usuario(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
     _usuario_del_responsable(session, tenant_id, auth.miembro_id, pago.usuario_id)
     if (
-        pago.estado != "PROGRAMADO" or pago.conciliado or pago.fecha_pago is not None
-        or pago.voucher_documento_id is not None or Decimal(pago.adelantos) != 0
+        pago.estado != "PROGRAMADO"
+        or pago.conciliado
+        or pago.fecha_pago is not None
+        or pago.voucher_documento_id is not None
+        or Decimal(pago.adelantos) != 0
     ):
         raise HTTPException(status.HTTP_409_CONFLICT, "Liquidación ya aplicada o pagada")
     auditoria.registrar(
-        session, tenant_id, "PAGO_USUARIO_PROGRAMACION_ANULADA", "pago_erp", pago.id,
+        session,
+        tenant_id,
+        "PAGO_USUARIO_PROGRAMACION_ANULADA",
+        "pago_erp",
+        pago.id,
         {"usuario_id": str(pago.usuario_id), "saldo": str(pago.saldo)},
     )
     session.delete(pago)
