@@ -133,3 +133,34 @@ def test_responsable_crea_usuario_en_su_equipo(
         ).status_code
         == 422
     )
+
+def test_responsable_crea_codigo_manual_y_edita_solo_su_usuario(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    tenant = auth_prueba.contexto.tenant_id
+    responsable = Miembro(tenant_id=tenant, codigo="RES-TEST", nombre="Responsable", rol="RESPONSABLE", activo=True)
+    otro = Miembro(tenant_id=tenant, codigo="RES-OTRO", nombre="Otro Responsable", rol="RESPONSABLE", activo=True)
+    session.add_all([responsable, otro])
+    session.flush()
+    ajeno = Miembro(tenant_id=tenant, codigo="AJENO01", nombre="Usuario ajeno", rol="USUARIO", responsable_id=otro.id, activo=True)
+    session.add(ajeno)
+    session.commit()
+    auth_prueba.contexto = ContextoAcceso(
+        cuenta_id=auth_prueba.contexto.cuenta_id, tenant_id=tenant, rol="RESPONSABLE",
+        miembro_id=responsable.id, gestor_id=None, usuario_id=None, codigo=responsable.codigo,
+        nombre=responsable.nombre, cambio_clave_obligatorio=False,
+    )
+    ruta = "/api/v1/miembros/mis-usuarios"
+    r = client.post(ruta, json={"nombre": "José Carlos", "codigo": "JOSE01", "porcentaje_produccion": "1.5"})
+    assert r.status_code == 201, r.text
+    usuario = r.json()["miembro"]
+    assert usuario["codigo"] == "JOSE01"
+    assert client.post(ruta, json={"nombre": "Duplicado", "codigo": "JOSE01"}).status_code == 409
+    assert client.post(ruta, json={"nombre": "Inválido", "codigo": "INVALIDO!"}).status_code == 422
+    datos = {"nombre": "José Carlos Editado", "codigo": "JOSE02", "porcentaje_produccion": "2.5"}
+    assert client.patch(f"{ruta}/{ajeno.id}", json=datos).status_code == 404
+    actual = client.patch(f"{ruta}/{usuario['id']}", json=datos)
+    assert actual.status_code == 200, actual.text
+    assert actual.json()["codigo"] == "JOSE02"
+    assert actual.json()["nombre"] == "José Carlos Editado"
+    assert client.patch(f"{ruta}/{usuario['id']}", json={**datos, "codigo": "AJENO01"}).status_code == 409
