@@ -1,0 +1,32 @@
+name: Format gerencias final (temporary)
+on:
+  push:
+    branches:
+      - feature/gerentes-responsables-multiples-20261009
+    paths:
+      - .github/workflows/format-gerencias-final-temp.yml
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/gerentes-responsables-multiples-20261009
+      - uses: astral-sh/setup-uv@v6
+      - name: Apply pinned Ruff formatter
+        working-directory: backend
+        run: |
+          uv sync --locked
+          uv run ruff check --fix .
+          uv run ruff format .
+      - name: Commit branch-only formatting
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend
+          if ! git diff --cached --quiet; then
+            git commit -m 'style: automatic Ruff lint and formatting'
+            git push origin HEAD:feature/gerentes-responsables-multiples-20261009
+          fi
