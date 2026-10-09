@@ -228,16 +228,12 @@ def solicitar_acceso(
 
 
 @router.get("/me", response_model=SesionOut)
-def me(contexto: AuthDep) -> SesionOut:
-    return SesionOut(
-        rol=contexto.rol,
-        codigo=contexto.codigo,
-        nombre=contexto.nombre,
-        miembro_id=contexto.miembro_id,
-        gestor_id=contexto.gestor_id,
-        usuario_id=contexto.usuario_id,
-        cambio_clave_obligatorio=contexto.cambio_clave_obligatorio,
-    )
+def me(contexto: AuthDep, session: SessionDep) -> SesionOut:
+    """Reconstruye en cada consulta la jerarquía real del usuario autenticado."""
+    cuenta = session.get(CuentaAcceso, contexto.cuenta_id)
+    if cuenta is None or cuenta.tenant_id != contexto.tenant_id or cuenta.deleted_at is not None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sesión inválida")
+    return _salida_sesion(session, cuenta, contexto.rol)
 
 
 @router.post("/cambiar-clave", response_model=SesionOut)
