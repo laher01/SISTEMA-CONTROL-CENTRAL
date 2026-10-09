@@ -29,12 +29,20 @@ def test_responsable_solo_ve_sus_usuarios(
     session.add_all([responsable, otro])
     session.flush()
     usuario_propio = Miembro(
-        tenant_id=tenant_id, codigo="USER-PROP", nombre="Usuario propio",
-        rol="USUARIO", activo=True, responsable_id=responsable.id,
+        tenant_id=tenant_id,
+        codigo="USER-PROP",
+        nombre="Usuario propio",
+        rol="USUARIO",
+        activo=True,
+        responsable_id=responsable.id,
     )
     usuario_ajeno = Miembro(
-        tenant_id=tenant_id, codigo="USER-AJENO", nombre="Usuario ajeno",
-        rol="USUARIO", activo=True, responsable_id=otro.id,
+        tenant_id=tenant_id,
+        codigo="USER-AJENO",
+        nombre="Usuario ajeno",
+        rol="USUARIO",
+        activo=True,
+        responsable_id=otro.id,
     )
     session.add_all([usuario_propio, usuario_ajeno])
     session.commit()
