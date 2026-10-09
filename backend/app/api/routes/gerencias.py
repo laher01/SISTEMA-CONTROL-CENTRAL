@@ -276,3 +276,78 @@ def asignar_cartera(
     session.commit()
     session.refresh(relacion)
     return relacion
+
+
+class RegularizarPedidoIn(BaseModel):
+    gerente_id: uuid.UUID
+
+
+@router.put("/pedidos/{pedido_id}/gerente")
+def regularizar_pedido(
+    pedido_id: uuid.UUID,
+    datos: RegularizarPedidoIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str]:
+    """Asignación auditada de pedidos históricos sin Gerente identificado."""
+    _administracion(auth)
+    pedido = session.get(PedidoGerencia, pedido_id)
+    if pedido is None or pedido.tenant_id != tenant_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pedido no encontrado")
+    if pedido.gerente_id is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "El pedido ya tiene Gerente")
+    _miembro_activo(session, tenant_id, datos.gerente_id, RolMiembro.GERENTE)
+    cartera = session.scalar(
+        select(GerenteEmpresa.id).where(
+            GerenteEmpresa.tenant_id == tenant_id,
+            GerenteEmpresa.gerente_id == datos.gerente_id,
+            GerenteEmpresa.empresa_id == pedido.cliente_id,
+            GerenteEmpresa.activo.is_(True),
+        )
+    )
+    if cartera is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Cliente no asignado al Gerente")
+    if pedido.responsable_id is not None:
+        vinculo = session.scalar(
+            select(GerenteResponsable.id).where(
+                GerenteResponsable.tenant_id == tenant_id,
+                GerenteResponsable.gerente_id == datos.gerente_id,
+                GerenteResponsable.responsable_id == pedido.responsable_id,
+                GerenteResponsable.activo.is_(True),
+            )
+        )
+        if vinculo is None:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Responsable no vinculado al Gerente"
+            )
+    conflicto = session.scalar(
+        select(PedidoGerencia.id).where(
+            PedidoGerencia.tenant_id == tenant_id,
+            PedidoGerencia.id != pedido.id,
+            PedidoGerencia.gerente_id == datos.gerente_id,
+            PedidoGerencia.cliente_id == pedido.cliente_id,
+            PedidoGerencia.periodo_mes == pedido.periodo_mes,
+            PedidoGerencia.moneda == pedido.moneda,
+            PedidoGerencia.estado != "CANCELADO",
+        )
+    )
+    if conflicto is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Pedido ya registrado para ese Gerente")
+    ya_atribuido = session.scalar(
+        select(Expediente.id).where(
+            Expediente.tenant_id == tenant_id,
+            Expediente.pedido_gerencia_id == pedido.id,
+            Expediente.gerente_id.is_not(None),
+        )
+    )
+    if ya_atribuido is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Pedido con facturas ya atribuidas")
+    pedido.gerente_id = datos.gerente_id
+    auditoria.registrar(
+        session, tenant_id, "PEDIDO_GERENCIA_REGULARIZADO",
+        "pedido_gerencia", pedido.id,
+        {"gerente_id": str(datos.gerente_id), "actor": auth.codigo},
+    )
+    session.commit()
+    return {"pedido_id": str(pedido.id), "gerente_id": str(datos.gerente_id)}
