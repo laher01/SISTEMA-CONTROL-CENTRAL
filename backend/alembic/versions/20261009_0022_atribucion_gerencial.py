@@ -68,7 +68,7 @@ def downgrade() -> None:
             type_="unique",
         )
         batch.create_unique_constraint(
-            "uq_pagos_responsables_erp_tenant_id_responsable_id_periodo_desde_periodo_hasta_moneda",
+            "uq_pagos_resp_legacy_periodo_moneda",
             ["tenant_id", "responsable_id", "periodo_desde", "periodo_hasta", "moneda"],
         )
     op.drop_index("ix_pagos_responsables_erp_gerente_id", table_name="pagos_responsables_erp")
