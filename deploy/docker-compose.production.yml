@@ -26,6 +26,7 @@ services:
       FC_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       FC_STORAGE_DIR: /data/documentos
       FC_TENANT_DEFAULT: ${FC_TENANT_DEFAULT}
+      FC_TENANT_DOMAIN: ${FC_TENANT_DOMAIN:-factcentral.online}
       FC_TENANT_RUC: ${FC_TENANT_RUC:-}
       FC_ZONA_HORARIA: America/Lima
       FC_DIA_LIMITE_EXPEDIENTE: ${FC_DIA_LIMITE_EXPEDIENTE:-7}
