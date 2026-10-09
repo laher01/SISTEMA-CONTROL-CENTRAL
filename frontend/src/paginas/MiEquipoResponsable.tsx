@@ -344,7 +344,6 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
             disabled={referenciaConfirmacion.trim().length < 4}
             onClick={() => void confirmarLiquidacion(p.id)}>Confirmar pago</button>}
         </p>)}
-        {false && <p>Producción: {formatearMonto(moneda, cotizacion.produccion)} · Porcentaje: {cotizacion.porcentaje}% · <strong>Importe: {formatearMonto(moneda, cotizacion.bruto)}</strong> <button type="button" onClick={() => void programarPago()}>Programar</button></p>}
         {errorPago && <p role="alert">{errorPago}</p>}
         {mensaje && <p role="status">{mensaje}</p>}
         <table><thead><tr><th>Usuario</th><th>Desde</th><th>Hasta</th><th>Producción</th><th>%</th><th>Bruto</th><th>Adelantos</th><th>Saldo</th><th>Estado</th><th>Acción</th></tr></thead>
