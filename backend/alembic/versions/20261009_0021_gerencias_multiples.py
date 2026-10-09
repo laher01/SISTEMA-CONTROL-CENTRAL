@@ -16,6 +16,14 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+
+def _restriccion_única(tabla: str, columnas: set[str]) -> str:
+    for restriccion in sa.inspect(op.get_bind()).get_unique_constraints(tabla):
+        if set(restriccion["column_names"]) == columnas and restriccion.get("name"):
+            return str(restriccion["name"])
+    raise RuntimeError(f"Restricción única esperada no encontrada en {tabla}")
+
+
 def upgrade() -> None:
     op.create_table(
         "gerentes_responsables",
@@ -48,7 +56,7 @@ def upgrade() -> None:
     # individual y auditada; no se adjudican al Gerente equivocado.
     with op.batch_alter_table("pedidos_gerencia") as batch:
         batch.drop_constraint(
-            "uq_pedidos_gerencia_tenant_id_cliente_id_periodo_mes_moneda",
+            _restriccion_única("pedidos_gerencia", {"tenant_id","cliente_id","periodo_mes","moneda"}),
             type_="unique",
         )
         batch.create_unique_constraint(
