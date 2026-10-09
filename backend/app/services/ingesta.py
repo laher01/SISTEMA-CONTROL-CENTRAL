@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, TipoComprobante, TipoDocumento
-from app.models import Documento, Expediente, Gestor
+from app.models import Documento, Expediente, GerenteEmpresa, GerenteResponsable, Gestor, Miembro, PedidoGerencia
 from app.services import auditoria
 from app.services.expedientes import (
     actualizar_expediente,
@@ -19,6 +19,54 @@ from app.services.expedientes import (
 )
 from app.services.ubl import ComprobanteUbl, parece_xml, parse_ubl
 from app.storage import AlmacenLocal
+
+
+def atribuir_gerencia_inequivoca(session: Session, expediente: Expediente) -> None:
+    """Solo asigna si exactamente un Pedido de Gerencia corresponde al expediente."""
+    if expediente.gerente_id is not None or expediente.usuario_id is None:
+        return
+    usuario = session.get(Miembro, expediente.usuario_id)
+    if usuario is None or usuario.responsable_id is None:
+        return
+    periodo = expediente.fecha_emision.replace(day=1)
+    candidatos = list(
+        session.scalars(
+            select(PedidoGerencia).join(
+                GerenteResponsable,
+                (GerenteResponsable.gerente_id == PedidoGerencia.gerente_id)
+                & (GerenteResponsable.responsable_id == PedidoGerencia.responsable_id)
+                & (GerenteResponsable.tenant_id == PedidoGerencia.tenant_id),
+            ).join(
+                GerenteEmpresa,
+                (GerenteEmpresa.gerente_id == PedidoGerencia.gerente_id)
+                & (GerenteEmpresa.empresa_id == PedidoGerencia.cliente_id)
+                & (GerenteEmpresa.tenant_id == PedidoGerencia.tenant_id),
+            ).where(
+                PedidoGerencia.tenant_id == expediente.tenant_id,
+                PedidoGerencia.responsable_id == usuario.responsable_id,
+                PedidoGerencia.cliente_id == expediente.receptor_id,
+                PedidoGerencia.periodo_mes == periodo,
+                PedidoGerencia.moneda == expediente.moneda,
+                PedidoGerencia.estado == "ACTIVO",
+                PedidoGerencia.gerente_id.is_not(None),
+                GerenteResponsable.activo.is_(True),
+                GerenteEmpresa.activo.is_(True),
+            )
+        )
+    )
+    if len(candidatos) != 1:
+        return
+    pedido = candidatos[0]
+    expediente.gerente_id = pedido.gerente_id
+    expediente.pedido_gerencia_id = pedido.id
+    auditoria.registrar(
+        session,
+        expediente.tenant_id,
+        "EXPEDIENTE_GERENCIA_ATRIBUCION_AUTOMATICA",
+        "expediente",
+        expediente.id,
+        {"gerente_id": str(pedido.gerente_id), "pedido_id": str(pedido.id)},
+    )
 
 
 class DocumentoDuplicado(Exception):
@@ -209,6 +257,7 @@ def crear_expediente(
     )
     session.add(expediente)
     session.flush()
+    atribuir_gerencia_inequivoca(session, expediente)
     auditoria.registrar(session, tenant_id, "EXPEDIENTE_CREADO", "expediente", expediente.id)
     actualizar_expediente(session, expediente, hoy, settings)
     return expediente
