@@ -360,6 +360,10 @@ def _salida_sesion(session: SessionDep, cuenta: CuentaAcceso, rol: str) -> Sesio
         if miembro.rol == "USUARIO"
         else [],
         cambio_clave_obligatorio=cuenta.cambio_clave_obligatorio,
+        es_administracion_demo=bool(
+            (tenant := session.get(Tenant, cuenta.tenant_id))
+            and tenant.origen_alta == "DEMO_AUTORIZADA"
+        ),
     )
 
 
