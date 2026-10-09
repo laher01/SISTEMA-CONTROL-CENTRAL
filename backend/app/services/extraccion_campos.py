@@ -670,7 +670,7 @@ def _extraer_campos_fiscales_rhe(
         return
 
     # SUNAT puede separar «Nro:» de «E001-39» en distintas líneas.
-    serie_numero = re.search(r"\\b(E[0-9]{3})\\s*[-–—]\\s*0*([0-9]{1,8})\\b", texto, re.I)
+    serie_numero = re.search(r"\b(E[0-9]{3})\s*[-–—]\s*0*([0-9]{1,8})\b", texto, re.I)
     if serie_numero:
         evidencia = serie_numero.group(0)
         campos["serie"] = CampoExtraido(
@@ -684,10 +684,10 @@ def _extraer_campos_fiscales_rhe(
     # final del bloque de texto, lejos de «23 de Setiembre del 2026».
     if "fecha_emision" not in campos:
         patron_fecha = re.compile(
-            r"(?<!\\d)(\\d{1,2})\\s+(?:DE\\s+)?"
+            r"(?<!\d)(\d{1,2})\s+(?:DE\s+)?"
             r"(ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|"
             r"SEPTIEMBRE|SETIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE)"
-            r"\\s+(?:DEL?\\s+)?(20\\d{2})(?!\\d)",
+            r"\s+(?:DEL?\s+)?(20\d{2})(?!\d)",
             re.IGNORECASE,
         )
         candidatos_fecha = []
@@ -707,7 +707,7 @@ def _extraer_campos_fiscales_rhe(
     # En el cuerpo típico aparecen bruto, retención y neto. Nunca tomar la
     # retención (0.00) como importe; si bruto y neto difieren, se usa bruto.
     if "importe_total" not in campos:
-        patron_monto = re.compile(r"(?<![\\d.,])(?:\\d{1,3}(?:,\\d{3})+|\\d{1,8})\\.\\d{2}(?!\\d)")
+        patron_monto = re.compile(r"(?<![\d.,])(?:\d{1,3}(?:,\d{3})+|\d{1,8})\.\d{2}(?!\d)")
         montos: list[tuple[str, Decimal | None]] = []
         for coincidencia in patron_monto.finditer(texto):
             bruto = coincidencia.group(0)
