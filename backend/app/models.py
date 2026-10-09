@@ -530,6 +530,20 @@ class PagoResponsableERP(ConId, ConTenant, ConCreacion, Base):
     referencia_pago: Mapped[str | None] = mapped_column(String(160))
 
 
+
+class MovimientoPagoResponsable(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "movimientos_pagos_responsables"
+
+    pago_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("pagos_responsables_erp.id"), index=True
+    )
+    monto: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    fecha: Mapped[date] = mapped_column(Date)
+    referencia: Mapped[str] = mapped_column(String(160))
+    comprobante_archivo: Mapped[str] = mapped_column(String(255))
+    creado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
+
+
 class PagoERP(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "pagos_erp"
     __table_args__ = (
