@@ -74,6 +74,10 @@ jobs:
           VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
         run: |
+          if [ "$VPS_HOST" != "132.145.233.172" ] || [ "$VPS_USER" != "ubuntu" ]; then
+            echo "::error::Despliegue bloqueado: únicamente VPS antigua ubuntu@132.145.233.172"
+            exit 1
+          fi
           for name in VPS_HOST VPS_USER VPS_DEPLOY_PATH VPS_SSH_PRIVATE_KEY VPS_SSH_KNOWN_HOSTS; do
             if [ -z "${!name:-}" ]; then
               echo "::error::Falta el secreto $name en el environment staging"
