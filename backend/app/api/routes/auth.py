@@ -30,13 +30,18 @@ def login(
     request: Request,
 ) -> SesionOut:
     tenant_host = tenant_de_host(request, session, settings)
-    if tenant_host is not None and datos.espacio and datos.espacio.strip().lower() not in {
-        tenant_host.nombre.lower(), (tenant_host.codigo or "").lower()
-    }:
+    if (
+        tenant_host is not None
+        and datos.espacio
+        and datos.espacio.strip().lower()
+        not in {tenant_host.nombre.lower(), (tenant_host.codigo or "").lower()}
+    ):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Credenciales inválidas")
-    espacio = (tenant_host.codigo or tenant_host.nombre) if tenant_host else (
-        datos.espacio or settings.tenant_default
-    ).strip()
+    espacio = (
+        (tenant_host.codigo or tenant_host.nombre)
+        if tenant_host
+        else (datos.espacio or settings.tenant_default).strip()
+    )
     tenant_codigo = session.scalar(
         select(Tenant).where(func.upper(Tenant.codigo) == espacio.upper())
     )
