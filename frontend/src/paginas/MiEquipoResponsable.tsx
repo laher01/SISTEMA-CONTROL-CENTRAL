@@ -19,7 +19,7 @@ interface Equipo {
 type Pestana = "USUARIOS" | "PEDIDOS" | "COBROS" | "PAGOS";
 
 export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?: Pestana }) {
-  const [pestana, setPestana] = useState<Pestana>(inicial);
+  const pestana = inicial;
   const { datos, error, cargando, recargar } = useDatos<UsuarioResponsable[]>(
     "/api/v1/miembros/mis-usuarios",
   );
@@ -60,13 +60,6 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
         No se realiza ningún pago desde esta pantalla.
       </p>
       <div className="filtros">
-        {([
-          ["USUARIOS", "Mis Usuarios"], ["PEDIDOS", "Pedidos"],
-          ["COBROS", "Cobros y clientes"], ["PAGOS", "Pago de Usuarios"],
-        ] as const).map(([id, titulo]) => (
-          <button key={id} type="button" onClick={() => setPestana(id)}
-            aria-pressed={pestana === id}>{titulo}</button>
-        ))}
         <button type="button" onClick={() => { recargar(); recargarEquipo(); }}>Actualizar</button>
         {pestana !== "USUARIOS" && <label>Moneda{" "}
           <select value={moneda} onChange={(e) => setMoneda(e.target.value as "PEN" | "USD")}>
