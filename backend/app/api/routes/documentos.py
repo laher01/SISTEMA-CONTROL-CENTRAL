@@ -151,8 +151,7 @@ async def importar_paquete_pdf(
     for segmento in segmentos:
         clave = segmento.descripcion()
         nombre = (
-            f"{segmento.ruc_emisor}-{segmento.tipo}-"
-            f"{segmento.serie}-{segmento.correlativo}.pdf"
+            f"{segmento.ruc_emisor}-{segmento.tipo}-{segmento.serie}-{segmento.correlativo}.pdf"
         )
         try:
             subido = ArchivoSubido(
@@ -161,8 +160,15 @@ async def importar_paquete_pdf(
                 contenido=extraer_fragmento(contenido, segmento),
             )
             documento = ingerir_documento(
-                session, almacen, settings, hoy, tenant_id, subido,
-                None, None, auth.gestor_id if auth.rol == "GESTOR" else None,
+                session,
+                almacen,
+                settings,
+                hoy,
+                tenant_id,
+                subido,
+                None,
+                None,
+                auth.gestor_id if auth.rol == "GESTOR" else None,
                 auth.usuario_id,
                 cuenta_administradora_responsable(session, auth),
             )
@@ -172,12 +178,16 @@ async def importar_paquete_pdf(
                 except DocumentoNoProcesable as exc:
                     registrar_fallo(session, documento, str(exc))
             session.commit()
-            resultados.append({
-                **clave,
-                "estado": "relacionado" if documento.expediente_id else "revision",
-                "documento_id": str(documento.id),
-                "expediente_id": str(documento.expediente_id) if documento.expediente_id else None,
-            })
+            resultados.append(
+                {
+                    **clave,
+                    "estado": "relacionado" if documento.expediente_id else "revision",
+                    "documento_id": str(documento.id),
+                    "expediente_id": str(documento.expediente_id)
+                    if documento.expediente_id
+                    else None,
+                }
+            )
         except (DocumentoDuplicado, ComprobanteYaRegistrado):
             session.rollback()
             resultados.append({**clave, "estado": "duplicado"})
