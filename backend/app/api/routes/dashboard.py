@@ -6,14 +6,13 @@ from typing import Literal
 from fastapi import APIRouter
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import selectinload
-
-from app.services.expedientes import documentos_faltantes
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.enums import EstadoDocumento, EstadoExpediente, Moneda, RolMiembro, TipoAlerta
 from app.models import Alerta, Documento, Empresa, Expediente, Gestor, Miembro
 from app.schemas import DashboardDesglose, DashboardDesgloseFila, DashboardResumen, MontosMoneda
+from app.services.expedientes import documentos_faltantes
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
