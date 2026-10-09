@@ -28,8 +28,10 @@ def login(
     settings: SettingsDep,
 ) -> SesionOut:
     espacio = (datos.espacio or settings.tenant_default).strip()
-    tenant = session.scalar(select(Tenant).where(Tenant.nombre == espacio))
-    if tenant is None:
+    tenant = session.scalar(
+        select(Tenant).where((Tenant.codigo == espacio.upper()) | (Tenant.nombre == espacio))
+    )
+    if tenant is None or tenant.estado != "ACTIVO":
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Credenciales inválidas")
 
     config = session.scalar(
