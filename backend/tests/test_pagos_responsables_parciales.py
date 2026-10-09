@@ -26,10 +26,16 @@ def test_adelanto_y_pago_total_con_comprobante(
     usuario.responsable_id = responsable.id
     session.add(
         Expediente(
-            tenant_id=tenant, emisor_id=cliente.id, receptor_id=cliente.id,
-            tipo_comprobante="FACT", serie="F001", correlativo="300",
-            fecha_emision=date(2026, 9, 15), moneda="PEN",
-            importe_total=Decimal("1000.00"), usuario_id=usuario.id,
+            tenant_id=tenant,
+            emisor_id=cliente.id,
+            receptor_id=cliente.id,
+            tipo_comprobante="FACT",
+            serie="F001",
+            correlativo="300",
+            fecha_emision=date(2026, 9, 15),
+            moneda="PEN",
+            importe_total=Decimal("1000.00"),
+            usuario_id=usuario.id,
         )
     )
     session.commit()
@@ -38,8 +44,10 @@ def test_adelanto_y_pago_total_con_comprobante(
     programado = client.post(
         url + "/programar",
         json={
-            "responsable_id": str(responsable.id), "desde": "2026-09-01",
-            "hasta": "2026-09-30", "moneda": "PEN",
+            "responsable_id": str(responsable.id),
+            "desde": "2026-09-01",
+            "hasta": "2026-09-30",
+            "moneda": "PEN",
         },
     )
     assert programado.status_code == 201, programado.text
