@@ -450,7 +450,6 @@ class AplicacionAdelantoERP(ConId, ConTenant, ConCreacion, Base):
 
 
 
-
 class AbonoClienteERP(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "abonos_cliente_erp"
 
