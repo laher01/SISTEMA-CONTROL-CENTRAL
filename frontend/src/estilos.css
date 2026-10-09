@@ -779,3 +779,26 @@ button.peligro {
 .jerarquia-sesion-vacia {
   opacity: 0.8;
 }
+
+/* Identificación compacta del dominio y cadena de responsables */
+.ruta-organizacion {
+  background: #164472;
+  color: #f8fafc;
+  border-radius: 7px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.1rem;
+  display: grid;
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+}
+.ruta-dominio { display: flex; gap: 0.8rem; flex-wrap: wrap; align-items: center; color: #ffe17b; }
+.ruta-dominio span { font-size: 0.82rem; }
+.ruta-personas { display: flex; align-items: center; flex-wrap: wrap; gap: 0.3rem 0.6rem; font-size: 0.8rem; }
+.ruta-persona { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0.28rem; }
+.ruta-persona strong { color: #ffe17b; }
+.ruta-flecha { color: #ffe17b; margin-right: 0.35rem; }
+@media (max-width: 760px) {
+  .ruta-organizacion { padding: 0.65rem; }
+  .ruta-personas { display: grid; gap: 0.32rem; }
+  .ruta-flecha { display: none; }
+}

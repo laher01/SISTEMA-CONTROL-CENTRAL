@@ -123,6 +123,13 @@ export default function App() {
   };
 
   const menu = MENU.filter((item) => item.roles.includes(sesion.rol));
+  const cadena = sesion.rol === "GESTOR"
+    ? [{ rol: "GESTOR", codigo: sesion.codigo, nombre: sesion.nombre }, ...(sesion.jerarquia ?? [])]
+    : sesion.rol === "USUARIO"
+      ? (sesion.jerarquia?.length ? sesion.jerarquia : [{ rol: "USUARIO", codigo: sesion.codigo, nombre: sesion.nombre }])
+      : [{ rol: sesion.rol, codigo: sesion.codigo, nombre: sesion.nombre }];
+  const haySuperior = cadena.some((n) => n.rol === "RESPONSABLE" || n.rol === "ADMINISTRADOR" || n.rol === "SUPERADMIN");
+  const dominio = window.location.hostname;
 
   return (
     <div className="app">
@@ -133,18 +140,14 @@ export default function App() {
           <span>{sesion.nombre}</span>
           <small>{sesion.rol}</small>
           {(sesion.rol === "USUARIO" || sesion.rol === "GESTOR") && (
-            <div className="jerarquia-sesion" aria-label="Jerarquía de responsabilidad">
-              {(sesion.jerarquia ?? [])
-                .filter((_, indice) => sesion.rol === "GESTOR" || indice > 0)
-                .map((persona) => (
-                  <div className="jerarquia-sesion-nodo" key={persona.codigo}>
-                    <span className="jerarquia-sesion-rol">{persona.rol}</span>
-                    <span className="jerarquia-sesion-nombre">{persona.codigo} · {persona.nombre}</span>
-                  </div>
-                ))}
-              {(!sesion.jerarquia || sesion.jerarquia.length <= (sesion.rol === "USUARIO" ? 1 : 0)) && (
-                <small className="jerarquia-sesion-vacia">Sin responsable asignado</small>
-              )}
+            <div className="jerarquia-sesion" aria-label="Árbol de responsabilidad">
+              {cadena.map((persona, indice) => (
+                <div className="jerarquia-sesion-nodo" style={{ paddingLeft: Math.min(indice, 4) * 8 }} key={persona.rol + persona.codigo}>
+                  <span className="jerarquia-sesion-rol">{persona.rol}</span>
+                  <span className="jerarquia-sesion-nombre">{persona.codigo} · {persona.nombre}</span>
+                </div>
+              ))}
+              {!haySuperior && <small className="jerarquia-sesion-vacia">Responsable pendiente de vinculación</small>}
             </div>
           )}
         </div>
@@ -158,6 +161,17 @@ export default function App() {
         <button className="cerrar-sesion" onClick={cerrarSesion}>Cerrar sesión</button>
       </aside>
       <main className="contenido">
+        <header className="ruta-organizacion" aria-label="Dominio y cadena de responsabilidad">
+          <div className="ruta-dominio"><strong>FACT CENTRAL</strong><span>{dominio}</span></div>
+          <div className="ruta-personas">
+            {cadena.map((persona, indice) => (
+              <span className="ruta-persona" key={persona.rol + persona.codigo}>
+                {indice > 0 && <span className="ruta-flecha" aria-hidden="true">→</span>}
+                <strong>{persona.rol}:</strong> {persona.codigo} · {persona.nombre}
+              </span>
+            ))}
+          </div>
+        </header>
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/ingresar" element={<Navigate to="/" replace />} />
