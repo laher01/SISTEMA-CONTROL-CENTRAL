@@ -102,6 +102,16 @@ def test_produccion_aislada_por_gerente(
     assert pedidos_b.status_code == 200, pedidos_b.text
     assert len(pedidos_b.json()) == 1
     assert Decimal(str(pedidos_b.json()[0]["monto_ejecutado"])) == Decimal("300")
+    intento = client.patch(
+        f"/api/v1/pagos/pedidos/{pedidos_a.json()[0]['id']}",
+        json={"monto_solicitado": "9999.00"},
+    )
+    assert intento.status_code == 404
+    assert client.get("/api/v1/pagos").status_code == 403
+    assert client.get(
+        "/api/v1/pagos/clientes/resumen", params={"mes": "2026-10", "moneda": "PEN"}
+    ).status_code == 403
+
 
 
 def test_atribucion_automatica_requiere_unico_pedido(
