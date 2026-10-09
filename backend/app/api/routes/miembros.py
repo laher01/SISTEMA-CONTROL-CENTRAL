@@ -56,8 +56,7 @@ def crear(
         creado_por_cuenta_id=auth.cuenta_id,
         responsable_id=(
             auth.miembro_id
-            if datos.rol == RolMiembro.RESPONSABLE
-            and auth.rol == RolMiembro.ADMINISTRADOR
+            if datos.rol == RolMiembro.RESPONSABLE and auth.rol == RolMiembro.ADMINISTRADOR
             else None
         ),
     )
