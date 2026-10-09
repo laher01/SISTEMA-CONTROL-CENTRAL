@@ -1,4 +1,4 @@
-name: Format feature branch (temporary)
+name: Format feature branch (temporary v2)
 on:
   push:
     branches:
