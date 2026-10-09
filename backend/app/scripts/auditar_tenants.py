@@ -23,8 +23,8 @@ def main() -> None:
         if args.tenant_id is None:
             tenants = session.scalars(select(Tenant).order_by(Tenant.nombre)).all()
             print("TENANTS (ningún dato se eliminará):")
-            for tenant in tenants:
-                print(f"{tenant.id} | {tenant.nombre}")
+            for item in tenants:
+                print(f"{item.id} | {item.nombre}")
             print(f"Total: {len(tenants)}")
             return
 
