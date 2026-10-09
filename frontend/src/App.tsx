@@ -123,6 +123,19 @@ export default function App() {
   };
 
   const menu = MENU.filter((item) => item.roles.includes(sesion.rol));
+  const jerarquiaCompleta = [
+    { rol: sesion.rol, codigo: sesion.codigo, nombre: sesion.nombre },
+    ...(sesion.jerarquia ?? []).filter(
+      (persona) => persona.codigo !== sesion.codigo || persona.rol !== sesion.rol,
+    ),
+  ];
+  const cadenaOperativa = jerarquiaCompleta.filter(
+    (persona) => persona.rol !== "ADMINISTRADOR" && persona.rol !== "SUPERADMIN",
+  );
+  const administracion = jerarquiaCompleta.filter(
+    (persona) => persona.rol === "ADMINISTRADOR" || persona.rol === "SUPERADMIN",
+  );
+  const rutaActual = `${window.location.hostname}${window.location.pathname}`;
 
   return (
     <div className="app">
@@ -132,21 +145,6 @@ export default function App() {
           <strong>{sesion.codigo}</strong>
           <span>{sesion.nombre}</span>
           <small>{sesion.rol}</small>
-          {(sesion.rol === "USUARIO" || sesion.rol === "GESTOR") && (
-            <div className="jerarquia-sesion" aria-label="Jerarquía de responsabilidad">
-              {(sesion.jerarquia ?? [])
-                .filter((_, indice) => sesion.rol === "GESTOR" || indice > 0)
-                .map((persona) => (
-                  <div className="jerarquia-sesion-nodo" key={persona.codigo}>
-                    <span className="jerarquia-sesion-rol">{persona.rol}</span>
-                    <span className="jerarquia-sesion-nombre">{persona.codigo} · {persona.nombre}</span>
-                  </div>
-                ))}
-              {(!sesion.jerarquia || sesion.jerarquia.length <= (sesion.rol === "USUARIO" ? 1 : 0)) && (
-                <small className="jerarquia-sesion-vacia">Sin responsable asignado</small>
-              )}
-            </div>
-          )}
         </div>
         <nav>
           {menu.map((item) => (
@@ -158,6 +156,26 @@ export default function App() {
         <button className="cerrar-sesion" onClick={cerrarSesion}>Cerrar sesión</button>
       </aside>
       <main className="contenido">
+        <section className="contexto-sistema" aria-label="Ubicación y jerarquía de la sesión">
+          <div className="contexto-ruta">{rutaActual}</div>
+          <div className="contexto-cadena">
+            {cadenaOperativa.map((persona, indice) => (
+              <span className="contexto-nodo" key={`${persona.rol}-${persona.codigo}`}>
+                <strong>{persona.rol}:</strong> {persona.codigo} · {persona.nombre}
+                {indice < cadenaOperativa.length - 1 && <span className="contexto-flecha"> → </span>}
+              </span>
+            ))}
+          </div>
+          {administracion.length > 0 && (
+            <div className="contexto-administracion">
+              {administracion.map((persona) => (
+                <span key={`${persona.rol}-${persona.codigo}`}>
+                  <strong>{persona.rol}:</strong> {persona.codigo} · {persona.nombre}
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/ingresar" element={<Navigate to="/" replace />} />
