@@ -70,6 +70,7 @@ export interface Miembro {
 }
 
 export interface Gestor {
+  porcentaje_comision: string | null;
   id: string;
   codigo: string;
   nombre: string;
