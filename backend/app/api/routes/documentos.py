@@ -482,9 +482,7 @@ def _aplicar_ambito_documentos(consulta: Any, auth: OperativeAuthDep) -> Any:
     if auth.rol == RolMiembro.USUARIO:
         return consulta.where(Documento.usuario_id == auth.usuario_id)
     if auth.rol == RolMiembro.GERENTE:
-        return consulta.where(
-            Documento.expediente.has(Expediente.gerente_id == auth.miembro_id)
-        )
+        return consulta.where(Documento.expediente.has(Expediente.gerente_id == auth.miembro_id))
     return consulta
 
 

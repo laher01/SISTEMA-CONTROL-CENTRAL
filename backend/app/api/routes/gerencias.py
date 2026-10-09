@@ -8,7 +8,14 @@ from sqlalchemy import select
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
-from app.models import Empresa, Expediente, GerenteEmpresa, GerenteResponsable, Miembro, PedidoGerencia
+from app.models import (
+    Empresa,
+    Expediente,
+    GerenteEmpresa,
+    GerenteResponsable,
+    Miembro,
+    PedidoGerencia,
+)
 from app.services import auditoria
 
 router = APIRouter(prefix="/gerencias", tags=["gerencias"])
@@ -160,7 +167,8 @@ def atribuir_factura(
     usuario = session.get(Miembro, expediente.usuario_id) if expediente.usuario_id else None
     if usuario is None or usuario.responsable_id != pedido.responsable_id:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, "El Usuario no pertenece al Responsable",
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "El Usuario no pertenece al Responsable",
         )
     autorizado = session.scalar(
         select(GerenteResponsable.id).where(
@@ -212,9 +220,7 @@ class CarteraGerenteOut(BaseModel):
 def listar_cartera(
     session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
 ) -> list[GerenteEmpresa]:
-    if auth.rol not in (
-        RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.GERENTE
-    ):
+    if auth.rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.GERENTE):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin acceso a cartera de Gerencia")
     consulta = select(GerenteEmpresa).where(GerenteEmpresa.tenant_id == tenant_id)
     if auth.rol == RolMiembro.GERENTE:
@@ -245,16 +251,21 @@ def asignar_cartera(
     )
     if relacion is None:
         relacion = GerenteEmpresa(
-            tenant_id=tenant_id, gerente_id=datos.gerente_id,
-            empresa_id=datos.empresa_id, activo=datos.activo,
+            tenant_id=tenant_id,
+            gerente_id=datos.gerente_id,
+            empresa_id=datos.empresa_id,
+            activo=datos.activo,
         )
         session.add(relacion)
     else:
         relacion.activo = datos.activo
     session.flush()
     auditoria.registrar(
-        session, tenant_id, "CARTERA_GERENCIA_CAMBIADA",
-        "gerentes_empresas", relacion.id,
+        session,
+        tenant_id,
+        "CARTERA_GERENCIA_CAMBIADA",
+        "gerentes_empresas",
+        relacion.id,
         {
             "gerente_id": str(datos.gerente_id),
             "empresa_id": str(datos.empresa_id),

@@ -542,8 +542,12 @@ class PagoResponsableERP(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "pagos_responsables_erp"
     __table_args__ = (
         UniqueConstraint(
-            "tenant_id", "gerente_id", "responsable_id",
-            "periodo_desde", "periodo_hasta", "moneda",
+            "tenant_id",
+            "gerente_id",
+            "responsable_id",
+            "periodo_desde",
+            "periodo_hasta",
+            "moneda",
         ),
     )
 

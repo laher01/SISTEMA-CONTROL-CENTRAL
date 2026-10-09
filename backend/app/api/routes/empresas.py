@@ -8,7 +8,15 @@ from sqlalchemy.exc import IntegrityError
 from app.api.deps import HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado
 from app.enums import RolMiembro
-from app.models import ChatMensaje, CuentaAcceso, Empresa, Expediente, GerenteEmpresa, Miembro, ahora
+from app.models import (
+    ChatMensaje,
+    CuentaAcceso,
+    Empresa,
+    Expediente,
+    GerenteEmpresa,
+    Miembro,
+    ahora,
+)
 from app.schemas import (
     EmpresaActualizar,
     EmpresaListadoOut,

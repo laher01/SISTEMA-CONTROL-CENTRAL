@@ -179,7 +179,8 @@ def _calculo(
             PedidoGerencia.periodo_mes <= ultimo_mes,
             PedidoGerencia.moneda == moneda,
             PedidoGerencia.estado != "CANCELADO",
-            PedidoGerencia.gerente_id == gerente_id if gerente_id is not None
+            PedidoGerencia.gerente_id == gerente_id
+            if gerente_id is not None
             else PedidoGerencia.gerente_id.is_not(None),
         )
     ):

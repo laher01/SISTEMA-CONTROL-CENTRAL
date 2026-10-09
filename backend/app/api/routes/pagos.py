@@ -151,9 +151,7 @@ def responsables_pedido(
         )
     return [
         FiltroOpcion(id=r.id, codigo=r.codigo, nombre=r.nombre)
-        for r in session.scalars(
-            consulta.order_by(Miembro.codigo)
-        )
+        for r in session.scalars(consulta.order_by(Miembro.codigo))
     ]
 
 
@@ -199,18 +197,14 @@ def clientes_pago(
         Empresa.tipo_relacion.in_(["CLIENTE", "AMBOS"]),
     )
     if auth.rol == RolMiembro.GERENTE:
-        consulta = consulta.join(
-            GerenteEmpresa, GerenteEmpresa.empresa_id == Empresa.id
-        ).where(
+        consulta = consulta.join(GerenteEmpresa, GerenteEmpresa.empresa_id == Empresa.id).where(
             GerenteEmpresa.tenant_id == tenant_id,
             GerenteEmpresa.gerente_id == auth.miembro_id,
             GerenteEmpresa.activo.is_(True),
         )
     return [
         FiltroOpcion(id=e.id, codigo=e.ruc, nombre=e.razon_social)
-        for e in session.scalars(
-            consulta.order_by(Empresa.razon_social)
-        )
+        for e in session.scalars(consulta.order_by(Empresa.razon_social))
     ]
 
 

@@ -16,7 +16,6 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
-
 def _restriccion_única(tabla: str, columnas: set[str]) -> str:
     for restriccion in sa.inspect(op.get_bind()).get_unique_constraints(tabla):
         if set(restriccion["column_names"]) == columnas and restriccion.get("name"):
@@ -30,9 +29,7 @@ def upgrade() -> None:
         "expedientes",
         sa.Column("pedido_gerencia_id", sa.Uuid(), sa.ForeignKey("pedidos_gerencia.id")),
     )
-    op.add_column(
-        "expedientes", sa.Column("gerente_id", sa.Uuid(), sa.ForeignKey("miembros.id"))
-    )
+    op.add_column("expedientes", sa.Column("gerente_id", sa.Uuid(), sa.ForeignKey("miembros.id")))
     op.create_index("ix_expedientes_pedido_gerencia_id", "expedientes", ["pedido_gerencia_id"])
     op.create_index("ix_expedientes_gerente_id", "expedientes", ["gerente_id"])
     op.add_column(
@@ -53,8 +50,12 @@ def upgrade() -> None:
         batch.create_unique_constraint(
             "uq_pagos_responsables_erp_tenant_id_gerente_id_responsable_id_periodo_desde_periodo_hasta_moneda",
             [
-                "tenant_id", "gerente_id", "responsable_id",
-                "periodo_desde", "periodo_hasta", "moneda",
+                "tenant_id",
+                "gerente_id",
+                "responsable_id",
+                "periodo_desde",
+                "periodo_hasta",
+                "moneda",
             ],
         )
 
@@ -70,9 +71,7 @@ def downgrade() -> None:
             "uq_pagos_responsables_erp_tenant_id_responsable_id_periodo_desde_periodo_hasta_moneda",
             ["tenant_id", "responsable_id", "periodo_desde", "periodo_hasta", "moneda"],
         )
-    op.drop_index(
-        "ix_pagos_responsables_erp_gerente_id", table_name="pagos_responsables_erp"
-    )
+    op.drop_index("ix_pagos_responsables_erp_gerente_id", table_name="pagos_responsables_erp")
     op.drop_column("pagos_responsables_erp", "gerente_id")
     op.drop_index("ix_expedientes_gerente_id", table_name="expedientes")
     op.drop_index("ix_expedientes_pedido_gerencia_id", table_name="expedientes")

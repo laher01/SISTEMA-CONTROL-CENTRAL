@@ -16,7 +16,6 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
-
 def _restriccion_única(tabla: str, columnas: set[str]) -> str:
     for restriccion in sa.inspect(op.get_bind()).get_unique_constraints(tabla):
         if set(restriccion["column_names"]) == columnas and restriccion.get("name"):
