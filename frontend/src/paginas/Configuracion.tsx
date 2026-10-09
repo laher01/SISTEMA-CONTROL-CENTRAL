@@ -137,6 +137,37 @@ function ConfiguracionAccesoPanel() {
   const [email, setEmail] = useState("");
   const [rol, setRol] = useState<RolMiembro>("USUARIO");
   const [mensaje, setMensaje] = useState("");
+  const [nuevoNombre, setNuevoNombre] = useState("");
+  const [nuevoCodigo, setNuevoCodigo] = useState("");
+  const [nuevoRol, setNuevoRol] = useState<"GERENTE" | "SECRETARIA">("GERENTE");
+  const [creandoCuenta, setCreandoCuenta] = useState(false);
+  const [credencial, setCredencial] = useState<{ login: string; clave_temporal: string } | null>(null);
+
+  const crearCuentaRol = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!nuevoNombre.trim() || creandoCuenta) return;
+    setCreandoCuenta(true);
+    setMensaje("");
+    setCredencial(null);
+    try {
+      const resultado = await enviarJson<{
+        credencial: { login: string; clave_temporal: string };
+      }>("/api/v1/miembros", "POST", {
+        nombre: nuevoNombre.trim(),
+        codigo: nuevoCodigo.trim() || null,
+        rol: nuevoRol,
+      });
+      setCredencial(resultado.credencial);
+      setNuevoNombre("");
+      setNuevoCodigo("");
+      recargarCuentas();
+      setMensaje("Cuenta creada. Entrega la clave temporal por un canal seguro; se cambiará en el primer acceso.");
+    } catch (err) {
+      setMensaje(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCreandoCuenta(false);
+    }
+  };
 
   const guardar = async (cambios: Partial<ConfiguracionAccesoTipo>) => {
     if (!config) return;
@@ -387,6 +418,31 @@ function ConfiguracionAccesoPanel() {
         </tbody>
       </table>
 
+      <h4>Crear acceso de Gerencia o Secretaría</h4>
+      <p className="tenue">
+        Crea un miembro y su cuenta asociada en una sola operación. Se genera una clave
+        temporal que deberá cambiarse al iniciar sesión. No se muestran contraseñas existentes.
+      </p>
+      <form className="formulario-linea" onSubmit={(e) => void crearCuentaRol(e)}>
+        <input aria-label="Nombre del nuevo miembro" placeholder="Nombre completo" required
+          value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)} />
+        <input aria-label="Código opcional de acceso" placeholder="Código de acceso (opcional)"
+          value={nuevoCodigo} onChange={(e) => setNuevoCodigo(e.target.value)} />
+        <select aria-label="Rol de la nueva cuenta" value={nuevoRol}
+          onChange={(e) => setNuevoRol(e.target.value as "GERENTE" | "SECRETARIA")}>
+          <option value="GERENTE">Gerencia</option>
+          <option value="SECRETARIA">Secretaría</option>
+        </select>
+        <button type="submit" disabled={creandoCuenta}>
+          {creandoCuenta ? "Creando…" : "Crear miembro y cuenta"}
+        </button>
+      </form>
+      {credencial && <div role="status" className="panel-configuracion">
+        <strong>Credencial temporal — mostrar una sola vez</strong>
+        <p>Usuario: <code>{credencial.login}</code></p>
+        <p>Clave temporal: <code>{credencial.clave_temporal}</code></p>
+        <button type="button" onClick={() => setCredencial(null)}>Ocultar clave</button>
+      </div>}
       <h4>Cuentas de acceso</h4>
       <table>
         <thead>
