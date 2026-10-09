@@ -184,6 +184,8 @@ def resumen(
         vigentes.append(Expediente.gestor_id == auth.gestor_id)
     elif auth.rol == RolMiembro.USUARIO:
         vigentes.append(Expediente.usuario_id == auth.usuario_id)
+    elif auth.rol == RolMiembro.GERENTE:
+        vigentes.append(Expediente.gerente_id == auth.miembro_id)
 
     por_estado = {e: 0 for e in EstadoExpediente}
     for estado, total in session.execute(
@@ -240,6 +242,16 @@ def resumen(
         documentos_scope.append(Documento.gestor_id == auth.gestor_id)
     elif auth.rol == RolMiembro.USUARIO:
         documentos_scope.append(Documento.usuario_id == auth.usuario_id)
+    elif auth.rol == RolMiembro.GERENTE:
+        documentos_scope.append(
+            Documento.expediente_id.in_(
+                select(Expediente.id).where(
+                    Expediente.tenant_id == tenant_id,
+                    Expediente.gerente_id == auth.miembro_id,
+                    Expediente.deleted_at.is_(None),
+                )
+            )
+        )
     for estado, total in session.execute(
         select(Documento.estado, func.count()).where(*documentos_scope).group_by(Documento.estado)
     ):
@@ -284,7 +296,9 @@ def desglose(
         consulta = consulta.where(Expediente.gestor_id == auth.gestor_id)
     elif auth.rol == RolMiembro.USUARIO:
         consulta = consulta.where(Expediente.usuario_id == auth.usuario_id)
-    elif usuario_id is not None:
+    elif auth.rol == RolMiembro.GERENTE:
+        consulta = consulta.where(Expediente.gerente_id == auth.miembro_id)
+    if usuario_id is not None:
         consulta = consulta.where(Expediente.usuario_id == usuario_id)
     if emisor_id is not None:
         consulta = consulta.where(Expediente.emisor_id == emisor_id)
