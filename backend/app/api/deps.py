@@ -54,14 +54,14 @@ def get_contexto_operativo(
         or (request.method == "GET" and request.url.path == "/api/v1/responsable/resumen")
         or (
             request.method == "POST"
-            and request.url.path in {
+            and request.url.path
+            in {
                 "/api/v1/responsable/pagos/cotizar",
                 "/api/v1/responsable/pagos/programar",
             }
         )
         or (
-            request.method == "DELETE"
-            and request.url.path.startswith("/api/v1/responsable/pagos/")
+            request.method == "DELETE" and request.url.path.startswith("/api/v1/responsable/pagos/")
         )
         or (
             request.method == "POST"
