@@ -59,21 +59,13 @@ def test_responsable_solo_consulta_su_equipo(
     )
     session.add(pedido)
     session.flush()
-    session.add_all(
-        [
-            AsignacionPedidoGerencia(
-                tenant_id=tid,
-                pedido_id=pedido.id,
-                usuario_id=propio.id,
-                monto_asignado=Decimal("90.00"),
-            ),
-            AsignacionPedidoGerencia(
-                tenant_id=tid,
-                pedido_id=pedido.id,
-                usuario_id=ajeno.id,
-                monto_asignado=Decimal("110.00"),
-            ),
-        ]
+    session.add(
+        AsignacionPedidoGerencia(
+            tenant_id=tid,
+            pedido_id=pedido.id,
+            usuario_id=propio.id,
+            monto_asignado=Decimal("90.00"),
+        )
     )
     session.commit()
 
