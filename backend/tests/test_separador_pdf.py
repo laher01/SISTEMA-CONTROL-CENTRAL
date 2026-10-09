@@ -17,13 +17,17 @@ def _paquete(paginas: list[str]) -> bytes:
     salida = PdfWriter()
     for contenido in paginas:
         hoja = salida.add_blank_page(width=595, height=842)
-        fuente = DictionaryObject({
-            NameObject("/F1"): DictionaryObject({
-                NameObject("/Type"): NameObject("/Font"),
-                NameObject("/Subtype"): NameObject("/Type1"),
-                NameObject("/BaseFont"): NameObject("/Helvetica"),
-            }),
-        })
+        fuente = DictionaryObject(
+            {
+                NameObject("/F1"): DictionaryObject(
+                    {
+                        NameObject("/Type"): NameObject("/Font"),
+                        NameObject("/Subtype"): NameObject("/Type1"),
+                        NameObject("/BaseFont"): NameObject("/Helvetica"),
+                    }
+                ),
+            }
+        )
         hoja[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): fuente})
         lineas = contenido.splitlines()
         operadores = ["BT /F1 10 Tf 20 780 Td"]
@@ -39,12 +43,14 @@ def _paquete(paginas: list[str]) -> bytes:
 
 
 def test_paquete_facturas_multiemisor_y_continuacion() -> None:
-    pdf = _paquete([
-        "FACTURA ELECTRONICA\nRUC: 20612873446\nE001-9050",
-        "Anexo o segunda pagina de la factura precedente",
-        "FACTURA ELECTRONICA\nRUC: 20615266796\nE001-2272",
-        "FACTURA ELECTRONICA\nRUC: 20612873446\nE001-9051",
-    ])
+    pdf = _paquete(
+        [
+            "FACTURA ELECTRONICA\nRUC: 20612873446\nE001-9050",
+            "Anexo o segunda pagina de la factura precedente",
+            "FACTURA ELECTRONICA\nRUC: 20615266796\nE001-2272",
+            "FACTURA ELECTRONICA\nRUC: 20612873446\nE001-9051",
+        ]
+    )
     partes = analizar_paquete(pdf)
     assert [(p.inicio, p.fin, p.serie, p.correlativo) for p in partes] == [
         (0, 2, "E001", "9050"),
