@@ -466,10 +466,22 @@ class AbonoClienteERP(ConId, ConTenant, ConCreacion, Base):
     referencia: Mapped[str | None] = mapped_column(String(120))
 
 
+class GerenteResponsable(ConId, ConTenant, ConCreacion, Base):
+    """Vínculo operativo entre Gerencia y Responsable sin duplicar equipos."""
+
+    __tablename__ = "gerentes_responsables"
+    __table_args__ = (UniqueConstraint("tenant_id", "gerente_id", "responsable_id"),)
+
+    gerente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    responsable_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    activo: Mapped[bool] = mapped_column(default=True, server_default="true")
+
+
 class PedidoGerencia(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "pedidos_gerencia"
-    __table_args__ = (UniqueConstraint("tenant_id", "cliente_id", "periodo_mes", "moneda"),)
+    __table_args__ = (UniqueConstraint("tenant_id", "gerente_id", "cliente_id", "periodo_mes", "moneda"),)
 
+    gerente_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
     cliente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("empresas.id"), index=True)
     responsable_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
     creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
