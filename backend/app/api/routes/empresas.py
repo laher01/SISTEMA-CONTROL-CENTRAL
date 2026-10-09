@@ -26,7 +26,7 @@ from app.schemas import (
     EmpresaUsuarioOut,
 )
 from app.services import auditoria
-from app.services.ambito_gerencia import alcance_expedientes_gerente, expediente_visible_gerente
+from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.expedientes import recalcular_expedientes
 
 router = APIRouter(prefix="/empresas", tags=["empresas"])
