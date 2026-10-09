@@ -471,29 +471,22 @@ class AsignacionPedidoGerencia(ConId, ConTenant, ConCreacion, Base):
     )
 
 
-
 class ComisionResponsableRegla(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "comisiones_responsable_reglas"
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "responsable_id", "cliente_id"),
-    )
+    __table_args__ = (UniqueConstraint("tenant_id", "responsable_id", "cliente_id"),)
 
     responsable_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
     cliente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("empresas.id"), index=True)
     porcentaje: Mapped[Decimal] = mapped_column(Numeric(7, 4))
     creado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
-    actualizado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("cuentas_acceso.id")
-    )
+    actualizado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
     updated_at: Mapped[datetime] = mapped_column(default=ahora, onupdate=ahora)
 
 
 class PagoResponsableERP(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "pagos_responsables_erp"
     __table_args__ = (
-        UniqueConstraint(
-            "tenant_id", "responsable_id", "periodo_desde", "periodo_hasta", "moneda"
-        ),
+        UniqueConstraint("tenant_id", "responsable_id", "periodo_desde", "periodo_hasta", "moneda"),
     )
 
     responsable_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
@@ -506,12 +499,8 @@ class PagoResponsableERP(ConId, ConTenant, ConCreacion, Base):
     estado: Mapped[str] = mapped_column(String(20), default="PROGRAMADO", index=True)
     fecha_pago: Mapped[date | None] = mapped_column(Date)
     observacion: Mapped[str | None] = mapped_column(String(500))
-    creado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("cuentas_acceso.id")
-    )
-    pagado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("cuentas_acceso.id")
-    )
+    creado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
+    pagado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cuentas_acceso.id"))
     referencia_pago: Mapped[str | None] = mapped_column(String(160))
 
 
