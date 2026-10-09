@@ -426,6 +426,31 @@ class AdelantoERP(ConId, ConTenant, ConCreacion, Base):
     aplicado: Mapped[bool] = mapped_column(default=False, server_default="false")
 
 
+
+class SaldoCompraERP(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "saldos_compras_erp"
+
+    usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    periodo_mes: Mapped[date] = mapped_column(Date, index=True)
+    moneda: Mapped[str] = mapped_column(String(3))
+    monto: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    detalle: Mapped[str] = mapped_column(String(500))
+    pago_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pagos_erp.id"), index=True)
+    creado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
+
+
+class AplicacionAdelantoERP(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "aplicaciones_adelantos_erp"
+    __table_args__ = (UniqueConstraint("tenant_id", "adelanto_id"),)
+
+    adelanto_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("adelantos_erp.id"), index=True)
+    pago_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pagos_erp.id"), index=True)
+    usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    monto: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    creado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
+
+
+
 class AbonoClienteERP(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "abonos_cliente_erp"
 
@@ -539,6 +564,7 @@ class PagoERP(ConId, ConTenant, ConCreacion, Base):
         ForeignKey("documentos.id"), index=True
     )
     conciliado: Mapped[bool] = mapped_column(default=False, server_default="false")
+    referencia_pago: Mapped[str | None] = mapped_column(String(160))
 
 
 class PagoGestor(ConId, ConTenant, ConCreacion, Base):
