@@ -30,6 +30,33 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const [montos, setMontos] = useState<Record<string, string>>({});
   const [mensaje, setMensaje] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const [nombreNuevo, setNombreNuevo] = useState("");
+  const [porcentajeNuevo, setPorcentajeNuevo] = useState("1.5");
+  const [creandoUsuario, setCreandoUsuario] = useState(false);
+  const [credencialNueva, setCredencialNueva] = useState<{ login: string; clave_temporal: string } | null>(null);
+  const [errorAlta, setErrorAlta] = useState("");
+  const crearUsuario = async (evento: React.FormEvent<HTMLFormElement>) => {
+    evento.preventDefault();
+    setCreandoUsuario(true);
+    setErrorAlta("");
+    setCredencialNueva(null);
+    try {
+      const alta = await enviarJson<{ credencial: { login: string; clave_temporal: string } }>(
+        "/api/v1/miembros/mis-usuarios", "POST", {
+          nombre: nombreNuevo,
+          porcentaje_produccion: porcentajeNuevo,
+        },
+      );
+      setCredencialNueva(alta.credencial);
+      setNombreNuevo("");
+      recargar();
+      recargarEquipo();
+    } catch (error) {
+      setErrorAlta(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCreandoUsuario(false);
+    }
+  };
   const [usuarioPago, setUsuarioPago] = useState("");
   const [desdePago, setDesdePago] = useState(new Date().toISOString().slice(0, 7) + "-01");
   const [hastaPago, setHastaPago] = useState(new Date().toISOString().slice(0, 10));
@@ -97,6 +124,32 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
       </div>
       {(cargando || cargandoEquipo) && <p>Cargando…</p>}
       {(error || errorEquipo) && <p role="alert">{error || errorEquipo}</p>}
+      {pestana === "USUARIOS" && <section className="panel-configuracion">
+        <h3>Crear Usuario de mi equipo</h3>
+        <p className="tenue">Se generará automáticamente un código y una clave inicial. El Usuario quedará asignado a tu responsabilidad.</p>
+        <form onSubmit={(e) => void crearUsuario(e)} className="filtros">
+          <label>Nombre completo
+            <input value={nombreNuevo} required minLength={3} maxLength={200}
+              onChange={(e) => setNombreNuevo(e.target.value)}
+              placeholder="Nombres y apellidos" />
+          </label>
+          <label>Porcentaje de producción (%)
+            <input type="number" min="0" max="100" step="0.0001" required
+              value={porcentajeNuevo} onChange={(e) => setPorcentajeNuevo(e.target.value)} />
+          </label>
+          <button type="submit" disabled={creandoUsuario}>
+            {creandoUsuario ? "Creando…" : "Crear Usuario"}
+          </button>
+        </form>
+        {errorAlta && <p role="alert">{errorAlta}</p>}
+        {credencialNueva && <div className="panel-configuracion" role="status">
+          <h3>Credencial inicial — guárdala ahora</h3>
+          <p>Usuario: <strong>{credencialNueva.login}</strong></p>
+          <p>Clave temporal: <strong>{credencialNueva.clave_temporal}</strong></p>
+          <p className="tenue">La clave se muestra una sola vez y deberá cambiarse al ingresar.</p>
+          <button type="button" onClick={() => setCredencialNueva(null)}>Ocultar credencial</button>
+        </div>}
+      </section>}
       {pestana === "USUARIOS" && <table>
         <thead><tr><th>Código</th><th>Nombre</th><th>Estado</th><th>Clientes con expedientes</th></tr></thead>
         <tbody>{(datos ?? []).map((u) => (

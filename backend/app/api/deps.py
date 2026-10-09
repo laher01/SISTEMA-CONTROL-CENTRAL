@@ -50,7 +50,7 @@ def get_contexto_operativo(
             "Debe cambiar la clave temporal antes de continuar",
         )
     permitido_responsable = (
-        (request.method == "GET" and request.url.path == "/api/v1/miembros/mis-usuarios")
+        (request.method in {"GET", "POST"} and request.url.path == "/api/v1/miembros/mis-usuarios")
         or (request.method == "POST" and request.url.path == "/api/v1/comisiones/simular")
         or (request.method == "GET" and request.url.path == "/api/v1/comisiones/receptores")
         or (request.method == "GET" and request.url.path == "/api/v1/responsable/resumen")
