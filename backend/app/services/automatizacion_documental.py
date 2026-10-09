@@ -115,7 +115,12 @@ def aplicar_automaticamente(
 
     extraccion = procesamiento.get("extraccion_estructurada")
     campos, confianzas, candidatos = _leer_extraccion(extraccion)
-    _completar_rucs(campos, confianzas, candidatos, settings.tenant_ruc)
+    _completar_rucs(
+        campos,
+        confianzas,
+        candidatos,
+        settings.tenant_ruc if tipo == TipoDocumento.FACT else None,
+    )
 
     faltantes = [campo for campo in CAMPOS_FISCALES if campo not in campos]
     if faltantes:
@@ -127,7 +132,11 @@ def aplicar_automaticamente(
     ]
     if baja_confianza:
         motivos.append("Campos con baja confianza: " + ", ".join(baja_confianza))
-    if settings.tenant_ruc and campos.get("ruc_receptor") not in (None, settings.tenant_ruc):
+    if (
+        tipo == TipoDocumento.FACT
+        and settings.tenant_ruc
+        and campos.get("ruc_receptor") not in (None, settings.tenant_ruc)
+    ):
         motivos.append("El RUC receptor no coincide con el RUC configurado para la empresa")
     if campos.get("ruc_emisor") == campos.get("ruc_receptor") and campos.get("ruc_emisor"):
         motivos.append("El RUC emisor y receptor no pueden ser iguales")
