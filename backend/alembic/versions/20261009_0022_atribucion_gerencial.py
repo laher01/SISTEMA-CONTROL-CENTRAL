@@ -7,6 +7,7 @@ Revises: 0021
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "0022"
@@ -43,12 +44,18 @@ def upgrade() -> None:
     )
     with op.batch_alter_table("pagos_responsables_erp") as batch:
         batch.drop_constraint(
-            _restriccion_única("pagos_responsables_erp", {"tenant_id","responsable_id","periodo_desde","periodo_hasta","moneda"}),
+            _restriccion_única(
+                "pagos_responsables_erp",
+                {"tenant_id", "responsable_id", "periodo_desde", "periodo_hasta", "moneda"},
+            ),
             type_="unique",
         )
         batch.create_unique_constraint(
             "uq_pagos_responsables_erp_tenant_id_gerente_id_responsable_id_periodo_desde_periodo_hasta_moneda",
-            ["tenant_id", "gerente_id", "responsable_id", "periodo_desde", "periodo_hasta", "moneda"],
+            [
+                "tenant_id", "gerente_id", "responsable_id",
+                "periodo_desde", "periodo_hasta", "moneda",
+            ],
         )
 
 
