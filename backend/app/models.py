@@ -533,6 +533,7 @@ class PagoResponsableERP(ConId, ConTenant, ConCreacion, Base):
 
 class MovimientoPagoResponsable(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "movimientos_pagos_responsables"
+    __table_args__ = (UniqueConstraint("pago_id", "referencia"),)
 
     pago_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("pagos_responsables_erp.id"), index=True
