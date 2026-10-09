@@ -2,6 +2,7 @@ import uuid
 from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
@@ -84,6 +85,56 @@ def listar(
     if rol is not None:
         consulta = consulta.where(Miembro.rol == rol)
     return list(session.scalars(consulta.order_by(Miembro.rol, Miembro.codigo)))
+
+
+class AsignacionResponsableIn(BaseModel):
+    responsable_id: uuid.UUID | None
+
+
+@router.get("/mis-usuarios", response_model=list[MiembroOut])
+def mis_usuarios_responsable(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> list[Miembro]:
+    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo el Responsable puede consultar sus Usuarios")
+    return list(
+        session.scalars(
+            select(Miembro).where(
+                Miembro.tenant_id == tenant_id,
+                Miembro.rol == RolMiembro.USUARIO,
+                Miembro.responsable_id == auth.miembro_id,
+                Miembro.deleted_at.is_(None),
+                Miembro.activo.is_(True),
+            ).order_by(Miembro.codigo)
+        )
+    )
+
+
+@router.put("/{usuario_id}/responsable", response_model=MiembroOut)
+def asignar_responsable(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    usuario_id: uuid.UUID,
+    datos: AsignacionResponsableIn,
+) -> Miembro:
+    _solo_admin(auth.rol)
+    usuario = usuario_operativo(session, tenant_id, usuario_id)
+    if datos.responsable_id is not None:
+        responsable = session.get(Miembro, datos.responsable_id)
+        if (
+            responsable is None
+            or responsable.tenant_id != tenant_id
+            or responsable.rol != RolMiembro.RESPONSABLE
+            or responsable.deleted_at is not None
+            or not responsable.activo
+        ):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Responsable inválido")
+    usuario.responsable_id = datos.responsable_id
+    session.commit()
+    return usuario
 
 
 def usuario_operativo(session: SessionDep, tenant_id: uuid.UUID, usuario_id: uuid.UUID) -> Miembro:
