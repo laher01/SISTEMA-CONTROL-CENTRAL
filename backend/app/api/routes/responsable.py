@@ -39,11 +39,7 @@ def distribuir_pedido(
     if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
     pedido = session.get(PedidoGerencia, pedido_id)
-    if (
-        pedido is None
-        or pedido.tenant_id != tenant_id
-        or pedido.responsable_id != auth.miembro_id
-    ):
+    if pedido is None or pedido.tenant_id != tenant_id or pedido.responsable_id != auth.miembro_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pedido no asignado al Responsable")
     if pedido.estado != "ACTIVO":
         raise HTTPException(status.HTTP_409_CONFLICT, "El pedido no está activo")
@@ -70,17 +66,21 @@ def distribuir_pedido(
         )
     )
     existentes = [
-        a for a in asignaciones
+        a
+        for a in asignaciones
         if a.usuario_id == usuario.id and a.gestor_id is None and a.proveedor_id is None
     ]
     if any(a.usuario_id == usuario.id for a in asignaciones) and not existentes:
         raise HTTPException(
             status.HTTP_409_CONFLICT, "El usuario ya tiene asignaciones específicas"
         )
-    nuevo_total = sum(
-        (Decimal(a.monto_asignado) for a in asignaciones if a not in existentes),
-        Decimal("0"),
-    ) + datos.monto
+    nuevo_total = (
+        sum(
+            (Decimal(a.monto_asignado) for a in asignaciones if a not in existentes),
+            Decimal("0"),
+        )
+        + datos.monto
+    )
     if nuevo_total > Decimal(pedido.monto_solicitado):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Supera el presupuesto bruto")
     if existentes:
