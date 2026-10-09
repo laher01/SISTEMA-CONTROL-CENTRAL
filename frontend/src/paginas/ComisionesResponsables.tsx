@@ -89,6 +89,9 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
     conParametros("/api/v1/pagos-responsables/resumen", { desde, hasta, moneda }),
   );
   const pagos = useDatos<Pago[]>("/api/v1/pagos-responsables");
+  const pagosFiltrados = (pagos.datos ?? []).filter(p =>
+    p.moneda === moneda && p.periodo_desde >= desde && p.periodo_hasta <= hasta
+  );
   const filas = datos?.filas ?? [];
   const responsables = Array.from(
     new Map(filas.map((f) => [f.responsable_id, f.responsable_nombre])).entries(),
@@ -271,7 +274,7 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
       </p>;
     })}
     <h4>Pagos a Responsables</h4>
-    <p className="resumen-carga">Saldo global de las liquidaciones: {formatearMonto(moneda, (pagos.datos ?? []).filter(p => p.moneda === moneda).reduce((a, p) => a + Number(p.saldo ?? (p.estado === "PAGADO" ? 0 : p.comision_total)), 0))}</p>
+    <p className="resumen-carga">Saldo global de las liquidaciones: {formatearMonto(moneda, pagosFiltrados.reduce((a, p) => a + Number(p.saldo ?? (p.estado === "PAGADO" ? 0 : p.comision_total)), 0))}</p>
     {puedePagar && <div className="filtros">
       <label>Fecha de pago <input type="date" value={fechaPago}
         onChange={(e) => setFechaPago(e.target.value)} /></label>
@@ -289,7 +292,7 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
     <div className="tabla-responsive"><table>
       <thead><tr><th>Responsable</th><th>Periodo</th><th>Comisión</th>
         <th>Abonado</th><th>Saldo</th><th>Estado</th><th>Referencia</th><th>Acción</th></tr></thead>
-      <tbody>{(pagos.datos ?? []).map((p) => <tr key={p.id}>
+      <tbody>{pagosFiltrados.map((p) => <tr key={p.id}>
         <td>{responsables.find(([id]) => id === p.responsable_id)?.[1] ?? p.responsable_id}</td>
         <td>{p.periodo_desde} al {p.periodo_hasta}</td>
         <td>{formatearMonto(p.moneda as "PEN" | "USD", p.comision_total)}</td>
