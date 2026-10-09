@@ -372,7 +372,7 @@ function PedidosGerencia({
                       "¿Eliminar este pedido? Solo se permite si no tiene asignaciones ni ejecución. La acción quedará auditada."
                     )) return;
                     try {
-                      await enviarJson<null>(`/api/v1/pagos/pedidos/${p.id}`, "DELETE");
+                      await eliminar(`/api/v1/pagos/pedidos/${p.id}`);
                       alMensaje("Pedido eliminado. Se conserva el registro de auditoría.");
                       setSeleccionado("");
                       alCambiar();
