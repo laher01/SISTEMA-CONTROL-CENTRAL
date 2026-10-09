@@ -528,6 +528,19 @@ class PagoResponsableERP(ConId, ConTenant, ConCreacion, Base):
     creado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
     pagado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cuentas_acceso.id"))
     referencia_pago: Mapped[str | None] = mapped_column(String(160))
+    fecha_reprogramada: Mapped[date | None] = mapped_column(Date)
+
+
+class MovimientoPagoResponsable(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "movimientos_pagos_responsables"
+    __table_args__ = (UniqueConstraint("pago_id", "referencia"),)
+
+    pago_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pagos_responsables_erp.id"), index=True)
+    monto: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    fecha: Mapped[date] = mapped_column(Date)
+    referencia: Mapped[str] = mapped_column(String(160))
+    comprobante_archivo: Mapped[str] = mapped_column(String(255))
+    creado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
 
 
 class PagoERP(ConId, ConTenant, ConCreacion, Base):
