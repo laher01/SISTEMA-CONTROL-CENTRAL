@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from "react";
 
 import { conParametros, eliminar, enviarJson, useDatos } from "../api";
 import { formatearFecha, formatearMonto } from "../formato";
+import ComisionesResponsables from "./ComisionesResponsables";
 import type {
   AbonoClienteERP,
   AdelantoERP,
@@ -14,7 +15,7 @@ import type {
   SesionActual,
 } from "../tipos";
 
-type PestanaPagos = "PEDIDOS" | "COBROS" | "LIQUIDACIONES";
+type PestanaPagos = "PEDIDOS" | "COBROS" | "LIQUIDACIONES" | "RESPONSABLES";
 
 function mesActual(): string {
   return new Date().toISOString().slice(0, 7);
@@ -79,6 +80,12 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
           Cobros de clientes
         </button>
         <button
+          className={pestana === "RESPONSABLES" ? "activo" : undefined}
+          onClick={() => setPestana("RESPONSABLES")}
+        >
+          Pago a Responsables
+        </button>
+        <button
           className={pestana === "LIQUIDACIONES" ? "activo" : undefined}
           onClick={() => setPestana("LIQUIDACIONES")}
         >
@@ -137,6 +144,8 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
           alMensaje={setMensaje}
         />
       )}
+
+      {pestana === "RESPONSABLES" && <ComisionesResponsables sesion={sesion} />}
 
       {pestana === "LIQUIDACIONES" && (
         <>
