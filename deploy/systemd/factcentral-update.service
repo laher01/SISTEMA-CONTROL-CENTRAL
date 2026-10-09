@@ -1,0 +1,9 @@
+[Unit]
+Description=FACT CENTRAL - consultar nuevas versiones en GitHub
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/fact-central
+ExecStart=/usr/bin/bash /home/ubuntu/fact-central/deploy/check-updates.sh
+TimeoutStartSec=1800
