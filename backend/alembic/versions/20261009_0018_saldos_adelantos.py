@@ -60,8 +60,10 @@ def upgrade() -> None:
         sa.Column("usuario_id", sa.Uuid(), sa.ForeignKey("miembros.id"), nullable=False),
         sa.Column("monto", sa.Numeric(14, 2), nullable=False),
         sa.Column(
-            "creado_por_cuenta_id", sa.Uuid(),
-            sa.ForeignKey("cuentas_acceso.id"), nullable=False,
+            "creado_por_cuenta_id",
+            sa.Uuid(),
+            sa.ForeignKey("cuentas_acceso.id"),
+            nullable=False,
         ),
         sa.UniqueConstraint("tenant_id", "adelanto_id"),
     )
