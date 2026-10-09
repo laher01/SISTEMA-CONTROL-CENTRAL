@@ -158,12 +158,12 @@ function FilaPendiente({
         <Procesar documento={documento} alSeleccionar={setSeleccion} alCompletar={alVincular} />
       </td>
       <td>
-        <Vincular
+        {(documento.tipo_documento !== "RHE" && obtenerTipoSugerido(documento) !== "RHE") ? <Vincular
           key={`${documento.id}:${seleccion?.expediente.id ?? "manual"}:${seleccion?.tipo ?? ""}`}
           documento={documento}
           seleccion={seleccion}
           alVincular={alVincular}
-        />
+        /> : <span className="tenue">El RHE crea su propio expediente.</span>}
       </td>
     </tr>
   );
@@ -288,6 +288,15 @@ function Procesar({
   );
 }
 
+function obtenerTipoSugerido(documento: Documento): TipoDocumento | undefined {
+  const proceso = documento.datos_extraidos?.procesamiento_documental;
+  const sugerencia = proceso && typeof proceso === "object" && "clasificacion_sugerida" in proceso
+    ? proceso.clasificacion_sugerida : null;
+  return sugerencia && typeof sugerencia === "object" && "tipo" in sugerencia
+    && TIPOS_DOCUMENTO.includes(sugerencia.tipo as TipoDocumento)
+    ? sugerencia.tipo as TipoDocumento : undefined;
+}
+
 function obtenerMotivosAutomaticos(documento: Documento): string[] {
   const automatizacion = documento.datos_extraidos?.automatizacion_documental;
   if (!automatizacion || typeof automatizacion !== "object" || !("motivos" in automatizacion)) {
@@ -350,6 +359,7 @@ function ConfirmarCampos({
     Object.fromEntries(campos.map((campo) => [campo.nombre, campo.valor])),
   );
   const [guardando, setGuardando] = useState(false);
+  const [hayCambios, setHayCambios] = useState(false);
   const [creando, setCreando] = useState(false);
   const [tipoComprobante, setTipoComprobante] = useState<"FACT" | "RHE">(
     tipoSugerido === "RHE" ? "RHE" : "FACT",
@@ -372,6 +382,7 @@ function ConfirmarCampos({
         Object.fromEntries(Object.entries(valores).filter(([, valor]) => valor.trim() !== "")),
       );
       alConfirmar(actualizado);
+      setHayCambios(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -400,7 +411,7 @@ function ConfirmarCampos({
     }
   };
   return (
-    <details>
+    <details open={tipoSugerido === "RHE" ? true : undefined}>
       <summary>
         Datos sugeridos ({campos.length}){confirmado ? " · Confirmados" : ""}
       </summary>
@@ -416,7 +427,7 @@ function ConfirmarCampos({
                 step={nombre === "importe_total" ? "0.01" : undefined}
                 value={valores[nombre] ?? ""}
                 placeholder={campo ? undefined : "Completar desde el comprobante"}
-                onChange={(e) => setValores({ ...valores, [nombre]: e.target.value })}
+                onChange={(e) => { setValores({ ...valores, [nombre]: e.target.value }); setHayCambios(true); }}
               />
               {campo && <>
                 <span> {Math.round(campo.confianza * 100)} % · {campo.fuente}</span>
@@ -427,10 +438,11 @@ function ConfirmarCampos({
         })}
       </dl>
       {tipoSugerido === "RHE" && <p className="tenue">Comprueba los datos contra el recibo original. Un RHE genera su expediente independiente, sin obligación de guía de remisión.</p>}
+      {hayCambios && <small className="tenue">Guarda primero las correcciones fiscales para crear el expediente.</small>}
       <button disabled={guardando} onClick={guardar}>
         {guardando ? "Guardando…" : confirmado ? "Actualizar confirmación" : "Confirmar campos"}
       </button>
-      {confirmado && (
+      {confirmado && !hayCambios && (
         <div className="crear-expediente-asistido">
           <select
             aria-label="Tipo de comprobante"
