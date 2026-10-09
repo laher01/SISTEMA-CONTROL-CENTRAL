@@ -143,12 +143,18 @@ export default function App() {
   };
 
   const menu = MENU.filter((item) => item.roles.includes(sesion.rol));
+  // La jerarquía proviene del backend: no se infieren vínculos por nombre.
   const cadena = sesion.rol === "GESTOR"
     ? [{ rol: "GESTOR", codigo: sesion.codigo, nombre: sesion.nombre }, ...(sesion.jerarquia ?? [])]
     : sesion.rol === "USUARIO"
       ? (sesion.jerarquia?.length ? sesion.jerarquia : [{ rol: "USUARIO", codigo: sesion.codigo, nombre: sesion.nombre }])
       : [{ rol: sesion.rol, codigo: sesion.codigo, nombre: sesion.nombre }];
+  const requiereResponsable = sesion.rol === "USUARIO" || sesion.rol === "GESTOR";
+  const tieneResponsable = cadena.some((persona) => persona.rol === "RESPONSABLE");
+  const tieneAdmin = cadena.some((persona) => persona.rol === "ADMINISTRADOR" || persona.rol === "SUPERADMIN");
   const dominio = window.location.hostname;
+  const segmentosDominio = dominio.split(".");
+  const subdominio = segmentosDominio.length > 2 ? segmentosDominio[0] : null;
 
   return (
     <div className="app">
@@ -172,15 +178,17 @@ export default function App() {
       </aside>
       <main className="contenido">
         <header className="ruta-organizacion" aria-label="Dominio y cadena de responsabilidad">
-          <div className="ruta-dominio"><strong>FACT CENTRAL</strong><span>{dominio}</span></div>
+          <div className="ruta-dominio"><strong>FACT CENTRAL</strong><span>Dominio: {dominio}</span>{subdominio && <span>Subdominio: {subdominio}</span>}</div>
           <div className="ruta-personas">
             {cadena.map((persona, indice) => (
               <span className="ruta-persona" key={persona.rol + persona.codigo}>
                 {indice > 0 && <span className="ruta-flecha" aria-hidden="true">→</span>}
-                <strong>{persona.rol}:</strong> {persona.codigo} · {persona.nombre}
+                <strong>{persona.rol}:</strong> {persona.nombre} <span className="ruta-codigo">({persona.codigo})</span>
               </span>
             ))}
           </div>
+          {requiereResponsable && !tieneResponsable && <p className="ruta-advertencia" role="status">Responsable sin asignar en el sistema. Administración debe revisar la vinculación del Usuario.</p>}
+          {requiereResponsable && tieneResponsable && !tieneAdmin && <p className="ruta-advertencia" role="status">Administrador no asignado a este Responsable.</p>}
         </header>
         <Routes>
           <Route path="/" element={<Dashboard />} />
