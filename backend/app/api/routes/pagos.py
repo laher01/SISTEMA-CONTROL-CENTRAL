@@ -22,6 +22,7 @@ from app.models import (
     PagoERP,
     PedidoGerencia,
     PlanLiquidacion,
+    Tenant,
 )
 from app.schemas import (
     AbonoClienteERPIn,
@@ -96,11 +97,17 @@ class SimulacionJonatanOut(BaseModel):
 @router.post("/simular-jonatan", response_model=SimulacionJonatanOut)
 def simular_jonatan(
     datos: SimulacionJonatanIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> SimulacionJonatanOut:
-    # Exclusivo de Administración hasta establecer la jerarquía Responsable.
+    # Regla privada de la Administración Luis Arévalo Herrera; no forma parte
+    # del comportamiento SaaS estándar de otros tenants.
     if auth.rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin permiso de simulación")
+    tenant = session.get(Tenant, tenant_id)
+    if tenant is None or tenant.codigo != "LAH-001-AD":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Regla especial no habilitada")
     try:
         resultado = calcular_distribucion_jonatan(
             total_emitido=datos.total_emitido,
