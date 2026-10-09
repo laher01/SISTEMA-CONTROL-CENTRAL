@@ -33,7 +33,6 @@ class DistribucionIn(BaseModel):
     monto: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
 
 
-
 class ProgramarUsuarioIn(BaseModel):
     usuario_id: uuid.UUID
     desde: date
@@ -95,7 +94,9 @@ def _autorizar_pago(
 
 
 def _componentes_pendientes(
-    session: SessionDep, tenant_id: uuid.UUID, datos: ProgramarUsuarioIn,
+    session: SessionDep,
+    tenant_id: uuid.UUID,
+    datos: ProgramarUsuarioIn,
 ) -> tuple[list[SaldoCompraERP], list[AdelantoERP], int]:
     if len(datos.saldo_ids) != len(set(datos.saldo_ids)):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Saldos repetidos")
@@ -234,11 +235,13 @@ def listar_saldos_pendientes(
 ) -> list[dict[str, str]]:
     _autorizar_pago(session, tenant_id, auth, usuario_id)
     saldos = session.scalars(
-        select(SaldoCompraERP).where(
+        select(SaldoCompraERP)
+        .where(
             SaldoCompraERP.tenant_id == tenant_id,
             SaldoCompraERP.usuario_id == usuario_id,
             SaldoCompraERP.pago_id.is_(None),
-        ).order_by(SaldoCompraERP.periodo_mes)
+        )
+        .order_by(SaldoCompraERP.periodo_mes)
     )
     return [
         {
@@ -287,7 +290,11 @@ def registrar_saldo_pendiente(
     session.add(saldo)
     session.flush()
     auditoria.registrar(
-        session, tenant_id, "SALDO_COMPRAS_AGREGADO", "saldo_compra", saldo.id,
+        session,
+        tenant_id,
+        "SALDO_COMPRAS_AGREGADO",
+        "saldo_compra",
+        saldo.id,
         {
             "usuario_id": str(datos.usuario_id),
             "periodo": datos.periodo_mes.isoformat(),
@@ -309,11 +316,13 @@ def listar_adelantos_pendientes(
 ) -> list[dict[str, str]]:
     _autorizar_pago(session, tenant_id, auth, usuario_id)
     adelantos = session.scalars(
-        select(AdelantoERP).where(
+        select(AdelantoERP)
+        .where(
             AdelantoERP.tenant_id == tenant_id,
             AdelantoERP.usuario_id == usuario_id,
             AdelantoERP.aplicado.is_(False),
-        ).order_by(AdelantoERP.fecha)
+        )
+        .order_by(AdelantoERP.fecha)
     )
     return [
         {
@@ -436,7 +445,11 @@ def programar_pago_usuario(
             status.HTTP_409_CONFLICT, "Liquidación o adelanto ya utilizado"
         ) from exc
     auditoria.registrar(
-        session, tenant_id, "PAGO_USUARIO_PROGRAMADO", "pago_erp", pago.id,
+        session,
+        tenant_id,
+        "PAGO_USUARIO_PROGRAMADO",
+        "pago_erp",
+        pago.id,
         {
             "usuario_id": str(datos.usuario_id),
             "produccion_periodo": str(produccion),
@@ -444,9 +457,7 @@ def programar_pago_usuario(
                 {"id": str(s.id), "mes": s.periodo_mes.isoformat(), "monto": str(s.monto)}
                 for s in saldos
             ],
-            "adelantos_descontados": [
-                {"id": str(a.id), "monto": str(a.monto)} for a in adelantos
-            ],
+            "adelantos_descontados": [{"id": str(a.id), "monto": str(a.monto)} for a in adelantos],
             "adelantos_omitidos": omitidos,
             "observacion_adelantos": datos.observacion_adelantos,
             "porcentaje": str(tasa),
@@ -477,7 +488,11 @@ def confirmar_pago_usuario(
     pago.fecha_pago = datos.fecha_pago
     pago.referencia_pago = datos.referencia_pago.strip()
     auditoria.registrar(
-        session, tenant_id, "PAGO_USUARIO_CONFIRMADO", "pago_erp", pago.id,
+        session,
+        tenant_id,
+        "PAGO_USUARIO_CONFIRMADO",
+        "pago_erp",
+        pago.id,
         {
             "fecha_pago": datos.fecha_pago.isoformat(),
             "referencia": datos.referencia_pago.strip(),
@@ -512,12 +527,14 @@ def anular_pago_usuario(
             select(SaldoCompraERP).where(
                 SaldoCompraERP.tenant_id == tenant_id,
                 SaldoCompraERP.pago_id == pago.id,
-            ).with_for_update()
+            )
+            .with_for_update()
         )
     )
     aplicaciones = list(
         session.scalars(
-            select(AplicacionAdelantoERP).where(
+            select(AplicacionAdelantoERP)
+            .where(
                 AplicacionAdelantoERP.tenant_id == tenant_id,
                 AplicacionAdelantoERP.pago_id == pago.id,
             ).with_for_update()
@@ -531,7 +548,11 @@ def anular_pago_usuario(
             adelanto.aplicado = False
         session.delete(a)
     auditoria.registrar(
-        session, tenant_id, "PAGO_USUARIO_PROGRAMACION_ANULADA", "pago_erp", pago.id,
+        session,
+        tenant_id,
+        "PAGO_USUARIO_PROGRAMACION_ANULADA",
+        "pago_erp",
+        pago.id,
         {
             "usuario_id": str(pago.usuario_id),
             "saldo": str(pago.saldo),
