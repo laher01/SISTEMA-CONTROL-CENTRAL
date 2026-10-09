@@ -206,6 +206,7 @@ export interface SesionActual {
   gestor_id: string | null;
   usuario_id: string | null;
   cambio_clave_obligatorio: boolean;
+  es_administracion_demo?: boolean;
   jerarquia: Array<{ rol: string; codigo: string; nombre: string }>;
 }
 
