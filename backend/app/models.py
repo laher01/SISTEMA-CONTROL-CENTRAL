@@ -498,7 +498,11 @@ class PagoGestor(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "pagos_gestores"
     __table_args__ = (
         UniqueConstraint(
-            "tenant_id", "gestor_id", "periodo_desde", "periodo_hasta", "moneda",
+            "tenant_id",
+            "gestor_id",
+            "periodo_desde",
+            "periodo_hasta",
+            "moneda",
             name="uq_pagos_gestores_periodo",
         ),
     )
