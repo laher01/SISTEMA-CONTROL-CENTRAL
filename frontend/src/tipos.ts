@@ -61,6 +61,7 @@ export interface Empresa {
 
 export interface Miembro {
   id: string;
+  responsable_id: string | null;
   codigo: string;
   nombre: string;
   rol: RolMiembro;
