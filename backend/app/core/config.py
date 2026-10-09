@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     storage_dir: Path = Path("./storage")
     tenant_default: str = "default"
     tenant_domain: str = ""
+    demo_signup_key: str | None = None
     zona_horaria: str = "America/Lima"
     dia_limite_expediente: int = 7
     umbral_bancarizacion_pen: Decimal = Decimal("2000")
