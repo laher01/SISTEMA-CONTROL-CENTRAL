@@ -14,6 +14,7 @@ export function Login({ alIngresar }: { alIngresar: () => void }) {
   const [nombre, setNombre] = useState("");
   const [codigo, setCodigo] = useState("");
   const [mensajeSolicitud, setMensajeSolicitud] = useState("");
+  const { datos: administracion } = useDatos<{ por_subdominio: boolean; nombre: string; codigo: string }>("/api/v1/auth/administracion-publica");
   const { datos: accesoPublico } = useDatos<{ registro_publico: boolean }>(
     "/api/v1/auth/acceso-publico",
   );
@@ -23,7 +24,7 @@ export function Login({ alIngresar }: { alIngresar: () => void }) {
     setError("");
     setEnviando(true);
     try {
-      await enviarJson<SesionActual>("/api/v1/auth/login", "POST", { espacio: espacio.trim() || null, login, clave });
+      await enviarJson<SesionActual>("/api/v1/auth/login", "POST", { espacio: administracion?.por_subdominio ? null : espacio.trim() || null, login, clave });
       alIngresar();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -56,12 +57,12 @@ export function Login({ alIngresar }: { alIngresar: () => void }) {
     <main className="login-contenedor">
       <section className="login-tarjeta">
         <h1>FACT CENTRAL</h1>
-        <p className="tenue">Ingresa con la cuenta asignada por Administración.</p>
+        <p className="tenue">{administracion?.por_subdominio ? `Administración: ${administracion.nombre}` : "Ingresa con la cuenta asignada por Administración."}</p>
         <form onSubmit={ingresar} className="login-formulario">
-          <label>
+          {!administracion?.por_subdominio && <label>
             Espacio administrativo
             <input value={espacio} onChange={(e) => setEspacio(e.target.value)} placeholder="Código o nombre de Administración" autoComplete="organization" />
-          </label>
+          </label>}
           <label>
             Usuario o correo
             <input
