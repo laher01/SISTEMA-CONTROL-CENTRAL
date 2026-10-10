@@ -71,3 +71,13 @@ Ninguna. No ejecutar el SQL del prototipo V10 contra producción.
 3. Añadir pruebas PostgreSQL y permisos multi-tenant.
 4. Integrar conectores OAuth, workers y pantallas en la rama.
 5. Ejecutar CI y E2E staging; únicamente después evaluar merge/despliegue productivo.
+
+
+## Validación por GitHub Actions — 2026-10-10
+- Nuevo workflow no desplegable: `.github/workflows/recepcion-documental-ci.yml`, commit `430fc86b0d51121f4c3baba1664468d429a36b67`.
+- Disparador: pull_request sobre cambios backend y workflow_dispatch; NO tiene SSH, secrets de VPS ni pasos deploy.
+- Controles: PostgreSQL 17 efímero, uv sync --locked, ruff, mypy, pytest, alembic upgrade head, alembic heads.
+- Al consultar estado combinado para ese commit, no se reportaron estados: **NO afirmar CI aprobado**.
+- La migración Alembic 0025 NO existe todavía en la rama; los modelos agregados requieren migración antes de desplegar.
+- No se modifica main, VPS ni la base productiva.
+- **Siguiente paso:** revisar ejecución real de Actions, corregir sus fallos; agregar migración 0025 verificable, comprobar permisos y reversión con datos de ensayo.
