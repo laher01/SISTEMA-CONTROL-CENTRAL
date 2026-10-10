@@ -46,12 +46,14 @@ def opciones(
         responsables = [
             FiltroOpcion(id=r.id, codigo=r.codigo, nombre=r.nombre)
             for r in session.scalars(
-                select(Miembro).where(
+                select(Miembro)
+                .where(
                     Miembro.tenant_id == tenant_id,
                     Miembro.rol == RolMiembro.RESPONSABLE,
                     Miembro.activo.is_(True),
                     Miembro.deleted_at.is_(None),
-                ).order_by(Miembro.codigo)
+                )
+                .order_by(Miembro.codigo)
             )
         ]
         usuarios = [
@@ -82,27 +84,29 @@ def opciones(
         ]
     elif auth.rol == RolMiembro.RESPONSABLE:
         usuarios = [
-            FiltroOpcion(
-                id=u.id, codigo=u.codigo, nombre=u.nombre, responsable_id=u.responsable_id
-            )
+            FiltroOpcion(id=u.id, codigo=u.codigo, nombre=u.nombre, responsable_id=u.responsable_id)
             for u in session.scalars(
-                select(Miembro).where(
+                select(Miembro)
+                .where(
                     Miembro.tenant_id == tenant_id,
                     Miembro.responsable_id == auth.miembro_id,
                     Miembro.rol == RolMiembro.USUARIO,
                     Miembro.activo.is_(True),
                     Miembro.deleted_at.is_(None),
-                ).order_by(Miembro.codigo)
+                )
+                .order_by(Miembro.codigo)
             )
         ]
         gestores = [
             FiltroOpcion(id=g.id, codigo=g.codigo, nombre=g.nombre, usuario_id=g.usuario_id)
             for g in session.scalars(
-                select(Gestor).where(
+                select(Gestor)
+                .where(
                     Gestor.tenant_id == tenant_id,
                     Gestor.usuario_id.in_([u.id for u in usuarios]),
                     Gestor.deleted_at.is_(None),
-                ).order_by(Gestor.codigo)
+                )
+                .order_by(Gestor.codigo)
             )
         ]
     elif auth.rol == RolMiembro.USUARIO:
