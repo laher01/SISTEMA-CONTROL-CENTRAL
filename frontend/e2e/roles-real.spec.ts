@@ -5,8 +5,12 @@ async function login(page: Page, espacio: string, usuario: string) {
   await page.getByLabel("Espacio administrativo").fill(espacio);
   await page.getByLabel("Usuario o correo").fill(usuario);
   await page.getByLabel("Clave").fill("ClaveE2e123!");
-  await page.getByRole("button", { name: "Iniciar sesión" }).click();
-  await expect(page.getByText("Iniciar sesión", { exact: true })).toHaveCount(0);
+  const [respuesta] = await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/api/v1/auth/login") && r.request().method() === "POST"),
+    page.getByRole("button", { name: "Iniciar sesión" }).click(),
+  ]);
+  expect(respuesta.status()).toBe(200);
+  await expect.poll(async () => (await page.request.get("/api/v1/auth/me")).status()).toBe(200);
   await page.goto("/configuracion");
 }
 
