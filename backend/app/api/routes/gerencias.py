@@ -303,7 +303,8 @@ def editar_cartera_gerente(
     if auth.rol == RolMiembro.GERENTE and relacion.gerente_id != auth.miembro_id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Cartera ajena")
     if "alias_comercial" in datos.model_fields_set:
-        relacion.alias_comercial = datos.alias_comercial.strip() or None if datos.alias_comercial else None
+        alias = datos.alias_comercial.strip() if datos.alias_comercial else ""
+        relacion.alias_comercial = alias or None
     if "rol_comercial" in datos.model_fields_set:
         relacion.rol_comercial = datos.rol_comercial
     auditoria.registrar(
