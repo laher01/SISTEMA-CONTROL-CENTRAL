@@ -413,20 +413,20 @@ def _agregar_empresas(
         consulta = consulta.where(Empresa.id.in_(empresas))
     elif auth.rol == RolMiembro.RESPONSABLE:
         usuarios = _usuarios_visibles(session, auth) or []
-        filas = session.execute(
+        filas_expedientes = session.execute(
             select(Expediente.emisor_id, Expediente.receptor_id).where(
                 Expediente.tenant_id == auth.tenant_id,
                 Expediente.deleted_at.is_(None),
                 Expediente.usuario_id.in_(usuarios),
             )
         ).all()
-        empresas = {
+        empresas_alcanzadas = {
             empresa_id
-            for emisor_id, receptor_id in filas
+            for emisor_id, receptor_id in filas_expedientes
             for empresa_id in (emisor_id, receptor_id)
             if empresa_id is not None
         }
-        consulta = consulta.where(Empresa.id.in_(empresas))
+        consulta = consulta.where(Empresa.id.in_(empresas_alcanzadas))
     else:
         contexto.advertencias.append(
             "NEXUS no amplió la vista maestra de Empresas porque el rol actual "
@@ -434,9 +434,9 @@ def _agregar_empresas(
         )
         return
 
-    filas = session.execute(consulta.group_by(Empresa.tipo_relacion)).all()
+    filas_relaciones = session.execute(consulta.group_by(Empresa.tipo_relacion)).all()
     contexto.datos["empresas_por_relacion"] = {
-        str(tipo): int(cantidad) for tipo, cantidad in filas
+        str(tipo): int(cantidad) for tipo, cantidad in filas_relaciones
     }
 
 
@@ -475,7 +475,7 @@ def _agregar_organizacion(
                 )
             )
         )
-        usuarios = set(
+        usuarios_gerente = set(
             session.scalars(
                 select(Expediente.usuario_id).where(
                     Expediente.tenant_id == auth.tenant_id,
@@ -487,7 +487,7 @@ def _agregar_organizacion(
         )
         contexto.datos["organizacion"] = {
             "responsables_vinculados": len(responsables),
-            "usuarios_bajo_gerencia": len(usuarios),
+            "usuarios_bajo_gerencia": len(usuarios_gerente),
         }
     elif auth.rol == RolMiembro.RESPONSABLE and auth.miembro_id is not None:
         usuarios = _usuarios_visibles(session, auth) or []
@@ -656,10 +656,7 @@ def puede_ver_empresa(
             Expediente.tenant_id == auth.tenant_id,
             Expediente.deleted_at.is_(None),
             *condiciones,
-            (
-                (Expediente.emisor_id == empresa.id)
-                | (Expediente.receptor_id == empresa.id)
-            ),
+            ((Expediente.emisor_id == empresa.id) | (Expediente.receptor_id == empresa.id)),
         )
         .limit(1)
     )
