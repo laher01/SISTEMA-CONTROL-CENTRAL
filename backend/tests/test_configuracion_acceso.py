@@ -444,3 +444,29 @@ def test_limpieza_fallo_de_archivo_deja_pendiente_recuperacion(
     assert not ruta.exists()
     segundo = client.post("/api/v1/configuracion/mantenimiento/reintentar-archivos")
     assert segundo.json() == {"procesados": 0, "completados": 0}
+
+def test_reintento_archivos_no_procesa_otro_tenant(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba, settings
+) -> None:
+    from app.models import EliminacionArchivoPendiente, Tenant
+
+    externo = Tenant(nombre="TENANT REINTENTO EXTERNO", codigo="REINTENTO-OTRO", estado="ACTIVO")
+    session.add(externo)
+    session.flush()
+    ruta = settings.storage_dir / "externo" / "pendiente.txt"
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.write_bytes(b"archivo de otro tenant")
+    pendiente = EliminacionArchivoPendiente(
+        tenant_id=externo.id, ruta_storage="externo/pendiente.txt"
+    )
+    session.add(pendiente)
+    session.commit()
+
+    auth_prueba.como_admin()
+    respuesta = client.post("/api/v1/configuracion/mantenimiento/reintentar-archivos")
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json() == {"procesados": 0, "completados": 0}
+    session.refresh(pendiente)
+    assert pendiente.estado == "PENDIENTE"
+    assert pendiente.intentos == 0
+    assert ruta.exists()
