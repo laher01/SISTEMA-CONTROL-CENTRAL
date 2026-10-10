@@ -11,7 +11,16 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.enums import RolMiembro
-from app.models import Documento, Empresa, Expediente, Gestor, Miembro, PagoERP, PedidoGerencia
+from app.models import (
+    Documento,
+    Empresa,
+    Expediente,
+    GerenteResponsable,
+    Gestor,
+    Miembro,
+    PagoERP,
+    PedidoGerencia,
+)
 from app.security import ContextoAcceso
 
 
@@ -25,10 +34,15 @@ class ContextoNexus:
     advertencias: list[str] = field(default_factory=list)
 
     def a_prompt(self, max_chars: int) -> str:
+        actor_minimo = {
+            clave: valor
+            for clave, valor in self.actor.items()
+            if clave != "tenant_id"
+        }
         partes = [
             f"SECCION={self.seccion}",
             f"RUTA={self.ruta}",
-            f"ACTOR={self.actor}",
+            f"ACTOR={actor_minimo}",
             f"FILTROS={self.filtros}",
             f"DATOS_AUTORIZADOS={self.datos}",
         ]
@@ -63,7 +77,7 @@ def construir_contexto(
 
     hoy = settings.hoy()
     desde = date(hoy.year, hoy.month, 1)
-    condiciones = _condiciones_expedientes(auth)
+    condiciones = _condiciones_expedientes(session, auth)
     condiciones.extend(
         [
             Expediente.tenant_id == auth.tenant_id,
@@ -123,7 +137,7 @@ def _agregar_expediente(
     if expediente is None or expediente.tenant_id != auth.tenant_id or expediente.deleted_at:
         contexto.advertencias.append("El expediente indicado no existe dentro del Tenant activo.")
         return
-    if not _puede_ver_expediente(auth, expediente):
+    if not _puede_ver_expediente(session, auth, expediente):
         contexto.advertencias.append("El expediente indicado está fuera del ámbito del actor.")
         return
 
@@ -270,29 +284,34 @@ def _agregar_pagos(
         )
         return
 
-    pedidos = session.execute(
-        select(
-            func.count(PedidoGerencia.id),
-            func.coalesce(func.sum(PedidoGerencia.monto_solicitado), 0),
-        ).where(
-            PedidoGerencia.tenant_id == auth.tenant_id,
-            PedidoGerencia.periodo_mes == desde,
-            PedidoGerencia.estado != "CANCELADO",
-        )
-    ).one()
-    pagos = session.execute(
-        select(
-            PagoERP.estado,
-            func.count(PagoERP.id),
-            func.coalesce(func.sum(PagoERP.saldo), 0),
-        )
-        .where(
-            PagoERP.tenant_id == auth.tenant_id,
-            PagoERP.periodo_hasta >= desde,
-            PagoERP.periodo_desde <= hasta,
-        )
-        .group_by(PagoERP.estado)
-    ).all()
+    consulta_pedidos = select(
+        func.count(PedidoGerencia.id),
+        func.coalesce(func.sum(PedidoGerencia.monto_solicitado), 0),
+    ).where(
+        PedidoGerencia.tenant_id == auth.tenant_id,
+        PedidoGerencia.periodo_mes == desde,
+        PedidoGerencia.estado != "CANCELADO",
+    )
+    if auth.rol == RolMiembro.GERENTE:
+        consulta_pedidos = consulta_pedidos.where(PedidoGerencia.gerente_id == auth.miembro_id)
+    pedidos = session.execute(consulta_pedidos).one()
+
+    if auth.rol == RolMiembro.GERENTE:
+        pagos: list[tuple[object, object, object]] = []
+    else:
+        pagos = session.execute(
+            select(
+                PagoERP.estado,
+                func.count(PagoERP.id),
+                func.coalesce(func.sum(PagoERP.saldo), 0),
+            )
+            .where(
+                PagoERP.tenant_id == auth.tenant_id,
+                PagoERP.periodo_hasta >= desde,
+                PagoERP.periodo_desde <= hasta,
+            )
+            .group_by(PagoERP.estado)
+        ).all()
     contexto.datos["pagos"] = {
         "pedidos_mes": int(pedidos[0] or 0),
         "monto_solicitado_mes": str(Decimal(pedidos[1] or 0)),
@@ -303,20 +322,82 @@ def _agregar_pagos(
     }
 
 
-def _condiciones_expedientes(auth: ContextoAcceso) -> list[object]:
+def _condiciones_expedientes(
+    session: Session,
+    auth: ContextoAcceso,
+) -> list[object]:
     condiciones: list[object] = []
     if auth.rol == "GESTOR":
         condiciones.append(Expediente.gestor_id == auth.gestor_id)
     elif auth.rol == RolMiembro.USUARIO:
         condiciones.append(Expediente.usuario_id == auth.usuario_id)
+    elif auth.rol == RolMiembro.RESPONSABLE and auth.miembro_id is not None:
+        usuarios = list(
+            session.scalars(
+                select(Miembro.id).where(
+                    Miembro.tenant_id == auth.tenant_id,
+                    Miembro.responsable_id == auth.miembro_id,
+                    Miembro.rol == RolMiembro.USUARIO,
+                    Miembro.activo.is_(True),
+                    Miembro.deleted_at.is_(None),
+                )
+            )
+        )
+        condiciones.append(Expediente.usuario_id.in_(usuarios))
+    elif auth.rol == RolMiembro.GERENTE and auth.miembro_id is not None:
+        responsables = list(
+            session.scalars(
+                select(GerenteResponsable.responsable_id).where(
+                    GerenteResponsable.tenant_id == auth.tenant_id,
+                    GerenteResponsable.gerente_id == auth.miembro_id,
+                    GerenteResponsable.activo.is_(True),
+                )
+            )
+        )
+        usuarios = list(
+            session.scalars(
+                select(Miembro.id).where(
+                    Miembro.tenant_id == auth.tenant_id,
+                    Miembro.responsable_id.in_(responsables),
+                    Miembro.rol == RolMiembro.USUARIO,
+                    Miembro.activo.is_(True),
+                    Miembro.deleted_at.is_(None),
+                )
+            )
+        )
+        condiciones.append(Expediente.usuario_id.in_(usuarios))
     return condiciones
 
 
-def _puede_ver_expediente(auth: ContextoAcceso, expediente: Expediente) -> bool:
+def _puede_ver_expediente(
+    session: Session,
+    auth: ContextoAcceso,
+    expediente: Expediente,
+) -> bool:
     if auth.rol == "GESTOR":
         return expediente.gestor_id == auth.gestor_id
     if auth.rol == RolMiembro.USUARIO:
         return expediente.usuario_id == auth.usuario_id
+    if auth.rol == RolMiembro.RESPONSABLE:
+        if auth.miembro_id is None or expediente.usuario_id is None:
+            return False
+        usuario = session.get(Miembro, expediente.usuario_id)
+        return usuario is not None and usuario.responsable_id == auth.miembro_id
+    if auth.rol == RolMiembro.GERENTE:
+        if auth.miembro_id is None or expediente.usuario_id is None:
+            return False
+        usuario = session.get(Miembro, expediente.usuario_id)
+        if usuario is None or usuario.responsable_id is None:
+            return False
+        relacion = session.scalar(
+            select(GerenteResponsable.id).where(
+                GerenteResponsable.tenant_id == auth.tenant_id,
+                GerenteResponsable.gerente_id == auth.miembro_id,
+                GerenteResponsable.responsable_id == usuario.responsable_id,
+                GerenteResponsable.activo.is_(True),
+            )
+        )
+        return relacion is not None
     return True
 
 
