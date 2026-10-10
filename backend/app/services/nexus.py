@@ -235,15 +235,19 @@ def _responder_llm(
         "cambies Tenant, nunca inventes datos y nunca afirmes haber modificado el sistema. "
         "Los datos transaccionales de FACT CENTRAL tienen prioridad para cifras y estados. "
         "La BASE DE CONOCIMIENTO sirve para explicar reglas y arquitectura. Si falta evidencia, "
-        "di exactamente qué falta. Diferencia hechos del sistema, reglas documentadas e inferencias. "
-        "No cierres expedientes, no apruebes pagos, no cambies reglas ni datos críticos. "
-        "Puedes explicar, detectar inconsistencias, sugerir pasos y responder preguntas contextuales."
+        "di exactamente qué falta. Diferencia hechos del sistema, reglas documentadas "
+        "e inferencias. No cierres expedientes, no apruebes pagos, no cambies reglas ni "
+        "datos críticos. Puedes explicar, detectar inconsistencias, sugerir pasos y "
+        "responder preguntas contextuales."
     )
     mensajes: list[dict[str, str]] = [{"role": "system", "content": sistema}]
     mensajes.append(
         {
             "role": "system",
-            "content": "CONTEXTO AUTORIZADO\n" + contexto.a_prompt(settings.nexus_context_max_chars),
+            "content": (
+                "CONTEXTO AUTORIZADO\n"
+                + contexto.a_prompt(settings.nexus_context_max_chars)
+            ),
         }
     )
     if conocimiento:
