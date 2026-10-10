@@ -40,13 +40,17 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
       <h2>{sesion.rol === "SUPERADMIN" ? "Consola SaaS · Administración de tenants" : "Configuración de Administración"}</h2>
       <div className="acciones">
         {sesion.rol !== "SUPERADMIN" && (
-        <button onClick={() => setSeccion("permisos")}>Permisos operativos</button>
+          <button onClick={() => setSeccion("permisos")}>Permisos operativos</button>
+        )}
+        {sesion.rol === "ADMINISTRADOR" && (
+          <>
+            <button onClick={() => setSeccion("acceso")}>Configuración de acceso</button>
+            <button onClick={() => setSeccion("empresas")}>Empresas registradas</button>
+            <button onClick={() => setSeccion("mantenimiento")}>Mantenimiento</button>
+          </>
         )}
         {sesion.rol === "SUPERADMIN" && (
-          <>
-            <button onClick={() => setSeccion("administraciones")}>Administradores</button>
-
-          </>
+          <button onClick={() => setSeccion("administraciones")}>Administraciones SaaS</button>
         )}
       </div>
 
@@ -62,7 +66,7 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
             <h3>Catálogo de roles y responsabilidades</h3>
             <p className="tenue">Este catálogo muestra capacidades actuales y objetivos pendientes; el control efectivo depende siempre del backend.</p>
             <table><thead><tr><th>Rol</th><th>Ámbito de acceso</th><th>Estado técnico</th></tr></thead><tbody>
-              <tr><td>SUPERADMIN</td><td>Inventario global SaaS; operación según sesión de tenant</td><td>Implementado parcialmente</td></tr>
+              <tr><td>SUPERADMIN</td><td>Inventario global SaaS sin acceso operativo a tenants</td><td>Implementado parcialmente</td></tr>
               <tr><td>ADMINISTRADOR</td><td>Su propia Administración</td><td>Implementado</td></tr>
               <tr><td>GERENTE</td><td>Presupuestos y cobros del tenant</td><td>Falta restringir detalle subordinado</td></tr>
               <tr><td>SECRETARIA</td><td>Control documental transversal del tenant</td><td>Implementado parcialmente</td></tr>
@@ -106,9 +110,9 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
       )}
 
       {seccion === "administraciones" && sesion.rol === "SUPERADMIN" && <AdministracionesPanel />}
-      {seccion === "acceso" && sesion.rol === "SUPERADMIN" && <ConfiguracionAccesoPanel />}
-      {seccion === "empresas" && sesion.rol === "SUPERADMIN" && <EmpresasRegistradasPanel />}
-      {seccion === "mantenimiento" && sesion.rol === "SUPERADMIN" && <MantenimientoPanel />}
+      {seccion === "acceso" && sesion.rol === "ADMINISTRADOR" && <ConfiguracionAccesoPanel />}
+      {seccion === "empresas" && sesion.rol === "ADMINISTRADOR" && <EmpresasRegistradasPanel />}
+      {seccion === "mantenimiento" && sesion.rol === "ADMINISTRADOR" && <MantenimientoPanel />}
     </>
   );
 }
@@ -218,7 +222,7 @@ function ConfiguracionAccesoPanel() {
     <section className="panel-configuracion">
       <h3>Configuración de acceso</h3>
       <p className="tenue">
-        Exclusivo de SUPERADMIN. Aquí se controla quién puede solicitar acceso y qué
+        Exclusivo del ADMINISTRADOR del tenant. Aquí se controla quién puede solicitar acceso y qué
         protección externa está vigente.
       </p>
       {cargando && <p>Cargando…</p>}
@@ -606,7 +610,7 @@ function MantenimientoPanel() {
     <section className="panel-configuracion">
       <h3>Mantenimiento · Zona crítica</h3>
       <p className="tenue">
-        Exclusivo de SUPERADMIN. Selecciona primero el administrador responsable,
+        Exclusivo del ADMINISTRADOR del tenant. Selecciona primero el administrador responsable,
         los tipos de registros y el rango de fechas. La auditoría de la limpieza se conserva.
       </p>
 
@@ -785,7 +789,7 @@ function EmpresasRegistradasPanel() {
       <h3>Empresas registradas</h3>
       <p className="tenue">
         Las emisoras y receptoras detectadas quedan registradas aunque provengan de pruebas.
-        No forman parte de la limpieza general. Solo SUPERADMIN puede retirarlas manualmente
+        No forman parte de la limpieza general. Solo el ADMINISTRADOR del tenant puede retirarlas manualmente
         desde esta pantalla.
       </p>
 
