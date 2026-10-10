@@ -79,7 +79,7 @@ def construir_contexto(
 
     hoy = settings.hoy()
     desde = date(hoy.year, hoy.month, 1)
-    condiciones = _condiciones_expedientes(session, auth)
+    condiciones = condiciones_expedientes(session, auth)
     condiciones.extend(
         [
             Expediente.tenant_id == auth.tenant_id,
@@ -427,7 +427,7 @@ def _usuarios_visibles(
     return None
 
 
-def _condiciones_expedientes(
+def condiciones_expedientes(
     session: Session,
     auth: ContextoAcceso,
 ) -> list[Any]:
