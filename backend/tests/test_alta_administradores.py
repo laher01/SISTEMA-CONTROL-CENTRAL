@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, select, text
 from sqlalchemy.orm import Session
 
-from app.models import Miembro, Tenant
+from app.models import CuentaAcceso, Miembro, Tenant
 from tests.conftest import AuthPrueba
 
 
@@ -34,4 +34,23 @@ def test_alta_administrador_desde_superadmin(
         )
         is not None
     )
+    cuenta_nueva = session.scalar(
+        select(CuentaAcceso).where(
+            CuentaAcceso.tenant_id == tenant.id,
+            CuentaAcceso.login == "ADMIN01",
+        )
+    )
+    assert cuenta_nueva is not None
+    assert cuenta_nueva.miembro_id is not None
+    assert cuenta_nueva.tenant_id != auth_prueba.contexto.tenant_id
+
+    inventario = client.get("/api/v1/configuracion/administraciones")
+    assert inventario.status_code == 200, inventario.text
+    tenants = inventario.json()
+    assert {item["id"] for item in tenants} == {
+        str(auth_prueba.contexto.tenant_id),
+        str(tenant.id),
+    }
+    assert next(item for item in tenants if item["id"] == str(tenant.id))["documentos"] == 0
+
     assert client.post("/api/v1/configuracion/administraciones", json=datos).status_code == 409
