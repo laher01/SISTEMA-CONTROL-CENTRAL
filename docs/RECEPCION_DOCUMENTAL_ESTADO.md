@@ -35,7 +35,7 @@ Ninguna. No ejecutar el SQL del prototipo V10 contra producción.
 
 ## Rama, PR y commit
 - Rama: `feature/recepcion-documental-gmail-outlook`.
-- PR: se registrará tras crearlo.
+- PR: #105 (borrador), https://github.com/laher01/SISTEMA-CONTROL-CENTRAL/pull/105.
 - Commit de rama: consultar a GitHub, no inferir de este documento.
 - Último HEAD verificado de main: **pendiente de comprobar**.
 
