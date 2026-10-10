@@ -41,6 +41,8 @@ export default function Secretaria() {
   const [emisor, setEmisor] = useState("");
   const [receptor, setReceptor] = useState("");
   const [estado, setEstado] = useState("");
+  const [tipoBusqueda, setTipoBusqueda] = useState("correlativo");
+  const [busqueda, setBusqueda] = useState("");
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
   const [trabajando, setTrabajando] = useState(false);
   const [mensaje, setMensaje] = useState("");
@@ -50,6 +52,10 @@ export default function Secretaria() {
     emisor_ruc: emisor.length === 11 ? emisor : undefined,
     receptor_ruc: receptor.length === 11 ? receptor : undefined,
     estado,
+    correlativo: tipoBusqueda === "correlativo" ? busqueda.trim() || undefined : undefined,
+    monto_desde: tipoBusqueda === "monto" ? busqueda.trim() || undefined : undefined,
+    monto_hasta: tipoBusqueda === "monto" ? busqueda.trim() || undefined : undefined,
+    guia_remitente: tipoBusqueda === "guia" ? busqueda.trim() || undefined : undefined,
   };
   const { datos, cargando, error } = useDatos<Resumen>(
     conParametros("/api/v1/dashboard/secretaria-expedientes", filtros),
@@ -114,6 +120,26 @@ export default function Secretaria() {
           <option value="NARANJA">Naranja / incompleto</option>
           <option value="ROJO">Rojo / vencido</option>
         </select>
+      </div>
+      <div className="filtros">
+        <label>Buscar por
+          <select aria-label="Tipo de búsqueda documental" value={tipoBusqueda} onChange={(e) => cambiarFiltro(() => { setTipoBusqueda(e.target.value); setBusqueda(""); })}>
+            <option value="correlativo">Correlativo de comprobante</option>
+            <option value="monto">Monto exacto</option>
+            <option value="guia">Guía de remisión remitente (nombre del archivo)</option>
+          </select>
+        </label>
+        <label>Dato de búsqueda
+          <input
+            aria-label="Dato de búsqueda documental"
+            type={tipoBusqueda === "monto" ? "number" : "text"}
+            min={tipoBusqueda === "monto" ? "0" : undefined}
+            step={tipoBusqueda === "monto" ? "0.01" : undefined}
+            placeholder={tipoBusqueda === "correlativo" ? "Ej. E001-1521" : tipoBusqueda === "monto" ? "Ej. 954.01" : "Ej. EG07-2269"}
+            value={busqueda}
+            onChange={(e) => cambiarFiltro(() => setBusqueda(e.target.value))}
+          />
+        </label>
       </div>
       <section className="panel-configuracion">
         <strong>Resumen general del filtro (todas las filas)</strong>

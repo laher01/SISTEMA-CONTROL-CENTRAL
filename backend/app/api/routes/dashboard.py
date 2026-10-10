@@ -29,6 +29,10 @@ def detalle_secretaria(
     emisor_ruc: str | None = None,
     receptor_ruc: str | None = None,
     estado: EstadoExpediente | None = None,
+    correlativo: str | None = None,
+    monto_desde: Decimal | None = None,
+    monto_hasta: Decimal | None = None,
+    guia_remitente: str | None = None,
 ) -> dict[str, object]:
     """Consulta transversal de Secretaría sin exponer pagos ni comisiones."""
     from fastapi import HTTPException, status
@@ -69,6 +73,30 @@ def detalle_secretaria(
         ).where(receptor_empresa.ruc == receptor_ruc)
     if estado is not None:
         consulta = consulta.where(Expediente.estado == estado)
+    if correlativo:
+        termino = correlativo.strip().lower()
+        if termino:
+            consulta = consulta.where(
+                func.lower(Expediente.serie + "-" + Expediente.correlativo).contains(termino)
+                | func.lower(Expediente.correlativo).contains(termino)
+            )
+    if monto_desde is not None:
+        consulta = consulta.where(Expediente.importe_total >= monto_desde)
+    if monto_hasta is not None:
+        consulta = consulta.where(Expediente.importe_total <= monto_hasta)
+    if guia_remitente:
+        guia = guia_remitente.strip().lower()
+        if guia:
+            consulta = consulta.where(
+                select(Documento.id)
+                .where(
+                    Documento.expediente_id == Expediente.id,
+                    Documento.tenant_id == tenant_id,
+                    Documento.deleted_at.is_(None),
+                    func.lower(Documento.nombre_original).contains(guia),
+                )
+                .exists()
+            )
     expedientes = list(session.scalars(consulta))
     usuarios = {
         item.id: item
