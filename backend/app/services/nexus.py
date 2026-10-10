@@ -53,7 +53,14 @@ def responder(
 
     if expediente_id is not None and any(
         frase in normalizado
-        for frase in ("qué falta", "que falta", "falta algo", "expediente", "revisar factura")
+        for frase in (
+            "qué falta",
+            "que falta",
+            "falta algo",
+            "qué documentos faltan",
+            "que documentos faltan",
+            "revisar factura",
+        )
     ):
         salida = _responder_expediente(session, settings, auth, expediente_id)
         return _enriquecer(salida, contexto, fuentes_conocimiento, "ESPECIALISTA_EXPEDIENTES")
