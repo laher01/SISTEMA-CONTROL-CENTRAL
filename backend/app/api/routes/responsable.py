@@ -39,6 +39,7 @@ class ProgramarUsuarioIn(BaseModel):
     hasta: date
     moneda: str = Field(pattern="^(PEN|USD)$")
     saldo_ids: list[uuid.UUID] = Field(default_factory=list, max_length=100)
+    porcentajes_saldos: dict[uuid.UUID, Decimal] = Field(default_factory=dict)
     adelanto_ids: list[uuid.UUID] = Field(default_factory=list, max_length=100)
     porcentaje_manual: Decimal | None = Field(
         default=None, ge=0, le=100, max_digits=7, decimal_places=4
@@ -381,18 +382,27 @@ def cotizar_pago_usuario(
     _autorizar_pago(session, tenant_id, auth, datos.usuario_id)
     produccion, tasa, bruto_produccion, _ = _base_pago_usuario(session, tenant_id, datos)
     saldos, adelantos, total_pendientes = _componentes_pendientes(session, tenant_id, datos)
-    # Un saldo histórico no incluye clasificación de retención en el modelo actual.
-    # No aplicar la tasa efectiva de otro periodo a una base histórica desconocida.
-    if saldos:
+    if set(datos.porcentajes_saldos) != set(datos.saldo_ids):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "Los saldos anteriores requieren clasificación con/sin agente "
-            "antes de incorporarse a una liquidación de dos tasas",
+            "Indique el porcentaje histórico de cada saldo seleccionado",
+        )
+    if any(not tasa.is_finite() or tasa < 0 or tasa > 100 for tasa in datos.porcentajes_saldos.values()):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Porcentaje histórico inválido"
         )
     saldos_total = sum((Decimal(s.monto) for s in saldos), Decimal("0"))
     adelantos_total = sum((Decimal(a.monto) for a in adelantos), Decimal("0"))
     base = produccion + saldos_total
-    bruto = bruto_produccion + (saldos_total * tasa / Decimal("100")).quantize(Decimal("0.01"))
+    bruto = bruto_produccion + sum(
+        (
+            (Decimal(s.monto) * datos.porcentajes_saldos[s.id] / Decimal("100")).quantize(
+                Decimal("0.01")
+            )
+            for s in saldos
+        ),
+        Decimal("0"),
+    )
     neto = bruto - adelantos_total
     return {
         "produccion": str(produccion),
@@ -436,18 +446,27 @@ def programar_pago_usuario(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "Explique en observaciones por qué no se descuentan todos los adelantos",
         )
-    # Un saldo histórico no incluye clasificación de retención en el modelo actual.
-    # No aplicar la tasa efectiva de otro periodo a una base histórica desconocida.
-    if saldos:
+    if set(datos.porcentajes_saldos) != set(datos.saldo_ids):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "Los saldos anteriores requieren clasificación con/sin agente "
-            "antes de incorporarse a una liquidación de dos tasas",
+            "Indique el porcentaje histórico de cada saldo seleccionado",
+        )
+    if any(not tasa.is_finite() or tasa < 0 or tasa > 100 for tasa in datos.porcentajes_saldos.values()):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Porcentaje histórico inválido"
         )
     saldos_total = sum((Decimal(s.monto) for s in saldos), Decimal("0"))
     adelantos_total = sum((Decimal(a.monto) for a in adelantos), Decimal("0"))
     base = produccion + saldos_total
-    bruto = bruto_produccion + (saldos_total * tasa / Decimal("100")).quantize(Decimal("0.01"))
+    bruto = bruto_produccion + sum(
+        (
+            (Decimal(s.monto) * datos.porcentajes_saldos[s.id] / Decimal("100")).quantize(
+                Decimal("0.01")
+            )
+            for s in saldos
+        ),
+        Decimal("0"),
+    )
     neto = bruto - adelantos_total
     if neto < 0:
         raise HTTPException(
@@ -508,6 +527,7 @@ def programar_pago_usuario(
                 {"id": str(s.id), "mes": s.periodo_mes.isoformat(), "monto": str(s.monto)}
                 for s in saldos
             ],
+            "tasas_saldos_historicos": {str(s.id): str(datos.porcentajes_saldos[s.id]) for s in saldos},
             "adelantos_descontados": [{"id": str(a.id), "monto": str(a.monto)} for a in adelantos],
             "adelantos_omitidos": omitidos,
             "observacion_adelantos": datos.observacion_adelantos,
