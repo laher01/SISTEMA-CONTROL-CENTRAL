@@ -1,0 +1,96 @@
+name: create-platform-superadmin-vps-staging
+on:
+  workflow_dispatch:
+    inputs:
+      confirmacion:
+        description: Para crear escriba CREAR_PLATFORM_SUPADMIN01
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: factcentral-staging-platform-bootstrap
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 15
+    steps:
+      - name: Verificar destino y secretos
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          test "$VPS_HOST" = "132.145.233.172"
+          test "$VPS_USER" = "ubuntu"
+          for name in VPS_DEPLOY_PATH VPS_SSH_PRIVATE_KEY VPS_SSH_KNOWN_HOSTS; do
+            test -n "${!name:-}" || { echo "::error::Falta $name"; exit 1; }
+          done
+      - name: Configurar acceso SSH existente
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+      - name: Comprobar identidades y ejecutar alta controlada
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          CONFIRMACION: ${{ inputs.confirmacion }}
+        run: |
+          test "$CONFIRMACION" = CREAR_PLATFORM_SUPADMIN01 || { echo "::error::Confirmación incorrecta"; exit 1; }
+          ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
+            "cd -- '$VPS_DEPLOY_PATH' && bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          umask 077
+          test -f deploy/.env.production
+          test "$(git branch --show-current)" = main
+          git merge-base --is-ancestor ac26ce89f0a9d935b4e48b6addef4b9621fa24b7 HEAD
+          compose=(docker compose --env-file deploy/.env.production -f deploy/docker-compose.production.yml)
+          echo "=== ESTADO SERVICIOS ==="
+          "${compose[@]}" ps </dev/null
+          echo "=== IDENTIDADES ACTUALES ==="
+          "${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
+          SELECT version_num FROM alembic_version;
+          SELECT codigo, nombre, estado FROM tenants ORDER BY nombre;
+          SELECT t.codigo AS tenant, m.codigo AS usuario, m.rol, m.activo
+          FROM miembros m JOIN tenants t ON t.id=m.tenant_id
+          WHERE m.codigo IN ('ADMIN01','SUPADMIN01') AND m.deleted_at IS NULL
+          ORDER BY t.codigo, m.codigo;
+          SQL
+          test -s deploy/backups/audit/factcentral_20261010T053407Z.dump
+          test -s deploy/backups/documentos/documentos_20261010T054030Z.tar.gz
+          mkdir -p deploy/private
+          chmod 700 deploy/private
+          test ! -e deploy/private/platform-bootstrap-credentials.txt || {
+            echo "Ya existe un archivo privado de credenciales; abortando sin restablecer."
+            exit 1
+          }
+          if "${compose[@]}" exec -T db sh -c 'psql -AtX -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT 1 FROM miembros WHERE codigo = '\''SUPADMIN01'\'' AND deleted_at IS NULL LIMIT 1"' | grep -q 1'; then
+            echo "SUPADMIN01 ya registrado; abortando sin cambiar contraseñas."
+            exit 1
+          fi
+          clave_file="deploy/private/platform-bootstrap-credentials.txt"
+          # El CLI emite una clave temporal: se captura solamente en archivo privado VPS.
+          if ! "${compose[@]}" exec -T backend uv run python -m app.cli bootstrap-admin --crear > "$clave_file"; then
+            rm -f -- "$clave_file"
+            echo "Falló alta de plataforma; comprobar base de datos."
+            exit 1
+          fi
+          chmod 600 "$clave_file"
+          test "$(grep -c '^CLAVE_TEMPORAL=' "$clave_file")" = 1
+          # Verificar HTTP /auth/login desde backend, sin mostrar la clave ni cookie.
+          sed -n 's/^CLAVE_TEMPORAL=//p' "$clave_file" |
+            "${compose[@]}" exec -T backend uv run python -c 'import json,sys,urllib.request; password=sys.stdin.read().strip(); assert len(password)>=8; data=json.dumps({"espacio":"PLATFORM","login":"SUPADMIN01","clave":password}).encode(); req=urllib.request.Request("http://127.0.0.1:8000/api/v1/auth/login",data=data,headers={"Content-Type":"application/json"}); response=urllib.request.urlopen(req,timeout=10); result=json.load(response); response.close(); assert result["rol"]=="SUPERADMIN"; assert result["codigo"]=="SUPADMIN01"; print("LOGIN_SUPADMIN_PLATFORM_VERIFICADO")'
+          echo "CREDENCIAL_TEMPORAL_GUARDADA_SOLO_EN_VPS: deploy/private/platform-bootstrap-credentials.txt"
+          echo "PLATFORM_SUPADMIN_CREADO_VERIFICADO"
+          REMOTE
