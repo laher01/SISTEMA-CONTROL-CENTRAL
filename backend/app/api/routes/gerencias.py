@@ -308,8 +308,12 @@ def editar_cartera_gerente(
     if "rol_comercial" in datos.model_fields_set:
         relacion.rol_comercial = datos.rol_comercial
     auditoria.registrar(
-        session, tenant_id, "CARTERA_COMERCIAL_EDITADA", "gerentes_empresas",
-        relacion.id, {"gerente_id": str(relacion.gerente_id), "actor": auth.codigo},
+        session,
+        tenant_id,
+        "CARTERA_COMERCIAL_EDITADA",
+        "gerentes_empresas",
+        relacion.id,
+        {"gerente_id": str(relacion.gerente_id), "actor": auth.codigo},
     )
     session.commit()
     session.refresh(relacion)
