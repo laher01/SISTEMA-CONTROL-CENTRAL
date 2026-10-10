@@ -334,16 +334,12 @@ def resumen(
                 "cliente_nombre": nombre,
                 "produccion": str(_redondear(Decimal(importe))),
                 "porcentaje": str(
-                    reglas.get(
-                        (rid, cid), Decimal("3.0") if retencion else Decimal("3.5")
-                    )
+                    reglas.get((rid, cid), Decimal("3.0") if retencion else Decimal("3.5"))
                 ),
                 "comision_referencial": str(
                     _redondear(
                         Decimal(importe)
-                        * reglas.get(
-                            (rid, cid), Decimal("3.0") if retencion else Decimal("3.5")
-                        )
+                        * reglas.get((rid, cid), Decimal("3.0") if retencion else Decimal("3.5"))
                         / Decimal("100")
                     )
                 ),
