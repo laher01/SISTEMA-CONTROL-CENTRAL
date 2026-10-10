@@ -22,14 +22,19 @@ def test_pagos_consolidados_historicos_y_privacidad(
         tenant_id=tenant_id, codigo="GERENTE02", nombre="Otro gerente", rol="GERENTE"
     )
     responsable = Miembro(
-        tenant_id=tenant_id, codigo="RESP-HIST", nombre="Responsable", rol="RESPONSABLE",
+        tenant_id=tenant_id,
+        codigo="RESP-HIST",
+        nombre="Responsable",
+        rol="RESPONSABLE",
         activo=True,
     )
     usuario = Miembro(
         tenant_id=tenant_id, codigo="US-HIST", nombre="Usuario", rol="USUARIO", activo=True
     )
     cliente = Empresa(
-        tenant_id=tenant_id, ruc="20998887711", razon_social="CLIENTE HISTORICO",
+        tenant_id=tenant_id,
+        ruc="20998887711",
+        razon_social="CLIENTE HISTORICO",
         tipo_relacion="CLIENTE",
     )
     session.add_all([gerente_global, gerente_dos, responsable, usuario, cliente])
@@ -43,19 +48,32 @@ def test_pagos_consolidados_historicos_y_privacidad(
     ]:
         session.add(
             Expediente(
-                tenant_id=tenant_id, emisor_id=cliente.id, receptor_id=cliente.id,
-                tipo_comprobante="FACT", serie="F001", correlativo=numero,
-                fecha_emision=date(2026, 9, 18), moneda="PEN",
-                importe_total=Decimal(monto), usuario_id=usuario.id,
+                tenant_id=tenant_id,
+                emisor_id=cliente.id,
+                receptor_id=cliente.id,
+                tipo_comprobante="FACT",
+                serie="F001",
+                correlativo=numero,
+                fecha_emision=date(2026, 9, 18),
+                moneda="PEN",
+                importe_total=Decimal(monto),
+                usuario_id=usuario.id,
                 gerente_id=gerente,
             )
         )
     session.add(
         Expediente(
-            tenant_id=tenant_id, emisor_id=cliente.id, receptor_id=cliente.id,
-            tipo_comprobante="FACT", serie="F001", correlativo="103",
-            fecha_emision=date(2026, 9, 19), moneda="PEN",
-            importe_total=Decimal("50"), usuario_id=None, gerente_id=None,
+            tenant_id=tenant_id,
+            emisor_id=cliente.id,
+            receptor_id=cliente.id,
+            tipo_comprobante="FACT",
+            serie="F001",
+            correlativo="103",
+            fecha_emision=date(2026, 9, 19),
+            moneda="PEN",
+            importe_total=Decimal("50"),
+            usuario_id=None,
+            gerente_id=None,
         )
     )
     session.commit()
@@ -63,17 +81,20 @@ def test_pagos_consolidados_historicos_y_privacidad(
     def iniciar(gerente: Miembro) -> None:
         anterior = auth_prueba.contexto
         auth_prueba.contexto = ContextoAcceso(
-            cuenta_id=anterior.cuenta_id, tenant_id=tenant_id,
-            rol="GERENTE", miembro_id=gerente.id, usuario_id=None,
-            gestor_id=None, codigo=gerente.codigo, nombre=gerente.nombre,
+            cuenta_id=anterior.cuenta_id,
+            tenant_id=tenant_id,
+            rol="GERENTE",
+            miembro_id=gerente.id,
+            usuario_id=None,
+            gestor_id=None,
+            codigo=gerente.codigo,
+            nombre=gerente.nombre,
             cambio_clave_obligatorio=False,
         )
 
     params = {"desde": "2026-09-01", "hasta": "2026-09-30", "moneda": "PEN"}
     iniciar(gerente_global)
-    consolidado = client.get(
-        "/api/v1/pagos/consolidado", params={**params, "agrupar": "CLIENTE"}
-    )
+    consolidado = client.get("/api/v1/pagos/consolidado", params={**params, "agrupar": "CLIENTE"})
     assert consolidado.status_code == 200, consolidado.text
     assert Decimal(consolidado.json()["total"]) == Decimal("350")
     assert consolidado.json()["filas"][0]["registros"] == 3

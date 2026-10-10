@@ -278,7 +278,9 @@ def resumen(
         resultado["pendientes_atribucion"] = [
             {
                 "responsable_id": str(rid) if rid else "sin-responsable",
-                "responsable": responsables[rid].codigo if rid in responsables else "SIN RESPONSABLE",
+                "responsable": responsables[rid].codigo
+                if rid in responsables
+                else "SIN RESPONSABLE",
                 "registros": n,
                 "produccion": str(_redondear(Decimal(total))),
             }

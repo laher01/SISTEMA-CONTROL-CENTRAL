@@ -151,14 +151,16 @@ def responsables_pedido(
             GerenteResponsable.activo.is_(True),
         )
     if auth.rol == RolMiembro.GERENTE and auth.codigo == "GRTEGLOBAL":
-        historicos = select(Miembro.responsable_id).join(
-            Expediente, Expediente.usuario_id == Miembro.id
-        ).where(
-            Expediente.tenant_id == tenant_id,
-            Expediente.deleted_at.is_(None),
-            alcance_expedientes_gerente(auth),
-            Miembro.tenant_id == tenant_id,
-            Miembro.responsable_id.is_not(None),
+        historicos = (
+            select(Miembro.responsable_id)
+            .join(Expediente, Expediente.usuario_id == Miembro.id)
+            .where(
+                Expediente.tenant_id == tenant_id,
+                Expediente.deleted_at.is_(None),
+                alcance_expedientes_gerente(auth),
+                Miembro.tenant_id == tenant_id,
+                Miembro.responsable_id.is_not(None),
+            )
         )
         consulta = select(Miembro).where(
             Miembro.tenant_id == tenant_id,
