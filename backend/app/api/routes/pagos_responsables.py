@@ -725,10 +725,10 @@ def reprogramar_pago(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
     if pago.estado in ("PAGADO", "ANULADO"):
         raise HTTPException(status.HTTP_409_CONFLICT, "Liquidación cerrada")
-    if datos.fecha.replace(day=1) <= pago.periodo_hasta.replace(day=1):
+    if datos.fecha <= date.today():
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "Reprogramación debe indicar un mes posterior al periodo",
+            "Indique una fecha futura para el pago postergado",
         )
     pago.fecha_reprogramada = datos.fecha
     pago.observacion = datos.motivo
