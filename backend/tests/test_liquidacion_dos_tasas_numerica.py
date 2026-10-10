@@ -32,7 +32,10 @@ def test_bruto_adelanto_y_neto_con_dos_tasas() -> None:
 
 def test_usuario_tasa_identica_con_o_sin_agente() -> None:
     resultado = liquidar_dos_tasas(
-        [FacturaProduccion(Decimal("5000.00"), True), FacturaProduccion(Decimal("5000.00"), False)],
+        [
+            FacturaProduccion(Decimal("5000.00"), True),
+            FacturaProduccion(Decimal("5000.00"), False),
+        ],
         porcentaje_con_agente=Decimal("2.70"),
         porcentaje_sin_agente=Decimal("2.70"),
         adelantos=Decimal("0"),
@@ -54,4 +57,9 @@ def test_redondeo_y_adelanto_mayor_que_bruto() -> None:
 @pytest.mark.parametrize("adelanto", [Decimal("-1"), Decimal("NaN")])
 def test_rechazar_adelantos_invalidos(adelanto: Decimal) -> None:
     with pytest.raises(ValueError, match="Adelantos inválidos"):
-        liquidar_dos_tasas([], porcentaje_con_agente=Decimal("2"), porcentaje_sin_agente=Decimal("3"), adelantos=adelanto)
+        liquidar_dos_tasas(
+            [],
+            porcentaje_con_agente=Decimal("2"),
+            porcentaje_sin_agente=Decimal("3"),
+            adelantos=adelanto,
+        )
