@@ -5,11 +5,12 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.models import CorreoRemitente, Gestor, Miembro
+from app.models import CorreoRemitente, Empresa, Gestor, Miembro
 from app.services.expedientes import obtener_tenant
 from app.services.ingesta import ArchivoSubido
 from app.services.recepcion_correo_ingesta import admitir_adjunto_ubl
 from app.storage import AlmacenLocal
+from tests.xml import RECEPTOR, factura
 
 
 def _adjunto(nombre: str = "prueba.xml") -> ArchivoSubido:
@@ -84,3 +85,47 @@ def test_no_ingiere_archivo_no_ubl(session: Session, settings: Settings) -> None
         _adjunto("foto.png"),
     )
     assert resultado.estado == "REVISION_TIPO_DOCUMENTO"
+
+
+def test_receptor_no_autorizado_con_ubl_valido(session: Session, settings: Settings) -> None:
+    tenant = obtener_tenant(session, settings.tenant_default)
+    _registrar_gestor(session, tenant.id, "G4", "proveedor@example.com")
+    resultado = admitir_adjunto_ubl(
+        session,
+        AlmacenLocal(settings.storage_dir),
+        settings,
+        date(2026, 10, 10),
+        tenant.id,
+        "proveedor@example.com",
+        ArchivoSubido("factura.xml", "application/xml", factura()),
+    )
+    assert resultado.estado == "RECEPTOR_NO_AUTORIZADO"
+
+
+def test_usuario_inactivo_con_ubl_valido(session: Session, settings: Settings) -> None:
+    tenant = obtener_tenant(session, settings.tenant_default)
+    _registrar_gestor(session, tenant.id, "G5", "proveedor@example.com")
+    receptor = Empresa(
+        tenant_id=tenant.id,
+        ruc=RECEPTOR,
+        razon_social="EMPRESA RECEPTORA",
+        autorizada=True,
+    )
+    session.add(receptor)
+    session.flush()
+    from sqlalchemy import select
+
+    usuario = session.scalar(select(Miembro).where(Miembro.codigo == "USR-G5"))
+    assert usuario is not None
+    usuario.activo = False
+    session.flush()
+    resultado = admitir_adjunto_ubl(
+        session,
+        AlmacenLocal(settings.storage_dir),
+        settings,
+        date(2026, 10, 10),
+        tenant.id,
+        "proveedor@example.com",
+        ArchivoSubido("factura.xml", "application/xml", factura()),
+    )
+    assert resultado.estado == "USUARIO_NO_AUTORIZADO"
