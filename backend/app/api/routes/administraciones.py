@@ -12,7 +12,8 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep
 from app.enums import RolMiembro
-from app.models import CuentaAcceso, Gestor, Miembro, Tenant
+from app.models import CuentaAcceso, Expediente, Gestor, Miembro, Tenant
+from app.services import auditoria
 from app.security import crear_o_restablecer_cuenta
 from app.tenant_host import validar_subdominio
 
@@ -276,5 +277,52 @@ def estructura_global_tenant(
             {"id": str(g.id), "codigo": g.codigo, "nombre": g.nombre,
              "usuario_id": str(g.usuario_id) if g.usuario_id else None}
             for g in gestores
+        ],
+    }
+
+
+@router.get("/{tenant_id}/expedientes")
+def expedientes_globales_tenant(
+    tenant_id: uuid.UUID,
+    session: SessionDep,
+    auth: OperativeAuthDep,
+    limite: int = 100,
+) -> dict[str, object]:
+    """Inspección supervisada, paginación acotada; ninguna suplantación de identidad."""
+    if auth.rol != RolMiembro.SUPERADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo SUPERADMIN")
+    if limite < 1 or limite > 100:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Límite fuera de rango")
+    tenant = session.get(Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Administración no encontrada")
+    expedientes = session.scalars(
+        select(Expediente)
+        .where(Expediente.tenant_id == tenant_id, Expediente.deleted_at.is_(None))
+        .order_by(Expediente.created_at.desc(), Expediente.id.desc())
+        .limit(limite)
+    ).all()
+    auditoria.registrar(
+        session, tenant_id, "SUPERADMIN_CONSULTA_EXPEDIENTES",
+        "tenant", tenant_id,
+        {"actor_cuenta_id": str(auth.cuenta_id), "limite": limite},
+    )
+    session.commit()
+    return {
+        "tenant_id": str(tenant_id),
+        "expedientes": [
+            {
+                "id": str(e.id),
+                "tipo": e.tipo_comprobante,
+                "serie": e.serie,
+                "correlativo": e.correlativo,
+                "fecha_emision": e.fecha_emision.isoformat(),
+                "moneda": e.moneda,
+                "importe_total": str(e.importe_total),
+                "estado": e.estado,
+                "usuario_id": str(e.usuario_id) if e.usuario_id else None,
+                "gestor_id": str(e.gestor_id) if e.gestor_id else None,
+            }
+            for e in expedientes
         ],
     }
