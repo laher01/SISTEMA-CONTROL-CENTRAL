@@ -380,7 +380,6 @@ def test_limpieza_rechaza_confirmacion_invalida_sin_borrar_datos(
     assert session.get(Documento, documento.id) is not None
 
 
-
 def test_limpieza_fallo_de_archivo_deja_pendiente_recuperacion(
     client: TestClient, session: Session, auth_prueba: AuthPrueba, settings, monkeypatch
 ) -> None:
@@ -446,6 +445,7 @@ def test_limpieza_fallo_de_archivo_deja_pendiente_recuperacion(
     assert not ruta.exists()
     segundo = client.post("/api/v1/configuracion/mantenimiento/reintentar-archivos")
     assert segundo.json() == {"procesados": 0, "completados": 0}
+
 
 def test_reintento_archivos_no_procesa_otro_tenant(
     client: TestClient, session: Session, auth_prueba: AuthPrueba, settings
