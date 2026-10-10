@@ -59,14 +59,11 @@ jobs:
           echo "=== ESTADO SERVICIOS ==="
           "${compose[@]}" ps </dev/null
           echo "=== IDENTIDADES ACTUALES ==="
-          "${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
-          SELECT version_num FROM alembic_version;
-          SELECT codigo, nombre, estado FROM tenants ORDER BY nombre;
-          SELECT t.codigo AS tenant, m.codigo AS usuario, m.rol, m.activo
-          FROM miembros m JOIN tenants t ON t.id=m.tenant_id
-          WHERE m.codigo IN ('ADMIN01','SUPADMIN01') AND m.deleted_at IS NULL
-          ORDER BY t.codigo, m.codigo;
-          SQL
+          # Evitar pasar una consulta SQL por stdin: SSH utiliza stdin para
+          # enviar este script remoto, y un comando anidado puede agotarlo.
+          "${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT version_num FROM alembic_version;"'
+          "${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT codigo, nombre, estado FROM tenants ORDER BY nombre;"'
+          echo "INVENTARIO_COMPLETADO_CONTINUANDO_BOOTSTRAP"
           test -s deploy/backups/audit/factcentral_20261010T053407Z.dump
           test -s deploy/backups/documentos/documentos_20261010T054030Z.tar.gz
           mkdir -p deploy/private
