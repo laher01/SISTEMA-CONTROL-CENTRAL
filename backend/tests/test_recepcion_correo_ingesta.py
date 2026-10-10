@@ -158,6 +158,9 @@ def test_xml_duplicado_no_crea_segundo_documento(session: Session, settings: Set
 
     from app.models import Documento
 
-    assert session.scalar(
-        select(func.count()).select_from(Documento).where(Documento.tenant_id == tenant.id)
-    ) == 1
+    assert (
+        session.scalar(
+            select(func.count()).select_from(Documento).where(Documento.tenant_id == tenant.id)
+        )
+        == 1
+    )
