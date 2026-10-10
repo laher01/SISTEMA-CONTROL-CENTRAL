@@ -654,10 +654,16 @@ class NexusFuente(BaseModel):
     tipo: str
 
 
+class NexusMensajeHistorial(BaseModel):
+    autor: Literal["usuario", "nexus"]
+    texto: str = Field(min_length=1, max_length=4000)
+
+
 class NexusChatIn(BaseModel):
     mensaje: str = Field(min_length=1, max_length=2000)
     ruta: str = Field(default="/", max_length=500)
     expediente_id: uuid.UUID | None = None
+    historial: list[NexusMensajeHistorial] = Field(default_factory=list, max_length=20)
 
 
 class NexusChatOut(BaseModel):
@@ -666,6 +672,9 @@ class NexusChatOut(BaseModel):
     fuentes: list[NexusFuente] = []
     datos: dict[str, object] = {}
     internet_usado: bool = False
+    llm_usado: bool = False
+    motor: str = "CONTEXTUAL"
+    seccion: str | None = None
     requiere_configuracion_externa: bool = False
 
 
@@ -673,6 +682,8 @@ class NexusEstadoOut(BaseModel):
     asistente_activo: bool
     consulta_ruc_externa: bool
     busqueda_internet: bool
+    motor_conversacional: bool
+    knowledge_base: bool
     fuente_oficial_preferida: str
 
 
