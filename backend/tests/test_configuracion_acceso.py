@@ -386,7 +386,7 @@ def test_limpieza_fallo_de_archivo_deja_pendiente_recuperacion(
 ) -> None:
     from pathlib import Path
 
-    from app.models import Documento
+    from app.models import Documento, EliminacionArchivoPendiente
 
     auth_prueba.como_admin()
     ruta = settings.storage_dir / "pruebas" / "pendiente.pdf"
@@ -427,4 +427,20 @@ def test_limpieza_fallo_de_archivo_deja_pendiente_recuperacion(
     assert ruta.exists()
     session.expire_all()
     assert session.get(Documento, documento_id) is None
-    # Regresión documentada: la operación actual no crea una cola durable de reintento.
+    pendiente = session.query(EliminacionArchivoPendiente).filter_by(
+        tenant_id=auth_prueba.contexto.tenant_id
+    ).one()
+    assert pendiente.estado == "PENDIENTE"
+    assert pendiente.intentos == 1
+    assert pendiente.ultimo_error is not None
+
+    monkeypatch.undo()
+    reintento = client.post("/api/v1/configuracion/mantenimiento/reintentar-archivos")
+    assert reintento.status_code == 200, reintento.text
+    assert reintento.json() == {"procesados": 1, "completados": 1}
+    session.refresh(pendiente)
+    assert pendiente.estado == "COMPLETADO"
+    assert pendiente.intentos == 2
+    assert not ruta.exists()
+    segundo = client.post("/api/v1/configuracion/mantenimiento/reintentar-archivos")
+    assert segundo.json() == {"procesados": 0, "completados": 0}
