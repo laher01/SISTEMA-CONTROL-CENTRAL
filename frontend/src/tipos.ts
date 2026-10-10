@@ -437,6 +437,9 @@ export interface NexusRespuesta {
   fuentes: NexusFuente[];
   datos: Record<string, unknown>;
   internet_usado: boolean;
+  llm_usado: boolean;
+  motor: string;
+  seccion: string | null;
   requiere_configuracion_externa: boolean;
 }
 
@@ -444,6 +447,8 @@ export interface NexusEstado {
   asistente_activo: boolean;
   consulta_ruc_externa: boolean;
   busqueda_internet: boolean;
+  motor_conversacional: boolean;
+  knowledge_base: boolean;
   fuente_oficial_preferida: string;
 }
 
