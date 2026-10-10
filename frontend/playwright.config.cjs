@@ -8,6 +8,7 @@ module.exports = {
     command: "npm run dev -- --host 127.0.0.1 --port 4173 --strictPort",
     url: `${protocol}://127.0.0.1:4173`,
     reuseExistingServer: false,
+    ignoreHTTPSErrors: tls,
     timeout: 30000,
   },
 };
