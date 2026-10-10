@@ -50,6 +50,7 @@ from app.schemas import (
 )
 from app.security import cuenta_administradora_responsable
 from app.services import auditoria
+from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.distribucion_jonatan import calcular_distribucion_jonatan
 
 router = APIRouter(prefix="/pagos", tags=["pagos"])
@@ -149,6 +150,30 @@ def responsables_pedido(
             GerenteResponsable.gerente_id == auth.miembro_id,
             GerenteResponsable.activo.is_(True),
         )
+    if auth.rol == RolMiembro.GERENTE and auth.codigo == "GRTEGLOBAL":
+        historicos = select(Miembro.responsable_id).join(
+            Expediente, Expediente.usuario_id == Miembro.id
+        ).where(
+            Expediente.tenant_id == tenant_id,
+            Expediente.deleted_at.is_(None),
+            alcance_expedientes_gerente(auth),
+            Miembro.tenant_id == tenant_id,
+            Miembro.responsable_id.is_not(None),
+        )
+        consulta = select(Miembro).where(
+            Miembro.tenant_id == tenant_id,
+            Miembro.rol == RolMiembro.RESPONSABLE,
+            Miembro.activo.is_(True),
+            Miembro.deleted_at.is_(None),
+            Miembro.id.in_(historicos)
+            | Miembro.id.in_(
+                select(GerenteResponsable.responsable_id).where(
+                    GerenteResponsable.tenant_id == tenant_id,
+                    GerenteResponsable.gerente_id == auth.miembro_id,
+                    GerenteResponsable.activo.is_(True),
+                )
+            ),
+        )
     return [
         FiltroOpcion(id=r.id, codigo=r.codigo, nombre=r.nombre)
         for r in session.scalars(consulta.order_by(Miembro.codigo))
@@ -201,6 +226,26 @@ def clientes_pago(
             GerenteEmpresa.tenant_id == tenant_id,
             GerenteEmpresa.gerente_id == auth.miembro_id,
             GerenteEmpresa.activo.is_(True),
+        )
+    if auth.rol == RolMiembro.GERENTE and auth.codigo == "GRTEGLOBAL":
+        consulta = select(Empresa).where(
+            Empresa.tenant_id == tenant_id,
+            Empresa.deleted_at.is_(None),
+            Empresa.tipo_relacion.in_(["CLIENTE", "AMBOS"]),
+            Empresa.id.in_(
+                select(Expediente.receptor_id).where(
+                    Expediente.tenant_id == tenant_id,
+                    Expediente.deleted_at.is_(None),
+                    alcance_expedientes_gerente(auth),
+                )
+            )
+            | Empresa.id.in_(
+                select(GerenteEmpresa.empresa_id).where(
+                    GerenteEmpresa.tenant_id == tenant_id,
+                    GerenteEmpresa.gerente_id == auth.miembro_id,
+                    GerenteEmpresa.activo.is_(True),
+                )
+            ),
         )
     return [
         FiltroOpcion(id=e.id, codigo=e.ruc, nombre=e.razon_social)
@@ -366,7 +411,7 @@ def consolidado_compras(
             .group_by(responsable.c.id, responsable.c.codigo, responsable.c.nombre)
         )
     if auth.rol == RolMiembro.GERENTE:
-        consulta = consulta.where(Expediente.gerente_id == auth.miembro_id)
+        consulta = consulta.where(alcance_expedientes_gerente(auth))
     filas = [
         {
             "id": str(id_),
