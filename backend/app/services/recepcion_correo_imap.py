@@ -6,6 +6,7 @@ Las credenciales solo se suministran por variables de entorno.
 
 import email
 import imaplib
+from email.utils import parseaddr
 import os
 import uuid
 from datetime import date
@@ -25,7 +26,7 @@ MAX_MENSAJE_BYTES = 25 * 1024 * 1024
 
 def _adjuntos_xml(contenido: bytes) -> tuple[str, list[ArchivoSubido]]:
     mensaje = email.message_from_bytes(contenido, policy=default)
-    remitente = email.utils.parseaddr(str(mensaje.get("From", "")))[1].lower()
+    remitente = parseaddr(str(mensaje.get("From", "")))[1].lower()
     adjuntos: list[ArchivoSubido] = []
     for parte in mensaje.walk():
         if parte.is_multipart():
@@ -108,7 +109,7 @@ def consultar_buzon(
         estado, _ = conexion.select("INBOX", readonly=True)
         if estado != "OK":
             raise RuntimeError("No se pudo seleccionar el buzón")
-        estado, encontrados = conexion.uid("search", None, "ALL")
+        estado, encontrados = conexion.uid("search", "", "ALL")
         if estado != "OK":
             raise RuntimeError("No se pudo consultar el buzón")
         uids = encontrados[0].split()[-max(1, min(limite, 100)) :]
