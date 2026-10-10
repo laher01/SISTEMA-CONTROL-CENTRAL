@@ -2,6 +2,8 @@
 
 import hmac
 import re
+import uuid
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
@@ -11,8 +13,9 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep
 from app.enums import RolMiembro
-from app.models import CuentaAcceso, Gestor, Miembro, Tenant
+from app.models import ChatMensaje, CuentaAcceso, Expediente, Gestor, Miembro, Tenant
 from app.security import crear_o_restablecer_cuenta
+from app.services import auditoria
 from app.tenant_host import validar_subdominio
 
 
@@ -237,3 +240,144 @@ def crear_administracion_demo(
         "plan_demo": datos.plan,
         "url": f"https://{alta['subdominio']}.{settings.tenant_domain}/ingresar",
     }
+
+
+@router.get("/{tenant_id}/estructura")
+def estructura_global_tenant(
+    tenant_id: uuid.UUID,
+    session: SessionDep,
+    auth: OperativeAuthDep,
+) -> dict[str, object]:
+    """Consulta global del tenant; no suplanta sesiones ni expone contraseñas."""
+    if auth.rol != RolMiembro.SUPERADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo SUPERADMIN")
+    tenant = session.get(Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Administración no encontrada")
+    miembros = session.scalars(select(Miembro).where(
+        Miembro.tenant_id == tenant_id,
+        Miembro.deleted_at.is_(None),
+    ).order_by(Miembro.rol, Miembro.codigo)).all()
+    gestores = session.scalars(select(Gestor).where(
+        Gestor.tenant_id == tenant_id,
+        Gestor.deleted_at.is_(None),
+    ).order_by(Gestor.codigo)).all()
+    return {
+        "id": str(tenant.id),
+        "nombre": tenant.nombre,
+        "codigo": tenant.codigo or "",
+        "subdominio": tenant.subdominio or "",
+        "estado": tenant.estado,
+        "miembros": [
+            {"id": str(m.id), "codigo": m.codigo, "nombre": m.nombre,
+             "rol": m.rol, "activo": m.activo,
+             "responsable_id": str(m.responsable_id) if m.responsable_id else None}
+            for m in miembros
+        ],
+        "gestores": [
+            {"id": str(g.id), "codigo": g.codigo, "nombre": g.nombre,
+             "usuario_id": str(g.usuario_id) if g.usuario_id else None}
+            for g in gestores
+        ],
+    }
+
+
+@router.get("/{tenant_id}/expedientes")
+def expedientes_globales_tenant(
+    tenant_id: uuid.UUID,
+    session: SessionDep,
+    auth: OperativeAuthDep,
+    limite: int = 100,
+) -> dict[str, object]:
+    """Inspección supervisada, paginación acotada; ninguna suplantación de identidad."""
+    if auth.rol != RolMiembro.SUPERADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo SUPERADMIN")
+    if limite < 1 or limite > 100:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Límite fuera de rango")
+    tenant = session.get(Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Administración no encontrada")
+    expedientes = session.scalars(
+        select(Expediente)
+        .where(Expediente.tenant_id == tenant_id, Expediente.deleted_at.is_(None))
+        .order_by(Expediente.created_at.desc(), Expediente.id.desc())
+        .limit(limite)
+    ).all()
+    auditoria.registrar(
+        session, tenant_id, "SUPERADMIN_CONSULTA_EXPEDIENTES",
+        "tenant", tenant_id,
+        {"actor_cuenta_id": str(auth.cuenta_id), "limite": limite},
+    )
+    session.commit()
+    return {
+        "tenant_id": str(tenant_id),
+        "expedientes": [
+            {
+                "id": str(e.id),
+                "tipo": e.tipo_comprobante,
+                "serie": e.serie,
+                "correlativo": e.correlativo,
+                "fecha_emision": e.fecha_emision.isoformat(),
+                "moneda": e.moneda,
+                "importe_total": str(e.importe_total),
+                "estado": e.estado,
+                "usuario_id": str(e.usuario_id) if e.usuario_id else None,
+                "gestor_id": str(e.gestor_id) if e.gestor_id else None,
+            }
+            for e in expedientes
+        ],
+    }
+
+
+@router.get("/{tenant_id}/chats")
+def chats_globales_tenant(
+    tenant_id: uuid.UUID,
+    session: SessionDep,
+    auth: OperativeAuthDep,
+    limite: int = 100,
+) -> dict[str, object]:
+    """Historial auditado del tenant, solo lectura global, sin suplantación."""
+    if auth.rol != RolMiembro.SUPERADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo SUPERADMIN")
+    if not 1 <= limite <= 100:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Límite inválido")
+    tenant = session.get(Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant inexistente")
+    items = session.scalars(
+        select(ChatMensaje).where(
+            ChatMensaje.tenant_id == tenant_id,
+            ChatMensaje.deleted_at.is_(None),
+        ).order_by(ChatMensaje.created_at.desc(), ChatMensaje.id.desc()).limit(limite)
+    ).all()
+    auditoria.registrar(session, tenant_id, "SUPERADMIN_CONSULTA_CHATS",
+        "tenant", tenant_id, {"actor_cuenta_id": str(auth.cuenta_id), "limite": limite})
+    session.commit()
+    return {"tenant_id": str(tenant_id), "mensajes": [
+        {"id": str(m.id), "remitente_cuenta_id": str(m.remitente_cuenta_id),
+         "destinatario_cuenta_id": str(m.destinatario_cuenta_id),
+         "texto": m.texto, "archivo_nombre": m.archivo_nombre,
+         "created_at": m.created_at.isoformat()}
+        for m in items
+    ]}
+
+
+@router.delete("/{tenant_id}/chats/{mensaje_id}", status_code=status.HTTP_204_NO_CONTENT)
+def eliminar_chat_global(
+    tenant_id: uuid.UUID,
+    mensaje_id: uuid.UUID,
+    session: SessionDep,
+    auth: OperativeAuthDep,
+) -> None:
+    """Eliminar lógicamente, conservar evidencia y autor identificable."""
+    if auth.rol != RolMiembro.SUPERADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo SUPERADMIN")
+    mensaje = session.get(ChatMensaje, mensaje_id)
+    if mensaje is None or mensaje.tenant_id != tenant_id or mensaje.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Mensaje no encontrado")
+    mensaje.deleted_at = datetime.now(UTC)
+    mensaje.eliminado_por_cuenta_id = auth.cuenta_id
+    auditoria.registrar(session, tenant_id, "SUPERADMIN_ELIMINA_CHAT",
+        "chat_mensaje", mensaje_id,
+        {"actor_cuenta_id": str(auth.cuenta_id), "eliminacion": "logica"})
+    session.commit()
