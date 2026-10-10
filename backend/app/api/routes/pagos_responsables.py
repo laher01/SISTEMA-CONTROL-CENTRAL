@@ -286,6 +286,70 @@ def resumen(
             }
             for rid, total, n in historicos
         ]
+        # Desglose de consulta por cliente; nunca se utiliza para programar pagos.
+        detalle = list(
+            session.execute(
+                select(
+                    Miembro.responsable_id,
+                    Empresa.id,
+                    Empresa.ruc,
+                    Empresa.razon_social,
+                    Empresa.agente_retencion,
+                    func.sum(Expediente.importe_total),
+                )
+                .join(Miembro, Expediente.usuario_id == Miembro.id)
+                .join(Empresa, Expediente.receptor_id == Empresa.id)
+                .where(
+                    Expediente.tenant_id == tenant_id,
+                    Expediente.deleted_at.is_(None),
+                    Expediente.gerente_id.is_(None),
+                    Expediente.fecha_emision.between(desde, hasta),
+                    Expediente.moneda == moneda,
+                    Miembro.tenant_id == tenant_id,
+                    Miembro.responsable_id.is_not(None),
+                    Empresa.tenant_id == tenant_id,
+                )
+                .group_by(
+                    Miembro.responsable_id,
+                    Empresa.id,
+                    Empresa.ruc,
+                    Empresa.razon_social,
+                    Empresa.agente_retencion,
+                )
+            )
+        )
+        reglas = {
+            (r.responsable_id, r.cliente_id): Decimal(r.porcentaje)
+            for r in session.scalars(
+                select(ComisionResponsableRegla).where(
+                    ComisionResponsableRegla.tenant_id == tenant_id
+                )
+            )
+        }
+        resultado["detalle_historico_clientes"] = [
+            {
+                "responsable_id": str(rid),
+                "cliente_id": str(cid),
+                "cliente_ruc": ruc,
+                "cliente_nombre": nombre,
+                "produccion": str(_redondear(Decimal(importe))),
+                "porcentaje": str(
+                    reglas.get(
+                        (rid, cid), Decimal("3.0") if retencion else Decimal("3.5")
+                    )
+                ),
+                "comision_referencial": str(
+                    _redondear(
+                        Decimal(importe)
+                        * reglas.get(
+                            (rid, cid), Decimal("3.0") if retencion else Decimal("3.5")
+                        )
+                        / Decimal("100")
+                    )
+                ),
+            }
+            for rid, cid, ruc, nombre, retencion, importe in detalle
+        ]
         resultado["total_pendiente_atribucion"] = str(
             _redondear(sum((Decimal(total) for _, total, _ in historicos), Decimal("0")))
         )
