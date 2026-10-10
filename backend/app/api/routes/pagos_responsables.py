@@ -414,8 +414,11 @@ def incorporar_historicos(
         expediente.gerente_id = auth.miembro_id
     total = sum((Decimal(e.importe_total) for e in expedientes), Decimal("0"))
     auditoria.registrar(
-        session, tenant_id, "GERENTE_INCORPORA_PRODUCCION_HISTORICA",
-        "miembro", datos.responsable_id,
+        session,
+        tenant_id,
+        "GERENTE_INCORPORA_PRODUCCION_HISTORICA",
+        "miembro",
+        datos.responsable_id,
         {
             "gerente_id": str(auth.miembro_id),
             "responsable_id": str(datos.responsable_id),
