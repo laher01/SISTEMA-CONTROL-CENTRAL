@@ -948,7 +948,7 @@ function AdministracionesPanel() {
         <thead><tr><th>Administración</th><th>Código</th><th>Subdominio</th><th>Origen</th><th>Estado</th><th>Identificador</th><th>Documentos</th><th>Expedientes</th><th>Proveedores</th><th>Receptores</th><th>Responsables</th><th>Administradores</th><th>Gerentes</th><th>Secretaría</th><th>Usuarios</th><th>Gestores</th><th>Cuentas habilitadas</th></tr></thead>
         <tbody>{visibles.map((a) => (
           <tr key={a.id}>
-            <td>{a.nombre}</td><td>{a.codigo || "Legado"}</td><td>{a.subdominio || "Sin asignar"}</td><td>{a.origen}</td><td>{a.estado}</td><td>{a.id}</td><td>{a.documentos}</td><td>{a.expedientes}</td><td>{a.proveedores}</td><td>{a.receptores}</td><td>{a.responsables}</td><td>{a.documentos}</td><td>{a.expedientes}</td><td>{a.proveedores}</td><td>{a.receptores}</td><td>{a.responsables}</td><td>{a.documentos}</td><td>{a.expedientes}</td><td>{a.proveedores}</td><td>{a.receptores}</td><td>{a.responsables}</td><td>{a.administradores}</td>
+            <td>{a.nombre}</td><td>{a.codigo || "Legado"}</td><td>{a.subdominio || "Sin asignar"}</td><td>{a.origen}</td><td>{a.estado}</td><td>{a.id}</td><td>{a.documentos}</td><td>{a.expedientes}</td><td>{a.proveedores}</td><td>{a.receptores}</td><td>{a.responsables}</td><td>{a.administradores}</td>
             <td>{a.gerentes}</td><td>{a.secretarias}</td><td>{a.usuarios}</td>
             <td>{a.gestores}</td><td>{a.cuentas_activas}</td>
           </tr>
