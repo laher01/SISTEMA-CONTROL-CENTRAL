@@ -30,3 +30,6 @@ El acceso operativo cruza tenant_id solo si se implementa una ruta autorizada ex
 
 ## Validación GitHub Actions
 No fusionar si Ruff, pytest, mypy, frontend o migraciones fallan. El primer CI del PR #101 detectó errores de formato; se corrigieron en la rama. Ejecutar CI nuevamente antes de despliegue.
+
+## Control previo al despliegue (CI)
+La rama de seguridad debe aprobar Ruff, formato, MyPy, Pytest y frontend. El formateo se ejecuta solo en la rama de trabajo y ningún job puede desplegar producción durante esta validación.
