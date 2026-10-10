@@ -2,12 +2,10 @@ import argparse
 
 from sqlalchemy import select
 
-from app.core.config import get_settings
 from app.core.db import get_sessionmaker
 from app.enums import RolMiembro
-from app.models import Miembro
+from app.models import Miembro, Tenant
 from app.security import crear_o_restablecer_cuenta
-from app.services.expedientes import obtener_tenant
 
 
 def main() -> None:
@@ -29,14 +27,19 @@ def main() -> None:
 
 
 def _bootstrap_admin(codigo: str, nombre: str, crear: bool = False) -> None:
-    settings = get_settings()
     with get_sessionmaker()() as session:
-        tenant = obtener_tenant(session, settings.tenant_default)
         codigo_normalizado = codigo.strip().upper()
         if codigo_normalizado != "SUPADMIN01":
             raise SystemExit("Bootstrap reservado exclusivamente para SUPADMIN01")
         if not crear:
             raise SystemExit("Use --crear después de verificar el respaldo de la base")
+        tenant = session.scalar(select(Tenant).where(Tenant.codigo == "PLATFORM"))
+        if tenant is None:
+            tenant = Tenant(
+                nombre="FACT CENTRAL PLATAFORMA", codigo="PLATFORM", estado="ACTIVO"
+            )
+            session.add(tenant)
+            session.flush()
         miembro = session.scalar(
             select(Miembro).where(
                 Miembro.tenant_id == tenant.id,
