@@ -1,6 +1,5 @@
 """Prohibiciones de acceso cruzado a mensajes y expedientes por rol."""
 
-import uuid
 from dataclasses import replace
 
 import pytest
