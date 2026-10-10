@@ -1,0 +1,106 @@
+name: repair-nexomar-admin-role-vps-staging
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: Simular primero; aplicar solo con confirmación
+        required: true
+        type: choice
+        options:
+          - simular
+          - aplicar
+      confirmacion:
+        description: Para aplicar escriba CORREGIR_ADMIN01_NEXOMAR
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: factcentral-staging-admin-role
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 15
+    steps:
+      - name: Verificar destino y secretos
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          test "$VPS_HOST" = "132.145.233.172"
+          test "$VPS_USER" = "ubuntu"
+          for name in VPS_DEPLOY_PATH VPS_SSH_PRIVATE_KEY VPS_SSH_KNOWN_HOSTS; do
+            test -n "${!name:-}" || { echo "::error::Falta $name"; exit 1; }
+          done
+      - name: Configurar acceso SSH existente
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+      - name: Validar operación y cuenta exacta
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          MODO: ${{ inputs.modo }}
+          CONFIRMACION: ${{ inputs.confirmacion }}
+        run: |
+          set -euo pipefail
+          if [ "$MODO" = aplicar ]; then
+            test "$CONFIRMACION" = CORREGIR_ADMIN01_NEXOMAR || { echo "::error::Confirmación incorrecta"; exit 1; }
+          fi
+          ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
+            "cd -- '$VPS_DEPLOY_PATH' && MODO='$MODO' bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          test -f deploy/.env.production
+          test -s deploy/backups/audit/factcentral_20261010T053407Z.dump
+          compose=(docker compose --env-file deploy/.env.production -f deploy/docker-compose.production.yml)
+          "${compose[@]}" exec -T backend env MODO="$MODO" uv run python -c '
+          import os
+          from sqlalchemy import select
+          from app.core.db import get_sessionmaker
+          from app.models import Tenant, Miembro, CuentaAcceso
+          from app.enums import RolMiembro
+          modo=os.environ["MODO"]
+          with get_sessionmaker()() as s:
+              platform=s.scalars(select(Tenant).where(Tenant.codigo=="PLATFORM",Tenant.estado=="ACTIVO")).all()
+              assert len(platform)==1, "PLATFORM no único/activo"
+              admins=s.scalars(select(Miembro).where(Miembro.tenant_id==platform[0].id,Miembro.codigo=="SUPADMIN01",Miembro.deleted_at.is_(None),Miembro.activo.is_(True))).all()
+              assert len(admins)==1 and admins[0].rol==RolMiembro.SUPERADMIN, "SUPADMIN01 no confirmado"
+              global_access=s.scalars(select(CuentaAcceso).where(CuentaAcceso.tenant_id==platform[0].id,CuentaAcceso.miembro_id==admins[0].id,CuentaAcceso.activo.is_(True),CuentaAcceso.deleted_at.is_(None))).all()
+              assert len(global_access)==1, "Acceso global ausente"
+              targets=s.scalars(select(Tenant).where(Tenant.nombre=="NEXOMAR NEGOCIOS E.I.R.L.",Tenant.estado=="ACTIVO")).all()
+              assert len(targets)==1, "Tenant NEXOMAR ambiguo"
+              miembros=s.scalars(select(Miembro).where(Miembro.tenant_id==targets[0].id,Miembro.codigo=="ADMIN01",Miembro.deleted_at.is_(None),Miembro.activo.is_(True))).all()
+              assert len(miembros)==1, "ADMIN01 de NEXOMAR ambiguo"
+              admin=miembros[0]
+              cuentas=s.scalars(select(CuentaAcceso).where(CuentaAcceso.tenant_id==targets[0].id,CuentaAcceso.miembro_id==admin.id,CuentaAcceso.deleted_at.is_(None))).all()
+              assert len(cuentas)==1, "Cuenta ADMIN01 ambigua"
+              original_hash=cuentas[0].password_hash
+              print("TENANT_VALIDADO: NEXOMAR NEGOCIOS E.I.R.L.")
+              print("ADMIN01_ROL_ANTERIOR:",admin.rol)
+              if modo=="simular":
+                  assert admin.rol in (RolMiembro.SUPERADMIN,RolMiembro.ADMINISTRADOR)
+                  print("SIMULACION_APROBADA_SIN_CAMBIOS")
+              else:
+                  assert modo=="aplicar"
+                  assert admin.rol in (RolMiembro.SUPERADMIN,RolMiembro.ADMINISTRADOR)
+                  admin.rol=RolMiembro.ADMINISTRADOR
+                  s.flush()
+                  assert cuentas[0].password_hash==original_hash
+                  s.commit()
+                  print("ADMIN01_NEXOMAR_CORREGIDO")
+              assert cuentas[0].password_hash==original_hash
+              print("CONTRASENA_ADMIN01_PRESERVADA")
+          ' </dev/null
+          REMOTE
