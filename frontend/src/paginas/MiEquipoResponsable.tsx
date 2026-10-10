@@ -115,6 +115,15 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const [desdePago, setDesdePago] = useState(new Date().toISOString().slice(0, 7) + "-01");
   const [hastaPago, setHastaPago] = useState(new Date().toISOString().slice(0, 10));
   const [cotizacion, setCotizacion] = useState<CotizacionUsuario | null>(null);
+  const desglose = useDatos<{
+    produccion_documentada: string;
+    motivo_bloqueo: string;
+    clientes: { receptor_id: string; ruc: string; razon_social: string; expedientes: number; produccion_documentada: string }[];
+  }>(usuarioPago
+    ? "/api/v1/responsable/pagos/desglose?usuario_id=" + encodeURIComponent(usuarioPago)
+      + "&desde=" + desdePago + "&hasta=" + hastaPago + "&moneda=" + moneda
+    : null);
+
   const [porcentajeManual, setPorcentajeManual] = useState("");
   const [saldosSeleccionados, setSaldosSeleccionados] = useState<string[]>([]);
   const [adelantosSeleccionados, setAdelantosSeleccionados] = useState<string[]>([]);
@@ -348,6 +357,21 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
           <label>Hasta <input type="date" value={hastaPago} onChange={(e) => { setHastaPago(e.target.value); setCotizacion(null); }} /></label>
           <button type="button" disabled={!usuarioPago} onClick={() => void cotizarPago()}>Calcular pago</button>
         </div>
+        {usuarioPago && <section className="panel-configuracion">
+          <h4>Producción documentada por cliente — vista preliminar</h4>
+          <p className="tenue">La producción no equivale a comisión liquidable hasta comprobar la condición histórica de retención de cada comprobante y la tarifa correspondiente.</p>
+          {desglose.error && <p role="alert">{desglose.error}</p>}
+          {desglose.datos && <>
+            <p>Producción registrada: <strong>{formatearMonto(moneda, desglose.datos.produccion_documentada)}</strong></p>
+            <p role="status">{desglose.datos.motivo_bloqueo}</p>
+            <table><thead><tr><th>RUC</th><th>Cliente / receptor</th><th>Expedientes</th><th>Producción</th></tr></thead>
+              <tbody>{desglose.datos.clientes.map((x) => <tr key={x.receptor_id}>
+                <td>{x.ruc}</td><td>{x.razon_social}</td><td>{x.expedientes}</td>
+                <td>{formatearMonto(moneda, x.produccion_documentada)}</td>
+              </tr>)}</tbody>
+            </table>
+          </>}
+        </section>}
         {usuarioPago && <>
           <h4>Saldos de compras pendientes por mes</h4>
           <div className="filtros">
