@@ -654,10 +654,12 @@ class FiltroOpcion(BaseModel):
     codigo: str
     nombre: str
     usuario_id: uuid.UUID | None = None
+    responsable_id: uuid.UUID | None = None
     porcentaje_produccion: Decimal | None = None
 
 
 class RegistroOpciones(BaseModel):
+    responsables: list[FiltroOpcion] = Field(default_factory=list)
     usuarios: list[FiltroOpcion]
     gestores: list[FiltroOpcion]
 
