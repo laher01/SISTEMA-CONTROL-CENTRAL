@@ -4,7 +4,9 @@ Revision ID: 0016
 Revises: 0015
 """
 from collections.abc import Sequence
+
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "0016"
@@ -14,7 +16,9 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("chat_mensajes", sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "chat_mensajes", sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True)
+    )
     op.add_column("chat_mensajes", sa.Column("eliminado_por_cuenta_id", sa.Uuid(), nullable=True))
     op.create_foreign_key(
         "fk_chat_eliminado_por_cuenta", "chat_mensajes", "cuentas_acceso",
