@@ -8,7 +8,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.core.config import Settings
 from app.enums import RolMiembro
@@ -115,12 +115,16 @@ def construir_contexto(
     if expediente_id is not None:
         _agregar_expediente(session, auth, contexto, expediente_id)
 
-    if seccion == "DOCUMENTOS":
+    if seccion == "REGISTROS":
+        _agregar_registros(session, auth, contexto)
+    elif seccion == "DOCUMENTOS":
         _agregar_documentos(session, auth, contexto)
     elif seccion == "EMPRESAS":
         _agregar_empresas(session, auth, contexto)
     elif seccion == "ORGANIZACION":
         _agregar_organizacion(session, auth, contexto)
+    elif seccion == "PRODUCCION":
+        _agregar_produccion(session, auth, contexto)
     elif seccion == "PAGOS":
         _agregar_pagos(session, auth, contexto, desde, hoy)
 
@@ -177,6 +181,182 @@ def _agregar_expediente(
             for documento in documentos
         ],
     }
+
+
+def _agregar_registros(
+    session: Session,
+    auth: ContextoAcceso,
+    contexto: ContextoNexus,
+) -> None:
+    emisor = aliased(Empresa)
+    receptor = aliased(Empresa)
+    condiciones = [
+        Expediente.tenant_id == auth.tenant_id,
+        Expediente.deleted_at.is_(None),
+        *condiciones_expedientes(session, auth),
+    ]
+    filtros = contexto.filtros
+
+    usuario_id = _uuid_filtro(filtros, "usuario_id")
+    gestor_id = _uuid_filtro(filtros, "gestor_id")
+    if usuario_id is not None and auth.rol in {
+        RolMiembro.SUPERADMIN,
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.GERENTE,
+        RolMiembro.SECRETARIA,
+    }:
+        condiciones.append(Expediente.usuario_id == usuario_id)
+    if gestor_id is not None and auth.rol in {
+        RolMiembro.SUPERADMIN,
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.GERENTE,
+        RolMiembro.SECRETARIA,
+        RolMiembro.USUARIO,
+    }:
+        condiciones.append(Expediente.gestor_id == gestor_id)
+
+    consulta = (
+        select(Expediente)
+        .join(emisor, Expediente.emisor_id == emisor.id)
+        .join(receptor, Expediente.receptor_id == receptor.id)
+        .where(*condiciones)
+    )
+    texto_emisor = _primer_filtro(filtros, "emisor")
+    if texto_emisor:
+        texto = texto_emisor.lower()
+        consulta = consulta.where(
+            func.lower(emisor.ruc).contains(texto, autoescape=True)
+            | func.lower(emisor.razon_social).contains(texto, autoescape=True)
+        )
+    texto_receptor = _primer_filtro(filtros, "receptor")
+    if texto_receptor:
+        texto = texto_receptor.lower()
+        consulta = consulta.where(
+            func.lower(receptor.ruc).contains(texto, autoescape=True)
+            | func.lower(receptor.razon_social).contains(texto, autoescape=True)
+        )
+
+    dia = _fecha_filtro(filtros, "dia")
+    desde = _fecha_filtro(filtros, "fecha_desde")
+    hasta = _fecha_filtro(filtros, "fecha_hasta")
+    mes = _primer_filtro(filtros, "mes")
+    if dia is not None:
+        consulta = consulta.where(Expediente.fecha_emision == dia)
+    if desde is not None:
+        consulta = consulta.where(Expediente.fecha_emision >= desde)
+    if hasta is not None:
+        consulta = consulta.where(Expediente.fecha_emision <= hasta)
+    if mes and re_full_mes(mes):
+        anio, numero_mes = (int(valor) for valor in mes.split("-", 1))
+        consulta = consulta.where(
+            func.extract("year", Expediente.fecha_emision) == anio,
+            func.extract("month", Expediente.fecha_emision) == numero_mes,
+        )
+
+    tipo_empresa = _primer_filtro(filtros, "tipo_empresa")
+    if tipo_empresa in {"A", "B"}:
+        consulta = consulta.where(emisor.clasificacion_proveedor == tipo_empresa)
+
+    base = consulta.subquery()
+    total = session.execute(
+        select(
+            func.count(base.c.id),
+            func.coalesce(
+                func.sum(
+                    func.case(
+                        (base.c.moneda == "PEN", base.c.importe_total),
+                        else_=0,
+                    )
+                ),
+                0,
+            ),
+            func.coalesce(
+                func.sum(
+                    func.case(
+                        (base.c.moneda == "USD", base.c.importe_total),
+                        else_=0,
+                    )
+                ),
+                0,
+            ),
+        )
+    ).one()
+
+    muestra = list(
+        session.scalars(
+            consulta.order_by(
+                Expediente.fecha_emision.desc(),
+                Expediente.created_at.desc(),
+            ).limit(8)
+        )
+    )
+    contexto.datos["registros_filtrados"] = {
+        "total_registros": int(total[0] or 0),
+        "total_pen": str(Decimal(total[1] or 0)),
+        "total_usd": str(Decimal(total[2] or 0)),
+        "muestra": [
+            {
+                "numero": f"{item.tipo_comprobante} {item.serie}-{item.correlativo}",
+                "fecha": item.fecha_emision.isoformat(),
+                "moneda": item.moneda,
+                "importe": str(item.importe_total),
+            }
+            for item in muestra
+        ],
+    }
+
+
+def _agregar_produccion(
+    session: Session,
+    auth: ContextoAcceso,
+    contexto: ContextoNexus,
+) -> None:
+    condiciones = [
+        Expediente.tenant_id == auth.tenant_id,
+        Expediente.deleted_at.is_(None),
+        *condiciones_expedientes(session, auth),
+    ]
+    filas = session.execute(
+        select(
+            Miembro.codigo,
+            Miembro.nombre,
+            Gestor.codigo,
+            Gestor.nombre,
+            Expediente.moneda,
+            func.count(Expediente.id),
+            func.coalesce(func.sum(Expediente.importe_total), 0),
+        )
+        .outerjoin(Miembro, Expediente.usuario_id == Miembro.id)
+        .outerjoin(Gestor, Expediente.gestor_id == Gestor.id)
+        .where(*condiciones)
+        .group_by(
+            Miembro.codigo,
+            Miembro.nombre,
+            Gestor.codigo,
+            Gestor.nombre,
+            Expediente.moneda,
+        )
+        .order_by(func.sum(Expediente.importe_total).desc())
+        .limit(12)
+    ).all()
+    contexto.datos["produccion_visible"] = [
+        {
+            "usuario": f"{usuario_codigo or 'SIN-USUARIO'} · {usuario_nombre or 'Sin usuario'}",
+            "gestor": f"{gestor_codigo or 'SIN-GESTOR'} · {gestor_nombre or 'Sin gestor'}",
+            "moneda": moneda,
+            "expedientes": int(cantidad),
+            "importe": str(Decimal(total or 0)),
+        }
+        for (
+            usuario_codigo,
+            usuario_nombre,
+            gestor_codigo,
+            gestor_nombre,
+            moneda,
+            cantidad,
+            total,
+        ) in filas
+    ]
 
 
 def _agregar_documentos(
@@ -488,6 +668,45 @@ def puede_ver_empresa(
         .limit(1)
     )
     return visible is not None
+
+
+def _primer_filtro(filtros: dict[str, list[str]], clave: str) -> str | None:
+    valores = filtros.get(clave)
+    if not valores:
+        return None
+    valor = valores[0].strip()
+    return valor or None
+
+
+def _uuid_filtro(filtros: dict[str, list[str]], clave: str) -> uuid.UUID | None:
+    valor = _primer_filtro(filtros, clave)
+    if valor is None:
+        return None
+    try:
+        return uuid.UUID(valor)
+    except ValueError:
+        return None
+
+
+def _fecha_filtro(filtros: dict[str, list[str]], clave: str) -> date | None:
+    valor = _primer_filtro(filtros, clave)
+    if valor is None:
+        return None
+    try:
+        return date.fromisoformat(valor)
+    except ValueError:
+        return None
+
+
+def re_full_mes(valor: str) -> bool:
+    if len(valor) != 7 or valor[4] != "-":
+        return False
+    try:
+        anio = int(valor[:4])
+        numero_mes = int(valor[5:])
+    except ValueError:
+        return False
+    return anio >= 2000 and 1 <= numero_mes <= 12
 
 
 def _seccion(path: str) -> str:
