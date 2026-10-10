@@ -127,6 +127,7 @@ def _raices() -> tuple[Path, ...]:
             unicas.append(raiz)
     return tuple(unicas)
 
+
 def _secciones(contenido: str) -> list[tuple[str, str]]:
     lineas = contenido.splitlines()
     secciones: list[tuple[str, str]] = []
