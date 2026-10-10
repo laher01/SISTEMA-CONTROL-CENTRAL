@@ -31,6 +31,9 @@ jobs:
       FC_DATABASE_URL: postgresql+psycopg://fact:fact@localhost:5432/fact_central
       FC_E2E_ISOLATED: "true"
       VITE_BACKEND_PROXY: http://127.0.0.1:8000
+      FC_E2E_TLS: "true"
+      FC_E2E_TLS_KEY: /tmp/fact-central-e2e-local.key
+      FC_E2E_TLS_CERT: /tmp/fact-central-e2e-local.crt
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -57,6 +60,12 @@ jobs:
           done
           cat "$RUNNER_TEMP/fastapi.log"
           exit 1
+      - name: Certificado HTTPS autofirmado exclusivamente para runner local
+        run: |
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout "$FC_E2E_TLS_KEY" -out "$FC_E2E_TLS_CERT" \
+            -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
       - name: Instalar frontend y navegador efímeros
         working-directory: frontend
         run: |
