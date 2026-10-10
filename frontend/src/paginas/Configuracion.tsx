@@ -880,6 +880,14 @@ function AdministracionesPanel() {
   const [nombreEspacio, setNombreEspacio] = useState("Administración Luis Arévalo Herrera");
   const [subdominio, setSubdominio] = useState("");
   const [nuevaCuenta, setNuevaCuenta] = useState<{ codigo: string; login: string; clave_temporal: string } | null>(null);
+  const [tenantSeleccionado, setTenantSeleccionado] = useState("");
+  const { datos: estructura, error: errorEstructura } = useDatos<{
+    nombre: string;
+    codigo: string;
+    miembros: { id: string; nombre: string; codigo: string; rol: string; activo: boolean; responsable_id: string | null }[];
+    gestores: { id: string; nombre: string; codigo: string; usuario_id: string | null }[];
+  }>(tenantSeleccionado ? `/api/v1/configuracion/administraciones/${tenantSeleccionado}/estructura` : "");
+
   const [mensaje, setMensaje] = useState("");
   const crear = async (evento: FormEvent) => {
     evento.preventDefault();
@@ -942,12 +950,31 @@ function AdministracionesPanel() {
         <thead><tr><th>Administración</th><th>Código</th><th>Subdominio</th><th>Origen</th><th>Estado</th><th>Identificador</th><th>Administradores</th><th>Gerentes</th><th>Secretaría</th><th>Usuarios</th><th>Gestores</th><th>Cuentas habilitadas</th></tr></thead>
         <tbody>{visibles.map((a) => (
           <tr key={a.id}>
-            <td>{a.nombre}</td><td>{a.codigo || "Legado"}</td><td>{a.subdominio || "Sin asignar"}</td><td>{a.origen}</td><td>{a.estado}</td><td>{a.id}</td><td>{a.administradores}</td>
+            <td><button type="button" onClick={() => setTenantSeleccionado(a.id)}>{a.nombre}</button></td><td>{a.codigo || "Legado"}</td><td>{a.subdominio || "Sin asignar"}</td><td>{a.origen}</td><td>{a.estado}</td><td>{a.id}</td><td>{a.administradores}</td>
             <td>{a.gerentes}</td><td>{a.secretarias}</td><td>{a.usuarios}</td>
             <td>{a.gestores}</td><td>{a.cuentas_activas}</td>
           </tr>
         ))}</tbody>
       </table>
+      {tenantSeleccionado && (
+        <section className="panel-configuracion">
+          <h4>Inspección global (solo lectura): {estructura?.nombre || "Cargando…"}</h4>
+          <button type="button" onClick={() => setTenantSeleccionado("")}>Cerrar inspección</button>
+          {errorEstructura && <p role="alert">{errorEstructura}</p>}
+          <h5>Personal de la Administración</h5>
+          <table><thead><tr><th>Nombre</th><th>Código</th><th>Rol</th><th>Estado</th></tr></thead>
+            <tbody>{(estructura?.miembros || []).map((m) => (
+              <tr key={m.id}><td>{m.nombre}</td><td>{m.codigo}</td><td>{m.rol}</td><td>{m.activo ? "Activo" : "Inactivo"}</td></tr>
+            ))}</tbody>
+          </table>
+          <h5>Gestores</h5>
+          <table><thead><tr><th>Nombre</th><th>Código</th><th>Usuario asignado</th></tr></thead>
+            <tbody>{(estructura?.gestores || []).map((g) => (
+              <tr key={g.id}><td>{g.nombre}</td><td>{g.codigo}</td><td>{g.usuario_id || "Sin asignar"}</td></tr>
+            ))}</tbody>
+          </table>
+        </section>
+      )}
       <p className="tenue">
         La edición, suspensión, creación y eliminación de Administraciones requiere
         incorporar estados de tenant, respaldo y auditoría. No se permite borrar
