@@ -16,7 +16,12 @@ from app.models import Empresa, Expediente
 from app.schemas import NexusChatOut, NexusFuente, NexusMensajeHistorial
 from app.security import ContextoAcceso
 from app.services.expedientes import documentos_faltantes, tipos_presentes
-from app.services.nexus_context import ContextoNexus, construir_contexto
+from app.services.nexus_context import (
+    ContextoNexus,
+    condiciones_expedientes,
+    construir_contexto,
+    puede_ver_expediente,
+)
 from app.services.nexus_knowledge import recuperar_conocimiento
 
 
@@ -328,7 +333,7 @@ def _responder_expediente(
             respuesta="No encuentro ese expediente dentro de tu ámbito.",
             accion="EXPEDIENTE_NO_DISPONIBLE",
         )
-    if not _puede_ver_expediente(auth, expediente):
+    if not puede_ver_expediente(session, auth, expediente):
         return NexusChatOut(
             respuesta="Ese expediente no pertenece a tu ámbito de acceso.",
             accion="EXPEDIENTE_NO_DISPONIBLE",
@@ -442,16 +447,15 @@ def _responder_totales(
 ) -> NexusChatOut:
     hoy = settings.hoy()
     desde = date(hoy.year, hoy.month, 1)
-    condiciones = [
-        Expediente.tenant_id == auth.tenant_id,
-        Expediente.deleted_at.is_(None),
-        Expediente.fecha_emision >= desde,
-        Expediente.fecha_emision <= hoy,
-    ]
-    if auth.rol == "GESTOR":
-        condiciones.append(Expediente.gestor_id == auth.gestor_id)
-    elif auth.rol == RolMiembro.USUARIO:
-        condiciones.append(Expediente.usuario_id == auth.usuario_id)
+    condiciones = condiciones_expedientes(session, auth)
+    condiciones.extend(
+        [
+            Expediente.tenant_id == auth.tenant_id,
+            Expediente.deleted_at.is_(None),
+            Expediente.fecha_emision >= desde,
+            Expediente.fecha_emision <= hoy,
+        ]
+    )
 
     filas = session.execute(
         select(
@@ -601,27 +605,3 @@ def _encontrar_razon_social(datos: dict[str, object]) -> str | None:
 def _extraer_ruc(texto: str) -> str | None:
     coincidencia = re.search(r"(?<!\d)(?:10|20)\d{9}(?!\d)", texto)
     return coincidencia.group(0) if coincidencia else None
-
-
-def _puede_ver_expediente(auth: ContextoAcceso, expediente: Expediente) -> bool:
-    if auth.rol == "GESTOR":
-        return expediente.gestor_id == auth.gestor_id
-    if auth.rol == RolMiembro.USUARIO:
-        return expediente.usuario_id == auth.usuario_id
-    return True
-
-
-def _contexto_basico(
-    session: Session,
-    auth: ContextoAcceso,
-    expediente_id: uuid.UUID | None,
-) -> str:
-    if expediente_id is None:
-        return f"sesión {auth.codigo} ({auth.rol})"
-    expediente = session.get(Expediente, expediente_id)
-    if expediente is None or not _puede_ver_expediente(auth, expediente):
-        return f"sesión {auth.codigo} ({auth.rol})"
-    return (
-        f"{expediente.tipo_comprobante} {expediente.serie}-{expediente.correlativo}, "
-        f"{expediente.moneda} {expediente.importe_total}"
-    )
