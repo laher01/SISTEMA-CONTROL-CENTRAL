@@ -44,7 +44,7 @@ Ninguna. No ejecutar el SQL del prototipo V10 contra producción.
 
 ## Pruebas
 - Pruebas de la política añadidas, **no ejecutadas todavía**. No se han ejecutado pruebas del repositorio integrado en esta rama.
-- V10: paquete local recuperado con tests históricos; requiere instalación y prueba aislada.
+- V10: paquete local recuperado y ejecutado el 2026-10-10 con `python -m pytest -q`: **76 passed in 0.80s** sobre el ZIP extraído localmente. Son pruebas del prototipo aislado, NO del backend FACT CENTRAL ni de PostgreSQL.
 - Pendientes: ruff, mypy, pytest, migraciones upgrade/downgrade staging, React build y E2E, aislamiento tenants/gerencias, regresión de expedientes, pagos y liquidaciones.
 
 ## Bloqueadores
@@ -59,6 +59,11 @@ Ninguna. No ejecutar el SQL del prototipo V10 contra producción.
 ## Estado de main y VPS
 - No integrado en `main`. VPS no modificada desde este trabajo.
 - `deploy-staging.yml` usa `push: main` y `workflow_dispatch`; fusionar a main puede iniciar despliegue, así que se prohíbe merge antes de la aprobación técnica y respaldo comprobado.
+
+## Verificación adicional de esta sesión
+- Se verificó existencia del paquete V10 en `/mnt/data/FACT_CENTRAL_CORREO_V10_LOCAL.zip` y se extrajo temporalmente.
+- `python -m pytest -q`: 76/76 aprobadas en entorno local. No se tocaron secretos ni servicios VPS.
+- PR #105 permanece borrador; ningún merge ni deployment.
 
 ## Siguiente tarea exacta
 1. Leer y comparar migraciones actuales, servicios de gestión de empresas y modelos de seguridad completos.
