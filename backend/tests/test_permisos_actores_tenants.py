@@ -11,9 +11,7 @@ from tests.conftest import AuthPrueba
 
 
 def _contacto(session: Session, tenant_id, codigo: str, rol: str) -> str:
-    miembro = Miembro(
-        tenant_id=tenant_id, codigo=codigo, nombre=codigo, rol=rol, activo=True
-    )
+    miembro = Miembro(tenant_id=tenant_id, codigo=codigo, nombre=codigo, rol=rol, activo=True)
     session.add(miembro)
     session.flush()
     cuenta = CuentaAcceso(
