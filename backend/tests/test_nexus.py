@@ -114,8 +114,8 @@ def test_nexus_motor_conversacional_recibe_contexto_historial_y_conocimiento(
     settings: Settings,
     monkeypatch,
 ) -> None:
-    settings.nexus_llm_url = "https://llm.example.test/chat"
-    settings.nexus_llm_model = "nexus-test"
+    monkeypatch.setattr(settings, "nexus_llm_url", "https://llm.example.test/chat")
+    monkeypatch.setattr(settings, "nexus_llm_model", "nexus-test")
     capturado: dict[str, object] = {}
 
     def falso_http(
