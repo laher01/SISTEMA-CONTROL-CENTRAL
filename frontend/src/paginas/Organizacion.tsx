@@ -94,7 +94,7 @@ function OrganizacionAdmin() {
   };
   const importarCartera = async () => {
     if (!gerenteCartera) { setMensaje("Seleccione un Gerente."); return; }
-    const filas = textoImportacion.split(/\\r?\\n/).map((l) => l.trim()).filter(Boolean);
+    const filas = textoImportacion.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     const empresasImportadas = filas.map((linea) => {
       const [ruc, razon_social, tipo_relacion = "SIN_CLASIFICAR"] = linea.split(";").map((v) => v.trim());
       return { ruc, razon_social, tipo_relacion: tipo_relacion.toUpperCase() };
