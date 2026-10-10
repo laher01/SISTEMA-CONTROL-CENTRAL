@@ -27,3 +27,6 @@ ADMIN01: altas de gerentes, secretarias, responsables, usuarios y gestores, y ad
 
 ## Bloqueos actuales
 El acceso operativo cruza tenant_id solo si se implementa una ruta autorizada expresamente. El repositorio actual conserva sesiones vinculadas a un tenant; disponer de rol SUPERADMIN no concede automáticamente acceso entre tenants.
+
+## Validación GitHub Actions
+No fusionar si Ruff, pytest, mypy, frontend o migraciones fallan. El primer CI del PR #101 detectó errores de formato; se corrigieron en la rama. Ejecutar CI nuevamente antes de despliegue.
