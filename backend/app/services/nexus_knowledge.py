@@ -63,9 +63,7 @@ def recuperar_conocimiento(
     for relativo, titulo, texto in _biblioteca():
         normal = _normalizar(f"{titulo} {texto}")
         puntaje = sum(
-            3 if termino in _normalizar(titulo) else 1
-            for termino in terminos
-            if termino in normal
+            3 if termino in _normalizar(titulo) else 1 for termino in terminos if termino in normal
         )
         if puntaje <= 0:
             continue
@@ -149,9 +147,30 @@ def _secciones(contenido: str) -> list[tuple[str, str]]:
 
 def _terminos(texto: str) -> set[str]:
     stop = {
-        "para", "como", "desde", "donde", "cuando", "porque", "por", "que",
-        "una", "uno", "unos", "unas", "del", "las", "los", "con", "sin",
-        "esta", "este", "esto", "quiero", "puede", "puedes", "nexus",
+        "para",
+        "como",
+        "desde",
+        "donde",
+        "cuando",
+        "porque",
+        "por",
+        "que",
+        "una",
+        "uno",
+        "unos",
+        "unas",
+        "del",
+        "las",
+        "los",
+        "con",
+        "sin",
+        "esta",
+        "este",
+        "esto",
+        "quiero",
+        "puede",
+        "puedes",
+        "nexus",
     }
     return {
         palabra
