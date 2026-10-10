@@ -28,17 +28,29 @@ def resumir_saldos(
     otros_egresos_confirmados: Decimal = Decimal("0"),
 ) -> ResumenResponsable:
     cantidades = (
-        por_cobrar_inicial, comisiones_gerencia, cobros_confirmados,
-        por_pagar_inicial, comisiones_usuarios, pagos_usuarios_confirmados,
-        anticipos_usuarios_aplicados, caja_inicial, otros_egresos_confirmados,
+        por_cobrar_inicial,
+        comisiones_gerencia,
+        cobros_confirmados,
+        por_pagar_inicial,
+        comisiones_usuarios,
+        pagos_usuarios_confirmados,
+        anticipos_usuarios_aplicados,
+        caja_inicial,
+        otros_egresos_confirmados,
     )
     if any(not x.is_finite() for x in cantidades):
         raise ValueError("Importes no finitos")
-    if any(x < 0 for x in (
-        comisiones_gerencia, cobros_confirmados, comisiones_usuarios,
-        pagos_usuarios_confirmados, anticipos_usuarios_aplicados,
-        otros_egresos_confirmados,
-    )):
+    if any(
+        x < 0
+        for x in (
+            comisiones_gerencia,
+            cobros_confirmados,
+            comisiones_usuarios,
+            pagos_usuarios_confirmados,
+            anticipos_usuarios_aplicados,
+            otros_egresos_confirmados,
+        )
+    ):
         raise ValueError("Movimientos negativos: registre reversión separada")
     return ResumenResponsable(
         por_cobrar=por_cobrar_inicial + comisiones_gerencia - cobros_confirmados,
@@ -47,7 +59,9 @@ def resumir_saldos(
             - pagos_usuarios_confirmados - anticipos_usuarios_aplicados
         ),
         caja=(
-            caja_inicial + cobros_confirmados
-            - pagos_usuarios_confirmados - otros_egresos_confirmados
+            caja_inicial
+            + cobros_confirmados
+            - pagos_usuarios_confirmados
+            - otros_egresos_confirmados
         ),
     )
