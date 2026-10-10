@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 
 import { enviarJson, useDatos } from "./api";
 import NexusFlotante from "./componentes/NexusFlotante";
+import AparienciaPersonal from "./componentes/AparienciaPersonal";
 import Alertas from "./paginas/Alertas";
 import Configuracion from "./paginas/Configuracion";
 import CarteraGerencia from "./paginas/CarteraGerencia";
@@ -123,6 +124,9 @@ const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = 
 export default function App() {
   const [modoBarra, setModoBarra] = useState<"AUTOMATICO" | "MANUAL">(() => window.localStorage.getItem("fc-sidebar-mode") === "MANUAL" ? "MANUAL" : "AUTOMATICO");
   const [barraAbierta, setBarraAbierta] = useState(false);
+  const aplicarModoPersonal = useCallback((modo: "AUTOMATICO" | "MANUAL") => {
+    setModoBarra(modo);
+  }, []);
   const cambiarModo = (modo: "AUTOMATICO" | "MANUAL") => {
     setModoBarra(modo);
     window.localStorage.setItem("fc-sidebar-mode", modo);
@@ -162,6 +166,7 @@ export default function App() {
     <div className="app">
       <aside className={`menu menu-ajustable ${barraAbierta ? "menu-abierto" : "menu-cerrado"}`} onMouseEnter={() => { if (modoBarra === "AUTOMATICO") setBarraAbierta(true); }} onMouseLeave={() => { if (modoBarra === "AUTOMATICO") setBarraAbierta(false); }}>
         <div className="barra-controles"><button type="button" className="barra-toggle" aria-label={barraAbierta ? "Contraer menú" : "Expandir menú"} aria-expanded={barraAbierta} title={barraAbierta ? "Contraer menú" : "Expandir menú"} onClick={() => setBarraAbierta(!barraAbierta)}>☰</button><div className="barra-opciones"><label htmlFor="modo-menu">Modo</label><select id="modo-menu" aria-label="Comportamiento del menú lateral" value={modoBarra} onChange={(e) => cambiarModo(e.target.value as "AUTOMATICO" | "MANUAL")}><option value="AUTOMATICO">Automático</option><option value="MANUAL">Manual</option></select></div></div>
+        <AparienciaPersonal onBarra={aplicarModoPersonal} />
         <h1 className="barra-texto">FACT CENTRAL</h1>
         <div className="sesion-resumen barra-texto">
           <strong>{sesion.codigo}</strong>
