@@ -2,7 +2,8 @@
 
 import hmac
 import re
-from typing import Literal
+import uuid
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
@@ -11,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep
 from app.enums import RolMiembro
-from app.models import CuentaAcceso, Gestor, Miembro, Tenant
+from app.models import CuentaAcceso, Documento, Empresa, Expediente, Gestor, Miembro, Tenant
 from app.security import crear_o_restablecer_cuenta
 from app.tenant_host import validar_subdominio
 
@@ -58,14 +59,56 @@ def listar_administraciones(
             .group_by(CuentaAcceso.tenant_id)
         )
     }
+
+    def contar(modelo: Any, *, condicion: Any = None) -> dict[uuid.UUID, int]:
+        consulta = select(modelo.tenant_id, func.count(modelo.id))
+        if hasattr(modelo, "deleted_at"):
+            consulta = consulta.where(modelo.deleted_at.is_(None))
+        if condicion is not None:
+            consulta = consulta.where(condicion)
+        return {
+            tenant_id: cantidad
+            for tenant_id, cantidad in session.execute(consulta.group_by(modelo.tenant_id))
+        }
+
+    documentos = contar(Documento)
+    expedientes = contar(Expediente)
+    empresas = contar(Empresa)
+    proveedores = contar(Empresa, condicion=Empresa.tipo_relacion.in_(("PROVEEDOR", "AMBOS")))
+    receptores = contar(
+        Empresa, condicion=Empresa.tipo_relacion.in_(("CLIENTE", "RECEPTOR", "AMBOS"))
+    )
+    accesos = {
+        tenant_id: login
+        for tenant_id, login in session.execute(
+            select(Miembro.tenant_id, func.min(CuentaAcceso.login))
+            .join(CuentaAcceso, CuentaAcceso.miembro_id == Miembro.id)
+            .where(
+                Miembro.rol == RolMiembro.ADMINISTRADOR,
+                Miembro.activo.is_(True),
+                Miembro.deleted_at.is_(None),
+                CuentaAcceso.activo.is_(True),
+                CuentaAcceso.deleted_at.is_(None),
+                CuentaAcceso.tenant_id == Miembro.tenant_id,
+            )
+            .group_by(Miembro.tenant_id)
+        )
+    }
     return [
         {
             "id": str(tenant.id),
             "nombre": tenant.nombre,
             "codigo": tenant.codigo or "",
             "subdominio": tenant.subdominio or "",
+            "login_administrador": accesos.get(tenant.id, ""),
             "origen": tenant.origen_alta,
             "estado": tenant.estado,
+            "documentos": documentos.get(tenant.id, 0),
+            "expedientes": expedientes.get(tenant.id, 0),
+            "empresas": empresas.get(tenant.id, 0),
+            "proveedores": proveedores.get(tenant.id, 0),
+            "receptores": receptores.get(tenant.id, 0),
+            "responsables": miembros.get((tenant.id, RolMiembro.RESPONSABLE), 0),
             "administradores": miembros.get((tenant.id, RolMiembro.ADMINISTRADOR), 0),
             "gerentes": miembros.get((tenant.id, RolMiembro.GERENTE), 0),
             "secretarias": miembros.get((tenant.id, RolMiembro.SECRETARIA), 0),

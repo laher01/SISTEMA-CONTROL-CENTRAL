@@ -1,0 +1,79 @@
+name: roles-real-integration
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - ".github/workflows/roles-real-integration.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: fact
+          POSTGRES_PASSWORD: fact
+          POSTGRES_DB: fact_central
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U fact"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      FC_DATABASE_URL: postgresql+psycopg://fact:fact@localhost:5432/fact_central
+      FC_E2E_ISOLATED: "true"
+      VITE_BACKEND_PROXY: http://127.0.0.1:8000
+      FC_E2E_TLS: "true"
+      FC_E2E_TLS_KEY: /tmp/fact-central-e2e-local.key
+      FC_E2E_TLS_CERT: /tmp/fact-central-e2e-local.crt
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar backend
+        working-directory: backend
+        run: uv sync --locked
+      - name: Crear base de pruebas y cuentas sintéticas
+        working-directory: backend
+        run: |
+          uv run alembic upgrade head
+          PYTHONPATH=. uv run python scripts/seed_roles_e2e.py
+      - name: Arrancar FastAPI local
+        working-directory: backend
+        run: |
+          uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 > "$RUNNER_TEMP/fastapi.log" 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8000/health; then exit 0; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/fastapi.log"
+          exit 1
+      - name: Certificado HTTPS autofirmado exclusivamente para runner local
+        run: |
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout "$FC_E2E_TLS_KEY" -out "$FC_E2E_TLS_CERT" \
+            -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+      - name: Instalar frontend y navegador efímeros
+        working-directory: frontend
+        run: |
+          npm ci
+          npm install --no-save --package-lock=false @playwright/test@1.58.2
+          npx playwright install --with-deps chromium
+      - name: Verificar autenticación y permisos contra FastAPI y PostgreSQL reales
+        working-directory: frontend
+        run: npx playwright test e2e/roles-real.spec.ts --browser chromium --reporter=line
+        env:
+          CI: "true"

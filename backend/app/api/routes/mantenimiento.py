@@ -15,6 +15,7 @@ from app.models import (
     CuentaAcceso,
     CuentaPagoERP,
     Documento,
+    EliminacionArchivoPendiente,
     Expediente,
     Miembro,
     PagoERP,
@@ -41,11 +42,11 @@ TIPOS = {
 }
 
 
-def _solo_superadmin(rol: str) -> None:
-    if rol != RolMiembro.SUPERADMIN:
+def _solo_administrador(rol: str) -> None:
+    if rol != RolMiembro.ADMINISTRADOR:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            "Solo SUPERADMIN puede ejecutar mantenimiento crítico",
+            "Solo el ADMINISTRADOR del tenant puede ejecutar mantenimiento crítico",
         )
 
 
@@ -122,7 +123,7 @@ def administradores(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> list[MantenimientoAdministradorOut]:
-    _solo_superadmin(auth.rol)
+    _solo_administrador(auth.rol)
     cuentas = list(
         session.scalars(
             select(CuentaAcceso).where(
@@ -134,7 +135,7 @@ def administradores(
     salida: list[MantenimientoAdministradorOut] = []
     for cuenta in cuentas:
         rol = _rol_cuenta(session, cuenta)
-        if rol not in {RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR}:
+        if rol != RolMiembro.ADMINISTRADOR:
             continue
         registros = {
             nombre: _contar(
@@ -180,7 +181,7 @@ def vista_previa(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> MantenimientoVistaPreviaOut:
-    _solo_superadmin(auth.rol)
+    _solo_administrador(auth.rol)
     _validar_seleccion(datos)
     totales = {
         nombre: _contar(session, TIPOS[nombre], _filtros(TIPOS[nombre], tenant_id, datos))
@@ -203,7 +204,7 @@ def limpiar(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> MantenimientoResultadoOut:
-    _solo_superadmin(auth.rol)
+    _solo_administrador(auth.rol)
     _validar_seleccion(datos)
     if datos.confirmacion != "ELIMINAR-DATOS-OPERATIVOS":
         raise HTTPException(
@@ -314,19 +315,69 @@ def limpiar(
             "ejecutado_at": datetime.now(UTC).isoformat(),
         },
     )
+    pendientes = [
+        EliminacionArchivoPendiente(tenant_id=tenant_id, ruta_storage=ruta)
+        for ruta in rutas_archivo
+    ]
+    session.add_all(pendientes)
     session.commit()
 
     archivos_eliminados = 0
-    for ruta in rutas_archivo:
-        try:
-            archivo = almacen.ruta_absoluta(ruta)
-            if archivo.exists():
-                archivo.unlink()
-                archivos_eliminados += 1
-        except (OSError, ValueError):
-            continue
+    for pendiente in pendientes:
+        if _intentar_eliminar_archivo(session, almacen, pendiente):
+            archivos_eliminados += 1
+    session.commit()
 
     return MantenimientoResultadoOut(
         eliminados=eliminados,
         archivos_eliminados=archivos_eliminados,
     )
+
+
+def _intentar_eliminar_archivo(
+    session: SessionDep, almacen: AlmacenDep, pendiente: EliminacionArchivoPendiente
+) -> bool:
+    """Reintento idempotente: si el archivo ya no existe se marca completado."""
+    pendiente.intentos += 1
+    try:
+        archivo = almacen.ruta_absoluta(pendiente.ruta_storage)
+        encontrado = archivo.exists()
+        if encontrado:
+            archivo.unlink()
+        pendiente.estado = "COMPLETADO"
+        pendiente.ultimo_error = None
+        pendiente.completado_at = datetime.now(UTC)
+        return encontrado
+    except (OSError, ValueError) as exc:
+        pendiente.estado = "PENDIENTE"
+        pendiente.ultimo_error = str(exc)[:500]
+        return False
+
+
+@router.post("/reintentar-archivos")
+def reintentar_archivos(
+    session: SessionDep,
+    almacen: AlmacenDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, int]:
+    _solo_administrador(auth.rol)
+    pendientes = list(
+        session.scalars(
+            select(EliminacionArchivoPendiente)
+            .where(
+                EliminacionArchivoPendiente.tenant_id == tenant_id,
+                EliminacionArchivoPendiente.estado == "PENDIENTE",
+            )
+            .order_by(EliminacionArchivoPendiente.created_at, EliminacionArchivoPendiente.id)
+            .limit(100)
+            .with_for_update(skip_locked=True)
+        )
+    )
+    completados = 0
+    for pendiente in pendientes:
+        _intentar_eliminar_archivo(session, almacen, pendiente)
+        if pendiente.estado == "COMPLETADO":
+            completados += 1
+    session.commit()
+    return {"procesados": len(pendientes), "completados": completados}

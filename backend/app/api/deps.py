@@ -49,6 +49,14 @@ def get_contexto_operativo(
             status.HTTP_403_FORBIDDEN,
             "Debe cambiar la clave temporal antes de continuar",
         )
+    if contexto.rol == "SUPERADMIN" and not (
+        request.url.path == "/api/v1/configuracion/administraciones"
+        or request.url.path.startswith("/api/v1/configuracion/administraciones/")
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "SUPERADMIN solo puede acceder a las funciones globales de plataforma",
+        )
     permitido_responsable = (
         (
             request.method == "PATCH"

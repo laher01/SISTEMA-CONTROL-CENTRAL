@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, select, text
 from sqlalchemy.orm import Session
 
-from app.models import Miembro, Tenant
+from app.models import CuentaAcceso, Miembro, Tenant
 from tests.conftest import AuthPrueba
 
 
@@ -34,4 +34,48 @@ def test_alta_administrador_desde_superadmin(
         )
         is not None
     )
+    cuenta_nueva = session.scalar(
+        select(CuentaAcceso).where(
+            CuentaAcceso.tenant_id == tenant.id,
+            CuentaAcceso.login == "ADMIN01",
+        )
+    )
+    assert cuenta_nueva is not None
+    assert cuenta_nueva.miembro_id is not None
+    assert cuenta_nueva.tenant_id != auth_prueba.contexto.tenant_id
+
+    inventario = client.get("/api/v1/configuracion/administraciones")
+    assert inventario.status_code == 200, inventario.text
+    tenants = inventario.json()
+    assert {item["id"] for item in tenants} == {
+        str(auth_prueba.contexto.tenant_id),
+        str(tenant.id),
+    }
+    assert next(item for item in tenants if item["id"] == str(tenant.id))["documentos"] == 0
+
+    # Comprobar inicio de sesión real: el ADMIN01 nuevo pertenece a su tenant.
+    login_nuevo = client.post(
+        "/api/v1/auth/login",
+        json={
+            "espacio": cuerpo["codigo"],
+            "login": cuerpo["login"],
+            "clave": cuerpo["clave_temporal"],
+        },
+    )
+    assert login_nuevo.status_code == 200, login_nuevo.text
+    assert login_nuevo.json()["rol"] == "ADMINISTRADOR"
+    assert login_nuevo.json()["codigo"] == "ADMIN01"
+    assert login_nuevo.json()["cambio_clave_obligatorio"] is True
+
+    # Las mismas credenciales no deben autenticar en el tenant original.
+    login_cruzado = client.post(
+        "/api/v1/auth/login",
+        json={
+            "espacio": "pruebas",
+            "login": cuerpo["login"],
+            "clave": cuerpo["clave_temporal"],
+        },
+    )
+    assert login_cruzado.status_code == 401, login_cruzado.text
+
     assert client.post("/api/v1/configuracion/administraciones", json=datos).status_code == 409

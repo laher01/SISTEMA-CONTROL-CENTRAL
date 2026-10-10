@@ -41,6 +41,9 @@ def test_chat_no_permita_contactos_entre_tenants(
     session.add(cuenta)
     session.commit()
     listado = client.get("/api/v1/chat/contactos")
+    if rol == "SUPERADMIN":
+        assert listado.status_code == 403, listado.text
+        return
     assert listado.status_code == 200, listado.text
     assert str(cuenta.id) not in {x["cuenta_id"] for x in listado.json()}
     enviado = client.post(

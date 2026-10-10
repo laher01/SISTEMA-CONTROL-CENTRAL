@@ -708,3 +708,15 @@ class CorreoMensaje(ConId, ConTenant, ConCreacion, Base):
     gestor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"), index=True)
     estado: Mapped[str] = mapped_column(String(32), default="PENDIENTE", server_default="PENDIENTE")
     error: Mapped[str | None] = mapped_column(String(500))
+
+
+class EliminacionArchivoPendiente(ConId, ConTenant, ConCreacion, Base):
+    """Cola transaccional de archivos cuyo documento se elimina por mantenimiento."""
+
+    __tablename__ = "eliminaciones_archivos_pendientes"
+
+    ruta_storage: Mapped[str] = mapped_column(String(500))
+    estado: Mapped[str] = mapped_column(String(20), default="PENDIENTE", server_default="PENDIENTE")
+    intentos: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    ultimo_error: Mapped[str | None] = mapped_column(String(500))
+    completado_at: Mapped[datetime | None]

@@ -22,7 +22,7 @@ const PERMISO = "ELIMINAR_REGISTROS";
 export default function Configuracion({ sesion }: { sesion: SesionActual }) {
   const [seccion, setSeccion] = useState<
     "permisos" | "acceso" | "empresas" | "mantenimiento" | "administraciones"
-  >("permisos");
+  >(sesion.rol === "SUPERADMIN" ? "administraciones" : "permisos");
   const { datos, error, cargando, recargar } = useDatos<PermisoConfigurado[]>(
     "/api/v1/configuracion/permisos",
   );
@@ -37,24 +37,28 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
 
   return (
     <>
-      <h2>Configuración</h2>
+      <h2>{sesion.rol === "SUPERADMIN" ? "Consola SaaS · Administración de tenants" : "Configuración de Administración"}</h2>
       <div className="acciones">
-        <button onClick={() => setSeccion("permisos")}>Permisos operativos</button>
-        {sesion.rol === "SUPERADMIN" && (
+        {sesion.rol !== "SUPERADMIN" && (
+          <button onClick={() => setSeccion("permisos")}>Permisos operativos</button>
+        )}
+        {sesion.rol === "ADMINISTRADOR" && (
           <>
-            <button onClick={() => setSeccion("administraciones")}>Administradores</button>
             <button onClick={() => setSeccion("acceso")}>Configuración de acceso</button>
             <button onClick={() => setSeccion("empresas")}>Empresas registradas</button>
             <button onClick={() => setSeccion("mantenimiento")}>Mantenimiento</button>
           </>
         )}
+        {sesion.rol === "SUPERADMIN" && (
+          <button onClick={() => setSeccion("administraciones")}>Administraciones SaaS</button>
+        )}
       </div>
 
-      {seccion === "permisos" && (
+      {seccion === "permisos" && sesion.rol !== "SUPERADMIN" && (
         <>
           <p className="tenue">
-            Administración controla permisos adicionales. SUPERADMIN hereda las capacidades
-            administrativas; la seguridad global se gestiona aparte.
+            La Administración controla los permisos operativos de su tenant.
+            SUPERADMIN administra únicamente la plataforma SaaS.
           </p>
           {cargando && <p>Cargando…</p>}
           {error && <p className="error">{error}</p>}
@@ -62,7 +66,7 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
             <h3>Catálogo de roles y responsabilidades</h3>
             <p className="tenue">Este catálogo muestra capacidades actuales y objetivos pendientes; el control efectivo depende siempre del backend.</p>
             <table><thead><tr><th>Rol</th><th>Ámbito de acceso</th><th>Estado técnico</th></tr></thead><tbody>
-              <tr><td>SUPERADMIN</td><td>Inventario global SaaS; operación según sesión de tenant</td><td>Implementado parcialmente</td></tr>
+              <tr><td>SUPERADMIN</td><td>Inventario global SaaS sin acceso operativo a tenants</td><td>Implementado parcialmente</td></tr>
               <tr><td>ADMINISTRADOR</td><td>Su propia Administración</td><td>Implementado</td></tr>
               <tr><td>GERENTE</td><td>Presupuestos y cobros del tenant</td><td>Falta restringir detalle subordinado</td></tr>
               <tr><td>SECRETARIA</td><td>Control documental transversal del tenant</td><td>Implementado parcialmente</td></tr>
@@ -106,9 +110,9 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
       )}
 
       {seccion === "administraciones" && sesion.rol === "SUPERADMIN" && <AdministracionesPanel />}
-      {seccion === "acceso" && sesion.rol === "SUPERADMIN" && <ConfiguracionAccesoPanel />}
-      {seccion === "empresas" && sesion.rol === "SUPERADMIN" && <EmpresasRegistradasPanel />}
-      {seccion === "mantenimiento" && sesion.rol === "SUPERADMIN" && <MantenimientoPanel />}
+      {seccion === "acceso" && sesion.rol === "ADMINISTRADOR" && <ConfiguracionAccesoPanel />}
+      {seccion === "empresas" && sesion.rol === "ADMINISTRADOR" && <EmpresasRegistradasPanel />}
+      {seccion === "mantenimiento" && sesion.rol === "ADMINISTRADOR" && <MantenimientoPanel />}
     </>
   );
 }
@@ -218,7 +222,7 @@ function ConfiguracionAccesoPanel() {
     <section className="panel-configuracion">
       <h3>Configuración de acceso</h3>
       <p className="tenue">
-        Exclusivo de SUPERADMIN. Aquí se controla quién puede solicitar acceso y qué
+        Exclusivo del ADMINISTRADOR del tenant. Aquí se controla quién puede solicitar acceso y qué
         protección externa está vigente.
       </p>
       {cargando && <p>Cargando…</p>}
@@ -606,7 +610,7 @@ function MantenimientoPanel() {
     <section className="panel-configuracion">
       <h3>Mantenimiento · Zona crítica</h3>
       <p className="tenue">
-        Exclusivo de SUPERADMIN. Selecciona primero el administrador responsable,
+        Exclusivo del ADMINISTRADOR del tenant. Selecciona primero el administrador responsable,
         los tipos de registros y el rango de fechas. La auditoría de la limpieza se conserva.
       </p>
 
@@ -785,7 +789,7 @@ function EmpresasRegistradasPanel() {
       <h3>Empresas registradas</h3>
       <p className="tenue">
         Las emisoras y receptoras detectadas quedan registradas aunque provengan de pruebas.
-        No forman parte de la limpieza general. Solo SUPERADMIN puede retirarlas manualmente
+        No forman parte de la limpieza general. Solo el ADMINISTRADOR del tenant puede retirarlas manualmente
         desde esta pantalla.
       </p>
 
@@ -856,6 +860,13 @@ function EmpresasRegistradasPanel() {
 
 
 interface AdministracionGlobal {
+  login_administrador: string;
+  documentos: number;
+  expedientes: number;
+  empresas: number;
+  proveedores: number;
+  receptores: number;
+  responsables: number;
   subdominio: string;
   id: string;
   nombre: string;
@@ -939,10 +950,10 @@ function AdministracionesPanel() {
       {error && <p role="alert">{error}</p>}
       <p>Total de Administraciones registradas: <strong>{datos?.length ?? 0}</strong></p>
       <table>
-        <thead><tr><th>Administración</th><th>Código</th><th>Subdominio</th><th>Origen</th><th>Estado</th><th>Identificador</th><th>Administradores</th><th>Gerentes</th><th>Secretaría</th><th>Usuarios</th><th>Gestores</th><th>Cuentas habilitadas</th></tr></thead>
+        <thead><tr><th>Administración</th><th>Código</th><th>Subdominio</th><th>Login administrador</th><th>Suscripción</th><th>Origen</th><th>Estado</th><th>Identificador</th><th>Documentos</th><th>Expedientes</th><th>Proveedores</th><th>Receptores</th><th>Responsables</th><th>Administradores</th><th>Gerentes</th><th>Secretaría</th><th>Usuarios</th><th>Gestores</th><th>Cuentas habilitadas</th></tr></thead>
         <tbody>{visibles.map((a) => (
           <tr key={a.id}>
-            <td>{a.nombre}</td><td>{a.codigo || "Legado"}</td><td>{a.subdominio || "Sin asignar"}</td><td>{a.origen}</td><td>{a.estado}</td><td>{a.id}</td><td>{a.administradores}</td>
+            <td>{a.nombre}</td><td>{a.codigo || "Legado"}</td><td>{a.subdominio || "Sin asignar"}</td><td>{a.login_administrador || "Sin cuenta"}</td><td>{a.estado_suscripcion === "NO_IMPLEMENTADO" ? "Pendiente de implementar" : a.estado_suscripcion}</td><td>{a.origen}</td><td>{a.estado}</td><td>{a.id}</td><td>{a.documentos}</td><td>{a.expedientes}</td><td>{a.proveedores}</td><td>{a.receptores}</td><td>{a.responsables}</td><td>{a.administradores}</td>
             <td>{a.gerentes}</td><td>{a.secretarias}</td><td>{a.usuarios}</td>
             <td>{a.gestores}</td><td>{a.cuentas_activas}</td>
           </tr>

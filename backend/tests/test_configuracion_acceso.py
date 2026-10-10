@@ -28,15 +28,15 @@ def configuracion_payload(
     }
 
 
-def test_configuracion_acceso_es_exclusiva_de_superadmin(
+def test_configuracion_acceso_es_exclusiva_de_administrador(
     client: TestClient,
     auth_prueba: AuthPrueba,
 ) -> None:
-    auth_prueba.como_admin()
+    auth_prueba.como_superadmin()
     respuesta = client.get("/api/v1/configuracion/acceso")
     assert respuesta.status_code == 403
 
-    auth_prueba.como_superadmin()
+    auth_prueba.como_admin()
     respuesta = client.get("/api/v1/configuracion/acceso")
     assert respuesta.status_code == 200
     datos = respuesta.json()
@@ -50,7 +50,7 @@ def test_superadmin_autoriza_correo_y_habilita_solicitudes(
     client: TestClient,
     auth_prueba: AuthPrueba,
 ) -> None:
-    auth_prueba.como_superadmin()
+    auth_prueba.como_admin()
 
     correo = client.post(
         "/api/v1/configuracion/acceso/correos",
@@ -85,7 +85,7 @@ def test_no_permite_solicitud_con_correo_no_autorizado(
     client: TestClient,
     auth_prueba: AuthPrueba,
 ) -> None:
-    auth_prueba.como_superadmin()
+    auth_prueba.como_admin()
     config = client.put(
         "/api/v1/configuracion/acceso",
         json=configuracion_payload(registro_publico=True),
@@ -107,7 +107,7 @@ def test_no_permite_desactivar_aprobacion_sin_verificacion_email(
     client: TestClient,
     auth_prueba: AuthPrueba,
 ) -> None:
-    auth_prueba.como_superadmin()
+    auth_prueba.como_admin()
     respuesta = client.put(
         "/api/v1/configuracion/acceso",
         json=configuracion_payload(registro_publico=True, requiere_aprobacion=False),
@@ -115,16 +115,19 @@ def test_no_permite_desactivar_aprobacion_sin_verificacion_email(
     assert respuesta.status_code == 409
 
 
-def test_mantenimiento_es_exclusivo_de_superadmin(
+def test_mantenimiento_es_exclusivo_de_administrador(
     client: TestClient,
     auth_prueba: AuthPrueba,
 ) -> None:
-    auth_prueba.como_admin()
+    auth_prueba.como_superadmin()
     respuesta = client.get("/api/v1/configuracion/mantenimiento/administradores")
     assert respuesta.status_code == 403
+    auth_prueba.como_admin()
+    respuesta = client.get("/api/v1/configuracion/mantenimiento/administradores")
+    assert respuesta.status_code == 200, respuesta.text
 
 
-def test_superadmin_previsualiza_y_limpia_por_administrador(
+def test_administrador_previsualiza_y_limpia_su_tenant(
     client: TestClient,
     session: Session,
     auth_prueba: AuthPrueba,
@@ -183,7 +186,7 @@ def test_superadmin_previsualiza_y_limpia_por_administrador(
     session.add_all([plan, cuenta_pago])
     session.commit()
 
-    auth_prueba.como_superadmin()
+    auth_prueba.como_admin()
     listado = client.get("/api/v1/configuracion/mantenimiento/administradores")
     assert listado.status_code == 200, listado.text
     fila = next(item for item in listado.json() if item["login"] == "ADMIN02")
@@ -210,3 +213,262 @@ def test_superadmin_previsualiza_y_limpia_por_administrador(
     )
     assert limpieza.status_code == 200, limpieza.text
     assert limpieza.json()["eliminados"] == {"planes": 1, "cuentas_pago": 1}
+
+
+def test_administrador_no_puede_modificar_cuenta_ni_revocar_sesion_de_otro_tenant(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from app.models import SesionAcceso, Tenant
+
+    tenant_externo = Tenant(nombre="TENANT EXTERNO AISLADO", codigo="EXTERNO-E2E", estado="ACTIVO")
+    session.add(tenant_externo)
+    session.flush()
+    miembro_externo = Miembro(
+        tenant_id=tenant_externo.id,
+        codigo="ADMIN-EXTERNO",
+        nombre="Administrador externo",
+        rol="ADMINISTRADOR",
+        activo=True,
+    )
+    session.add(miembro_externo)
+    session.flush()
+    cuenta_externa = CuentaAcceso(
+        tenant_id=tenant_externo.id,
+        login="ADMIN-EXTERNO",
+        password_hash="test-hash",
+        miembro_id=miembro_externo.id,
+        activo=True,
+        cambio_clave_obligatorio=False,
+    )
+    session.add(cuenta_externa)
+    session.flush()
+    sesion_externa = SesionAcceso(
+        tenant_id=tenant_externo.id,
+        cuenta_id=cuenta_externa.id,
+        token_hash="a" * 64,
+        rol_activo="ADMINISTRADOR",
+        expira_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    session.add(sesion_externa)
+    session.commit()
+
+    auth_prueba.como_admin()
+    base = "/api/v1/configuracion/acceso"
+    assert client.get(f"{base}/cuentas").status_code == 200
+    assert all(
+        item["id"] != str(cuenta_externa.id) for item in client.get(f"{base}/cuentas").json()
+    )
+    assert (
+        client.patch(f"{base}/cuentas/{cuenta_externa.id}", json={"activo": False}).status_code
+        == 404
+    )
+    assert client.post(f"{base}/cuentas/{cuenta_externa.id}/restablecer-clave").status_code == 404
+    assert client.delete(f"{base}/sesiones/{sesion_externa.id}").status_code == 404
+
+    session.refresh(cuenta_externa)
+    session.refresh(sesion_externa)
+    assert cuenta_externa.activo is True
+    assert sesion_externa.revocada_at is None
+
+
+def test_administrador_no_modifica_ni_elimina_empresas_ajenas(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    from app.models import Empresa, Tenant
+
+    ajeno = Tenant(nombre="OTRO ESPACIO EMPRESAS", codigo="OTRO-EMP", estado="ACTIVO")
+    session.add(ajeno)
+    session.flush()
+    empresa = Empresa(
+        tenant_id=ajeno.id,
+        ruc="20123456789",
+        razon_social="Empresa externa de prueba",
+        tipo_relacion="PROVEEDOR",
+    )
+    session.add(empresa)
+    session.commit()
+
+    auth_prueba.como_admin()
+    listado = client.get("/api/v1/empresas")
+    assert listado.status_code == 200, listado.text
+    assert all(fila["id"] != str(empresa.id) for fila in listado.json())
+
+    respuesta = client.patch(
+        f"/api/v1/empresas/{empresa.id}",
+        json={"razon_social": "No debe aplicarse"},
+    )
+    assert respuesta.status_code == 404, respuesta.text
+
+    respuesta = client.post(
+        "/api/v1/empresas/eliminar-seleccion",
+        json={"empresa_ids": [str(empresa.id)]},
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["eliminadas"] == 0
+    session.refresh(empresa)
+    assert empresa.deleted_at is None
+    assert empresa.razon_social == "Empresa externa de prueba"
+
+
+def test_administrador_no_accede_a_documento_de_otro_tenant(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    from app.models import Documento, Tenant
+
+    externo = Tenant(nombre="OTRO ESPACIO DOCUMENTAL", codigo="OTRO-DOC", estado="ACTIVO")
+    session.add(externo)
+    session.flush()
+    documento = Documento(
+        tenant_id=externo.id,
+        sha256="b" * 64,
+        nombre_original="externo.pdf",
+        mime_type="application/pdf",
+        tamano_bytes=10,
+        ruta_storage="externo/no-accesible.pdf",
+        estado="PENDIENTE",
+    )
+    session.add(documento)
+    session.commit()
+
+    auth_prueba.como_admin()
+    for sufijo in ("", "/archivo"):
+        respuesta = client.get(f"/api/v1/documentos/{documento.id}{sufijo}")
+        assert respuesta.status_code == 404, respuesta.text
+
+    respuesta = client.delete(f"/api/v1/documentos/{documento.id}")
+    assert respuesta.status_code == 404, respuesta.text
+
+    session.refresh(documento)
+    assert documento.deleted_at is None
+
+
+def test_limpieza_rechaza_confirmacion_invalida_sin_borrar_datos(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    from app.models import Documento
+
+    auth_prueba.como_admin()
+    documento = Documento(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        creado_por_cuenta_id=auth_prueba.contexto.cuenta_id,
+        sha256="c" * 64,
+        nombre_original="conservar.pdf",
+        mime_type="application/pdf",
+        tamano_bytes=1,
+        ruta_storage="pruebas/conservar.pdf",
+        estado="PENDIENTE",
+    )
+    session.add(documento)
+    session.commit()
+
+    seleccion = {
+        "cuenta_ids": [str(auth_prueba.contexto.cuenta_id)],
+        "incluir_sin_trazabilidad": False,
+        "tipos": ["documentos"],
+        "fecha_desde": None,
+        "fecha_hasta": None,
+    }
+    respuesta = client.post(
+        "/api/v1/configuracion/mantenimiento/limpiar",
+        json={**seleccion, "confirmacion": "CONFIRMACION-INCORRECTA"},
+    )
+    assert respuesta.status_code == 422, respuesta.text
+    session.refresh(documento)
+    assert documento.deleted_at is None
+    assert session.get(Documento, documento.id) is not None
+
+
+def test_limpieza_fallo_de_archivo_deja_pendiente_recuperacion(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba, settings, monkeypatch
+) -> None:
+    from pathlib import Path
+
+    from app.models import Documento, EliminacionArchivoPendiente
+
+    auth_prueba.como_admin()
+    ruta = settings.storage_dir / "pruebas" / "pendiente.pdf"
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.write_bytes(b"archivo ficticio")
+    documento = Documento(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        creado_por_cuenta_id=auth_prueba.contexto.cuenta_id,
+        sha256="d" * 64,
+        nombre_original="pendiente.pdf",
+        mime_type="application/pdf",
+        tamano_bytes=16,
+        ruta_storage="pruebas/pendiente.pdf",
+        estado="PENDIENTE",
+    )
+    session.add(documento)
+    session.commit()
+    documento_id = documento.id
+
+    def fallar_borrado(self: Path, *args, **kwargs) -> None:
+        raise OSError("fallo simulado del almacenamiento")
+
+    monkeypatch.setattr(Path, "unlink", fallar_borrado)
+    respuesta = client.post(
+        "/api/v1/configuracion/mantenimiento/limpiar",
+        json={
+            "cuenta_ids": [str(auth_prueba.contexto.cuenta_id)],
+            "incluir_sin_trazabilidad": False,
+            "tipos": ["documentos"],
+            "fecha_desde": None,
+            "fecha_hasta": None,
+            "confirmacion": "ELIMINAR-DATOS-OPERATIVOS",
+        },
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["eliminados"]["documentos"] == 1
+    assert respuesta.json()["archivos_eliminados"] == 0
+    assert ruta.exists()
+    session.expire_all()
+    assert session.get(Documento, documento_id) is None
+    pendiente = (
+        session.query(EliminacionArchivoPendiente)
+        .filter_by(tenant_id=auth_prueba.contexto.tenant_id)
+        .one()
+    )
+    assert pendiente.estado == "PENDIENTE"
+    assert pendiente.intentos == 1
+    assert pendiente.ultimo_error is not None
+
+    monkeypatch.undo()
+    reintento = client.post("/api/v1/configuracion/mantenimiento/reintentar-archivos")
+    assert reintento.status_code == 200, reintento.text
+    assert reintento.json() == {"procesados": 1, "completados": 1}
+    session.refresh(pendiente)
+    assert pendiente.estado == "COMPLETADO"
+    assert pendiente.intentos == 2
+    assert not ruta.exists()
+    segundo = client.post("/api/v1/configuracion/mantenimiento/reintentar-archivos")
+    assert segundo.json() == {"procesados": 0, "completados": 0}
+
+
+def test_reintento_archivos_no_procesa_otro_tenant(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba, settings
+) -> None:
+    from app.models import EliminacionArchivoPendiente, Tenant
+
+    externo = Tenant(nombre="TENANT REINTENTO EXTERNO", codigo="REINTENTO-OTRO", estado="ACTIVO")
+    session.add(externo)
+    session.flush()
+    ruta = settings.storage_dir / "externo" / "pendiente.txt"
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.write_bytes(b"archivo de otro tenant")
+    pendiente = EliminacionArchivoPendiente(
+        tenant_id=externo.id, ruta_storage="externo/pendiente.txt"
+    )
+    session.add(pendiente)
+    session.commit()
+
+    auth_prueba.como_admin()
+    respuesta = client.post("/api/v1/configuracion/mantenimiento/reintentar-archivos")
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json() == {"procesados": 0, "completados": 0}
+    session.refresh(pendiente)
+    assert pendiente.estado == "PENDIENTE"
+    assert pendiente.intentos == 0
+    assert ruta.exists()

@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import aliased
 
-from app.api.deps import AuthDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
+from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.enums import Moneda, RolMiembro, TipoDocumento
 from app.models import Empresa, Expediente, Gestor, Miembro
 from app.schemas import FiltroOpcion, RegistroFila, RegistroOpciones, RegistroResumen
@@ -31,14 +31,13 @@ _OPCIONALES_BASE = [
 def opciones(
     session: SessionDep,
     tenant_id: TenantDep,
-    auth: AuthDep,
+    auth: OperativeAuthDep,
 ) -> RegistroOpciones:
     responsables: list[FiltroOpcion] = []
     usuarios: list[FiltroOpcion] = []
     gestores: list[FiltroOpcion] = []
 
     if auth.rol in (
-        RolMiembro.SUPERADMIN,
         RolMiembro.ADMINISTRADOR,
         RolMiembro.GERENTE,
         RolMiembro.SECRETARIA,
