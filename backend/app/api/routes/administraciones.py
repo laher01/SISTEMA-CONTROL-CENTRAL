@@ -58,6 +58,7 @@ def listar_administraciones(
             .group_by(CuentaAcceso.tenant_id)
         )
     }
+
     def contar(modelo, *, condicion=None):
         consulta = select(modelo.tenant_id, func.count(modelo.id))
         if hasattr(modelo, "deleted_at"):
