@@ -427,9 +427,11 @@ def test_limpieza_fallo_de_archivo_deja_pendiente_recuperacion(
     assert ruta.exists()
     session.expire_all()
     assert session.get(Documento, documento_id) is None
-    pendiente = session.query(EliminacionArchivoPendiente).filter_by(
-        tenant_id=auth_prueba.contexto.tenant_id
-    ).one()
+    pendiente = (
+        session.query(EliminacionArchivoPendiente)
+        .filter_by(tenant_id=auth_prueba.contexto.tenant_id)
+        .one()
+    )
     assert pendiente.estado == "PENDIENTE"
     assert pendiente.intentos == 1
     assert pendiente.ultimo_error is not None
