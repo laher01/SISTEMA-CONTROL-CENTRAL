@@ -152,8 +152,12 @@ def mis_usuarios_responsable(
 class AltaUsuarioResponsableIn(BaseModel):
     nombre: str
     porcentaje_produccion: Decimal | None = None
-    porcentaje_con_agente: Decimal | None = Field(default=None, ge=0, le=100, max_digits=7, decimal_places=4)
-    porcentaje_sin_agente: Decimal | None = Field(default=None, ge=0, le=100, max_digits=7, decimal_places=4)
+    porcentaje_con_agente: Decimal | None = Field(
+        default=None, ge=0, le=100, max_digits=7, decimal_places=4
+    )
+    porcentaje_sin_agente: Decimal | None = Field(
+        default=None, ge=0, le=100, max_digits=7, decimal_places=4
+    )
 
 
 @router.post(
@@ -196,8 +200,16 @@ def crear_usuario_responsable(
         rol=RolMiembro.USUARIO,
         responsable_id=responsable.id,
         porcentaje_produccion=porcentaje,
-        porcentaje_con_agente=(datos.porcentaje_con_agente if datos.porcentaje_con_agente is not None else porcentaje),
-        porcentaje_sin_agente=(datos.porcentaje_sin_agente if datos.porcentaje_sin_agente is not None else porcentaje),
+        porcentaje_con_agente=(
+            datos.porcentaje_con_agente
+            if datos.porcentaje_con_agente is not None
+            else porcentaje
+        ),
+        porcentaje_sin_agente=(
+            datos.porcentaje_sin_agente
+            if datos.porcentaje_sin_agente is not None
+            else porcentaje
+        ),
         activo=True,
         creado_por_cuenta_id=auth.cuenta_id,
     )
