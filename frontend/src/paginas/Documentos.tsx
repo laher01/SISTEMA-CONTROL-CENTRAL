@@ -29,6 +29,7 @@ type ResultadoLote = {
 
 export default function Documentos({ sesion }: { sesion: SesionActual }) {
   const [parametros, setParametros] = useSearchParams();
+  const responsableId = parametros.get("responsable_id") ?? "";
   const usuarioId = parametros.get("usuario_id") ?? "";
   const gestorId = parametros.get("gestor_id") ?? "";
   const estado = parametros.get("estado") ?? "";
@@ -43,6 +44,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
 
   const ruta = conParametros("/api/v1/documentos", {
     estado,
+    responsable_id: responsableId,
     usuario_id: usuarioId,
     gestor_id: gestorId,
     tipo_empresa: tipoEmpresa,
@@ -63,6 +65,9 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
     total_usd: string;
   }>(conParametros("/api/v1/documentos/resumen", {
     estado,
+    responsable_id: responsableId,
+    usuario_id: usuarioId,
+    gestor_id: gestorId,
     tipo_empresa: tipoEmpresa,
     dia,
     tipo_documento: tipo,
@@ -97,6 +102,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
     if (valor) siguiente.set(clave, valor);
     else siguiente.delete(clave);
     if (clave === "usuario_id") siguiente.delete("gestor_id");
+    if (clave === "responsable_id") { siguiente.delete("usuario_id"); siguiente.delete("gestor_id"); }
     if (clave !== "pagina") siguiente.delete("pagina");
     setParametros(siguiente);
   };
@@ -129,7 +135,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
       {errorLote && <p className="error">{errorLote}</p>}
 
       <div className="filtros filtros-documentos">
-        <FiltroJerarquia sesion={sesion} usuarioId={usuarioId} gestorId={gestorId} cambiar={cambiar} />
+        <FiltroJerarquia sesion={sesion} responsableId={responsableId} usuarioId={usuarioId} gestorId={gestorId} cambiar={cambiar} />
         <select aria-label="Tipo de empresa" value={tipoEmpresa} onChange={(e) => cambiar("tipo_empresa", e.target.value)}>
           <option value="">Todas las empresas</option>
           <option value="A">Tipo A</option>
