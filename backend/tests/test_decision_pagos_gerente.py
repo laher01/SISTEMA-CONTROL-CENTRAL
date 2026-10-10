@@ -53,7 +53,10 @@ def test_gerente_incorpora_historicos_con_auditoria_y_aislamiento(
         "hasta": "2026-08-31", "moneda": "PEN",
     }
     sesion_gerente(other_g)
-    assert client.post("/api/v1/pagos-responsables/incorporar-historicos", json=args).status_code == 403
+    assert (
+        client.post("/api/v1/pagos-responsables/incorporar-historicos", json=args).status_code
+        == 403
+    )
     sesion_gerente(global_g)
     r = client.post("/api/v1/pagos-responsables/incorporar-historicos", json=args)
     assert r.status_code == 200, r.text
@@ -62,7 +65,10 @@ def test_gerente_incorpora_historicos_con_auditoria_y_aislamiento(
     session.refresh(pendientes[1])
     assert pendientes[0].gerente_id == global_g.id
     assert pendientes[1].gerente_id == other_g.id
-    assert client.post("/api/v1/pagos-responsables/incorporar-historicos", json=args).status_code == 422
+    assert (
+        client.post("/api/v1/pagos-responsables/incorporar-historicos", json=args).status_code
+        == 422
+    )
     resumen = client.get("/api/v1/pagos-responsables/resumen", params={
         "desde": "2026-08-01", "hasta": "2026-08-31", "moneda": "PEN",
     })
