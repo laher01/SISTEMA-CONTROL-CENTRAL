@@ -191,6 +191,72 @@ def crear_usuario_responsable(
     )
 
 
+class EdicionUsuarioResponsableIn(BaseModel):
+    nombre: str
+
+
+def _usuario_de_mi_equipo(
+    session: SessionDep,
+    tenant_id: uuid.UUID,
+    auth: OperativeAuthDep,
+    usuario_id: uuid.UUID,
+) -> Miembro:
+    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
+    usuario = session.get(Miembro, usuario_id)
+    if (
+        usuario is None
+        or usuario.tenant_id != tenant_id
+        or usuario.responsable_id != auth.miembro_id
+        or usuario.rol != RolMiembro.USUARIO
+        or usuario.deleted_at is not None
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuario no pertenece a este equipo")
+    return usuario
+
+
+@router.patch("/mis-usuarios/{usuario_id}", response_model=MiembroOut)
+def editar_mi_usuario(
+    usuario_id: uuid.UUID,
+    datos: EdicionUsuarioResponsableIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> Miembro:
+    usuario = _usuario_de_mi_equipo(session, tenant_id, auth, usuario_id)
+    nombre = " ".join(datos.nombre.strip().split())
+    if not 3 <= len(nombre) <= 200:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Nombre inválido")
+    usuario.nombre = nombre
+    session.commit()
+    session.refresh(usuario)
+    return usuario
+
+
+@router.post(
+    "/mis-usuarios/{usuario_id}/restablecer-acceso",
+    response_model=CredencialTemporalOut,
+)
+def restablecer_acceso_mi_usuario(
+    usuario_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> CredencialTemporalOut:
+    usuario = _usuario_de_mi_equipo(session, tenant_id, auth, usuario_id)
+    if not usuario.activo:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Usuario inactivo")
+    try:
+        _, temporal = crear_o_restablecer_cuenta(
+            session, tenant_id, usuario.codigo, miembro_id=usuario.id
+        )
+        session.commit()
+    except ValueError as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    return CredencialTemporalOut(login=usuario.codigo, clave_temporal=temporal)
+
+
 class AsignacionAdministradorIn(BaseModel):
     administrador_id: uuid.UUID | None
 
