@@ -23,8 +23,8 @@ from app.api.routes import (
     pagos_gestores,
     pagos_responsables,
     produccion,
-    registros,
     recepcion_correo,
+    registros,
     responsable,
 )
 from app.core.config import get_settings
