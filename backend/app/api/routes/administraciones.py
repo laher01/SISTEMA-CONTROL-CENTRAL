@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep
 from app.enums import RolMiembro
-from app.models import CuentaAcceso, Gestor, Miembro, Tenant
+from app.models import CuentaAcceso, Documento, Empresa, Expediente, Gestor, Miembro, Tenant
 from app.security import crear_o_restablecer_cuenta
 from app.tenant_host import validar_subdominio
 
@@ -58,6 +58,19 @@ def listar_administraciones(
             .group_by(CuentaAcceso.tenant_id)
         )
     }
+    def contar(modelo, *, condicion=None):
+        consulta = select(modelo.tenant_id, func.count(modelo.id))
+        if hasattr(modelo, "deleted_at"):
+            consulta = consulta.where(modelo.deleted_at.is_(None))
+        if condicion is not None:
+            consulta = consulta.where(condicion)
+        return dict(session.execute(consulta.group_by(modelo.tenant_id)))
+
+    documentos = contar(Documento)
+    expedientes = contar(Expediente)
+    empresas = contar(Empresa)
+    proveedores = contar(Empresa, condicion=Empresa.tipo_relacion.in_(("PROVEEDOR", "AMBOS")))
+    receptores = contar(Empresa, condicion=Empresa.tipo_relacion.in_(("CLIENTE", "RECEPTOR", "AMBOS")))
     return [
         {
             "id": str(tenant.id),
@@ -66,6 +79,12 @@ def listar_administraciones(
             "subdominio": tenant.subdominio or "",
             "origen": tenant.origen_alta,
             "estado": tenant.estado,
+            "documentos": documentos.get(tenant.id, 0),
+            "expedientes": expedientes.get(tenant.id, 0),
+            "empresas": empresas.get(tenant.id, 0),
+            "proveedores": proveedores.get(tenant.id, 0),
+            "receptores": receptores.get(tenant.id, 0),
+            "responsables": miembros.get((tenant.id, RolMiembro.RESPONSABLE), 0),
             "administradores": miembros.get((tenant.id, RolMiembro.ADMINISTRADOR), 0),
             "gerentes": miembros.get((tenant.id, RolMiembro.GERENTE), 0),
             "secretarias": miembros.get((tenant.id, RolMiembro.SECRETARIA), 0),
