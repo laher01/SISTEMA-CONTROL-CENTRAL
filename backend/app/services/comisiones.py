@@ -59,12 +59,8 @@ def comision_por_condicion_retencion(
     contractuales del Usuario/Gestor.
     """
     tasas = {
-        receptor_id: (
-            TASA_AGENTE_RETENCION if agente_retencion else TASA_SIN_AGENTE_RETENCION
-        )
+        receptor_id: (TASA_AGENTE_RETENCION if agente_retencion else TASA_SIN_AGENTE_RETENCION)
         for receptor_id, (_, agente_retencion) in produccion.items()
     }
     montos = {receptor_id: monto for receptor_id, (monto, _) in produccion.items()}
-    return calcular_comisiones_por_receptor(
-        montos, porcentajes_por_receptor=tasas
-    )
+    return calcular_comisiones_por_receptor(montos, porcentajes_por_receptor=tasas)
