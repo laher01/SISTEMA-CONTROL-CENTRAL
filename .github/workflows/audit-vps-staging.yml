@@ -46,8 +46,8 @@ jobs:
           set -Eeuo pipefail
           test -f deploy/.env.production
           compose=(docker compose --env-file deploy/.env.production -f deploy/docker-compose.production.yml)
-          "${compose[@]}" ps
-          "${compose[@]}" exec -T db sh -c 'printf "DB=%s USER=%s\n" "$POSTGRES_DB" "$POSTGRES_USER"'
+          "${compose[@]}" ps </dev/null
+          "${compose[@]}" exec -T db sh -c 'printf "DB=%s USER=%s\n" "$POSTGRES_DB" "$POSTGRES_USER"' </dev/null
           dir="deploy/backups/audit"
           mkdir -p "$dir"
           chmod 700 "$dir"
@@ -55,7 +55,7 @@ jobs:
           file="$dir/factcentral_${stamp}.dump"
           tmp="$file.partial"
           trap 'rm -f "$tmp"' EXIT
-          "${compose[@]}" exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$tmp"
+          "${compose[@]}" exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' </dev/null > "$tmp"
           test -s "$tmp"
           "${compose[@]}" exec -T db pg_restore --list < "$tmp" >/dev/null
           mv "$tmp" "$file"
