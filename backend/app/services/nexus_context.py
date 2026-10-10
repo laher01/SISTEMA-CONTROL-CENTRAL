@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, aliased
 
 from app.core.config import Settings
@@ -263,7 +263,7 @@ def _agregar_registros(
             func.count(base.c.id),
             func.coalesce(
                 func.sum(
-                    func.case(
+                    case(
                         (base.c.moneda == "PEN", base.c.importe_total),
                         else_=0,
                     )
