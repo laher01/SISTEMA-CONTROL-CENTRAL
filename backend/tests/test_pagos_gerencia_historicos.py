@@ -50,6 +50,14 @@ def test_pagos_consolidados_historicos_y_privacidad(
                 gerente_id=gerente,
             )
         )
+    session.add(
+        Expediente(
+            tenant_id=tenant_id, emisor_id=cliente.id, receptor_id=cliente.id,
+            tipo_comprobante="FACT", serie="F001", correlativo="103",
+            fecha_emision=date(2026, 9, 19), moneda="PEN",
+            importe_total=Decimal("50"), usuario_id=None, gerente_id=None,
+        )
+    )
     session.commit()
 
     def iniciar(gerente: Miembro) -> None:
@@ -67,8 +75,15 @@ def test_pagos_consolidados_historicos_y_privacidad(
         "/api/v1/pagos/consolidado", params={**params, "agrupar": "CLIENTE"}
     )
     assert consolidado.status_code == 200, consolidado.text
-    assert Decimal(consolidado.json()["total"]) == Decimal("300")
-    assert consolidado.json()["filas"][0]["registros"] == 2
+    assert Decimal(consolidado.json()["total"]) == Decimal("350")
+    assert consolidado.json()["filas"][0]["registros"] == 3
+
+    por_responsable = client.get(
+        "/api/v1/pagos/consolidado", params={**params, "agrupar": "RESPONSABLE"}
+    )
+    assert por_responsable.status_code == 200, por_responsable.text
+    assert Decimal(por_responsable.json()["total"]) == Decimal("350")
+    assert any(f["id"] == "sin-responsable" for f in por_responsable.json()["filas"])
 
     clientes = client.get("/api/v1/pagos/clientes")
     responsables = client.get("/api/v1/pagos/responsables")
@@ -80,7 +95,7 @@ def test_pagos_consolidados_historicos_y_privacidad(
     liquidacion = client.get("/api/v1/pagos-responsables/resumen", params=params)
     assert liquidacion.status_code == 200, liquidacion.text
     assert Decimal(liquidacion.json()["total_produccion"]) == Decimal("200")
-    assert Decimal(liquidacion.json()["total_pendiente_atribucion"]) == Decimal("100")
+    assert Decimal(liquidacion.json()["total_pendiente_atribucion"]) == Decimal("150")
     assert Decimal(liquidacion.json()["total_comisiones"]) < Decimal("100")
 
     iniciar(gerente_dos)
