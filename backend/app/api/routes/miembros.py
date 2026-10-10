@@ -139,8 +139,10 @@ def crear_responsable_operativo(
     auth: OperativeAuthDep,
 ) -> AltaMiembroOut:
     if auth.rol not in (
-        RolMiembro.GERENTE, RolMiembro.SECRETARIA,
-        RolMiembro.ADMINISTRADOR, RolMiembro.SUPERADMIN,
+        RolMiembro.GERENTE,
+        RolMiembro.SECRETARIA,
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.SUPERADMIN,
     ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin permiso para crear Responsables")
     nombre = " ".join(datos.nombre.strip().split())
