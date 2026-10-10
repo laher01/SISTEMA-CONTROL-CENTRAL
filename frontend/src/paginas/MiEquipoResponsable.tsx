@@ -210,6 +210,11 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   };
   const nombreUsuario = (id: string) =>
     equipo?.usuarios.find((u) => u.id === id)?.codigo ?? "Usuario";
+  const usuarioElegido = (datos ?? []).find((u) => u.id === usuarioPago);
+  const requiereMotorDual = Boolean(usuarioElegido && (
+    usuarioElegido.porcentaje_sin_retencion !== null
+    || usuarioElegido.porcentaje_con_retencion !== null
+  ));
   const pedidos = (equipo?.pedidos ?? []).filter((p) => p.moneda === moneda);
   const clientes = (equipo?.clientes ?? []).filter((p) => p.moneda === moneda);
   const pagos = (equipo?.pagos ?? []).filter((p) => p.moneda === moneda);
@@ -355,8 +360,13 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
           </select></label>
           <label>Desde <input type="date" value={desdePago} onChange={(e) => { setDesdePago(e.target.value); setCotizacion(null); }} /></label>
           <label>Hasta <input type="date" value={hastaPago} onChange={(e) => { setHastaPago(e.target.value); setCotizacion(null); }} /></label>
-          <button type="button" disabled={!usuarioPago} onClick={() => void cotizarPago()}>Calcular pago</button>
+          <button type="button" disabled={!usuarioPago || requiereMotorDual} onClick={() => void cotizarPago()}>Calcular pago</button>
         </div>
+        {requiereMotorDual && <p role="status" className="tenue">
+          La programación automática está temporalmente bloqueada: faltan clasificación
+          histórica de retención por factura y cálculo de tarifas duales. Consulte abajo
+          el desglose documental. No use una tarifa manual para reemplazarlo.
+        </p>}
         {usuarioPago && <section className="panel-configuracion">
           <h4>Producción documentada por cliente — vista preliminar</h4>
           <p className="tenue">La producción no equivale a comisión liquidable hasta comprobar la condición histórica de retención de cada comprobante y la tarifa correspondiente.</p>
@@ -406,9 +416,9 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
               onChange={(e) => setObservacionAdelantos(e.target.value)}
               placeholder="Motivo para dejar adelantos pendientes" />
           </label>
-          <label>% de producción (vacío = asignado al Usuario)
+          <label>% único del sistema anterior (no aplica a tarifas duales)
             <input type="number" min="0" max="100" step="0.0001"
-              value={porcentajeManual} onChange={(e) => { setPorcentajeManual(e.target.value); setCotizacion(null); }}
+              disabled={requiereMotorDual} value={porcentajeManual} onChange={(e) => { setPorcentajeManual(e.target.value); setCotizacion(null); }}
               placeholder="Porcentaje predeterminado" />
           </label>
         </>}
