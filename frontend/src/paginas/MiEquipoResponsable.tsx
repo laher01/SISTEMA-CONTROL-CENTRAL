@@ -9,6 +9,8 @@ interface UsuarioResponsable {
   nombre: string;
   rol: string;
   activo: boolean;
+  porcentaje_sin_retencion: string | null;
+  porcentaje_con_retencion: string | null;
 }
 interface Equipo {
   usuarios: { id: string; codigo: string; nombre: string }[];
@@ -48,13 +50,21 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const [credencialNueva, setCredencialNueva] = useState<{ login: string; clave_temporal: string } | null>(null);
   const [errorAlta, setErrorAlta] = useState("");
   const [editandoId, setEditandoId] = useState("");
+  const [tasaSinEditar, setTasaSinEditar] = useState("");
+  const [tasaConEditar, setTasaConEditar] = useState("");
+  const [tasaSinNueva, setTasaSinNueva] = useState("");
+  const [tasaConNueva, setTasaConNueva] = useState("");
   const [nombreEdicion, setNombreEdicion] = useState("");
   const [actualizandoUsuario, setActualizandoUsuario] = useState(false);
   const editarUsuario = async () => {
     if (!editandoId || nombreEdicion.trim().length < 3) return;
     setActualizandoUsuario(true);
     try {
-      await enviarJson(`/api/v1/miembros/mis-usuarios/${editandoId}`, "PATCH", { nombre: nombreEdicion.trim() });
+      await enviarJson(`/api/v1/miembros/mis-usuarios/${editandoId}`, "PATCH", {
+        nombre: nombreEdicion.trim(),
+        porcentaje_sin_retencion: tasaSinEditar === "" ? null : tasaSinEditar,
+        porcentaje_con_retencion: tasaConEditar === "" ? null : tasaConEditar,
+      });
       setEditandoId("");
       recargar(); recargarEquipo();
       setMensaje("Usuario actualizado.");
@@ -87,6 +97,8 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
         "/api/v1/miembros/mis-usuarios", "POST", {
           nombre: nombreNuevo,
           porcentaje_produccion: porcentajeNuevo,
+          porcentaje_sin_retencion: tasaSinNueva === "" ? null : tasaSinNueva,
+          porcentaje_con_retencion: tasaConNueva === "" ? null : tasaConNueva,
         },
       );
       setCredencialNueva(alta.credencial);
@@ -224,6 +236,14 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
             <input type="number" min="0" max="100" step="0.0001" required
               value={porcentajeNuevo} onChange={(e) => setPorcentajeNuevo(e.target.value)} />
           </label>
+          <label>% sin agente de retención
+            <input type="number" min="0" max="100" step="0.0001" value={tasaSinNueva}
+              onChange={(e) => setTasaSinNueva(e.target.value)} placeholder="Pendiente de definir" />
+          </label>
+          <label>% con agente de retención
+            <input type="number" min="0" max="100" step="0.0001" value={tasaConNueva}
+              onChange={(e) => setTasaConNueva(e.target.value)} placeholder="Pendiente de definir" />
+          </label>
           <button type="submit" disabled={creandoUsuario}>
             {creandoUsuario ? "Creando…" : "Crear Usuario"}
           </button>
@@ -238,13 +258,15 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
         </div>}
       </section>}
       {pestana === "USUARIOS" && <table>
-        <thead><tr><th>Código de acceso</th><th>Nombre</th><th>Estado</th><th>Clientes con expedientes</th><th>Acciones</th></tr></thead>
+        <thead><tr><th>Código de acceso</th><th>Nombre</th><th>Estado</th><th>Clientes con expedientes</th><th>% sin retención</th><th>% con retención</th><th>Acciones</th></tr></thead>
         <tbody>{(datos ?? []).map((u) => (
           <tr key={u.id}><td>{u.codigo}</td><td>{u.nombre}</td>
             <td>{u.activo ? "Activo" : "Inactivo"}</td>
             <td>{new Set(equipo?.clientes.filter((c) => c.usuario_id === u.id).map((c) => c.receptor_id) ?? []).size}</td>
+            <td>{u.porcentaje_sin_retencion ?? "Pendiente"}%</td>
+            <td>{u.porcentaje_con_retencion ?? "Pendiente"}%</td>
             <td>
-              <button type="button" onClick={() => { setEditandoId(u.id); setNombreEdicion(u.nombre); }}>Editar</button>{" "}
+              <button type="button" onClick={() => { setEditandoId(u.id); setNombreEdicion(u.nombre); setTasaSinEditar(u.porcentaje_sin_retencion ?? ""); setTasaConEditar(u.porcentaje_con_retencion ?? ""); }}>Editar</button>{" "}
               <button type="button" disabled={!u.activo} onClick={() => void restablecerUsuario(u.id)}>Restablecer clave</button>
             </td>
           </tr>
@@ -255,6 +277,8 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
         <div className="filtros">
           <label>Nombre completo <input value={nombreEdicion} minLength={3} maxLength={200}
             onChange={(e) => setNombreEdicion(e.target.value)} /></label>
+          <label>% sin retención <input type="number" min="0" max="100" step="0.0001" value={tasaSinEditar} onChange={(e) => setTasaSinEditar(e.target.value)} /></label>
+          <label>% con retención <input type="number" min="0" max="100" step="0.0001" value={tasaConEditar} onChange={(e) => setTasaConEditar(e.target.value)} /></label>
           <button type="button" disabled={actualizandoUsuario || nombreEdicion.trim().length < 3}
             onClick={() => void editarUsuario()}>Guardar cambios</button>
           <button type="button" onClick={() => setEditandoId("")}>Cancelar</button>
