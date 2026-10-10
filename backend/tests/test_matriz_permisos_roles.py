@@ -11,7 +11,7 @@ from tests.conftest import AuthPrueba
 @pytest.mark.parametrize(
     ("rol", "esperado"),
     [
-        ("SUPERADMIN", 200),
+        ("SUPERADMIN", 403),
         ("ADMINISTRADOR", 200),
         ("GERENTE", 403),
         ("SECRETARIA", 403),
@@ -79,3 +79,29 @@ def test_roles_no_admin_no_asignan_gerencias(
         },
     )
     assert respuesta.status_code == 403, respuesta.text
+
+
+@pytest.mark.parametrize(
+    ("ruta", "metodo"),
+    [
+        ("/api/v1/documentos", "GET"),
+        ("/api/v1/expedientes", "GET"),
+        ("/api/v1/empresas", "GET"),
+        ("/api/v1/miembros", "GET"),
+        ("/api/v1/configuracion/acceso", "GET"),
+    ],
+)
+def test_superadmin_no_accede_a_api_operativa(
+    client: TestClient, auth_prueba: AuthPrueba, ruta: str, metodo: str
+) -> None:
+    auth_prueba.como_superadmin()
+    respuesta = client.request(metodo, ruta)
+    assert respuesta.status_code == 403, respuesta.text
+
+
+def test_superadmin_conserva_inventario_global(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    auth_prueba.como_superadmin()
+    respuesta = client.get("/api/v1/configuracion/administraciones")
+    assert respuesta.status_code == 200, respuesta.text
