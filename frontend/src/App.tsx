@@ -24,6 +24,7 @@ import PagoGestores from "./paginas/PagoGestores";
 import Pendientes from "./paginas/Pendientes";
 import Produccion from "./paginas/Produccion";
 import Registros from "./paginas/Registros";
+import RecepcionCorreo from "./paginas/RecepcionCorreo";
 import ResumenEmpresas from "./paginas/ResumenEmpresas";
 import ResponsablesOperativos from "./paginas/ResponsablesOperativos";
 import Secretaria from "./paginas/Secretaria";
@@ -33,6 +34,7 @@ import type { SesionActual } from "./tipos";
 type RolSesion = SesionActual["rol"];
 
 const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = [
+  { a: "/recepcion-correo", texto: "Recepción de correo", icono: "✉", roles: ["RESPONSABLE", "GESTOR"] },
   { a: "/resumen-empresas", texto: "Resumen empresas", icono: "▤", roles: ["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA", "GESTOR", "USUARIO", "RESPONSABLE", "GERENTE"] },
   { a: "/crear-gestores", texto: "Creador de Gestor", icono: "♙", roles: ["USUARIO"] },
   { a: "/responsables-operativos", texto: "Crear Responsables", icono: "♙", roles: ["GERENTE", "SECRETARIA"] },
@@ -200,6 +202,7 @@ export default function App() {
           <Route path="/ingresar" element={<Navigate to="/" replace />} />
           <Route path="/subir" element={<Subir sesion={sesion} />} />
           <Route path="/registros" element={<Registros sesion={sesion} />} />
+          <Route path="/recepcion-correo" element={<RecepcionCorreo sesion={sesion} />} />
           <Route path="/chat" element={<Chat />} />
           <Route path="/secretaria" element={["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA"].includes(sesion.rol) ? <Secretaria /> : <Navigate to="/" replace />} />
           <Route path="/documentos" element={<Documentos sesion={sesion} />} />
