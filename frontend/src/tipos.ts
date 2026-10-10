@@ -418,10 +418,12 @@ export interface FiltroOpcion {
   codigo: string;
   nombre: string;
   usuario_id: string | null;
+  responsable_id?: string | null;
   porcentaje_produccion: string | null;
 }
 
 export interface RegistroOpciones {
+  responsables?: FiltroOpcion[];
   usuarios: FiltroOpcion[];
   gestores: FiltroOpcion[];
 }
