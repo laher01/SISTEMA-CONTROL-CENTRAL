@@ -40,6 +40,7 @@ async function entrar(page: import("@playwright/test").Page, rol: Rol) {
   await page.getByLabel("Usuario o correo").fill(rol === "SUPERADMIN" ? "SUPADMIN01" : "ADMIN01");
   await page.getByLabel("Clave").fill("ClaveTemporal123!");
   await page.getByRole("button", { name: "Iniciar sesión" }).click();
+  await page.goto("/configuracion");
   await expect(page.getByRole("heading", { name: rol === "SUPERADMIN"
     ? /Consola SaaS/ : /Configuración de Administración/ })).toBeVisible();
 }
