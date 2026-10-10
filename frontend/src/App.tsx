@@ -23,6 +23,7 @@ import PagoGestores from "./paginas/PagoGestores";
 import Pendientes from "./paginas/Pendientes";
 import Produccion from "./paginas/Produccion";
 import Registros from "./paginas/Registros";
+import ResumenEmpresas from "./paginas/ResumenEmpresas";
 import Secretaria from "./paginas/Secretaria";
 import Subir from "./paginas/Subir";
 import type { SesionActual } from "./tipos";
@@ -30,6 +31,9 @@ import type { SesionActual } from "./tipos";
 type RolSesion = SesionActual["rol"];
 
 const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = [
+  { a: "/resumen-empresas", texto: "Resumen empresas", icono: "▤", roles: ["GESTOR", "USUARIO", "RESPONSABLE", "GERENTE"] },
+  { a: "/crear-gestores", texto: "Creador de Gestor", icono: "♙", roles: ["USUARIO"] },
+  { a: "/crear-usuarios", texto: "Crear Usuarios", icono: "♙", roles: ["RESPONSABLE"] },
   { a: "/mi-cartera", texto: "Mi cartera comercial", icono: "▥", roles: ["GERENTE"] },
   { a: "/mi-equipo", texto: "Mis Usuarios", icono: "♙", roles: ["RESPONSABLE"] },
   { a: "/mi-equipo/pedidos", texto: "Pedidos", icono: "▤", roles: ["RESPONSABLE"] },
@@ -204,6 +208,9 @@ export default function App() {
           <Route path="/pago-gestores" element={<PagoGestores />} />
           <Route path="/comisiones" element={<Comisiones sesion={sesion} />} />
           <Route path="/organizacion" element={<Organizacion sesion={sesion} />} />
+          <Route path="/crear-gestores" element={<Organizacion sesion={sesion} />} />
+          <Route path="/crear-usuarios" element={<MiEquipoResponsable />} />
+          <Route path="/resumen-empresas" element={<ResumenEmpresas />} />
           <Route path="/mi-cartera" element={<CarteraGerencia />} />
           <Route path="/produccion" element={<Produccion />} />
           <Route path="/pagos" element={<Pagos sesion={sesion} />} />
