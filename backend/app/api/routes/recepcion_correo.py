@@ -1,7 +1,5 @@
 """Administración de buzones y remitentes; sin credenciales OAuth en base de datos."""
 
-import uuid
-
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -30,7 +28,11 @@ def _correo(valor: str) -> str:
 
 
 @router.get("/buzones")
-def listar_buzones(session: SessionDep, tenant_id: TenantDep, auth: AuthDep) -> list[dict[str, str | bool]]:
+def listar_buzones(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: AuthDep
+) -> list[dict[str, str | bool]]:
     if auth.rol != "RESPONSABLE" or auth.miembro_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo el Responsable administra sus buzones")
     buzon = session.scalars(
@@ -45,7 +47,12 @@ def listar_buzones(session: SessionDep, tenant_id: TenantDep, auth: AuthDep) -> 
 
 
 @router.post("/buzones", status_code=status.HTTP_201_CREATED)
-def registrar_buzon(session: SessionDep, tenant_id: TenantDep, auth: AuthDep, datos: BuzonIn) -> dict[str, str]:
+def registrar_buzon(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: AuthDep,
+    datos: BuzonIn
+) -> dict[str, str]:
     if auth.rol != "RESPONSABLE" or auth.miembro_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo el Responsable administra buzones")
     miembro = session.scalar(
@@ -70,7 +77,11 @@ def registrar_buzon(session: SessionDep, tenant_id: TenantDep, auth: AuthDep, da
 
 
 @router.get("/remitentes")
-def listar_remitentes(session: SessionDep, tenant_id: TenantDep, auth: AuthDep) -> list[dict[str, str | bool]]:
+def listar_remitentes(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: AuthDep
+) -> list[dict[str, str | bool]]:
     if auth.rol != "GESTOR" or auth.gestor_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Gestor consulta sus remitentes")
     rows = session.scalars(select(CorreoRemitente).where(
@@ -80,7 +91,12 @@ def listar_remitentes(session: SessionDep, tenant_id: TenantDep, auth: AuthDep) 
 
 
 @router.post("/remitentes", status_code=status.HTTP_201_CREATED)
-def registrar_remitente(session: SessionDep, tenant_id: TenantDep, auth: AuthDep, datos: RemitenteIn) -> dict[str, str]:
+def registrar_remitente(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: AuthDep,
+    datos: RemitenteIn
+) -> dict[str, str]:
     if auth.rol != "GESTOR" or auth.gestor_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Gestor registra remitentes")
     gestor = session.scalar(select(Gestor.id).where(
