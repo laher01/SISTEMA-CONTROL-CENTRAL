@@ -387,7 +387,10 @@ def cotizar_pago_usuario(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "Indique el porcentaje histórico de cada saldo seleccionado",
         )
-    if any(not tasa.is_finite() or tasa < 0 or tasa > 100 for tasa in datos.porcentajes_saldos.values()):
+    if any(
+        not tasa.is_finite() or tasa < 0 or tasa > 100
+        for tasa in datos.porcentajes_saldos.values()
+    ):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "Porcentaje histórico inválido"
         )
@@ -451,7 +454,10 @@ def programar_pago_usuario(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "Indique el porcentaje histórico de cada saldo seleccionado",
         )
-    if any(not tasa.is_finite() or tasa < 0 or tasa > 100 for tasa in datos.porcentajes_saldos.values()):
+    if any(
+        not tasa.is_finite() or tasa < 0 or tasa > 100
+        for tasa in datos.porcentajes_saldos.values()
+    ):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "Porcentaje histórico inválido"
         )
@@ -527,7 +533,9 @@ def programar_pago_usuario(
                 {"id": str(s.id), "mes": s.periodo_mes.isoformat(), "monto": str(s.monto)}
                 for s in saldos
             ],
-            "tasas_saldos_historicos": {str(s.id): str(datos.porcentajes_saldos[s.id]) for s in saldos},
+            "tasas_saldos_historicos": {
+                str(s.id): str(datos.porcentajes_saldos[s.id]) for s in saldos
+            },
             "adelantos_descontados": [{"id": str(a.id), "monto": str(a.monto)} for a in adelantos],
             "adelantos_omitidos": omitidos,
             "observacion_adelantos": datos.observacion_adelantos,
