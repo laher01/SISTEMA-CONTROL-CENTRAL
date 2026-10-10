@@ -2,7 +2,8 @@
 
 import hmac
 import re
-from typing import Literal
+import uuid
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
@@ -59,13 +60,16 @@ def listar_administraciones(
         )
     }
 
-    def contar(modelo, *, condicion=None):
+    def contar(modelo: Any, *, condicion: Any = None) -> dict[uuid.UUID, int]:
         consulta = select(modelo.tenant_id, func.count(modelo.id))
         if hasattr(modelo, "deleted_at"):
             consulta = consulta.where(modelo.deleted_at.is_(None))
         if condicion is not None:
             consulta = consulta.where(condicion)
-        return dict(session.execute(consulta.group_by(modelo.tenant_id)))
+        return {
+            tenant_id: cantidad
+            for tenant_id, cantidad in session.execute(consulta.group_by(modelo.tenant_id))
+        }
 
     documentos = contar(Documento)
     expedientes = contar(Expediente)
@@ -74,8 +78,9 @@ def listar_administraciones(
     receptores = contar(
         Empresa, condicion=Empresa.tipo_relacion.in_(("CLIENTE", "RECEPTOR", "AMBOS"))
     )
-    accesos = dict(
-        session.execute(
+    accesos = {
+        tenant_id: login
+        for tenant_id, login in session.execute(
             select(Miembro.tenant_id, func.min(CuentaAcceso.login))
             .join(CuentaAcceso, CuentaAcceso.miembro_id == Miembro.id)
             .where(
@@ -88,7 +93,7 @@ def listar_administraciones(
             )
             .group_by(Miembro.tenant_id)
         )
-    )
+    }
     return [
         {
             "id": str(tenant.id),
