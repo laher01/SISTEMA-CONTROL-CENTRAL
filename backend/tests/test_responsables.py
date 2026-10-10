@@ -187,3 +187,49 @@ def test_responsable_edita_y_restablece_solo_su_usuario(
     assert reset.status_code == 200, reset.text
     assert reset.json()["login"] == "USR-EDIT"
     assert len(reset.json()["clave_temporal"]) >= 8
+
+
+def test_desglose_responsable_no_calcula_comision_sin_evidencia(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    tenant_id = auth_prueba.contexto.tenant_id
+    responsable = Miembro(
+        tenant_id=tenant_id, codigo="RESP-DESG", nombre="Responsable desglose",
+        rol="RESPONSABLE", activo=True,
+    )
+    ajeno = Miembro(
+        tenant_id=tenant_id, codigo="RESP-OTDESG", nombre="Otro responsable",
+        rol="RESPONSABLE", activo=True,
+    )
+    session.add_all([responsable, ajeno])
+    session.flush()
+    propio = Miembro(
+        tenant_id=tenant_id, codigo="USR-DESG", nombre="Usuario desglose",
+        rol="USUARIO", responsable_id=responsable.id, activo=True,
+        porcentaje_sin_retencion=1.5, porcentaje_con_retencion=1.0,
+    )
+    otro_usuario = Miembro(
+        tenant_id=tenant_id, codigo="USR-OTDESG", nombre="Usuario ajeno",
+        rol="USUARIO", responsable_id=ajeno.id, activo=True,
+    )
+    session.add_all([propio, otro_usuario])
+    session.commit()
+    auth_prueba.contexto = ContextoAcceso(
+        cuenta_id=auth_prueba.contexto.cuenta_id, tenant_id=tenant_id,
+        rol="RESPONSABLE", miembro_id=responsable.id, gestor_id=None,
+        usuario_id=None, codigo=responsable.codigo, nombre=responsable.nombre,
+        cambio_clave_obligatorio=False,
+    )
+    ruta = "/api/v1/responsable/pagos/desglose"
+    filtros = {"desde": "2026-10-01", "hasta": "2026-10-31", "moneda": "PEN"}
+    respuesta = client.get(ruta, params={**filtros, "usuario_id": str(propio.id)})
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["produccion_documentada"] == "0"
+    assert respuesta.json()["comision_liquidable"] is None
+    assert respuesta.json()["clientes"] == []
+    assert client.get(
+        ruta, params={**filtros, "usuario_id": str(otro_usuario.id)}
+    ).status_code == 403
+    assert client.get(
+        ruta, params={**filtros, "usuario_id": str(propio.id), "moneda": "EUR"}
+    ).status_code == 422
