@@ -215,7 +215,6 @@ def test_administrador_previsualiza_y_limpia_su_tenant(
     assert limpieza.json()["eliminados"] == {"planes": 1, "cuentas_pago": 1}
 
 
-
 def test_administrador_no_puede_modificar_cuenta_ni_revocar_sesion_de_otro_tenant(
     client: TestClient, session: Session, auth_prueba: AuthPrueba
 ) -> None:
@@ -223,9 +222,7 @@ def test_administrador_no_puede_modificar_cuenta_ni_revocar_sesion_de_otro_tenan
 
     from app.models import SesionAcceso, Tenant
 
-    tenant_externo = Tenant(
-        nombre="TENANT EXTERNO AISLADO", codigo="EXTERNO-E2E", estado="ACTIVO"
-    )
+    tenant_externo = Tenant(nombre="TENANT EXTERNO AISLADO", codigo="EXTERNO-E2E", estado="ACTIVO")
     session.add(tenant_externo)
     session.flush()
     miembro_externo = Miembro(
@@ -261,22 +258,19 @@ def test_administrador_no_puede_modificar_cuenta_ni_revocar_sesion_de_otro_tenan
     base = "/api/v1/configuracion/acceso"
     assert client.get(f"{base}/cuentas").status_code == 200
     assert all(
-        item["id"] != str(cuenta_externa.id)
-        for item in client.get(f"{base}/cuentas").json()
+        item["id"] != str(cuenta_externa.id) for item in client.get(f"{base}/cuentas").json()
     )
-    assert client.patch(
-        f"{base}/cuentas/{cuenta_externa.id}", json={"activo": False}
-    ).status_code == 404
-    assert client.post(
-        f"{base}/cuentas/{cuenta_externa.id}/restablecer-clave"
-    ).status_code == 404
+    assert (
+        client.patch(f"{base}/cuentas/{cuenta_externa.id}", json={"activo": False}).status_code
+        == 404
+    )
+    assert client.post(f"{base}/cuentas/{cuenta_externa.id}/restablecer-clave").status_code == 404
     assert client.delete(f"{base}/sesiones/{sesion_externa.id}").status_code == 404
 
     session.refresh(cuenta_externa)
     session.refresh(sesion_externa)
     assert cuenta_externa.activo is True
     assert sesion_externa.revocada_at is None
-
 
 
 def test_administrador_no_modifica_ni_elimina_empresas_ajenas(
@@ -316,7 +310,6 @@ def test_administrador_no_modifica_ni_elimina_empresas_ajenas(
     session.refresh(empresa)
     assert empresa.deleted_at is None
     assert empresa.razon_social == "Empresa externa de prueba"
-
 
 
 def test_administrador_no_accede_a_documento_de_otro_tenant(
