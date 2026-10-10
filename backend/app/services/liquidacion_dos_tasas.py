@@ -7,7 +7,6 @@ de retención de SUNAT. No se mezclan monedas ni se modifica el expediente.
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
-
 CENTIMO = Decimal("0.01")
 
 
