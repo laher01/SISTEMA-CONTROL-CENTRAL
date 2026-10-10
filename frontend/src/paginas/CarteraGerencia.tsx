@@ -3,7 +3,8 @@ import { useState, type FormEvent } from "react";
 import { enviarJson, useDatos } from "../api";
 import type { Empresa } from "../tipos";
 
-type Cartera = { id: string; empresa_id: string; gerente_id: string; activo: boolean };
+type Cartera = { id: string; empresa_id: string; gerente_id: string; activo: boolean;
+  alias_comercial: string | null; rol_comercial: string | null };
 
 export default function CarteraGerencia() {
   const { datos: cartera, recargar } = useDatos<Cartera[]>("/api/v1/gerencias/empresas");
@@ -13,6 +14,9 @@ export default function CarteraGerencia() {
   const [tipo, setTipo] = useState("CLIENTE");
   const [csv, setCsv] = useState("");
   const [mensaje, setMensaje] = useState("");
+  const [editando, setEditando] = useState<string | null>(null);
+  const [alias, setAlias] = useState("");
+  const [rol, setRol] = useState("SIN_CLASIFICAR");
   const actualizar = () => { recargar(); recargarEmpresas(); };
   const alta = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -38,6 +42,15 @@ export default function CarteraGerencia() {
       setCsv(""); actualizar();
     } catch (error) { setMensaje(String(error)); }
   };
+  const guardarFicha = async (id: string) => {
+    try {
+      await enviarJson("/api/v1/gerencias/empresas/" + id, "PATCH", {
+        alias_comercial: alias, rol_comercial: rol,
+      });
+      setMensaje("Ficha comercial actualizada sin modificar datos fiscales compartidos.");
+      setEditando(null); recargar();
+    } catch (error) { setMensaje(String(error)); }
+  };
   const vinculadas = (cartera ?? []).filter((x) => x.activo);
   return <main className="panel-configuracion">
     <h2>Mi cartera comercial</h2>
@@ -45,11 +58,25 @@ export default function CarteraGerencia() {
       se reutiliza sin duplicarlo ni sobrescribir sus datos fiscales.</p>
     {mensaje && <p role="status">{mensaje}</p>}
     <h3>Empresas vinculadas</h3>
-    <table><thead><tr><th>RUC</th><th>Razón social</th><th>Relación</th></tr></thead>
+    <table><thead><tr><th>RUC</th><th>Razón social</th><th>Relación</th><th>Editar cartera</th></tr></thead>
       <tbody>{vinculadas.map((v) => {
         const empresa = (empresas ?? []).find((e) => e.id === v.empresa_id);
         return empresa ? <tr key={v.id}><td>{empresa.ruc}</td>
-          <td>{empresa.razon_social}</td><td>{empresa.tipo_relacion}</td></tr> : null;
+          <td>{v.alias_comercial || empresa.razon_social}</td>
+          <td>{v.rol_comercial || empresa.tipo_relacion}</td>
+          <td>{editando === v.id ? <>
+            <input aria-label="Alias comercial" value={alias} maxLength={200}
+              onChange={(e) => setAlias(e.target.value)} />
+            <select aria-label="Rol comercial" value={rol} onChange={(e) => setRol(e.target.value)}>
+              <option value="CLIENTE">Cliente</option><option value="PROVEEDOR">Proveedor</option>
+              <option value="AMBOS">Ambos</option><option value="SIN_CLASIFICAR">Sin clasificar</option>
+            </select>
+            <button type="button" onClick={() => void guardarFicha(v.id)}>Guardar</button>
+            <button type="button" onClick={() => setEditando(null)}>Cancelar</button>
+          </> : <button type="button" onClick={() => {
+            setEditando(v.id); setAlias(v.alias_comercial || "");
+            setRol(v.rol_comercial || empresa.tipo_relacion);
+          }}>Editar</button>}</td></tr> : null;
       })}</tbody>
     </table>
     <h3>Registrar o incorporar empresa existente</h3>
