@@ -43,3 +43,28 @@ def calcular_comisiones_por_receptor(
         "comision_total": comision_total,
         "detalle": detalle,
     }
+
+
+TASA_AGENTE_RETENCION = Decimal("3.00")
+TASA_SIN_AGENTE_RETENCION = Decimal("3.50")
+
+
+def comision_por_condicion_retencion(
+    produccion: dict[uuid.UUID, tuple[Decimal, bool]],
+) -> dict[str, object]:
+    """Comisión operativa por receptor: utiliza estado agente_retencion de Empresa.
+
+    Entrada por receptor: (producción del periodo en una misma moneda,
+    empresa agente de retención). No mezcla monedas ni cambia porcentajes
+    contractuales del Usuario/Gestor.
+    """
+    tasas = {
+        receptor_id: (
+            TASA_AGENTE_RETENCION if agente_retencion else TASA_SIN_AGENTE_RETENCION
+        )
+        for receptor_id, (_, agente_retencion) in produccion.items()
+    }
+    montos = {receptor_id: monto for receptor_id, (monto, _) in produccion.items()}
+    return calcular_comisiones_por_receptor(
+        montos, porcentajes_por_receptor=tasas
+    )
