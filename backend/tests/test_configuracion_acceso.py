@@ -32,7 +32,7 @@ def test_configuracion_acceso_es_exclusiva_de_administrador(
     client: TestClient,
     auth_prueba: AuthPrueba,
 ) -> None:
-    auth_prueba.como_admin()
+    auth_prueba.como_superadmin()
     respuesta = client.get("/api/v1/configuracion/acceso")
     assert respuesta.status_code == 403
 
