@@ -203,8 +203,13 @@ def resumen_empresas_por_rol(
     if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Rango de fechas inválido")
     if auth.rol not in (
-        RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.GERENTE,
-        RolMiembro.SECRETARIA, RolMiembro.RESPONSABLE, RolMiembro.USUARIO, "GESTOR",
+        RolMiembro.SUPERADMIN,
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.GERENTE,
+        RolMiembro.SECRETARIA,
+        RolMiembro.RESPONSABLE,
+        RolMiembro.USUARIO,
+        "GESTOR",
     ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin acceso al resumen")
     condiciones = [Expediente.tenant_id == tenant_id, Expediente.deleted_at.is_(None)]
@@ -233,21 +238,34 @@ def resumen_empresas_por_rol(
     def agrupar(campo: InstrumentedAttribute[uuid.UUID]) -> list[dict[str, object]]:
         filas = session.execute(
             select(
-                Empresa.id, Empresa.ruc, Empresa.razon_social, Expediente.moneda,
-                func.count(Expediente.id), func.coalesce(func.sum(Expediente.importe_total), 0),
-            ).join(Empresa, (Empresa.id == campo) & (Empresa.tenant_id == tenant_id))
+                Empresa.id,
+                Empresa.ruc,
+                Empresa.razon_social,
+                Expediente.moneda,
+                func.count(Expediente.id),
+                func.coalesce(func.sum(Expediente.importe_total), 0),
+            )
+            .join(Empresa, (Empresa.id == campo) & (Empresa.tenant_id == tenant_id))
             .where(*condiciones)
             .group_by(Empresa.id, Empresa.ruc, Empresa.razon_social, Expediente.moneda)
             .order_by(Empresa.razon_social, Expediente.moneda)
         ).all()
         return [
-            {"empresa_id": str(eid), "ruc": ruc, "razon_social": nombre,
-             "moneda": divisa, "expedientes": cantidad, "total": str(total)}
+            {
+                "empresa_id": str(eid),
+                "ruc": ruc,
+                "razon_social": nombre,
+                "moneda": divisa,
+                "expedientes": cantidad,
+                "total": str(total),
+            }
             for eid, ruc, nombre, divisa, cantidad, total in filas
         ]
 
-    return {"proveedores": agrupar(Expediente.emisor_id),
-            "clientes": agrupar(Expediente.receptor_id)}
+    return {
+        "proveedores": agrupar(Expediente.emisor_id),
+        "clientes": agrupar(Expediente.receptor_id),
+    }
 
 
 @router.get("/resumen")
