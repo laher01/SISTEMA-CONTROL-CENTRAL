@@ -22,7 +22,7 @@ const PERMISO = "ELIMINAR_REGISTROS";
 export default function Configuracion({ sesion }: { sesion: SesionActual }) {
   const [seccion, setSeccion] = useState<
     "permisos" | "acceso" | "empresas" | "mantenimiento" | "administraciones"
-  >("permisos");
+  >(sesion.rol === "SUPERADMIN" ? "administraciones" : "permisos");
   const { datos, error, cargando, recargar } = useDatos<PermisoConfigurado[]>(
     "/api/v1/configuracion/permisos",
   );
@@ -37,20 +37,20 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
 
   return (
     <>
-      <h2>Configuración</h2>
+      <h2>{sesion.rol === "SUPERADMIN" ? "Consola SaaS · Administración de tenants" : "Configuración de Administración"}</h2>
       <div className="acciones">
+        {sesion.rol !== "SUPERADMIN" && (
         <button onClick={() => setSeccion("permisos")}>Permisos operativos</button>
+        )}
         {sesion.rol === "SUPERADMIN" && (
           <>
             <button onClick={() => setSeccion("administraciones")}>Administradores</button>
-            <button onClick={() => setSeccion("acceso")}>Configuración de acceso</button>
-            <button onClick={() => setSeccion("empresas")}>Empresas registradas</button>
-            <button onClick={() => setSeccion("mantenimiento")}>Mantenimiento</button>
+
           </>
         )}
       </div>
 
-      {seccion === "permisos" && (
+      {seccion === "permisos" && sesion.rol !== "SUPERADMIN" && (
         <>
           <p className="tenue">
             Administración controla permisos adicionales. SUPERADMIN hereda las capacidades
@@ -106,9 +106,9 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
       )}
 
       {seccion === "administraciones" && sesion.rol === "SUPERADMIN" && <AdministracionesPanel />}
-      {seccion === "acceso" && sesion.rol === "SUPERADMIN" && <ConfiguracionAccesoPanel />}
-      {seccion === "empresas" && sesion.rol === "SUPERADMIN" && <EmpresasRegistradasPanel />}
-      {seccion === "mantenimiento" && sesion.rol === "SUPERADMIN" && <MantenimientoPanel />}
+      {seccion === "acceso" && sesion.rol !== "SUPERADMIN" && sesion.rol === "SUPERADMIN" && <ConfiguracionAccesoPanel />}
+      {seccion === "empresas" && sesion.rol !== "SUPERADMIN" && sesion.rol === "SUPERADMIN" && <EmpresasRegistradasPanel />}
+      {seccion === "mantenimiento" && sesion.rol !== "SUPERADMIN" && sesion.rol === "SUPERADMIN" && <MantenimientoPanel />}
     </>
   );
 }
