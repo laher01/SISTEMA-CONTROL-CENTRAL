@@ -96,6 +96,8 @@ class Miembro(ConId, ConTenant, ConCreacion, Base):
     nombre: Mapped[str] = mapped_column(String(200))
     rol: Mapped[str] = mapped_column(String(20), index=True)
     porcentaje_produccion: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
+    porcentaje_con_agente: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
+    porcentaje_sin_agente: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
     responsable_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
     creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("cuentas_acceso.id"), index=True
