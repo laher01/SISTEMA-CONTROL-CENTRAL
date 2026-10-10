@@ -7,6 +7,7 @@ Revises: 0025
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
@@ -17,7 +18,11 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("cuentas_acceso", sa.Column("preferencias_visuales", sa.JSON(), nullable=True))
+    op.add_column("cuentas_acceso", sa.Column(
+            "preferencias_visuales",
+            sa.JSON().with_variant(postgresql.JSONB(), "postgresql"),
+            nullable=True,
+        ))
 
 
 def downgrade() -> None:
