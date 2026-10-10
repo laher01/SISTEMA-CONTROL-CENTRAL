@@ -71,12 +71,28 @@ def listar_administraciones(
     empresas = contar(Empresa)
     proveedores = contar(Empresa, condicion=Empresa.tipo_relacion.in_(("PROVEEDOR", "AMBOS")))
     receptores = contar(Empresa, condicion=Empresa.tipo_relacion.in_(("CLIENTE", "RECEPTOR", "AMBOS")))
+    accesos = dict(
+        session.execute(
+            select(Miembro.tenant_id, func.min(CuentaAcceso.login))
+            .join(CuentaAcceso, CuentaAcceso.miembro_id == Miembro.id)
+            .where(
+                Miembro.rol == RolMiembro.ADMINISTRADOR,
+                Miembro.activo.is_(True),
+                Miembro.deleted_at.is_(None),
+                CuentaAcceso.activo.is_(True),
+                CuentaAcceso.deleted_at.is_(None),
+                CuentaAcceso.tenant_id == Miembro.tenant_id,
+            )
+            .group_by(Miembro.tenant_id)
+        )
+    )
     return [
         {
             "id": str(tenant.id),
             "nombre": tenant.nombre,
             "codigo": tenant.codigo or "",
             "subdominio": tenant.subdominio or "",
+            "login_administrador": accesos.get(tenant.id, ""),
             "origen": tenant.origen_alta,
             "estado": tenant.estado,
             "documentos": documentos.get(tenant.id, 0),
