@@ -30,10 +30,10 @@ def crear(
     datos: MiembroIn,
 ) -> AltaMiembroOut:
     _solo_admin(auth.rol)
-    if datos.rol == RolMiembro.SUPERADMIN and auth.rol != RolMiembro.SUPERADMIN:
+    if datos.rol == RolMiembro.SUPERADMIN:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            "Solo SUPERADMIN puede crear otro SUPERADMIN",
+            "SUPERADMIN se administra exclusivamente mediante bootstrap de plataforma",
         )
     miembro = Miembro(
         tenant_id=tenant_id,
