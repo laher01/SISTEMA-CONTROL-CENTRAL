@@ -12,6 +12,7 @@ from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.enums import EstadoDocumento, EstadoExpediente, Moneda, RolMiembro, TipoAlerta
 from app.models import Alerta, Documento, Empresa, Expediente, Gestor, Miembro
 from app.schemas import DashboardDesglose, DashboardDesgloseFila, DashboardResumen, MontosMoneda
+from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.expedientes import documentos_faltantes
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -184,7 +185,7 @@ def resumen(
     elif auth.rol == RolMiembro.USUARIO:
         vigentes.append(Expediente.usuario_id == auth.usuario_id)
     elif auth.rol == RolMiembro.GERENTE:
-        vigentes.append(Expediente.gerente_id == auth.miembro_id)
+        vigentes.append(alcance_expedientes_gerente(auth))
 
     por_estado = {e: 0 for e in EstadoExpediente}
     for estado, total in session.execute(
@@ -246,7 +247,7 @@ def resumen(
             Documento.expediente_id.in_(
                 select(Expediente.id).where(
                     Expediente.tenant_id == tenant_id,
-                    Expediente.gerente_id == auth.miembro_id,
+                    alcance_expedientes_gerente(auth),
                     Expediente.deleted_at.is_(None),
                 )
             )
@@ -296,7 +297,7 @@ def desglose(
     elif auth.rol == RolMiembro.USUARIO:
         consulta = consulta.where(Expediente.usuario_id == auth.usuario_id)
     elif auth.rol == RolMiembro.GERENTE:
-        consulta = consulta.where(Expediente.gerente_id == auth.miembro_id)
+        consulta = consulta.where(alcance_expedientes_gerente(auth))
     if usuario_id is not None:
         consulta = consulta.where(Expediente.usuario_id == usuario_id)
     if emisor_id is not None:

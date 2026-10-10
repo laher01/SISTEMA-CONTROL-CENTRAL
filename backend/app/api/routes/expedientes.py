@@ -30,6 +30,7 @@ from app.schemas import (
 )
 from app.security import cuenta_administradora_responsable
 from app.services import auditoria
+from app.services.ambito_gerencia import alcance_expedientes_gerente, expediente_visible_gerente
 from app.services.expedientes import (
     buscar_expediente,
     documentos_faltantes,
@@ -133,7 +134,7 @@ def listar(
     elif auth.rol == RolMiembro.USUARIO:
         consulta = consulta.where(Expediente.usuario_id == auth.usuario_id)
     elif auth.rol == RolMiembro.GERENTE:
-        consulta = consulta.where(Expediente.gerente_id == auth.miembro_id)
+        consulta = consulta.where(alcance_expedientes_gerente(auth))
     if estado is not None:
         consulta = consulta.where(Expediente.estado == estado)
     if pendiente_aprobacion is not None:
@@ -213,7 +214,7 @@ def resumen_filtrado(
     elif auth.rol == RolMiembro.USUARIO:
         consulta = consulta.where(Expediente.usuario_id == auth.usuario_id)
     elif auth.rol == RolMiembro.GERENTE:
-        consulta = consulta.where(Expediente.gerente_id == auth.miembro_id)
+        consulta = consulta.where(alcance_expedientes_gerente(auth))
     if estado is not None:
         consulta = consulta.where(Expediente.estado == estado)
     if pendiente_aprobacion is not None:
@@ -301,7 +302,7 @@ def listar_ids(
     elif auth.rol == RolMiembro.USUARIO:
         consulta = consulta.where(Expediente.usuario_id == auth.usuario_id)
     elif auth.rol == RolMiembro.GERENTE:
-        consulta = consulta.where(Expediente.gerente_id == auth.miembro_id)
+        consulta = consulta.where(alcance_expedientes_gerente(auth))
     if estado is not None:
         consulta = consulta.where(Expediente.estado == estado)
     if pendiente_aprobacion is not None:
@@ -358,7 +359,7 @@ def _visible_para_auth(expediente: Expediente, auth: OperativeAuthDep) -> bool:
     if auth.rol == RolMiembro.USUARIO:
         return expediente.usuario_id == auth.usuario_id
     if auth.rol == RolMiembro.GERENTE:
-        return expediente.gerente_id == auth.miembro_id
+        return expediente_visible_gerente(expediente, auth)
     return True
 
 

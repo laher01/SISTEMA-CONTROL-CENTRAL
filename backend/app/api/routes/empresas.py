@@ -26,6 +26,7 @@ from app.schemas import (
     EmpresaUsuarioOut,
 )
 from app.services import auditoria
+from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.expedientes import recalcular_expedientes
 
 router = APIRouter(prefix="/empresas", tags=["empresas"])
@@ -61,7 +62,7 @@ def listar(
                 ),
                 exists().where(
                     Expediente.tenant_id == tenant_id,
-                    Expediente.gerente_id == auth.miembro_id,
+                    alcance_expedientes_gerente(auth),
                     Expediente.deleted_at.is_(None),
                     or_(Expediente.emisor_id == Empresa.id, Expediente.receptor_id == Empresa.id),
                 ),
@@ -110,7 +111,7 @@ def listar(
         if auth.rol == "GESTOR":
             usuarios_q = usuarios_q.where(Expediente.gestor_id == auth.gestor_id)
         elif auth.rol == RolMiembro.GERENTE:
-            usuarios_q = usuarios_q.where(Expediente.gerente_id == auth.miembro_id)
+            usuarios_q = usuarios_q.where(alcance_expedientes_gerente(auth))
         elif auth.rol == RolMiembro.USUARIO:
             usuarios_q = usuarios_q.where(Expediente.usuario_id == auth.usuario_id)
 
