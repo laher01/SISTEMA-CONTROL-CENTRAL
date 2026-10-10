@@ -81,17 +81,20 @@ def responder(
         salida = _responder_totales(session, settings, auth)
         return _enriquecer(salida, contexto, fuentes_conocimiento, "ESPECIALISTA_DATOS")
 
-    if any(
-        palabra in normalizado
-        for palabra in (
-            "sunat",
-            "norma",
-            "actualización",
-            "actualizacion",
-            "internet",
-            "buscar",
+    if (
+        any(
+            palabra in normalizado
+            for palabra in (
+                "sunat",
+                "norma",
+                "actualización",
+                "actualizacion",
+                "internet",
+                "buscar",
+            )
         )
-    ) and settings.nexus_search_url:
+        and settings.nexus_search_url
+    ):
         salida = _responder_busqueda_web(settings, texto)
         return _enriquecer(salida, contexto, fuentes_conocimiento, "ESPECIALISTA_WEB")
 
@@ -250,10 +253,7 @@ def _responder_llm(
     mensajes.append(
         {
             "role": "system",
-            "content": (
-                "CONTEXTO AUTORIZADO\n"
-                + contexto.a_prompt(settings.nexus_context_max_chars)
-            ),
+            "content": ("CONTEXTO AUTORIZADO\n" + contexto.a_prompt(settings.nexus_context_max_chars)),
         }
     )
     if conocimiento:
