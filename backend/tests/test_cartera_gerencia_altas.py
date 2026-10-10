@@ -132,7 +132,10 @@ def test_edicion_comercial_no_modifica_ficha_fiscal_compartida(
     assert ajeno.alias_comercial is None
     fiscal = session.get(Empresa, propio.empresa_id)
     assert fiscal.razon_social == "Razón fiscal"
-    assert client.patch(
-        f"/api/v1/gerencias/empresas/{ajeno.id}",
-        json={"alias_comercial": "Fuera de mi cartera"},
-    ).status_code == 403
+    assert (
+        client.patch(
+            f"/api/v1/gerencias/empresas/{ajeno.id}",
+            json={"alias_comercial": "Fuera de mi cartera"},
+        ).status_code
+        == 403
+    )
