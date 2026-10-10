@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
 from datetime import date
 from decimal import Decimal
+from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from sqlalchemy import func, select
