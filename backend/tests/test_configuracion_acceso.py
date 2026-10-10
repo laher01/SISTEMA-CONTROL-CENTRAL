@@ -316,3 +316,36 @@ def test_administrador_no_modifica_ni_elimina_empresas_ajenas(
     session.refresh(empresa)
     assert empresa.deleted_at is None
     assert empresa.razon_social == "Empresa externa de prueba"
+
+
+
+def test_administrador_no_accede_a_documento_de_otro_tenant(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    from app.models import Documento, Tenant
+
+    externo = Tenant(nombre="OTRO ESPACIO DOCUMENTAL", codigo="OTRO-DOC", estado="ACTIVO")
+    session.add(externo)
+    session.flush()
+    documento = Documento(
+        tenant_id=externo.id,
+        sha256="b" * 64,
+        nombre_original="externo.pdf",
+        mime_type="application/pdf",
+        tamano_bytes=10,
+        ruta_storage="externo/no-accesible.pdf",
+        estado="PENDIENTE",
+    )
+    session.add(documento)
+    session.commit()
+
+    auth_prueba.como_admin()
+    for sufijo in ("", "/archivo"):
+        respuesta = client.get(f"/api/v1/documentos/{documento.id}{sufijo}")
+        assert respuesta.status_code == 404, respuesta.text
+
+    respuesta = client.delete(f"/api/v1/documentos/{documento.id}")
+    assert respuesta.status_code == 404, respuesta.text
+
+    session.refresh(documento)
+    assert documento.deleted_at is None
