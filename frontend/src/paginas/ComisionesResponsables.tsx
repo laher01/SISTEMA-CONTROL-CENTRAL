@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { conParametros, enviarJson, useDatos } from "../api";
 import { formatearMonto } from "../formato";
-import type { SesionActual } from "../tipos";
+import type { FiltroOpcion, SesionActual } from "../tipos";
 
 type Fila = {
   responsable_id: string;
@@ -26,6 +26,7 @@ type Resumen = {
   total_produccion: string;
   total_comisiones: string;
   filas: Fila[];
+  detalle_historico_clientes?: Array<{ responsable_id: string; cliente_id: string; cliente_ruc: string; cliente_nombre: string; produccion: string; porcentaje: string; comision_referencial: string }>;
   total_pendiente_atribucion?: string;
   pendientes_atribucion?: Array<{ responsable_id: string; responsable: string; registros: number; produccion: string }>;
 };
@@ -74,6 +75,8 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
   const [desde, setDesde] = useState(inicial.desde);
   const [hasta, setHasta] = useState(inicial.hasta);
   const [moneda, setMoneda] = useState<"PEN" | "USD">("PEN");
+  const [responsableSeleccionado, setResponsableSeleccionado] = useState("");
+  const { datos: responsablesActivos } = useDatos<FiltroOpcion[]>("/api/v1/pagos/responsables");
   const [editando, setEditando] = useState("");
   const [porcentaje, setPorcentaje] = useState("");
   const [motivo, setMotivo] = useState("");
@@ -94,7 +97,12 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
   const pagosFiltrados = (pagos.datos ?? []).filter(p =>
     p.moneda === moneda && p.periodo_desde >= desde && p.periodo_hasta <= hasta
   );
-  const filas = datos?.filas ?? [];
+  const filas = (datos?.filas ?? []).filter(f => !responsableSeleccionado || f.responsable_id === responsableSeleccionado);
+  const detalleHistorico = (datos?.detalle_historico_clientes ?? []).filter(f => !responsableSeleccionado || f.responsable_id === responsableSeleccionado);
+  const produccionResponsable = filas.reduce((total, f) => total + Number(f.produccion), 0);
+  const comisionResponsable = filas.reduce((total, f) => total + Number(f.comision), 0);
+  const produccionHistorica = detalleHistorico.reduce((total, f) => total + Number(f.produccion), 0);
+  const comisionReferencial = detalleHistorico.reduce((total, f) => total + Number(f.comision_referencial), 0);
   const responsables = Array.from(
     new Map(filas.map((f) => [f.responsable_id, f.responsable_nombre])).entries(),
   );
@@ -218,6 +226,17 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
         <option value="PEN">PEN</option><option value="USD">USD</option>
       </select></label>
     </div>
+    <div className="filtros">
+      <label>Responsable activo
+        <select aria-label="Seleccionar Responsable" value={responsableSeleccionado}
+          onChange={e => setResponsableSeleccionado(e.target.value)}>
+          <option value="">Todos los Responsables</option>
+          {(responsablesActivos ?? []).map(r => <option key={r.id} value={r.id}>
+            {r.codigo} · {r.nombre}
+          </option>)}
+        </select>
+      </label>
+    </div>
     {cargando && <p>Cargando producción…</p>}
     {error && <p role="alert">{error}</p>}
     <div className="resumen-carga">
@@ -225,15 +244,29 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
       {" · "}
       <strong>Total a pagar por comisiones: {formatearMonto(moneda, datos?.total_comisiones ?? "0")}</strong>
     </div>
+    {responsableSeleccionado && <p className="resumen-carga">
+      <strong>Responsable seleccionado · Producción atribuida: {formatearMonto(moneda, produccionResponsable)}</strong>
+      {" · "}<strong>Comisión autorizada: {formatearMonto(moneda, comisionResponsable)}</strong>
+    </p>}
     {sesion.rol === "GERENTE" && Number(datos?.total_pendiente_atribucion ?? 0) > 0 && <section className="panel-configuracion">
       <h4>Producción histórica pendiente de atribución</h4>
-      <p className="tenue">Registros antiguos disponibles para consulta. No forman parte de las comisiones
-        pagables hasta que Administración confirme el pedido y el Gerente de origen.</p>
-      <strong>{formatearMonto(moneda, datos?.total_pendiente_atribucion ?? "0")}</strong>
-      <div className="tabla-responsive"><table><thead><tr><th>Responsable</th><th>Registros</th><th>Importe histórico</th></tr></thead>
-      <tbody>{(datos?.pendientes_atribucion ?? []).map((r) => <tr key={r.responsable_id}>
-        <td>{r.responsable}</td><td>{r.registros}</td><td>{formatearMonto(moneda, r.produccion)}</td>
-      </tr>)}</tbody></table></div>
+      <p className="tenue">Desglose referencial por cliente. Las comisiones mostradas aquí NO son saldos
+        pagables hasta que Administración confirme el Gerente y pedido de origen.</p>
+      {responsableSeleccionado ? <>
+        <div className="tabla-responsive"><table>
+          <thead><tr><th>Cliente receptor</th><th>Producción acumulada</th><th>% comisión</th><th>Comisión referencial</th></tr></thead>
+          <tbody>{detalleHistorico.map(f => <tr key={f.cliente_id}>
+            <td>{f.cliente_nombre}<small className="bloque tenue">{f.cliente_ruc}</small></td>
+            <td>{formatearMonto(moneda, f.produccion)}</td><td>{f.porcentaje}%</td>
+            <td>{formatearMonto(moneda, f.comision_referencial)}</td>
+          </tr>)}</tbody>
+          <tfoot><tr><th>Total referencial</th><th>{formatearMonto(moneda, produccionHistorica)}</th><th>—</th>
+            <th>{formatearMonto(moneda, comisionReferencial)}</th></tr></tfoot>
+        </table></div>
+      </> : <>
+        <strong>{formatearMonto(moneda, datos?.total_pendiente_atribucion ?? "0")}</strong>
+        <p className="tenue">Seleccione un Responsable para ver el detalle por cliente.</p>
+      </>}
     </section>}
     {mensaje && <p role="status">{mensaje}</p>}
     <div className="tabla-responsive"><table>

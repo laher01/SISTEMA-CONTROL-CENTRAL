@@ -118,6 +118,13 @@ def test_pagos_consolidados_historicos_y_privacidad(
     assert Decimal(liquidacion.json()["total_produccion"]) == Decimal("200")
     assert Decimal(liquidacion.json()["total_pendiente_atribucion"]) == Decimal("150")
     assert Decimal(liquidacion.json()["total_comisiones"]) < Decimal("100")
+    detalle = liquidacion.json()["detalle_historico_clientes"]
+    assert len(detalle) == 1
+    assert detalle[0]["responsable_id"] == str(responsable.id)
+    assert detalle[0]["cliente_id"] == str(cliente.id)
+    assert Decimal(detalle[0]["produccion"]) == Decimal("100")
+    assert Decimal(detalle[0]["porcentaje"]) == Decimal("3.5")
+    assert Decimal(detalle[0]["comision_referencial"]) == Decimal("3.50")
 
     iniciar(gerente_dos)
     otro = client.get("/api/v1/pagos/consolidado", params=params)
