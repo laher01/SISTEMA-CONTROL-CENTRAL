@@ -214,6 +214,8 @@ class CarteraGerenteOut(BaseModel):
     gerente_id: uuid.UUID
     empresa_id: uuid.UUID
     activo: bool
+    alias_comercial: str | None = None
+    rol_comercial: str | None = None
 
 
 @router.get("/empresas", response_model=list[CarteraGerenteOut])
@@ -272,6 +274,41 @@ def asignar_cartera(
             "activo": datos.activo,
             "actor": auth.codigo,
         },
+    )
+    session.commit()
+    session.refresh(relacion)
+    return relacion
+
+
+class EditarCarteraGerenteIn(BaseModel):
+    alias_comercial: str | None = Field(default=None, max_length=200)
+    rol_comercial: str | None = Field(
+        default=None, pattern="^(CLIENTE|PROVEEDOR|AMBOS|SIN_CLASIFICAR)$"
+    )
+
+
+@router.patch("/empresas/{relacion_id}", response_model=CarteraGerenteOut)
+def editar_cartera_gerente(
+    relacion_id: uuid.UUID,
+    datos: EditarCarteraGerenteIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> GerenteEmpresa:
+    if auth.rol not in (RolMiembro.GERENTE, RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin permiso para editar cartera")
+    relacion = session.get(GerenteEmpresa, relacion_id)
+    if relacion is None or relacion.tenant_id != tenant_id or not relacion.activo:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Vínculo no disponible")
+    if auth.rol == RolMiembro.GERENTE and relacion.gerente_id != auth.miembro_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Cartera ajena")
+    if "alias_comercial" in datos.model_fields_set:
+        relacion.alias_comercial = datos.alias_comercial.strip() or None if datos.alias_comercial else None
+    if "rol_comercial" in datos.model_fields_set:
+        relacion.rol_comercial = datos.rol_comercial
+    auditoria.registrar(
+        session, tenant_id, "CARTERA_COMERCIAL_EDITADA", "gerentes_empresas",
+        relacion.id, {"gerente_id": str(relacion.gerente_id), "actor": auth.codigo},
     )
     session.commit()
     session.refresh(relacion)
