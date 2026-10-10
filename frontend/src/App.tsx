@@ -98,7 +98,7 @@ const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = 
     a: "/empresas",
     texto: "Empresas",
     icono: "▥",
-    roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO"],
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"],
   },
   { a: "/organizacion", texto: "Organización", icono: "♧", roles: ["SUPERADMIN", "ADMINISTRADOR", "RESPONSABLE", "USUARIO"] },
   {
