@@ -25,10 +25,13 @@ Se recuperó de adjunto previo el paquete `FACT_CENTRAL_CORREO_V10_LOCAL.zip` (4
 - Baja de empresa: operación lógica auditada, confirmaciones separadas, protección de datos compartidos y obligaciones de conservación; nunca purga automática de datos productivos.
 
 ## Componentes implementados en esta rama
-- Este documento de continuidad, sin activación de funcionalidad ni cambios en el esquema.
+- Documento de continuidad.
+- Política pura fail-closed `politica_recepcion_correo.py` y pruebas unitarias iniciales (todavía no ejecutadas en CI). Sin activación de funcionalidad ni cambios en esquema.
 
 ## Archivos modificados
 - `docs/RECEPCION_DOCUMENTAL_ESTADO.md`
+- `backend/app/services/politica_recepcion_correo.py`
+- `backend/tests/test_politica_recepcion_correo.py`
 
 ## Migraciones incorporadas
 Ninguna. No ejecutar el SQL del prototipo V10 contra producción.
@@ -40,7 +43,7 @@ Ninguna. No ejecutar el SQL del prototipo V10 contra producción.
 - Último HEAD verificado de main: **pendiente de comprobar**.
 
 ## Pruebas
-- No se han ejecutado pruebas del repositorio integrado en esta rama.
+- Pruebas de la política añadidas, **no ejecutadas todavía**. No se han ejecutado pruebas del repositorio integrado en esta rama.
 - V10: paquete local recuperado con tests históricos; requiere instalación y prueba aislada.
 - Pendientes: ruff, mypy, pytest, migraciones upgrade/downgrade staging, React build y E2E, aislamiento tenants/gerencias, regresión de expedientes, pagos y liquidaciones.
 
