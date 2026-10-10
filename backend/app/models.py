@@ -127,6 +127,15 @@ class CuentaAcceso(ConId, ConTenant, ConCreacion, Base):
     deleted_at: Mapped[datetime | None]
 
 
+class ChatAutorizacion(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "chat_autorizaciones"
+    __table_args__ = (UniqueConstraint("tenant_id", "responsable_id", "destino_rol"),)
+
+    responsable_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    destino_rol: Mapped[str] = mapped_column(String(20))
+    autorizado: Mapped[bool] = mapped_column(default=False, server_default="false")
+
+
 class ChatMensaje(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "chat_mensajes"
 
@@ -137,6 +146,8 @@ class ChatMensaje(ConId, ConTenant, ConCreacion, Base):
         ForeignKey("cuentas_acceso.id"), index=True
     )
     texto: Mapped[str] = mapped_column(String(2000), default="", server_default="")
+    deleted_at: Mapped[datetime | None]
+    eliminado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cuentas_acceso.id"))
     archivo_nombre: Mapped[str | None] = mapped_column(String(255))
     archivo_mime: Mapped[str | None] = mapped_column(String(100))
     archivo_sha256: Mapped[str | None] = mapped_column(String(64))
