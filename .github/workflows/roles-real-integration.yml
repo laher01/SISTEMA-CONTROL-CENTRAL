@@ -46,7 +46,7 @@ jobs:
         working-directory: backend
         run: |
           uv run alembic upgrade head
-          uv run python scripts/seed_roles_e2e.py
+          PYTHONPATH=. uv run python scripts/seed_roles_e2e.py
       - name: Arrancar FastAPI local
         working-directory: backend
         run: |
