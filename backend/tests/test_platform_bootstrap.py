@@ -14,14 +14,20 @@ def test_bootstrap_platform_aislado(engine, settings, monkeypatch):
     with sessionmaker(engine)() as session:
         nexomar = obtener_tenant(session, settings.tenant_default)
         admin = Miembro(
-            tenant_id=nexomar.id, codigo="ADMIN01", nombre="Administrador de prueba",
-            rol="ADMINISTRADOR", activo=True,
+            tenant_id=nexomar.id,
+            codigo="ADMIN01",
+            nombre="Administrador de prueba",
+            rol="ADMINISTRADOR",
+            activo=True,
         )
         session.add(admin)
         session.flush()
         cuenta = CuentaAcceso(
-            tenant_id=nexomar.id, miembro_id=admin.id, login="ADMIN01",
-            password_hash="hash-no-modificar", activo=True,
+            tenant_id=nexomar.id,
+            miembro_id=admin.id,
+            login="ADMIN01",
+            password_hash="hash-no-modificar",
+            activo=True,
         )
         session.add(cuenta)
         session.commit()
@@ -42,7 +48,7 @@ def test_bootstrap_platform_aislado(engine, settings, monkeypatch):
         assert cuenta.password_hash == "hash-no-modificar"
         platform = session.scalar(select(Tenant).where(Tenant.codigo == "PLATFORM"))
         assert platform is not None and platform.id != nexomar_id
-        sup = session.scalar(select(Miembro).where(
-            Miembro.tenant_id == platform.id, Miembro.codigo == "SUPADMIN01"
-        ))
+        sup = session.scalar(
+            select(Miembro).where(Miembro.tenant_id == platform.id, Miembro.codigo == "SUPADMIN01")
+        )
         assert sup is not None and sup.rol == "SUPERADMIN"
