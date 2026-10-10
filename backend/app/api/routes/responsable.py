@@ -382,6 +382,14 @@ def cotizar_pago_usuario(
     _autorizar_pago(session, tenant_id, auth, datos.usuario_id)
     produccion, tasa, bruto_produccion, _ = _base_pago_usuario(session, tenant_id, datos)
     saldos, adelantos, total_pendientes = _componentes_pendientes(session, tenant_id, datos)
+    # Un saldo histórico no incluye clasificación de retención en el modelo actual.
+    # No aplicar la tasa efectiva de otro periodo a una base histórica desconocida.
+    if saldos:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Los saldos anteriores requieren clasificación con/sin agente "
+            "antes de incorporarse a una liquidación de dos tasas",
+        )
     saldos_total = sum((Decimal(s.monto) for s in saldos), Decimal("0"))
     adelantos_total = sum((Decimal(a.monto) for a in adelantos), Decimal("0"))
     base = produccion + saldos_total
@@ -428,6 +436,14 @@ def programar_pago_usuario(
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "Explique en observaciones por qué no se descuentan todos los adelantos",
+        )
+    # Un saldo histórico no incluye clasificación de retención en el modelo actual.
+    # No aplicar la tasa efectiva de otro periodo a una base histórica desconocida.
+    if saldos:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Los saldos anteriores requieren clasificación con/sin agente "
+            "antes de incorporarse a una liquidación de dos tasas",
         )
     saldos_total = sum((Decimal(s.monto) for s in saldos), Decimal("0"))
     adelantos_total = sum((Decimal(a.monto) for a in adelantos), Decimal("0"))
