@@ -278,7 +278,6 @@ def asignar_cartera(
     return relacion
 
 
-
 class AltaEmpresaCarteraIn(BaseModel):
     gerente_id: uuid.UUID | None = None
     ruc: str = Field(pattern=r"^[0-9]{11}$")
@@ -294,7 +293,9 @@ class ImportarCarteraIn(BaseModel):
 
 
 def _gerente_autorizado(
-    session: SessionDep, tenant_id: uuid.UUID, auth: OperativeAuthDep,
+    session: SessionDep,
+    tenant_id: uuid.UUID,
+    auth: OperativeAuthDep,
     gerente_id: uuid.UUID | None,
 ) -> Miembro:
     if auth.rol == RolMiembro.GERENTE:
@@ -309,8 +310,11 @@ def _gerente_autorizado(
 
 
 def _registrar_empresa_cartera(
-    session: SessionDep, tenant_id: uuid.UUID, auth: OperativeAuthDep,
-    gerente: Miembro, datos: AltaEmpresaCarteraIn,
+    session: SessionDep,
+    tenant_id: uuid.UUID,
+    auth: OperativeAuthDep,
+    gerente: Miembro,
+    datos: AltaEmpresaCarteraIn,
 ) -> tuple[Empresa, str]:
     empresa = session.scalar(
         select(Empresa).where(Empresa.tenant_id == tenant_id, Empresa.ruc == datos.ruc)
@@ -318,7 +322,8 @@ def _registrar_empresa_cartera(
     estado = "VINCULADA"
     if empresa is None:
         empresa = Empresa(
-            tenant_id=tenant_id, ruc=datos.ruc,
+            tenant_id=tenant_id,
+            ruc=datos.ruc,
             razon_social=datos.razon_social.strip(),
             tipo_relacion=datos.tipo_relacion,
         )
@@ -336,23 +341,30 @@ def _registrar_empresa_cartera(
         )
     )
     if relacion is None:
-        session.add(GerenteEmpresa(
-            tenant_id=tenant_id, gerente_id=gerente.id, empresa_id=empresa.id, activo=True
-        ))
+        session.add(
+            GerenteEmpresa(
+                tenant_id=tenant_id, gerente_id=gerente.id, empresa_id=empresa.id, activo=True
+            )
+        )
     else:
         relacion.activo = True
     auditoria.registrar(
-        session, tenant_id, "CARTERA_EMPRESA_ALTA", "empresas", empresa.id,
-        {"gerente_id": str(gerente.id), "ruc": datos.ruc, "estado": estado,
-         "actor": auth.codigo},
+        session,
+        tenant_id,
+        "CARTERA_EMPRESA_ALTA",
+        "empresas",
+        empresa.id,
+        {"gerente_id": str(gerente.id), "ruc": datos.ruc, "estado": estado, "actor": auth.codigo},
     )
     return empresa, estado
 
 
 @router.post("/empresas/alta", status_code=status.HTTP_201_CREATED)
 def alta_empresa_cartera(
-    datos: AltaEmpresaCarteraIn, session: SessionDep,
-    tenant_id: TenantDep, auth: OperativeAuthDep,
+    datos: AltaEmpresaCarteraIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
 ) -> dict[str, str]:
     gerente = _gerente_autorizado(session, tenant_id, auth, datos.gerente_id)
     empresa, estado = _registrar_empresa_cartera(session, tenant_id, auth, gerente, datos)
@@ -362,8 +374,10 @@ def alta_empresa_cartera(
 
 @router.post("/empresas/importar")
 def importar_empresas_cartera(
-    datos: ImportarCarteraIn, session: SessionDep,
-    tenant_id: TenantDep, auth: OperativeAuthDep,
+    datos: ImportarCarteraIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
 ) -> dict[str, int]:
     gerente = _gerente_autorizado(session, tenant_id, auth, datos.gerente_id)
     # Evitar duplicados dentro del mismo archivo antes de escribir.
