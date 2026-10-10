@@ -50,9 +50,13 @@ jobs:
           tmp="$(mktemp -d /tmp/factcentral-doc-check.XXXXXXXX)"
           trap 'rm -rf -- "$tmp"' EXIT
           tar -xzf "$file" -C "$tmp" --no-same-owner --no-same-permissions
-          original="$(tar -tzf "$file" | wc -l)"
-          extracted="$(find "$tmp" -mindepth 1 | wc -l)"
-          test "$original" -eq "$extracted"
-          echo "DOCUMENTOS_RESTAURACION_VERIFICADA: entradas=$extracted"
+          # Solo archivos reales: tar incluye la entrada "." y directorios.
+          archived_files="$(tar -tzf "$file" | grep -Ev '(^\./?$|/$)' | wc -l)"
+          extracted_files="$(find "$tmp" \( -type f -o -type l \) | wc -l)"
+          echo "ARCHIVADOS_ARCHIVOS: $archived_files"
+          echo "EXTRAIDOS_ARCHIVOS: $extracted_files"
+          test "$archived_files" -gt 0
+          test "$archived_files" -eq "$extracted_files"
+          echo "DOCUMENTOS_RESTAURACION_VERIFICADA: archivos=$extracted_files"
           echo "VOLUMEN_ORIGINAL_SIN_CAMBIOS"
           REMOTE
