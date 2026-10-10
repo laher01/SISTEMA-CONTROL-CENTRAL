@@ -1,4 +1,5 @@
 """Cuentas sintéticas exclusivas del PostgreSQL desechable de GitHub Actions."""
+
 import os
 
 from sqlalchemy.orm import Session
