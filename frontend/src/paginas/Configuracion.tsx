@@ -106,9 +106,9 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
       )}
 
       {seccion === "administraciones" && sesion.rol === "SUPERADMIN" && <AdministracionesPanel />}
-      {seccion === "acceso" && sesion.rol !== "SUPERADMIN" && sesion.rol === "SUPERADMIN" && <ConfiguracionAccesoPanel />}
-      {seccion === "empresas" && sesion.rol !== "SUPERADMIN" && sesion.rol === "SUPERADMIN" && <EmpresasRegistradasPanel />}
-      {seccion === "mantenimiento" && sesion.rol !== "SUPERADMIN" && sesion.rol === "SUPERADMIN" && <MantenimientoPanel />}
+      {seccion === "acceso" && sesion.rol === "SUPERADMIN" && <ConfiguracionAccesoPanel />}
+      {seccion === "empresas" && sesion.rol === "SUPERADMIN" && <EmpresasRegistradasPanel />}
+      {seccion === "mantenimiento" && sesion.rol === "SUPERADMIN" && <MantenimientoPanel />}
     </>
   );
 }
