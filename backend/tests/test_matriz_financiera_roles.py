@@ -10,7 +10,10 @@ from tests.conftest import AuthPrueba
 
 
 @pytest.mark.parametrize("rol", ["GERENTE", "SECRETARIA", "USUARIO", "GESTOR"])
-@pytest.mark.parametrize("ruta", ["/api/v1/responsable/pagos/cotizar", "/api/v1/responsable/pagos/programar"])
+@pytest.mark.parametrize(
+    "ruta",
+    ["/api/v1/responsable/pagos/cotizar", "/api/v1/responsable/pagos/programar"],
+)
 def test_pago_produccion_prohibido_para_rol_sin_facultad(
     client: TestClient, auth_prueba: AuthPrueba, rol: str, ruta: str
 ) -> None:
