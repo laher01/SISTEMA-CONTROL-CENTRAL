@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.enums import RolMiembro, TipoDocumento
+from app.enums import TipoDocumento
 from app.models import Empresa, Expediente
 from app.schemas import NexusChatOut, NexusFuente, NexusMensajeHistorial
 from app.security import ContextoAcceso
