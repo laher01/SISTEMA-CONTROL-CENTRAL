@@ -92,3 +92,33 @@ El workflow `deploy-staging.yml` actual apunta solo al entorno `staging`;
 haber creado secretos en `oracle-production` no activa ese segundo destino.
 No fusionar cambios a `main` sin comprobar su efecto en la VPS anterior,
 los permisos SSH desde GitHub y el comportamiento de `deploy/deploy.sh`.
+
+
+## NEXUS contextual
+
+NEXUS funciona en dos niveles:
+
+1. **Contextual determinístico**: activo por defecto. Usa la sesión, la ruta, el ámbito
+   autorizado, PostgreSQL y la Knowledge Base versionada en `docs/`.
+2. **Conversacional**: se activa cuando se configura un endpoint LLM compatible mediante
+   `FC_NEXUS_LLM_URL`, junto con su token y modelo cuando el proveedor lo requiera.
+
+Variables disponibles:
+
+- `FC_NEXUS_LLM_URL`
+- `FC_NEXUS_LLM_TOKEN`
+- `FC_NEXUS_LLM_MODEL`
+- `FC_NEXUS_LLM_TIMEOUT_SECONDS`
+- `FC_NEXUS_KNOWLEDGE_ENABLED`
+- `FC_NEXUS_HISTORY_MESSAGES`
+- `FC_NEXUS_CONTEXT_MAX_CHARS`
+
+Las credenciales del proveedor nunca deben subirse a GitHub. Deben permanecer únicamente en
+`deploy/.env.production` con permisos restringidos.
+
+El contenedor backend incorpora la documentación Markdown de FACT CENTRAL en cada build. Por eso
+los cambios aceptados en las librerías de `docs/` pasan a formar parte de la Knowledge Base de
+NEXUS después del siguiente despliegue.
+
+Aunque exista un motor conversacional externo, NEXUS no amplía permisos, no cambia Tenant, no
+aprueba pagos y no modifica datos críticos por sí mismo.
