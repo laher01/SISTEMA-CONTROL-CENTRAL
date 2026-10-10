@@ -27,12 +27,12 @@ function aplicar(preferencias: Apariencia): void {
 export default function AparienciaPersonal({ onBarra }: { onBarra: (modo: Apariencia["barra"]) => void }) {
   const { datos, error, cargando, recargar } = useDatos<Apariencia>("/api/v1/auth/mi-apariencia");
   const [editando, setEditando] = useState(false);
-  const [form, setForm] = useState<Apariencia>(BASE);
+  const [form, setForm] = useState<Apariencia | null>(null);
+  const actual = form ?? datos ?? BASE;
   const [mensaje, setMensaje] = useState("");
   const [guardando, setGuardando] = useState(false);
   useEffect(() => {
     if (datos) {
-      setForm(datos);
       aplicar(datos);
       onBarra(datos.barra);
     }
@@ -68,7 +68,7 @@ export default function AparienciaPersonal({ onBarra }: { onBarra: (modo: Aparie
       {cargando && <span>Cargando ajustes…</span>}
       {error && <span role="alert">{error}</span>}
       <label>Tema
-        <select value={form.tema} onChange={(e) => setForm({ ...form, tema: e.target.value as Apariencia["tema"] })}>
+        <select value={actual.tema} onChange={(e) => setForm({ ...actual, tema: e.target.value as Apariencia["tema"] })}>
           <option value="CLARO">Claro</option>
           <option value="OSCURO">Oscuro</option>
           <option value="SISTEMA">Según dispositivo</option>
@@ -93,7 +93,7 @@ export default function AparienciaPersonal({ onBarra }: { onBarra: (modo: Aparie
         </select>
       </label>
       <div className="apariencia-botones">
-        <button type="button" disabled={guardando || cargando} onClick={() => void guardar(form)}>Guardar</button>
+        <button type="button" disabled={guardando || cargando} onClick={() => void guardar(actual)}>Guardar</button>
         <button type="button" disabled={guardando} onClick={() => { setForm(BASE); void guardar(BASE); }}>Restaurar</button>
       </div>
       {mensaje && <small role="status">{mensaje}</small>}
