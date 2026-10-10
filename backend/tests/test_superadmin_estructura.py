@@ -29,3 +29,43 @@ def test_estructura_tenant_requiere_superadmin(
     assert datos["codigo"] == "ENS-901-AD"
     assert datos["miembros"][0]["codigo"] == "ADMIN01"
     assert "password_hash" not in str(datos)
+
+
+def test_alta_tenant_independiente_no_autorizada_para_admin(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    payload = {
+        "nombre_administrador": "Marina Torres",
+        "nombre_espacio": "Pesquera de Ensayo",
+        "subdominio": "pesquera-ensayo",
+        "origen": "SUPERADMIN",
+    }
+    auth_prueba.como_admin()
+    rechazado = client.post("/api/v1/configuracion/administraciones", json=payload)
+    assert rechazado.status_code == 403
+
+    auth_prueba.como_superadmin()
+    creado = client.post("/api/v1/configuracion/administraciones", json=payload)
+    assert creado.status_code == 201, creado.text
+    datos = creado.json()
+    assert datos["login"] == "ADMIN01"
+    assert datos["subdominio"] == "pesquera-ensayo"
+    assert datos["clave_temporal"]
+
+    from sqlalchemy import select
+    from app.models import CuentaAcceso
+    tenant = session.scalar(select(Tenant).where(Tenant.nombre == "Pesquera de Ensayo"))
+    assert tenant is not None
+    admin = session.scalar(select(Miembro).where(
+        Miembro.tenant_id == tenant.id,
+        Miembro.codigo == "ADMIN01",
+    ))
+    assert admin is not None and admin.rol == "ADMINISTRADOR"
+    cuenta = session.scalar(select(CuentaAcceso).where(
+        CuentaAcceso.tenant_id == tenant.id,
+        CuentaAcceso.miembro_id == admin.id,
+    ))
+    assert cuenta is not None and cuenta.cambio_clave_obligatorio
+
+    repetido = client.post("/api/v1/configuracion/administraciones", json=payload)
+    assert repetido.status_code == 409
