@@ -260,7 +260,9 @@ def _responder_llm(
     mensajes.append(
         {
             "role": "system",
-            "content": ("CONTEXTO AUTORIZADO\n" + contexto.a_prompt(settings.nexus_context_max_chars)),
+            "content": (
+                "CONTEXTO AUTORIZADO\n" + contexto.a_prompt(settings.nexus_context_max_chars)
+            ),
         }
     )
     if conocimiento:

@@ -254,14 +254,22 @@ def estructura_global_tenant(
     tenant = session.get(Tenant, tenant_id)
     if tenant is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Administración no encontrada")
-    miembros = session.scalars(select(Miembro).where(
-        Miembro.tenant_id == tenant_id,
-        Miembro.deleted_at.is_(None),
-    ).order_by(Miembro.rol, Miembro.codigo)).all()
-    gestores = session.scalars(select(Gestor).where(
-        Gestor.tenant_id == tenant_id,
-        Gestor.deleted_at.is_(None),
-    ).order_by(Gestor.codigo)).all()
+    miembros = session.scalars(
+        select(Miembro)
+        .where(
+            Miembro.tenant_id == tenant_id,
+            Miembro.deleted_at.is_(None),
+        )
+        .order_by(Miembro.rol, Miembro.codigo)
+    ).all()
+    gestores = session.scalars(
+        select(Gestor)
+        .where(
+            Gestor.tenant_id == tenant_id,
+            Gestor.deleted_at.is_(None),
+        )
+        .order_by(Gestor.codigo)
+    ).all()
     return {
         "id": str(tenant.id),
         "nombre": tenant.nombre,
@@ -269,14 +277,23 @@ def estructura_global_tenant(
         "subdominio": tenant.subdominio or "",
         "estado": tenant.estado,
         "miembros": [
-            {"id": str(m.id), "codigo": m.codigo, "nombre": m.nombre,
-             "rol": m.rol, "activo": m.activo,
-             "responsable_id": str(m.responsable_id) if m.responsable_id else None}
+            {
+                "id": str(m.id),
+                "codigo": m.codigo,
+                "nombre": m.nombre,
+                "rol": m.rol,
+                "activo": m.activo,
+                "responsable_id": str(m.responsable_id) if m.responsable_id else None,
+            }
             for m in miembros
         ],
         "gestores": [
-            {"id": str(g.id), "codigo": g.codigo, "nombre": g.nombre,
-             "usuario_id": str(g.usuario_id) if g.usuario_id else None}
+            {
+                "id": str(g.id),
+                "codigo": g.codigo,
+                "nombre": g.nombre,
+                "usuario_id": str(g.usuario_id) if g.usuario_id else None,
+            }
             for g in gestores
         ],
     }
@@ -304,8 +321,11 @@ def expedientes_globales_tenant(
         .limit(limite)
     ).all()
     auditoria.registrar(
-        session, tenant_id, "SUPERADMIN_CONSULTA_EXPEDIENTES",
-        "tenant", tenant_id,
+        session,
+        tenant_id,
+        "SUPERADMIN_CONSULTA_EXPEDIENTES",
+        "tenant",
+        tenant_id,
         {"actor_cuenta_id": str(auth.cuenta_id), "limite": limite},
     )
     session.commit()
@@ -345,21 +365,37 @@ def chats_globales_tenant(
     if tenant is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant inexistente")
     items = session.scalars(
-        select(ChatMensaje).where(
+        select(ChatMensaje)
+        .where(
             ChatMensaje.tenant_id == tenant_id,
             ChatMensaje.deleted_at.is_(None),
-        ).order_by(ChatMensaje.created_at.desc(), ChatMensaje.id.desc()).limit(limite)
+        )
+        .order_by(ChatMensaje.created_at.desc(), ChatMensaje.id.desc())
+        .limit(limite)
     ).all()
-    auditoria.registrar(session, tenant_id, "SUPERADMIN_CONSULTA_CHATS",
-        "tenant", tenant_id, {"actor_cuenta_id": str(auth.cuenta_id), "limite": limite})
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "SUPERADMIN_CONSULTA_CHATS",
+        "tenant",
+        tenant_id,
+        {"actor_cuenta_id": str(auth.cuenta_id), "limite": limite},
+    )
     session.commit()
-    return {"tenant_id": str(tenant_id), "mensajes": [
-        {"id": str(m.id), "remitente_cuenta_id": str(m.remitente_cuenta_id),
-         "destinatario_cuenta_id": str(m.destinatario_cuenta_id),
-         "texto": m.texto, "archivo_nombre": m.archivo_nombre,
-         "created_at": m.created_at.isoformat()}
-        for m in items
-    ]}
+    return {
+        "tenant_id": str(tenant_id),
+        "mensajes": [
+            {
+                "id": str(m.id),
+                "remitente_cuenta_id": str(m.remitente_cuenta_id),
+                "destinatario_cuenta_id": str(m.destinatario_cuenta_id),
+                "texto": m.texto,
+                "archivo_nombre": m.archivo_nombre,
+                "created_at": m.created_at.isoformat(),
+            }
+            for m in items
+        ],
+    }
 
 
 @router.delete("/{tenant_id}/chats/{mensaje_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -377,7 +413,12 @@ def eliminar_chat_global(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Mensaje no encontrado")
     mensaje.deleted_at = datetime.now(UTC)
     mensaje.eliminado_por_cuenta_id = auth.cuenta_id
-    auditoria.registrar(session, tenant_id, "SUPERADMIN_ELIMINA_CHAT",
-        "chat_mensaje", mensaje_id,
-        {"actor_cuenta_id": str(auth.cuenta_id), "eliminacion": "logica"})
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "SUPERADMIN_ELIMINA_CHAT",
+        "chat_mensaje",
+        mensaje_id,
+        {"actor_cuenta_id": str(auth.cuenta_id), "eliminacion": "logica"},
+    )
     session.commit()

@@ -18,7 +18,8 @@ def main() -> None:
     bootstrap.add_argument("--codigo", default="SUPADMIN01")
     bootstrap.add_argument("--nombre", default="Superadministrador FACT CENTRAL")
     bootstrap.add_argument(
-        "--crear", action="store_true",
+        "--crear",
+        action="store_true",
         help="Crear SUPADMIN01 solo si no existe; no restablecer contraseñas",
     )
 

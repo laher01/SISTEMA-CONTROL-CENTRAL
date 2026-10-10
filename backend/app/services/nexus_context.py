@@ -431,9 +431,7 @@ def _agregar_empresas(
         return
 
     filas = session.execute(consulta.group_by(Empresa.tipo_relacion)).all()
-    contexto.datos["empresas_por_relacion"] = {
-        str(tipo): int(cantidad) for tipo, cantidad in filas
-    }
+    contexto.datos["empresas_por_relacion"] = {str(tipo): int(cantidad) for tipo, cantidad in filas}
 
 
 def _agregar_organizacion(
@@ -660,10 +658,7 @@ def puede_ver_empresa(
             Expediente.tenant_id == auth.tenant_id,
             Expediente.deleted_at.is_(None),
             *condiciones,
-            (
-                (Expediente.emisor_id == empresa.id)
-                | (Expediente.receptor_id == empresa.id)
-            ),
+            ((Expediente.emisor_id == empresa.id) | (Expediente.receptor_id == empresa.id)),
         )
         .limit(1)
     )

@@ -3,6 +3,7 @@
 Revision ID: 0016
 Revises: 0015
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -21,8 +22,11 @@ def upgrade() -> None:
     )
     op.add_column("chat_mensajes", sa.Column("eliminado_por_cuenta_id", sa.Uuid(), nullable=True))
     op.create_foreign_key(
-        "fk_chat_eliminado_por_cuenta", "chat_mensajes", "cuentas_acceso",
-        ["eliminado_por_cuenta_id"], ["id"],
+        "fk_chat_eliminado_por_cuenta",
+        "chat_mensajes",
+        "cuentas_acceso",
+        ["eliminado_por_cuenta_id"],
+        ["id"],
     )
 
 

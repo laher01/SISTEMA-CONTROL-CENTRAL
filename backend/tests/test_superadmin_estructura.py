@@ -1,4 +1,5 @@
 """El inventario global solo se expone a SUPERADMIN."""
+
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -13,10 +14,15 @@ def test_estructura_tenant_requiere_superadmin(
     nuevo = Tenant(nombre="Tenant de ensayo separado", codigo="ENS-901-AD", estado="ACTIVO")
     session.add(nuevo)
     session.flush()
-    session.add(Miembro(
-        tenant_id=nuevo.id, codigo="ADMIN01", nombre="Admin Prueba",
-        rol="ADMINISTRADOR", activo=True,
-    ))
+    session.add(
+        Miembro(
+            tenant_id=nuevo.id,
+            codigo="ADMIN01",
+            nombre="Admin Prueba",
+            rol="ADMINISTRADOR",
+            activo=True,
+        )
+    )
     session.commit()
 
     auth_prueba.como_admin()
@@ -55,15 +61,19 @@ def test_alta_tenant_independiente_no_autorizada_para_admin(
 
     tenant = session.scalar(select(Tenant).where(Tenant.nombre == "Pesquera de Ensayo"))
     assert tenant is not None
-    admin = session.scalar(select(Miembro).where(
-        Miembro.tenant_id == tenant.id,
-        Miembro.codigo == "ADMIN01",
-    ))
+    admin = session.scalar(
+        select(Miembro).where(
+            Miembro.tenant_id == tenant.id,
+            Miembro.codigo == "ADMIN01",
+        )
+    )
     assert admin is not None and admin.rol == "ADMINISTRADOR"
-    cuenta = session.scalar(select(CuentaAcceso).where(
-        CuentaAcceso.tenant_id == tenant.id,
-        CuentaAcceso.miembro_id == admin.id,
-    ))
+    cuenta = session.scalar(
+        select(CuentaAcceso).where(
+            CuentaAcceso.tenant_id == tenant.id,
+            CuentaAcceso.miembro_id == admin.id,
+        )
+    )
     assert cuenta is not None and cuenta.cambio_clave_obligatorio
 
     repetido = client.post("/api/v1/configuracion/administraciones", json=payload)
@@ -77,14 +87,10 @@ def test_expedientes_globales_solo_superadmin(
     session.add(tenant)
     session.commit()
     auth_prueba.como_admin()
-    prohibido = client.get(
-        f"/api/v1/configuracion/administraciones/{tenant.id}/expedientes"
-    )
+    prohibido = client.get(f"/api/v1/configuracion/administraciones/{tenant.id}/expedientes")
     assert prohibido.status_code == 403
     auth_prueba.como_superadmin()
-    permitido = client.get(
-        f"/api/v1/configuracion/administraciones/{tenant.id}/expedientes"
-    )
+    permitido = client.get(f"/api/v1/configuracion/administraciones/{tenant.id}/expedientes")
     assert permitido.status_code == 200, permitido.text
     assert permitido.json()["expedientes"] == []
     invalido = client.get(

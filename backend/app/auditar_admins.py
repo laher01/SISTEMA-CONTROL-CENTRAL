@@ -3,6 +3,7 @@
 Solo lectura. Ejecutar dentro del contenedor backend con acceso a PostgreSQL.
 No imprime credenciales ni modifica ningún registro.
 """
+
 from sqlalchemy import select
 
 from app.core.db import get_sessionmaker
@@ -23,8 +24,7 @@ def main() -> None:
                 )
             ).all()
             print(
-                f"Tenant: {tenant.nombre}; codigo={tenant.codigo}; "
-                f"subdominio={tenant.subdominio}"
+                f"Tenant: {tenant.nombre}; codigo={tenant.codigo}; subdominio={tenant.subdominio}"
             )
             for miembro in miembros:
                 cuenta = session.scalar(
