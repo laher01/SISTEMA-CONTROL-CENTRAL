@@ -10,6 +10,7 @@ interface Mensaje {
   fuentes?: NexusRespuesta["fuentes"];
   internet?: boolean;
   configuracion?: boolean;
+  motor?: string;
 }
 
 export default function NexusFlotante({ sesion }: { sesion: SesionActual }) {
@@ -22,7 +23,7 @@ export default function NexusFlotante({ sesion }: { sesion: SesionActual }) {
     {
       autor: "nexus",
       texto:
-        "Soy NEXUS. Puedo revisar el contexto actual, comprobar RUC, calcular compras y consultar fuentes externas cuando estén configuradas.",
+        "Soy NEXUS. Ahora trabajo con el contexto de la pantalla, tu rol, los datos autorizados de FACT CENTRAL y la base de conocimiento del proyecto.",
     },
   ]);
 
@@ -38,10 +39,15 @@ export default function NexusFlotante({ sesion }: { sesion: SesionActual }) {
     setTexto("");
     setOcupado(true);
     try {
+      const historial = mensajes.slice(-10).map((item) => ({
+        autor: item.autor === "usuario" ? "usuario" : "nexus",
+        texto: item.texto,
+      }));
       const respuesta = await enviarJson<NexusRespuesta>("/api/v1/nexus/chat", "POST", {
         mensaje: limpio,
         ruta: location.pathname + location.search,
         expediente_id: expedienteId,
+        historial,
       });
       setMensajes((actual) => [
         ...actual,
@@ -51,6 +57,7 @@ export default function NexusFlotante({ sesion }: { sesion: SesionActual }) {
           fuentes: respuesta.fuentes,
           internet: respuesta.internet_usado,
           configuracion: respuesta.requiere_configuracion_externa,
+          motor: respuesta.motor,
         },
       ]);
     } catch (error) {
@@ -71,9 +78,55 @@ export default function NexusFlotante({ sesion }: { sesion: SesionActual }) {
     void consultar(texto);
   };
 
-  const acciones = expedienteId
-    ? ["¿Qué falta en este expediente?", "Verificar RUC del expediente", "Revisar esta factura"]
-    : ["¿Cuánto llevo comprado este mes?", "Buscar actualización SUNAT", "¿Qué puedes hacer?"];
+  const acciones = useMemo(() => {
+    if (expedienteId) {
+      return [
+        "¿Qué falta en este expediente?",
+        "¿Ves alguna inconsistencia aquí?",
+        "Explícame el estado de este expediente",
+      ];
+    }
+    if (location.pathname.startsWith("/pagos")) {
+      return [
+        "¿Qué está pasando en Pagos?",
+        "Explícame pedidos, cobros y liquidaciones",
+        "¿Qué debería revisar en esta pantalla?",
+      ];
+    }
+    if (location.pathname.startsWith("/empresas")) {
+      return [
+        "¿Qué diferencia hay entre Proveedores y Clientes?",
+        "¿Qué debería revisar en estas empresas?",
+        "Explícame Tipo A y Tipo B",
+      ];
+    }
+    if (location.pathname.startsWith("/produccion")) {
+      return [
+        "¿Cómo va la producción este mes?",
+        "¿Cómo se calcula la producción por Usuario y Gestor?",
+        "¿Qué debería revisar aquí?",
+      ];
+    }
+    if (location.pathname.startsWith("/documentos")) {
+      return [
+        "¿Qué documentos necesitan atención?",
+        "¿Cómo funciona la extracción automática?",
+        "¿Qué debería revisar aquí?",
+      ];
+    }
+    if (location.pathname.startsWith("/organizacion")) {
+      return [
+        "Explícame la jerarquía actual",
+        "¿Qué permisos tiene cada rol?",
+        "¿Qué debería revisar aquí?",
+      ];
+    }
+    return [
+      "¿Cuánto llevo comprado este mes?",
+      "¿Qué está pasando en esta pantalla?",
+      "¿Qué puedes hacer aquí?",
+    ];
+  }, [expedienteId, location.pathname]);
 
   return (
     <>
@@ -105,6 +158,12 @@ export default function NexusFlotante({ sesion }: { sesion: SesionActual }) {
               RUC externo: {estado?.consulta_ruc_externa ? "activo" : "pendiente"}
             </span>
             <span>
+              Conversacional: {estado?.motor_conversacional ? "activo" : "contextual"}
+            </span>
+            <span>
+              Knowledge Base: {estado?.knowledge_base ? "activa" : "pendiente"}
+            </span>
+            <span>
               Internet/SUNAT: {estado?.busqueda_internet ? "activo" : "pendiente"}
             </span>
           </div>
@@ -120,6 +179,7 @@ export default function NexusFlotante({ sesion }: { sesion: SesionActual }) {
                 className={"nexus-mensaje " + (mensaje.autor === "usuario" ? "usuario" : "asistente")}
               >
                 <p>{mensaje.texto}</p>
+                {mensaje.motor && <small>Motor: {mensaje.motor}</small>}
                 {mensaje.internet && <small>Consulta externa utilizada</small>}
                 {mensaje.configuracion && (
                   <small>
