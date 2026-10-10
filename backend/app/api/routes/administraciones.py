@@ -2,6 +2,7 @@
 
 import hmac
 import re
+from datetime import UTC, datetime
 import uuid
 from typing import Literal
 
@@ -12,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep
 from app.enums import RolMiembro
-from app.models import CuentaAcceso, Expediente, Gestor, Miembro, Tenant
+from app.models import ChatMensaje, CuentaAcceso, Expediente, Gestor, Miembro, Tenant
 from app.services import auditoria
 from app.security import crear_o_restablecer_cuenta
 from app.tenant_host import validar_subdominio
@@ -326,3 +327,57 @@ def expedientes_globales_tenant(
             for e in expedientes
         ],
     }
+
+
+@router.get("/{tenant_id}/chats")
+def chats_globales_tenant(
+    tenant_id: uuid.UUID,
+    session: SessionDep,
+    auth: OperativeAuthDep,
+    limite: int = 100,
+) -> dict[str, object]:
+    """Historial auditado del tenant, solo lectura global, sin suplantación."""
+    if auth.rol != RolMiembro.SUPERADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo SUPERADMIN")
+    if not 1 <= limite <= 100:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Límite inválido")
+    tenant = session.get(Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Tenant inexistente")
+    items = session.scalars(
+        select(ChatMensaje).where(
+            ChatMensaje.tenant_id == tenant_id,
+            ChatMensaje.deleted_at.is_(None),
+        ).order_by(ChatMensaje.created_at.desc(), ChatMensaje.id.desc()).limit(limite)
+    ).all()
+    auditoria.registrar(session, tenant_id, "SUPERADMIN_CONSULTA_CHATS",
+        "tenant", tenant_id, {"actor_cuenta_id": str(auth.cuenta_id), "limite": limite})
+    session.commit()
+    return {"tenant_id": str(tenant_id), "mensajes": [
+        {"id": str(m.id), "remitente_cuenta_id": str(m.remitente_cuenta_id),
+         "destinatario_cuenta_id": str(m.destinatario_cuenta_id),
+         "texto": m.texto, "archivo_nombre": m.archivo_nombre,
+         "created_at": m.created_at.isoformat()}
+        for m in items
+    ]}
+
+
+@router.delete("/{tenant_id}/chats/{mensaje_id}", status_code=status.HTTP_204_NO_CONTENT)
+def eliminar_chat_global(
+    tenant_id: uuid.UUID,
+    mensaje_id: uuid.UUID,
+    session: SessionDep,
+    auth: OperativeAuthDep,
+) -> None:
+    """Eliminar lógicamente, conservar evidencia y autor identificable."""
+    if auth.rol != RolMiembro.SUPERADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo SUPERADMIN")
+    mensaje = session.get(ChatMensaje, mensaje_id)
+    if mensaje is None or mensaje.tenant_id != tenant_id or mensaje.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Mensaje no encontrado")
+    mensaje.deleted_at = datetime.now(UTC)
+    mensaje.eliminado_por_cuenta_id = auth.cuenta_id
+    auditoria.registrar(session, tenant_id, "SUPERADMIN_ELIMINA_CHAT",
+        "chat_mensaje", mensaje_id,
+        {"actor_cuenta_id": str(auth.cuenta_id), "eliminacion": "logica"})
+    session.commit()
