@@ -64,7 +64,7 @@ jobs:
           umask 077
           test -f deploy/.env.production
           test "$(git branch --show-current)" = main
-          test "$(git rev-parse --short=8 HEAD)" = ac26ce89
+          git merge-base --is-ancestor ac26ce89f0a9d935b4e48b6addef4b9621fa24b7 HEAD
           compose=(docker compose --env-file deploy/.env.production -f deploy/docker-compose.production.yml)
           echo "=== ESTADO SERVICIOS ==="
           "${compose[@]}" ps </dev/null
