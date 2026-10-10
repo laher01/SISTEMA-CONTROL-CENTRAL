@@ -3,6 +3,7 @@
 Esta función no determina la condición tributaria ni valida expedientes:
 el llamador debe aportar líneas YA clasificadas y con tasas históricas.
 """
+
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
