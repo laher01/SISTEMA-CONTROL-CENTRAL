@@ -134,7 +134,7 @@ def administradores(
     salida: list[MantenimientoAdministradorOut] = []
     for cuenta in cuentas:
         rol = _rol_cuenta(session, cuenta)
-        if rol not in {RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR}:
+        if rol != RolMiembro.ADMINISTRADOR:
             continue
         registros = {
             nombre: _contar(
