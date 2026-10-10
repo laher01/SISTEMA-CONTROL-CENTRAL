@@ -138,7 +138,9 @@ class ChatMensaje(ConId, ConTenant, ConCreacion, Base):
     )
     texto: Mapped[str] = mapped_column(String(2000), default="", server_default="")
     deleted_at: Mapped[datetime | None]
-    eliminado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cuentas_acceso.id"))
+    eliminado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_acceso.id")
+    )
     archivo_nombre: Mapped[str | None] = mapped_column(String(255))
     archivo_mime: Mapped[str | None] = mapped_column(String(100))
     archivo_sha256: Mapped[str | None] = mapped_column(String(64))
