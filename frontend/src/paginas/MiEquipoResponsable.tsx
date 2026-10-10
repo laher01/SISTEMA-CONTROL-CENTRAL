@@ -9,6 +9,8 @@ interface UsuarioResponsable {
   nombre: string;
   rol: string;
   activo: boolean;
+  porcentaje_con_agente: string | null;
+  porcentaje_sin_agente: string | null;
 }
 interface Equipo {
   usuarios: { id: string; codigo: string; nombre: string }[];
@@ -43,7 +45,11 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const [mensaje, setMensaje] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [nombreNuevo, setNombreNuevo] = useState("");
-  const [porcentajeNuevo, setPorcentajeNuevo] = useState("1.5");
+  const [porcentajeConNuevo, setPorcentajeConNuevo] = useState("1.5");
+  const [porcentajeSinNuevo, setPorcentajeSinNuevo] = useState("1.5");
+  const [tasasEditando, setTasasEditando] = useState<string | null>(null);
+  const [tasasCon, setTasasCon] = useState("1.5");
+  const [tasasSin, setTasasSin] = useState("1.5");
   const [creandoUsuario, setCreandoUsuario] = useState(false);
   const [credencialNueva, setCredencialNueva] = useState<{ login: string; clave_temporal: string } | null>(null);
   const [errorAlta, setErrorAlta] = useState("");
@@ -56,7 +62,8 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
       const alta = await enviarJson<{ credencial: { login: string; clave_temporal: string } }>(
         "/api/v1/miembros/mis-usuarios", "POST", {
           nombre: nombreNuevo,
-          porcentaje_produccion: porcentajeNuevo,
+          porcentaje_con_agente: porcentajeConNuevo,
+          porcentaje_sin_agente: porcentajeSinNuevo,
         },
       );
       setCredencialNueva(alta.credencial);
@@ -190,9 +197,13 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
               onChange={(e) => setNombreNuevo(e.target.value)}
               placeholder="Nombres y apellidos" />
           </label>
-          <label>Porcentaje de producción (%)
+          <label>% con agente
             <input type="number" min="0" max="100" step="0.0001" required
-              value={porcentajeNuevo} onChange={(e) => setPorcentajeNuevo(e.target.value)} />
+              value={porcentajeConNuevo} onChange={(e) => setPorcentajeConNuevo(e.target.value)} />
+          </label>
+          <label>% sin agente
+            <input type="number" min="0" max="100" step="0.0001" required
+              value={porcentajeSinNuevo} onChange={(e) => setPorcentajeSinNuevo(e.target.value)} />
           </label>
           <button type="submit" disabled={creandoUsuario}>
             {creandoUsuario ? "Creando…" : "Crear Usuario"}
@@ -208,10 +219,33 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
         </div>}
       </section>}
       {pestana === "USUARIOS" && <table>
-        <thead><tr><th>Código</th><th>Nombre</th><th>Estado</th><th>Clientes con expedientes</th></tr></thead>
+        <thead><tr><th>Código</th><th>Nombre</th><th>Estado</th><th>% con agente</th><th>% sin agente</th><th>Editar tasas</th><th>Clientes con expedientes</th></tr></thead>
         <tbody>{(datos ?? []).map((u) => (
           <tr key={u.id}><td>{u.codigo}</td><td>{u.nombre}</td>
             <td>{u.activo ? "Activo" : "Inactivo"}</td>
+            <td>{u.porcentaje_con_agente ?? "—"}%</td>
+            <td>{u.porcentaje_sin_agente ?? "—"}%</td>
+            <td>{tasasEditando === u.id ? <>
+              <input aria-label="% con agente" type="number" min="0" max="100" step="0.0001"
+                value={tasasCon} onChange={(e) => setTasasCon(e.target.value)} />
+              <input aria-label="% sin agente" type="number" min="0" max="100" step="0.0001"
+                value={tasasSin} onChange={(e) => setTasasSin(e.target.value)} />
+              <button type="button" onClick={async () => {
+                try {
+                  await enviarJson(`/api/v1/miembros/mis-usuarios/${u.id}/porcentajes`, "PATCH", {
+                    porcentaje_con_agente: tasasCon, porcentaje_sin_agente: tasasSin,
+                  });
+                  setTasasEditando(null);
+                  recargar();
+                  setMensaje("Porcentajes actualizados.");
+                } catch (error) { setMensaje(String(error)); }
+              }}>Guardar</button>
+              <button type="button" onClick={() => setTasasEditando(null)}>Cancelar</button>
+            </> : <button type="button" onClick={() => {
+              setTasasEditando(u.id);
+              setTasasCon(u.porcentaje_con_agente ?? "1.5");
+              setTasasSin(u.porcentaje_sin_agente ?? "1.5");
+            }}>Editar</button>}</td>
             <td>{new Set(equipo?.clientes.filter((c) => c.usuario_id === u.id).map((c) => c.receptor_id) ?? []).size}</td>
           </tr>
         ))}</tbody>
