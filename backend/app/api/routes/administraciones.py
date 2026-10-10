@@ -70,7 +70,9 @@ def listar_administraciones(
     expedientes = contar(Expediente)
     empresas = contar(Empresa)
     proveedores = contar(Empresa, condicion=Empresa.tipo_relacion.in_(("PROVEEDOR", "AMBOS")))
-    receptores = contar(Empresa, condicion=Empresa.tipo_relacion.in_(("CLIENTE", "RECEPTOR", "AMBOS")))
+    receptores = contar(
+        Empresa, condicion=Empresa.tipo_relacion.in_(("CLIENTE", "RECEPTOR", "AMBOS"))
+    )
     accesos = dict(
         session.execute(
             select(Miembro.tenant_id, func.min(CuentaAcceso.login))
