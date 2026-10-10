@@ -387,13 +387,9 @@ def cotizar_pago_usuario(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "Indique el porcentaje histórico de cada saldo seleccionado",
         )
-    if any(
-        not tasa.is_finite() or tasa < 0 or tasa > 100
-        for tasa in datos.porcentajes_saldos.values()
-    ):
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, "Porcentaje histórico inválido"
-        )
+    tasas_historicas = datos.porcentajes_saldos.values()
+    if any(not t.is_finite() or t < 0 or t > 100 for t in tasas_historicas):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Porcentaje histórico inválido")
     saldos_total = sum((Decimal(s.monto) for s in saldos), Decimal("0"))
     adelantos_total = sum((Decimal(a.monto) for a in adelantos), Decimal("0"))
     base = produccion + saldos_total
@@ -454,13 +450,9 @@ def programar_pago_usuario(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "Indique el porcentaje histórico de cada saldo seleccionado",
         )
-    if any(
-        not tasa.is_finite() or tasa < 0 or tasa > 100
-        for tasa in datos.porcentajes_saldos.values()
-    ):
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, "Porcentaje histórico inválido"
-        )
+    tasas_historicas = datos.porcentajes_saldos.values()
+    if any(not t.is_finite() or t < 0 or t > 100 for t in tasas_historicas):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Porcentaje histórico inválido")
     saldos_total = sum((Decimal(s.monto) for s in saldos), Decimal("0"))
     adelantos_total = sum((Decimal(a.monto) for a in adelantos), Decimal("0"))
     base = produccion + saldos_total
