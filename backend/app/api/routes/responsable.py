@@ -39,6 +39,7 @@ class ProgramarUsuarioIn(BaseModel):
     hasta: date
     moneda: str = Field(pattern="^(PEN|USD)$")
     saldo_ids: list[uuid.UUID] = Field(default_factory=list, max_length=100)
+    porcentajes_saldos: dict[uuid.UUID, Decimal] = Field(default_factory=dict)
     adelanto_ids: list[uuid.UUID] = Field(default_factory=list, max_length=100)
     porcentaje_manual: Decimal | None = Field(
         default=None, ge=0, le=100, max_digits=7, decimal_places=4
@@ -170,27 +171,62 @@ def _base_pago_usuario(
         .order_by(PlanLiquidacion.vigencia_desde.desc())
         .limit(1)
     )
-    produccion = Decimal(
-        session.scalar(
-            select(func.coalesce(func.sum(Expediente.importe_total), 0)).where(
-                Expediente.tenant_id == tenant_id,
-                Expediente.usuario_id == datos.usuario_id,
-                Expediente.deleted_at.is_(None),
-                Expediente.moneda == datos.moneda,
-                Expediente.fecha_emision >= datos.desde,
-                Expediente.fecha_emision <= datos.hasta,
-            )
+    if datos.porcentaje_manual is not None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Configure los dos porcentajes contractuales en Organización; "
+            "no se admite una tasa manual única en liquidaciones nuevas",
         )
-        or 0
+    produccion_con = Decimal("0")
+    produccion_sin = Decimal("0")
+    facturas = session.execute(
+        select(Expediente.importe_total, Empresa.agente_retencion)
+        .join(
+            Empresa,
+            (Empresa.id == Expediente.receptor_id) & (Empresa.tenant_id == Expediente.tenant_id),
+        )
+        .where(
+            Expediente.tenant_id == tenant_id,
+            Expediente.usuario_id == datos.usuario_id,
+            Expediente.deleted_at.is_(None),
+            Expediente.moneda == datos.moneda,
+            Expediente.fecha_emision >= datos.desde,
+            Expediente.fecha_emision <= datos.hasta,
+        )
+    ).all()
+    for importe, es_agente in facturas:
+        if es_agente:
+            produccion_con += Decimal(importe)
+        else:
+            produccion_sin += Decimal(importe)
+    tasa_con = Decimal(
+        usuario.porcentaje_con_agente
+        if usuario.porcentaje_con_agente is not None
+        else usuario.porcentaje_produccion or 0
     )
+    tasa_sin = Decimal(
+        usuario.porcentaje_sin_agente
+        if usuario.porcentaje_sin_agente is not None
+        else usuario.porcentaje_produccion or 0
+    )
+    from app.services.liquidacion_dos_tasas import FacturaProduccion, liquidar_dos_tasas
+
+    calculo = liquidar_dos_tasas(
+        [
+            FacturaProduccion(importe=Decimal(importe), agente_retencion=bool(es_agente))
+            for importe, es_agente in facturas
+        ],
+        porcentaje_con_agente=tasa_con,
+        porcentaje_sin_agente=tasa_sin,
+    )
+    produccion = produccion_con + produccion_sin
+    # El campo histórico porcentaje sigue almacenando una tasa efectiva informativa.
     tasa = (
-        datos.porcentaje_manual
-        if datos.porcentaje_manual is not None
-        else Decimal(usuario.porcentaje_produccion or 0)
+        (calculo["bruto"] * Decimal("100") / produccion).quantize(Decimal("0.0001"))
+        if produccion > 0
+        else Decimal("0")
     )
-    tasa = Decimal(tasa)
-    bruto = (produccion * tasa / Decimal("100")).quantize(Decimal("0.01"))
-    return produccion, tasa, bruto, plan.id if plan is not None else None
+    return produccion, tasa, calculo["bruto"], plan.id if plan is not None else None
 
 
 @router.get("/pagos/liquidaciones")
@@ -344,12 +380,28 @@ def cotizar_pago_usuario(
     auth: OperativeAuthDep,
 ) -> dict[str, str | int]:
     _autorizar_pago(session, tenant_id, auth, datos.usuario_id)
-    produccion, tasa, _, _ = _base_pago_usuario(session, tenant_id, datos)
+    produccion, tasa, bruto_produccion, _ = _base_pago_usuario(session, tenant_id, datos)
     saldos, adelantos, total_pendientes = _componentes_pendientes(session, tenant_id, datos)
+    if set(datos.porcentajes_saldos) != set(datos.saldo_ids):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Indique el porcentaje histórico de cada saldo seleccionado",
+        )
+    tasas_historicas = datos.porcentajes_saldos.values()
+    if any(not t.is_finite() or t < 0 or t > 100 for t in tasas_historicas):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Porcentaje histórico inválido")
     saldos_total = sum((Decimal(s.monto) for s in saldos), Decimal("0"))
     adelantos_total = sum((Decimal(a.monto) for a in adelantos), Decimal("0"))
     base = produccion + saldos_total
-    bruto = (base * tasa / Decimal("100")).quantize(Decimal("0.01"))
+    bruto = bruto_produccion + sum(
+        (
+            (Decimal(s.monto) * datos.porcentajes_saldos[s.id] / Decimal("100")).quantize(
+                Decimal("0.01")
+            )
+            for s in saldos
+        ),
+        Decimal("0"),
+    )
     neto = bruto - adelantos_total
     return {
         "produccion": str(produccion),
@@ -383,7 +435,7 @@ def programar_pago_usuario(
     )
     if anterior is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Existe una liquidación que se solapa")
-    produccion, tasa, _, plan_id = _base_pago_usuario(session, tenant_id, datos)
+    produccion, tasa, bruto_produccion, plan_id = _base_pago_usuario(session, tenant_id, datos)
     saldos, adelantos, total_pendientes = _componentes_pendientes(session, tenant_id, datos)
     omitidos = total_pendientes - len(adelantos)
     if omitidos > 0 and (
@@ -393,10 +445,26 @@ def programar_pago_usuario(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "Explique en observaciones por qué no se descuentan todos los adelantos",
         )
+    if set(datos.porcentajes_saldos) != set(datos.saldo_ids):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Indique el porcentaje histórico de cada saldo seleccionado",
+        )
+    tasas_historicas = datos.porcentajes_saldos.values()
+    if any(not t.is_finite() or t < 0 or t > 100 for t in tasas_historicas):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Porcentaje histórico inválido")
     saldos_total = sum((Decimal(s.monto) for s in saldos), Decimal("0"))
     adelantos_total = sum((Decimal(a.monto) for a in adelantos), Decimal("0"))
     base = produccion + saldos_total
-    bruto = (base * tasa / Decimal("100")).quantize(Decimal("0.01"))
+    bruto = bruto_produccion + sum(
+        (
+            (Decimal(s.monto) * datos.porcentajes_saldos[s.id] / Decimal("100")).quantize(
+                Decimal("0.01")
+            )
+            for s in saldos
+        ),
+        Decimal("0"),
+    )
     neto = bruto - adelantos_total
     if neto < 0:
         raise HTTPException(
@@ -457,6 +525,9 @@ def programar_pago_usuario(
                 {"id": str(s.id), "mes": s.periodo_mes.isoformat(), "monto": str(s.monto)}
                 for s in saldos
             ],
+            "tasas_saldos_historicos": {
+                str(s.id): str(datos.porcentajes_saldos[s.id]) for s in saldos
+            },
             "adelantos_descontados": [{"id": str(a.id), "monto": str(a.monto)} for a in adelantos],
             "adelantos_omitidos": omitidos,
             "observacion_adelantos": datos.observacion_adelantos,

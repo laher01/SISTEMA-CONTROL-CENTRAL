@@ -79,6 +79,12 @@ class MiembroIn(BaseModel):
     porcentaje_produccion: Decimal | None = Field(
         default=None, ge=0, le=100, max_digits=7, decimal_places=4
     )
+    porcentaje_con_agente: Decimal | None = Field(
+        default=None, ge=0, le=100, max_digits=7, decimal_places=4
+    )
+    porcentaje_sin_agente: Decimal | None = Field(
+        default=None, ge=0, le=100, max_digits=7, decimal_places=4
+    )
 
 
 class MiembroOut(Orm):
@@ -88,6 +94,8 @@ class MiembroOut(Orm):
     nombre: str
     rol: RolMiembro
     porcentaje_produccion: Decimal | None
+    porcentaje_con_agente: Decimal | None
+    porcentaje_sin_agente: Decimal | None
     activo: bool
 
 
@@ -96,6 +104,12 @@ class MiembroActualizar(BaseModel):
     nombre: str | None = Field(default=None, min_length=1, max_length=200)
     rol: RolMiembro | None = None
     porcentaje_produccion: Decimal | None = Field(
+        default=None, ge=0, le=100, max_digits=7, decimal_places=4
+    )
+    porcentaje_con_agente: Decimal | None = Field(
+        default=None, ge=0, le=100, max_digits=7, decimal_places=4
+    )
+    porcentaje_sin_agente: Decimal | None = Field(
         default=None, ge=0, le=100, max_digits=7, decimal_places=4
     )
     activo: bool | None = None

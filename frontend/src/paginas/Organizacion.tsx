@@ -37,7 +37,8 @@ function OrganizacionAdmin() {
   const [codigo, setCodigo] = useState("");
   const [nombre, setNombre] = useState("");
   const [rol, setRol] = useState<RolMiembro>("RESPONSABLE");
-  const [porcentajeProduccion, setPorcentajeProduccion] = useState("1.5");
+  const [porcentajeConAgente, setPorcentajeConAgente] = useState("1.5");
+  const [porcentajeSinAgente, setPorcentajeSinAgente] = useState("1.5");
   const [miembroEditando, setMiembroEditando] = useState<string | null>(null);
   const [usuarioId, setUsuarioId] = useState("");
   const [codigoGestor, setCodigoGestor] = useState("");
@@ -119,7 +120,8 @@ function OrganizacionAdmin() {
           codigo,
           nombre,
           rol,
-          porcentaje_produccion: rol === "USUARIO" ? porcentajeProduccion : null,
+          porcentaje_con_agente: rol === "USUARIO" ? porcentajeConAgente : null,
+          porcentaje_sin_agente: rol === "USUARIO" ? porcentajeSinAgente : null,
         });
         setMensaje("Miembro actualizado.");
       } else {
@@ -127,7 +129,8 @@ function OrganizacionAdmin() {
           codigo,
           nombre,
           rol,
-          porcentaje_produccion: rol === "USUARIO" ? porcentajeProduccion : null,
+          porcentaje_con_agente: rol === "USUARIO" ? porcentajeConAgente : null,
+          porcentaje_sin_agente: rol === "USUARIO" ? porcentajeSinAgente : null,
         });
         setCredencial(alta.credencial);
         setMensaje("Miembro creado. Entrega la clave temporal de forma segura.");
@@ -135,7 +138,8 @@ function OrganizacionAdmin() {
       setCodigo("");
       setNombre("");
       setRol(pestanaAdmin === "GESTOR" ? "USUARIO" : pestanaAdmin);
-      setPorcentajeProduccion("1.5");
+      setPorcentajeConAgente("1.5");
+      setPorcentajeSinAgente("1.5");
       setMiembroEditando(null);
       recargar();
       recargarGestores();
@@ -310,18 +314,20 @@ function OrganizacionAdmin() {
               {ROLES.filter((r) => r === pestanaAdmin).map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
             {rol === "USUARIO" && (
+              <>
               <label>
-                % producción predeterminado
-                <input
-                  type="number"
-                  step="0.0001"
-                  min="0"
-                  max="100"
-                  value={porcentajeProduccion}
-                  onChange={(e) => setPorcentajeProduccion(e.target.value)}
-                  required
-                />
+                % con agente de retención
+                <input type="number" step="0.0001" min="0" max="100"
+                  value={porcentajeConAgente}
+                  onChange={(e) => setPorcentajeConAgente(e.target.value)} required />
               </label>
+              <label>
+                % sin agente de retención
+                <input type="number" step="0.0001" min="0" max="100"
+                  value={porcentajeSinAgente}
+                  onChange={(e) => setPorcentajeSinAgente(e.target.value)} required />
+              </label>
+              </>
             )}
             <button type="submit">{miembroEditando ? "Guardar" : "Crear y generar clave"}</button>
             {miembroEditando && (
@@ -330,26 +336,29 @@ function OrganizacionAdmin() {
                 setCodigo("");
                 setNombre("");
                 setRol("USUARIO");
-                setPorcentajeProduccion("1.5");
+                setPorcentajeConAgente("1.5");
+      setPorcentajeSinAgente("1.5");
               }}>Cancelar</button>
             )}
           </form>
 
           <h3>Miembros</h3>
           <table>
-            <thead><tr><th>Código</th><th>Nombre</th><th>Rol</th><th>% producción</th><th>Acciones</th></tr></thead>
+            <thead><tr><th>Código</th><th>Nombre</th><th>Rol</th><th>% con agente</th><th>% sin agente</th><th>Acciones</th></tr></thead>
             <tbody>
               {miembros?.filter((m) => m.rol === pestanaAdmin).map((m) => (
                 <tr key={m.id}>
                   <td>{m.codigo}</td><td>{m.nombre}</td><td>{m.rol}</td>
-                  <td>{m.rol === "USUARIO" ? (m.porcentaje_produccion ?? "0") + "%" : "—"}</td>
+                  <td>{m.rol === "USUARIO" ? (m.porcentaje_con_agente ?? m.porcentaje_produccion ?? "0") + "%" : "—"}</td>
+                  <td>{m.rol === "USUARIO" ? (m.porcentaje_sin_agente ?? m.porcentaje_produccion ?? "0") + "%" : "—"}</td>
                   <td>
                     <button type="button" onClick={() => {
                       setMiembroEditando(m.id);
                       setCodigo(m.codigo);
                       setNombre(m.nombre);
                       setRol(m.rol);
-                      setPorcentajeProduccion(m.porcentaje_produccion ?? "1.5");
+                      setPorcentajeConAgente(m.porcentaje_con_agente ?? m.porcentaje_produccion ?? "1.5");
+                      setPorcentajeSinAgente(m.porcentaje_sin_agente ?? m.porcentaje_produccion ?? "1.5");
                     }}>Editar</button>{" "}
                     <button type="button" onClick={() => void restablecerMiembro(m)}>
                       Restablecer acceso

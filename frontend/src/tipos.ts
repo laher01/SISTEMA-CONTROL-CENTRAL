@@ -66,6 +66,8 @@ export interface Miembro {
   nombre: string;
   rol: RolMiembro;
   porcentaje_produccion: string | null;
+  porcentaje_con_agente: string | null;
+  porcentaje_sin_agente: string | null;
   activo: boolean;
 }
 
