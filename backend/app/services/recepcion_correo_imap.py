@@ -81,8 +81,7 @@ def procesar_mensaje(
         for archivo in archivos
     ]
     registro.estado = (
-        "INGRESADO" if "INGRESADO" in resultados else
-        "REVISION" if resultados else "SIN_XML"
+        "INGRESADO" if "INGRESADO" in resultados else "REVISION" if resultados else "SIN_XML"
     )
     registro.error = ",".join(resultados)[:500] if resultados else None
     session.commit()
@@ -112,7 +111,7 @@ def consultar_buzon(
         estado, encontrados = conexion.uid("search", None, "ALL")
         if estado != "OK":
             raise RuntimeError("No se pudo consultar el buzón")
-        uids = encontrados[0].split()[-max(1, min(limite, 100)):]
+        uids = encontrados[0].split()[-max(1, min(limite, 100)) :]
         for uid_bytes in uids:
             uid = uid_bytes.decode("ascii")
             estado, respuesta = conexion.uid("fetch", uid, "(RFC822)")
