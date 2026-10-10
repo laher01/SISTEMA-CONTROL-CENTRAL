@@ -257,10 +257,11 @@ def _responder_llm(
         "responder preguntas contextuales."
     )
     mensajes: list[dict[str, str]] = [{"role": "system", "content": sistema}]
+    contexto_autorizado = contexto.a_prompt(settings.nexus_context_max_chars)
     mensajes.append(
         {
             "role": "system",
-            "content": ("CONTEXTO AUTORIZADO\n" + contexto.a_prompt(settings.nexus_context_max_chars)),
+            "content": "CONTEXTO AUTORIZADO\n" + contexto_autorizado,
         }
     )
     if conocimiento:
