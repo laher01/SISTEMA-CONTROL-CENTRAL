@@ -422,6 +422,34 @@ def consolidado_compras(
         }
         for id_, codigo, nombre, cantidad, monto in session.execute(consulta)
     ]
+    if agrupar == "RESPONSABLE" and auth.rol == RolMiembro.GERENTE and auth.codigo == "GRTEGLOBAL":
+        # Facturas sin Usuario o Responsable también forman parte del consolidado,
+        # pero no pueden asignarse a un Responsable ni generar comisiones.
+        sin_responsable = session.execute(
+            select(
+                func.count(Expediente.id),
+                func.coalesce(func.sum(Expediente.importe_total), 0),
+            )
+            .outerjoin(Miembro, Expediente.usuario_id == Miembro.id)
+            .where(
+                Expediente.tenant_id == tenant_id,
+                Expediente.deleted_at.is_(None),
+                Expediente.fecha_emision.between(desde, hasta),
+                Expediente.moneda == moneda,
+                alcance_expedientes_gerente(auth),
+                Miembro.responsable_id.is_(None),
+            )
+        ).one()
+        if sin_responsable[0]:
+            filas.append(
+                {
+                    "id": "sin-responsable",
+                    "codigo": "PENDIENTE",
+                    "nombre": "Expedientes sin Responsable identificado",
+                    "registros": sin_responsable[0],
+                    "monto": str(sin_responsable[1]),
+                }
+            )
     return {
         "desde": desde.isoformat(),
         "hasta": hasta.isoformat(),
