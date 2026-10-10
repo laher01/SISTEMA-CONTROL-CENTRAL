@@ -3,6 +3,7 @@
 Entradas: movimientos ya autorizados, de una sola moneda, sin duplicados.
 No crea asientos, no modifica pagos y no efectúa conciliación.
 """
+
 from dataclasses import dataclass
 from decimal import Decimal
 
