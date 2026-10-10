@@ -170,27 +170,63 @@ def _base_pago_usuario(
         .order_by(PlanLiquidacion.vigencia_desde.desc())
         .limit(1)
     )
-    produccion = Decimal(
-        session.scalar(
-            select(func.coalesce(func.sum(Expediente.importe_total), 0)).where(
-                Expediente.tenant_id == tenant_id,
-                Expediente.usuario_id == datos.usuario_id,
-                Expediente.deleted_at.is_(None),
-                Expediente.moneda == datos.moneda,
-                Expediente.fecha_emision >= datos.desde,
-                Expediente.fecha_emision <= datos.hasta,
-            )
+    if datos.porcentaje_manual is not None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Configure los dos porcentajes contractuales en Organización; "
+            "no se admite una tasa manual única en liquidaciones nuevas",
         )
-        or 0
+    produccion_con = Decimal("0")
+    produccion_sin = Decimal("0")
+    facturas = session.execute(
+        select(Expediente.importe_total, Empresa.agente_retencion)
+        .join(
+            Empresa,
+            (Empresa.id == Expediente.receptor_id)
+            & (Empresa.tenant_id == Expediente.tenant_id),
+        )
+        .where(
+            Expediente.tenant_id == tenant_id,
+            Expediente.usuario_id == datos.usuario_id,
+            Expediente.deleted_at.is_(None),
+            Expediente.moneda == datos.moneda,
+            Expediente.fecha_emision >= datos.desde,
+            Expediente.fecha_emision <= datos.hasta,
+        )
+    ).all()
+    for importe, es_agente in facturas:
+        if es_agente:
+            produccion_con += Decimal(importe)
+        else:
+            produccion_sin += Decimal(importe)
+    tasa_con = Decimal(
+        usuario.porcentaje_con_agente
+        if usuario.porcentaje_con_agente is not None
+        else usuario.porcentaje_produccion or 0
     )
+    tasa_sin = Decimal(
+        usuario.porcentaje_sin_agente
+        if usuario.porcentaje_sin_agente is not None
+        else usuario.porcentaje_produccion or 0
+    )
+    from app.services.liquidacion_dos_tasas import FacturaProduccion, liquidar_dos_tasas
+
+    calculo = liquidar_dos_tasas(
+        [
+            FacturaProduccion(importe=Decimal(importe), agente_retencion=bool(es_agente))
+            for importe, es_agente in facturas
+        ],
+        porcentaje_con_agente=tasa_con,
+        porcentaje_sin_agente=tasa_sin,
+    )
+    produccion = produccion_con + produccion_sin
+    # El campo histórico porcentaje sigue almacenando una tasa efectiva informativa.
     tasa = (
-        datos.porcentaje_manual
-        if datos.porcentaje_manual is not None
-        else Decimal(usuario.porcentaje_produccion or 0)
+        (calculo["bruto"] * Decimal("100") / produccion).quantize(Decimal("0.0001"))
+        if produccion > 0
+        else Decimal("0")
     )
-    tasa = Decimal(tasa)
-    bruto = (produccion * tasa / Decimal("100")).quantize(Decimal("0.01"))
-    return produccion, tasa, bruto, plan.id if plan is not None else None
+    return produccion, tasa, calculo["bruto"], plan.id if plan is not None else None
 
 
 @router.get("/pagos/liquidaciones")
