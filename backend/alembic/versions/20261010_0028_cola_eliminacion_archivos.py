@@ -7,6 +7,7 @@ Revises: 0027
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "0028"
@@ -20,7 +21,9 @@ def upgrade() -> None:
         "eliminaciones_archivos_pendientes",
         sa.Column("id", sa.Uuid(), primary_key=True, nullable=False),
         sa.Column("tenant_id", sa.Uuid(), sa.ForeignKey("tenants.id"), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.Column("ruta_storage", sa.String(500), nullable=False),
         sa.Column("estado", sa.String(20), server_default="PENDIENTE", nullable=False),
         sa.Column("intentos", sa.Integer(), server_default="0", nullable=False),
