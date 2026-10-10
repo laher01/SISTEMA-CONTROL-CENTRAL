@@ -1,0 +1,338 @@
+from __future__ import annotations
+
+import uuid
+from dataclasses import dataclass, field
+from datetime import date
+from decimal import Decimal
+from urllib.parse import parse_qs, urlsplit
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.core.config import Settings
+from app.enums import RolMiembro
+from app.models import Documento, Empresa, Expediente, Gestor, Miembro, PagoERP, PedidoGerencia
+from app.security import ContextoAcceso
+
+
+@dataclass
+class ContextoNexus:
+    seccion: str
+    ruta: str
+    actor: dict[str, object]
+    filtros: dict[str, list[str]]
+    datos: dict[str, object] = field(default_factory=dict)
+    advertencias: list[str] = field(default_factory=list)
+
+    def a_prompt(self, max_chars: int) -> str:
+        partes = [
+            f"SECCION={self.seccion}",
+            f"RUTA={self.ruta}",
+            f"ACTOR={self.actor}",
+            f"FILTROS={self.filtros}",
+            f"DATOS_AUTORIZADOS={self.datos}",
+        ]
+        if self.advertencias:
+            partes.append(f"ADVERTENCIAS={self.advertencias}")
+        texto = "\n".join(partes)
+        return texto[:max_chars]
+
+
+def construir_contexto(
+    session: Session,
+    settings: Settings,
+    auth: ContextoAcceso,
+    ruta: str,
+    expediente_id: uuid.UUID | None,
+) -> ContextoNexus:
+    split = urlsplit(ruta)
+    seccion = _seccion(split.path)
+    contexto = ContextoNexus(
+        seccion=seccion,
+        ruta=ruta,
+        actor={
+            "codigo": auth.codigo,
+            "nombre": auth.nombre,
+            "rol": str(auth.rol),
+            "tenant_id": str(auth.tenant_id),
+            "usuario_id": str(auth.usuario_id) if auth.usuario_id else None,
+            "gestor_id": str(auth.gestor_id) if auth.gestor_id else None,
+        },
+        filtros=parse_qs(split.query, keep_blank_values=False),
+    )
+
+    hoy = settings.hoy()
+    desde = date(hoy.year, hoy.month, 1)
+    condiciones = _condiciones_expedientes(auth)
+    condiciones.extend(
+        [
+            Expediente.tenant_id == auth.tenant_id,
+            Expediente.deleted_at.is_(None),
+        ]
+    )
+
+    filas = session.execute(
+        select(
+            Expediente.moneda,
+            func.count(Expediente.id),
+            func.coalesce(func.sum(Expediente.importe_total), 0),
+        )
+        .where(*condiciones, Expediente.fecha_emision >= desde, Expediente.fecha_emision <= hoy)
+        .group_by(Expediente.moneda)
+    ).all()
+    contexto.datos["mes_actual"] = {
+        "desde": desde.isoformat(),
+        "hasta": hoy.isoformat(),
+        "compras": {
+            str(moneda): {"expedientes": int(cantidad), "importe": str(Decimal(total or 0))}
+            for moneda, cantidad, total in filas
+        },
+    }
+
+    estados = session.execute(
+        select(Expediente.estado, func.count(Expediente.id))
+        .where(*condiciones)
+        .group_by(Expediente.estado)
+    ).all()
+    contexto.datos["expedientes_por_estado"] = {
+        str(estado): int(cantidad) for estado, cantidad in estados
+    }
+
+    if expediente_id is not None:
+        _agregar_expediente(session, auth, contexto, expediente_id)
+
+    if seccion == "DOCUMENTOS":
+        _agregar_documentos(session, auth, contexto)
+    elif seccion == "EMPRESAS":
+        _agregar_empresas(session, auth, contexto)
+    elif seccion == "ORGANIZACION":
+        _agregar_organizacion(session, auth, contexto)
+    elif seccion == "PAGOS":
+        _agregar_pagos(session, auth, contexto, desde, hoy)
+
+    return contexto
+
+
+def _agregar_expediente(
+    session: Session,
+    auth: ContextoAcceso,
+    contexto: ContextoNexus,
+    expediente_id: uuid.UUID,
+) -> None:
+    expediente = session.get(Expediente, expediente_id)
+    if expediente is None or expediente.tenant_id != auth.tenant_id or expediente.deleted_at:
+        contexto.advertencias.append("El expediente indicado no existe dentro del Tenant activo.")
+        return
+    if not _puede_ver_expediente(auth, expediente):
+        contexto.advertencias.append("El expediente indicado está fuera del ámbito del actor.")
+        return
+
+    emisor = session.get(Empresa, expediente.emisor_id)
+    receptor = session.get(Empresa, expediente.receptor_id)
+    documentos = list(
+        session.scalars(
+            select(Documento).where(
+                Documento.tenant_id == auth.tenant_id,
+                Documento.expediente_id == expediente.id,
+                Documento.deleted_at.is_(None),
+            )
+        )
+    )
+    contexto.datos["expediente_actual"] = {
+        "id": str(expediente.id),
+        "numero": f"{expediente.tipo_comprobante} {expediente.serie}-{expediente.correlativo}",
+        "fecha_emision": expediente.fecha_emision.isoformat(),
+        "moneda": expediente.moneda,
+        "importe_total": str(expediente.importe_total),
+        "estado": expediente.estado,
+        "pendiente_aprobacion": expediente.pendiente_aprobacion,
+        "emisor": (
+            {"ruc": emisor.ruc, "razon_social": emisor.razon_social}
+            if emisor is not None
+            else None
+        ),
+        "receptor": (
+            {"ruc": receptor.ruc, "razon_social": receptor.razon_social}
+            if receptor is not None
+            else None
+        ),
+        "documentos": [
+            {
+                "tipo": str(documento.tipo_documento) if documento.tipo_documento else None,
+                "estado": str(documento.estado),
+                "nombre": documento.nombre_original,
+            }
+            for documento in documentos
+        ],
+    }
+
+
+def _agregar_documentos(
+    session: Session,
+    auth: ContextoAcceso,
+    contexto: ContextoNexus,
+) -> None:
+    condiciones = [
+        Documento.tenant_id == auth.tenant_id,
+        Documento.deleted_at.is_(None),
+    ]
+    if auth.rol == "GESTOR":
+        condiciones.append(Documento.gestor_id == auth.gestor_id)
+    elif auth.rol == RolMiembro.USUARIO:
+        condiciones.append(Documento.usuario_id == auth.usuario_id)
+    filas = session.execute(
+        select(Documento.estado, func.count(Documento.id))
+        .where(*condiciones)
+        .group_by(Documento.estado)
+    ).all()
+    contexto.datos["documentos_por_estado"] = {
+        str(estado): int(cantidad) for estado, cantidad in filas
+    }
+
+
+def _agregar_empresas(
+    session: Session,
+    auth: ContextoAcceso,
+    contexto: ContextoNexus,
+) -> None:
+    if auth.rol not in {
+        RolMiembro.SUPERADMIN,
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.GERENTE,
+        RolMiembro.RESPONSABLE,
+    }:
+        contexto.advertencias.append(
+            "NEXUS no amplió la vista maestra de Empresas porque el rol actual no es administrativo."
+        )
+        return
+    filas = session.execute(
+        select(Empresa.tipo_relacion, func.count(Empresa.id))
+        .where(Empresa.tenant_id == auth.tenant_id, Empresa.deleted_at.is_(None))
+        .group_by(Empresa.tipo_relacion)
+    ).all()
+    contexto.datos["empresas_por_relacion"] = {
+        str(tipo): int(cantidad) for tipo, cantidad in filas
+    }
+
+
+def _agregar_organizacion(
+    session: Session,
+    auth: ContextoAcceso,
+    contexto: ContextoNexus,
+) -> None:
+    if auth.rol in {RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR}:
+        miembros = session.execute(
+            select(Miembro.rol, func.count(Miembro.id))
+            .where(
+                Miembro.tenant_id == auth.tenant_id,
+                Miembro.deleted_at.is_(None),
+                Miembro.activo.is_(True),
+            )
+            .group_by(Miembro.rol)
+        ).all()
+        gestores = session.scalar(
+            select(func.count(Gestor.id)).where(
+                Gestor.tenant_id == auth.tenant_id,
+                Gestor.deleted_at.is_(None),
+            )
+        )
+        contexto.datos["organizacion"] = {
+            "miembros_por_rol": {str(rol): int(cantidad) for rol, cantidad in miembros},
+            "gestores": int(gestores or 0),
+        }
+    elif auth.rol == RolMiembro.USUARIO and auth.usuario_id is not None:
+        gestores = session.scalar(
+            select(func.count(Gestor.id)).where(
+                Gestor.tenant_id == auth.tenant_id,
+                Gestor.usuario_id == auth.usuario_id,
+                Gestor.deleted_at.is_(None),
+            )
+        )
+        contexto.datos["organizacion"] = {"gestores_propios": int(gestores or 0)}
+    else:
+        contexto.advertencias.append("El rol actual no posee vista organizacional ampliada.")
+
+
+def _agregar_pagos(
+    session: Session,
+    auth: ContextoAcceso,
+    contexto: ContextoNexus,
+    desde: date,
+    hasta: date,
+) -> None:
+    if auth.rol not in {
+        RolMiembro.SUPERADMIN,
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.GERENTE,
+    }:
+        contexto.advertencias.append(
+            "Pagos ERP está restringido; NEXUS no recibió datos económicos de ese módulo."
+        )
+        return
+
+    pedidos = session.execute(
+        select(
+            func.count(PedidoGerencia.id),
+            func.coalesce(func.sum(PedidoGerencia.monto_solicitado), 0),
+        ).where(
+            PedidoGerencia.tenant_id == auth.tenant_id,
+            PedidoGerencia.periodo_mes == desde,
+            PedidoGerencia.estado != "CANCELADO",
+        )
+    ).one()
+    pagos = session.execute(
+        select(
+            PagoERP.estado,
+            func.count(PagoERP.id),
+            func.coalesce(func.sum(PagoERP.saldo), 0),
+        )
+        .where(
+            PagoERP.tenant_id == auth.tenant_id,
+            PagoERP.periodo_hasta >= desde,
+            PagoERP.periodo_desde <= hasta,
+        )
+        .group_by(PagoERP.estado)
+    ).all()
+    contexto.datos["pagos"] = {
+        "pedidos_mes": int(pedidos[0] or 0),
+        "monto_solicitado_mes": str(Decimal(pedidos[1] or 0)),
+        "liquidaciones_por_estado": {
+            str(estado): {"cantidad": int(cantidad), "saldo": str(Decimal(saldo or 0))}
+            for estado, cantidad, saldo in pagos
+        },
+    }
+
+
+def _condiciones_expedientes(auth: ContextoAcceso) -> list[object]:
+    condiciones: list[object] = []
+    if auth.rol == "GESTOR":
+        condiciones.append(Expediente.gestor_id == auth.gestor_id)
+    elif auth.rol == RolMiembro.USUARIO:
+        condiciones.append(Expediente.usuario_id == auth.usuario_id)
+    return condiciones
+
+
+def _puede_ver_expediente(auth: ContextoAcceso, expediente: Expediente) -> bool:
+    if auth.rol == "GESTOR":
+        return expediente.gestor_id == auth.gestor_id
+    if auth.rol == RolMiembro.USUARIO:
+        return expediente.usuario_id == auth.usuario_id
+    return True
+
+
+def _seccion(path: str) -> str:
+    limpio = path.strip("/").split("/", 1)[0].lower()
+    return {
+        "": "DASHBOARD",
+        "dashboard": "DASHBOARD",
+        "registros": "REGISTROS",
+        "documentos": "DOCUMENTOS",
+        "expedientes": "EXPEDIENTES",
+        "pendientes": "DOCUMENTOS",
+        "alertas": "DASHBOARD",
+        "empresas": "EMPRESAS",
+        "organizacion": "ORGANIZACION",
+        "produccion": "PRODUCCION",
+        "pagos": "PAGOS",
+        "configuracion": "CONFIGURACION",
+    }.get(limpio, "GENERAL")
