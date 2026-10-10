@@ -17,7 +17,10 @@ def main() -> None:
     bootstrap = sub.add_parser("bootstrap-admin", help="Crear exclusivamente SUPADMIN01")
     bootstrap.add_argument("--codigo", default="SUPADMIN01")
     bootstrap.add_argument("--nombre", default="Superadministrador FACT CENTRAL")
-    bootstrap.add_argument("--crear", action="store_true", help="Solo crear SUPADMIN01 cuando no exista; nunca restablecer una cuenta existente")
+    bootstrap.add_argument(
+        "--crear", action="store_true",
+        help="Crear SUPADMIN01 solo si no existe; no restablecer contraseñas",
+    )
 
     args = parser.parse_args()
     if args.comando == "bootstrap-admin":
@@ -51,7 +54,9 @@ def _bootstrap_admin(codigo: str, nombre: str, crear: bool = False) -> None:
             session.add(miembro)
             session.flush()
         else:
-            raise SystemExit("SUPADMIN01 ya existe: no se restablecen contraseñas ni se modifica la cuenta")
+            raise SystemExit(
+                "SUPADMIN01 ya existe: no se restablecen contraseñas ni se modifica la cuenta"
+            )
 
         _, temporal = crear_o_restablecer_cuenta(
             session,
