@@ -38,12 +38,12 @@ def liquidar_dos_tasas(
             con_agente += factura.importe
         else:
             sin_agente += factura.importe
-    bruto_sin_agente = (
-        sin_agente * porcentaje_sin_agente / Decimal("100")
-    ).quantize(CENTIMO, rounding=ROUND_HALF_UP)
-    bruto_con_agente = (
-        con_agente * porcentaje_con_agente / Decimal("100")
-    ).quantize(CENTIMO, rounding=ROUND_HALF_UP)
+    bruto_sin_agente = (sin_agente * porcentaje_sin_agente / Decimal("100")).quantize(
+        CENTIMO, rounding=ROUND_HALF_UP
+    )
+    bruto_con_agente = (con_agente * porcentaje_con_agente / Decimal("100")).quantize(
+        CENTIMO, rounding=ROUND_HALF_UP
+    )
     bruto = bruto_sin_agente + bruto_con_agente
     return {
         "produccion_sin_agente": sin_agente.quantize(CENTIMO),
