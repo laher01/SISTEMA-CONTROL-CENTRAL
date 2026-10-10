@@ -118,6 +118,7 @@ class CuentaAcceso(ConId, ConTenant, ConCreacion, Base):
     login: Mapped[str] = mapped_column(String(100))
     email: Mapped[str | None] = mapped_column(String(320), index=True)
     email_verificado: Mapped[bool] = mapped_column(default=False, server_default="false")
+    preferencias_visuales: Mapped[JsonDict | None]
     password_hash: Mapped[str] = mapped_column(String(500))
     miembro_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
     gestor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"), index=True)
