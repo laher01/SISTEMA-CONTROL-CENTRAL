@@ -3,7 +3,7 @@
 import uuid
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
@@ -276,6 +276,108 @@ def asignar_cartera(
     session.commit()
     session.refresh(relacion)
     return relacion
+
+
+
+class AltaEmpresaCarteraIn(BaseModel):
+    gerente_id: uuid.UUID | None = None
+    ruc: str = Field(pattern=r"^[0-9]{11}$")
+    razon_social: str = Field(min_length=3, max_length=300)
+    tipo_relacion: str = Field(default="SIN_CLASIFICAR", pattern="^(CLIENTE|PROVEEDOR|AMBOS|SIN_CLASIFICAR)$")
+
+
+class ImportarCarteraIn(BaseModel):
+    gerente_id: uuid.UUID | None = None
+    empresas: list[AltaEmpresaCarteraIn] = Field(min_length=1, max_length=500)
+
+
+def _gerente_autorizado(
+    session: SessionDep, tenant_id: uuid.UUID, auth: OperativeAuthDep,
+    gerente_id: uuid.UUID | None,
+) -> Miembro:
+    if auth.rol == RolMiembro.GERENTE:
+        if auth.miembro_id is None or (gerente_id is not None and gerente_id != auth.miembro_id):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "No puede administrar otra Gerencia")
+        gerente_id = auth.miembro_id
+    else:
+        _administracion(auth)
+    if gerente_id is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Seleccione un Gerente")
+    return _miembro_activo(session, tenant_id, gerente_id, RolMiembro.GERENTE)
+
+
+def _registrar_empresa_cartera(
+    session: SessionDep, tenant_id: uuid.UUID, auth: OperativeAuthDep,
+    gerente: Miembro, datos: AltaEmpresaCarteraIn,
+) -> tuple[Empresa, str]:
+    empresa = session.scalar(
+        select(Empresa).where(Empresa.tenant_id == tenant_id, Empresa.ruc == datos.ruc)
+    )
+    estado = "VINCULADA"
+    if empresa is None:
+        empresa = Empresa(
+            tenant_id=tenant_id, ruc=datos.ruc,
+            razon_social=datos.razon_social.strip(),
+            tipo_relacion=datos.tipo_relacion,
+        )
+        session.add(empresa)
+        session.flush()
+        estado = "CREADA"
+    elif empresa.deleted_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "RUC archivado: solicitar revisión")
+    # Los datos fiscales compartidos nunca se sobrescriben al importar.
+    relacion = session.scalar(
+        select(GerenteEmpresa).where(
+            GerenteEmpresa.tenant_id == tenant_id,
+            GerenteEmpresa.gerente_id == gerente.id,
+            GerenteEmpresa.empresa_id == empresa.id,
+        )
+    )
+    if relacion is None:
+        session.add(GerenteEmpresa(
+            tenant_id=tenant_id, gerente_id=gerente.id, empresa_id=empresa.id, activo=True
+        ))
+    else:
+        relacion.activo = True
+    auditoria.registrar(
+        session, tenant_id, "CARTERA_EMPRESA_ALTA", "empresas", empresa.id,
+        {"gerente_id": str(gerente.id), "ruc": datos.ruc, "estado": estado,
+         "actor": auth.codigo},
+    )
+    return empresa, estado
+
+
+@router.post("/empresas/alta", status_code=status.HTTP_201_CREATED)
+def alta_empresa_cartera(
+    datos: AltaEmpresaCarteraIn, session: SessionDep,
+    tenant_id: TenantDep, auth: OperativeAuthDep,
+) -> dict[str, str]:
+    gerente = _gerente_autorizado(session, tenant_id, auth, datos.gerente_id)
+    empresa, estado = _registrar_empresa_cartera(session, tenant_id, auth, gerente, datos)
+    session.commit()
+    return {"empresa_id": str(empresa.id), "resultado": estado}
+
+
+@router.post("/empresas/importar")
+def importar_empresas_cartera(
+    datos: ImportarCarteraIn, session: SessionDep,
+    tenant_id: TenantDep, auth: OperativeAuthDep,
+) -> dict[str, int]:
+    gerente = _gerente_autorizado(session, tenant_id, auth, datos.gerente_id)
+    # Evitar duplicados dentro del mismo archivo antes de escribir.
+    rucs = [item.ruc for item in datos.empresas]
+    if len(rucs) != len(set(rucs)):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "RUC duplicado en importación")
+    creadas = 0
+    vinculadas = 0
+    for item in datos.empresas:
+        empresa, estado = _registrar_empresa_cartera(session, tenant_id, auth, gerente, item)
+        if estado == "CREADA":
+            creadas += 1
+        else:
+            vinculadas += 1
+    session.commit()
+    return {"creadas": creadas, "vinculadas": vinculadas}
 
 
 class RegularizarPedidoIn(BaseModel):
