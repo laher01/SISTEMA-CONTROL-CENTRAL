@@ -283,7 +283,9 @@ class AltaEmpresaCarteraIn(BaseModel):
     gerente_id: uuid.UUID | None = None
     ruc: str = Field(pattern=r"^[0-9]{11}$")
     razon_social: str = Field(min_length=3, max_length=300)
-    tipo_relacion: str = Field(default="SIN_CLASIFICAR", pattern="^(CLIENTE|PROVEEDOR|AMBOS|SIN_CLASIFICAR)$")
+    tipo_relacion: str = Field(
+        default="SIN_CLASIFICAR", pattern="^(CLIENTE|PROVEEDOR|AMBOS|SIN_CLASIFICAR)$"
+    )
 
 
 class ImportarCarteraIn(BaseModel):
