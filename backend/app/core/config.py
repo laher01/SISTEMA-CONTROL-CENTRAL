@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     nexus_search_url: str | None = None
     nexus_search_token: str | None = None
     nexus_external_timeout_seconds: int = 10
+    nexus_llm_url: str | None = None
+    nexus_llm_token: str | None = None
+    nexus_llm_model: str | None = None
+    nexus_llm_timeout_seconds: int = 30
+    nexus_knowledge_enabled: bool = True
+    nexus_history_messages: int = 10
+    nexus_context_max_chars: int = 14_000
 
     def hoy(self) -> date:
         return datetime.now(ZoneInfo(self.zona_horaria)).date()
