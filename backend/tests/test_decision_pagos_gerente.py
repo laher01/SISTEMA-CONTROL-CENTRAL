@@ -22,7 +22,9 @@ def test_gerente_incorpora_historicos_con_auditoria_y_aislamiento(
     )
     usuario = Miembro(tenant_id=tid, codigo="US-H", nombre="Usuario", rol="USUARIO")
     empresa = Empresa(
-        tenant_id=tid, ruc="20990001111", razon_social="CLIENTE PRUEBA",
+        tenant_id=tid,
+        ruc="20990001111",
+        razon_social="CLIENTE PRUEBA",
         tipo_relacion="CLIENTE",
     )
     session.add_all([global_g, other_g, responsable, usuario, empresa])
@@ -31,10 +33,17 @@ def test_gerente_incorpora_historicos_con_auditoria_y_aislamiento(
     pendientes = []
     for correlativo, gerente in [("101", None), ("102", other_g.id)]:
         item = Expediente(
-            tenant_id=tid, emisor_id=empresa.id, receptor_id=empresa.id,
-            tipo_comprobante="FACT", serie="F001", correlativo=correlativo,
-            fecha_emision=date(2026, 8, 10), moneda="PEN",
-            importe_total=Decimal("100"), usuario_id=usuario.id, gerente_id=gerente,
+            tenant_id=tid,
+            emisor_id=empresa.id,
+            receptor_id=empresa.id,
+            tipo_comprobante="FACT",
+            serie="F001",
+            correlativo=correlativo,
+            fecha_emision=date(2026, 8, 10),
+            moneda="PEN",
+            importe_total=Decimal("100"),
+            usuario_id=usuario.id,
+            gerente_id=gerente,
         )
         session.add(item)
         pendientes.append(item)
@@ -43,14 +52,22 @@ def test_gerente_incorpora_historicos_con_auditoria_y_aislamiento(
     def sesion_gerente(m: Miembro) -> None:
         anterior = auth_prueba.contexto
         auth_prueba.contexto = ContextoAcceso(
-            cuenta_id=anterior.cuenta_id, tenant_id=tid, rol="GERENTE",
-            miembro_id=m.id, usuario_id=None, gestor_id=None,
-            codigo=m.codigo, nombre=m.nombre, cambio_clave_obligatorio=False,
+            cuenta_id=anterior.cuenta_id,
+            tenant_id=tid,
+            rol="GERENTE",
+            miembro_id=m.id,
+            usuario_id=None,
+            gestor_id=None,
+            codigo=m.codigo,
+            nombre=m.nombre,
+            cambio_clave_obligatorio=False,
         )
 
     args = {
-        "responsable_id": str(responsable.id), "desde": "2026-08-01",
-        "hasta": "2026-08-31", "moneda": "PEN",
+        "responsable_id": str(responsable.id),
+        "desde": "2026-08-01",
+        "hasta": "2026-08-31",
+        "moneda": "PEN",
     }
     sesion_gerente(other_g)
     assert (
@@ -69,9 +86,14 @@ def test_gerente_incorpora_historicos_con_auditoria_y_aislamiento(
         client.post("/api/v1/pagos-responsables/incorporar-historicos", json=args).status_code
         == 422
     )
-    resumen = client.get("/api/v1/pagos-responsables/resumen", params={
-        "desde": "2026-08-01", "hasta": "2026-08-31", "moneda": "PEN",
-    })
+    resumen = client.get(
+        "/api/v1/pagos-responsables/resumen",
+        params={
+            "desde": "2026-08-01",
+            "hasta": "2026-08-31",
+            "moneda": "PEN",
+        },
+    )
     assert resumen.status_code == 200, resumen.text
     assert Decimal(resumen.json()["total_produccion"]) == Decimal("100")
     assert Decimal(resumen.json()["total_comisiones"]) == Decimal("3.5")
