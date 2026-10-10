@@ -380,12 +380,12 @@ def cotizar_pago_usuario(
     auth: OperativeAuthDep,
 ) -> dict[str, str | int]:
     _autorizar_pago(session, tenant_id, auth, datos.usuario_id)
-    produccion, tasa, _, _ = _base_pago_usuario(session, tenant_id, datos)
+    produccion, tasa, bruto_produccion, _ = _base_pago_usuario(session, tenant_id, datos)
     saldos, adelantos, total_pendientes = _componentes_pendientes(session, tenant_id, datos)
     saldos_total = sum((Decimal(s.monto) for s in saldos), Decimal("0"))
     adelantos_total = sum((Decimal(a.monto) for a in adelantos), Decimal("0"))
     base = produccion + saldos_total
-    bruto = (base * tasa / Decimal("100")).quantize(Decimal("0.01"))
+    bruto = bruto_produccion + (saldos_total * tasa / Decimal("100")).quantize(Decimal("0.01"))
     neto = bruto - adelantos_total
     return {
         "produccion": str(produccion),
@@ -419,7 +419,7 @@ def programar_pago_usuario(
     )
     if anterior is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Existe una liquidación que se solapa")
-    produccion, tasa, _, plan_id = _base_pago_usuario(session, tenant_id, datos)
+    produccion, tasa, bruto_produccion, plan_id = _base_pago_usuario(session, tenant_id, datos)
     saldos, adelantos, total_pendientes = _componentes_pendientes(session, tenant_id, datos)
     omitidos = total_pendientes - len(adelantos)
     if omitidos > 0 and (
@@ -432,7 +432,7 @@ def programar_pago_usuario(
     saldos_total = sum((Decimal(s.monto) for s in saldos), Decimal("0"))
     adelantos_total = sum((Decimal(a.monto) for a in adelantos), Decimal("0"))
     base = produccion + saldos_total
-    bruto = (base * tasa / Decimal("100")).quantize(Decimal("0.01"))
+    bruto = bruto_produccion + (saldos_total * tasa / Decimal("100")).quantize(Decimal("0.01"))
     neto = bruto - adelantos_total
     if neto < 0:
         raise HTTPException(
