@@ -26,18 +26,26 @@ def test_gerente_global_ve_historicos_sin_ver_otros_gerentes(
     gerente_global = global_miembro.id
     otro_gerente = otro_miembro.id
     empresa = Empresa(
-        tenant_id=tenant_id, ruc="20995556666",
-        razon_social="CLIENTE HISTORICO", tipo_relacion="CLIENTE"
+        tenant_id=tenant_id,
+        ruc="20995556666",
+        razon_social="CLIENTE HISTORICO",
+        tipo_relacion="CLIENTE",
     )
     session.add(empresa)
     session.flush()
     for n, origen in [("100", None), ("101", gerente_global), ("102", otro_gerente)]:
         session.add(
             Expediente(
-                tenant_id=tenant_id, receptor_id=empresa.id, emisor_id=empresa.id,
-                tipo_comprobante="FACT", serie="F001", correlativo=n,
-                fecha_emision=date(2026, 9, 30), moneda="PEN",
-                importe_total=Decimal("100"), gerente_id=origen,
+                tenant_id=tenant_id,
+                receptor_id=empresa.id,
+                emisor_id=empresa.id,
+                tipo_comprobante="FACT",
+                serie="F001",
+                correlativo=n,
+                fecha_emision=date(2026, 9, 30),
+                moneda="PEN",
+                importe_total=Decimal("100"),
+                gerente_id=origen,
             )
         )
     session.commit()
@@ -45,9 +53,15 @@ def test_gerente_global_ve_historicos_sin_ver_otros_gerentes(
     def ingresar(codigo: str, gerente_id) -> None:
         anterior = auth_prueba.contexto
         auth_prueba.contexto = ContextoAcceso(
-            cuenta_id=anterior.cuenta_id, tenant_id=tenant_id, rol="GERENTE",
-            miembro_id=gerente_id, usuario_id=None, gestor_id=None,
-            codigo=codigo, nombre=codigo, cambio_clave_obligatorio=False,
+            cuenta_id=anterior.cuenta_id,
+            tenant_id=tenant_id,
+            rol="GERENTE",
+            miembro_id=gerente_id,
+            usuario_id=None,
+            gestor_id=None,
+            codigo=codigo,
+            nombre=codigo,
+            cambio_clave_obligatorio=False,
         )
 
     ingresar("GRTEGLOBAL", gerente_global)
