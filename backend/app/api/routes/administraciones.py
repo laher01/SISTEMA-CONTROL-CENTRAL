@@ -2,6 +2,7 @@
 
 import hmac
 import re
+import uuid
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
@@ -236,4 +237,44 @@ def crear_administracion_demo(
         **alta,
         "plan_demo": datos.plan,
         "url": f"https://{alta['subdominio']}.{settings.tenant_domain}/ingresar",
+    }
+
+
+@router.get("/{tenant_id}/estructura")
+def estructura_global_tenant(
+    tenant_id: uuid.UUID,
+    session: SessionDep,
+    auth: OperativeAuthDep,
+) -> dict[str, object]:
+    """Consulta global del tenant; no suplanta sesiones ni expone contraseñas."""
+    if auth.rol != RolMiembro.SUPERADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo SUPERADMIN")
+    tenant = session.get(Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Administración no encontrada")
+    miembros = session.scalars(select(Miembro).where(
+        Miembro.tenant_id == tenant_id,
+        Miembro.deleted_at.is_(None),
+    ).order_by(Miembro.rol, Miembro.codigo)).all()
+    gestores = session.scalars(select(Gestor).where(
+        Gestor.tenant_id == tenant_id,
+        Gestor.deleted_at.is_(None),
+    ).order_by(Gestor.codigo)).all()
+    return {
+        "id": str(tenant.id),
+        "nombre": tenant.nombre,
+        "codigo": tenant.codigo or "",
+        "subdominio": tenant.subdominio or "",
+        "estado": tenant.estado,
+        "miembros": [
+            {"id": str(m.id), "codigo": m.codigo, "nombre": m.nombre,
+             "rol": m.rol, "activo": m.activo,
+             "responsable_id": str(m.responsable_id) if m.responsable_id else None}
+            for m in miembros
+        ],
+        "gestores": [
+            {"id": str(g.id), "codigo": g.codigo, "nombre": g.nombre,
+             "usuario_id": str(g.usuario_id) if g.usuario_id else None}
+            for g in gestores
+        ],
     }
