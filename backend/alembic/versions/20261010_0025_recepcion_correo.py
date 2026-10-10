@@ -38,6 +38,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["responsable_id"], ["miembros.id"]),
         sa.UniqueConstraint("tenant_id", "direccion"),
     )
+    op.create_index(op.f("ix_correo_buzones_tenant_id"), "correo_buzones", ["tenant_id"])
     op.create_index(op.f("ix_correo_buzones_responsable_id"), "correo_buzones", ["responsable_id"])
     op.create_table(
         "correo_remitentes",
@@ -48,6 +49,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["gestor_id"], ["gestores.id"]),
         sa.UniqueConstraint("tenant_id", "gestor_id", "direccion"),
     )
+    op.create_index(op.f("ix_correo_remitentes_tenant_id"), "correo_remitentes", ["tenant_id"])
     op.create_index(op.f("ix_correo_remitentes_gestor_id"), "correo_remitentes", ["gestor_id"])
     op.create_table(
         "correo_mensajes",
@@ -62,6 +64,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["gestor_id"], ["gestores.id"]),
         sa.UniqueConstraint("buzon_id", "identificador_externo"),
     )
+    op.create_index(op.f("ix_correo_mensajes_tenant_id"), "correo_mensajes", ["tenant_id"])
     op.create_index(op.f("ix_correo_mensajes_buzon_id"), "correo_mensajes", ["buzon_id"])
     op.create_index(op.f("ix_correo_mensajes_gestor_id"), "correo_mensajes", ["gestor_id"])
 
@@ -69,8 +72,11 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index(op.f("ix_correo_mensajes_gestor_id"), table_name="correo_mensajes")
     op.drop_index(op.f("ix_correo_mensajes_buzon_id"), table_name="correo_mensajes")
+    op.drop_index(op.f("ix_correo_mensajes_tenant_id"), table_name="correo_mensajes")
     op.drop_table("correo_mensajes")
     op.drop_index(op.f("ix_correo_remitentes_gestor_id"), table_name="correo_remitentes")
+    op.drop_index(op.f("ix_correo_remitentes_tenant_id"), table_name="correo_remitentes")
     op.drop_table("correo_remitentes")
     op.drop_index(op.f("ix_correo_buzones_responsable_id"), table_name="correo_buzones")
+    op.drop_index(op.f("ix_correo_buzones_tenant_id"), table_name="correo_buzones")
     op.drop_table("correo_buzones")
