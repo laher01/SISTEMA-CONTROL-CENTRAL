@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.services.comisiones import calcular_comisiones_por_receptor
+from app.services.comisiones import calcular_comisiones_por_receptor, comision_por_condicion_retencion
 
 
 def test_comision_dos_receptores_calcula_bruto_total() -> None:
@@ -45,3 +45,16 @@ def test_rechaza_tasas_mezcladas() -> None:
             porcentajes_por_receptor={receptor: Decimal("1")},
             porcentaje_global=Decimal("2"),
         )
+
+
+def test_retencion_aplica_3_y_sin_retencion_3_5_por_receptor() -> None:
+    agente=uuid.UUID("00000000-0000-0000-0000-000000000003")
+    sin_agente=uuid.UUID("00000000-0000-0000-0000-000000000004")
+    resultado=comision_por_condicion_retencion({
+        agente: (Decimal("10000.00"), True),
+        sin_agente: (Decimal("10000.00"), False),
+    })
+    assert resultado["total_produccion"] == Decimal("20000.00")
+    assert resultado["comision_total"] == Decimal("650.00")
+    assert [item["porcentaje"] for item in resultado["detalle"]] == ["3.00", "3.50"]
+    assert [item["comision"] for item in resultado["detalle"]] == ["300.00", "350.00"]
