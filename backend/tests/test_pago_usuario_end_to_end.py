@@ -22,7 +22,10 @@ def test_cotizacion_y_programacion_coinciden_con_saldo_historico(
         tenant_id=tenant_id, ruc="20111111111", razon_social="Empresa agente", agente_retencion=True
     )
     receptor_libre = Empresa(
-        tenant_id=tenant_id, ruc="20222222222", razon_social="Empresa sin agente", agente_retencion=False
+        tenant_id=tenant_id,
+        ruc="20222222222",
+        razon_social="Empresa sin agente",
+        agente_retencion=False,
     )
     emisor = Empresa(tenant_id=tenant_id, ruc="20333333333", razon_social="Proveedor")
     session.add_all([receptor_agente, receptor_libre, emisor])
