@@ -48,7 +48,7 @@ jobs:
           compose=(docker compose --env-file deploy/.env.production -f deploy/docker-compose.production.yml)
           source_file="deploy/backups/audit/factcentral_20261010T053407Z.dump"
           test -s "$source_file"
-          (cd "$(dirname "$source_file")" && sha256sum -c "$(basename "$source_file").sha256")
+          sha256sum -c "$source_file.sha256"
           db="factcentral_restore_check_$(date +%s)_$$"
           case "$db" in factcentral_restore_check_*) ;; *) exit 1 ;; esac
           clean() {
