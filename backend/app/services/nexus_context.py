@@ -216,7 +216,8 @@ def _agregar_empresas(
         RolMiembro.RESPONSABLE,
     }:
         contexto.advertencias.append(
-            "NEXUS no amplió la vista maestra de Empresas porque el rol actual no es administrativo."
+            "NEXUS no amplió la vista maestra de Empresas porque el rol actual "
+            "no es administrativo."
         )
         return
     filas = session.execute(
