@@ -182,8 +182,7 @@ def _base_pago_usuario(
         select(Expediente.importe_total, Empresa.agente_retencion)
         .join(
             Empresa,
-            (Empresa.id == Expediente.receptor_id)
-            & (Empresa.tenant_id == Expediente.tenant_id),
+            (Empresa.id == Expediente.receptor_id) & (Empresa.tenant_id == Expediente.tenant_id),
         )
         .where(
             Expediente.tenant_id == tenant_id,
