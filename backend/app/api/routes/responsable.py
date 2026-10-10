@@ -158,10 +158,7 @@ def _base_pago_usuario(
     # El cálculo anterior aplica una única tasa a toda la producción.
     # Las tarifas duales requieren clasificación histórica por documento:
     # nunca aplicar una tasa única ni permitir que porcentaje_manual las eluda.
-    if (
-        usuario.porcentaje_sin_retencion is not None
-        or usuario.porcentaje_con_retencion is not None
-    ):
+    if usuario.porcentaje_sin_retencion is not None or usuario.porcentaje_con_retencion is not None:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             "Liquidación dual pendiente de clasificación histórica; use desglose documental",
@@ -224,8 +221,11 @@ def desglose_documentado_usuario(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Filtro inválido")
     registros = session.execute(
         select(
-            Empresa.id, Empresa.ruc, Empresa.razon_social,
-            func.count(Expediente.id), func.coalesce(func.sum(Expediente.importe_total), 0),
+            Empresa.id,
+            Empresa.ruc,
+            Empresa.razon_social,
+            func.count(Expediente.id),
+            func.coalesce(func.sum(Expediente.importe_total), 0),
         )
         .join(Empresa, Empresa.id == Expediente.receptor_id)
         .where(
@@ -260,13 +260,14 @@ def desglose_documentado_usuario(
         "moneda": moneda,
         "produccion_documentada": str(total),
         "porcentaje_sin_retencion": str(usuario.porcentaje_sin_retencion)
-        if usuario.porcentaje_sin_retencion is not None else None,
+        if usuario.porcentaje_sin_retencion is not None
+        else None,
         "porcentaje_con_retencion": str(usuario.porcentaje_con_retencion)
-        if usuario.porcentaje_con_retencion is not None else None,
+        if usuario.porcentaje_con_retencion is not None
+        else None,
         "comision_liquidable": None,
         "motivo_bloqueo": (
-            "Falta clasificación tributaria histórica por comprobante "
-            "y vigencia de tarifas"
+            "Falta clasificación tributaria histórica por comprobante y vigencia de tarifas"
         ),
         "clientes": clientes,
     }
