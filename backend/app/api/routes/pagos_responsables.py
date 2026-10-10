@@ -246,7 +246,50 @@ def resumen(
     gerente_id = auth.miembro_id if auth.rol == RolMiembro.GERENTE else None
     if auth.rol == RolMiembro.GERENTE and gerente_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Gerente sin identidad")
-    return _calculo(session, tenant_id, desde, hasta, moneda, responsable_id, gerente_id)
+    resultado = _calculo(session, tenant_id, desde, hasta, moneda, responsable_id, gerente_id)
+    if auth.rol == RolMiembro.GERENTE and auth.codigo == "GRTEGLOBAL":
+        # Solo informativo: sin pedido/gerente verificados no genera comisiones pagables.
+        consulta_historica = (
+            select(
+                Miembro.responsable_id,
+                func.sum(Expediente.importe_total),
+                func.count(Expediente.id),
+            )
+            .outerjoin(Miembro, Expediente.usuario_id == Miembro.id)
+            .where(
+                Expediente.tenant_id == tenant_id,
+                Expediente.deleted_at.is_(None),
+                Expediente.gerente_id.is_(None),
+                Expediente.fecha_emision.between(desde, hasta),
+                Expediente.moneda == moneda,
+            )
+            .group_by(Miembro.responsable_id)
+        )
+        historicos = list(session.execute(consulta_historica))
+        responsables = {
+            m.id: m
+            for m in session.scalars(
+                select(Miembro).where(
+                    Miembro.tenant_id == tenant_id,
+                    Miembro.id.in_([fila[0] for fila in historicos]),
+                )
+            )
+        }
+        resultado["pendientes_atribucion"] = [
+            {
+                "responsable_id": str(rid) if rid else "sin-responsable",
+                "responsable": responsables[rid].codigo
+                if rid in responsables
+                else "SIN RESPONSABLE",
+                "registros": n,
+                "produccion": str(_redondear(Decimal(total))),
+            }
+            for rid, total, n in historicos
+        ]
+        resultado["total_pendiente_atribucion"] = str(
+            _redondear(sum((Decimal(total) for _, total, _ in historicos), Decimal("0")))
+        )
+    return resultado
 
 
 @router.put("/comision")

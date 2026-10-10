@@ -26,6 +26,8 @@ type Resumen = {
   total_produccion: string;
   total_comisiones: string;
   filas: Fila[];
+  total_pendiente_atribucion?: string;
+  pendientes_atribucion?: Array<{ responsable_id: string; responsable: string; registros: number; produccion: string }>;
 };
 type Pago = {
   id: string;
@@ -223,6 +225,16 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
       {" · "}
       <strong>Total a pagar por comisiones: {formatearMonto(moneda, datos?.total_comisiones ?? "0")}</strong>
     </div>
+    {sesion.rol === "GERENTE" && Number(datos?.total_pendiente_atribucion ?? 0) > 0 && <section className="panel-configuracion">
+      <h4>Producción histórica pendiente de atribución</h4>
+      <p className="tenue">Registros antiguos disponibles para consulta. No forman parte de las comisiones
+        pagables hasta que Administración confirme el pedido y el Gerente de origen.</p>
+      <strong>{formatearMonto(moneda, datos?.total_pendiente_atribucion ?? "0")}</strong>
+      <div className="tabla-responsive"><table><thead><tr><th>Responsable</th><th>Registros</th><th>Importe histórico</th></tr></thead>
+      <tbody>{(datos?.pendientes_atribucion ?? []).map((r) => <tr key={r.responsable_id}>
+        <td>{r.responsable}</td><td>{r.registros}</td><td>{formatearMonto(moneda, r.produccion)}</td>
+      </tr>)}</tbody></table></div>
+    </section>}
     {mensaje && <p role="status">{mensaje}</p>}
     <div className="tabla-responsive"><table>
       <thead><tr>
