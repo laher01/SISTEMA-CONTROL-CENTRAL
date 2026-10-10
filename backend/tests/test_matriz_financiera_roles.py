@@ -46,5 +46,13 @@ def test_roles_sin_facultad_no_calculan_comisiones_ajenas(
     client: TestClient, auth_prueba: AuthPrueba, rol: str
 ) -> None:
     auth_prueba.contexto = replace(auth_prueba.contexto, rol=rol)
-    respuesta = client.post("/api/v1/comisiones/simular", json={})
-    assert respuesta.status_code in (403, 422), respuesta.text
+    respuesta = client.post(
+        "/api/v1/comisiones/simular",
+        json={
+            "usuario_id": str(uuid.uuid4()),
+            "desde": "2026-09-01",
+            "hasta": "2026-09-30",
+            "moneda": "PEN",
+        },
+    )
+    assert respuesta.status_code == 403, respuesta.text
