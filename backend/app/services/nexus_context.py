@@ -36,11 +36,7 @@ class ContextoNexus:
     advertencias: list[str] = field(default_factory=list)
 
     def a_prompt(self, max_chars: int) -> str:
-        actor_minimo = {
-            clave: valor
-            for clave, valor in self.actor.items()
-            if clave != "tenant_id"
-        }
+        actor_minimo = {clave: valor for clave, valor in self.actor.items() if clave != "tenant_id"}
         partes = [
             f"SECCION={self.seccion}",
             f"RUTA={self.ruta}",
@@ -165,9 +161,7 @@ def _agregar_expediente(
         "estado": expediente.estado,
         "pendiente_aprobacion": expediente.pendiente_aprobacion,
         "emisor": (
-            {"ruc": emisor.ruc, "razon_social": emisor.razon_social}
-            if emisor is not None
-            else None
+            {"ruc": emisor.ruc, "razon_social": emisor.razon_social} if emisor is not None else None
         ),
         "receptor": (
             {"ruc": receptor.ruc, "razon_social": receptor.razon_social}
