@@ -13,9 +13,11 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.enums import RolMiembro, TipoDocumento
 from app.models import Empresa, Expediente
-from app.schemas import NexusChatOut, NexusFuente
+from app.schemas import NexusChatOut, NexusFuente, NexusMensajeHistorial
 from app.security import ContextoAcceso
 from app.services.expedientes import documentos_faltantes, tipos_presentes
+from app.services.nexus_context import ContextoNexus, construir_contexto
+from app.services.nexus_knowledge import recuperar_conocimiento
 
 
 @dataclass(frozen=True)
@@ -32,22 +34,31 @@ def responder(
     mensaje: str,
     ruta: str,
     expediente_id: uuid.UUID | None,
+    historial: list[NexusMensajeHistorial] | None = None,
 ) -> NexusChatOut:
     texto = mensaje.strip()
     normalizado = texto.lower()
+    contexto = construir_contexto(session, settings, auth, ruta, expediente_id)
+    conocimiento, fuentes_conocimiento = recuperar_conocimiento(
+        settings,
+        texto,
+        contexto.seccion,
+    )
 
     if expediente_id is not None and any(
         frase in normalizado
         for frase in ("qué falta", "que falta", "falta algo", "expediente", "revisar factura")
     ):
-        return _responder_expediente(session, settings, auth, expediente_id)
+        salida = _responder_expediente(session, settings, auth, expediente_id)
+        return _enriquecer(salida, contexto, fuentes_conocimiento, "ESPECIALISTA_EXPEDIENTES")
 
     ruc = _extraer_ruc(texto)
     if ruc is not None and any(
         palabra in normalizado
         for palabra in ("ruc", "verifica", "verificar", "razon", "razón", "sunat")
     ):
-        return _responder_ruc(session, settings, auth, ruc)
+        salida = _responder_ruc(session, settings, auth, ruc)
+        return _enriquecer(salida, contexto, fuentes_conocimiento, "ESPECIALISTA_RUC")
 
     if any(
         frase in normalizado
@@ -61,35 +72,244 @@ def responder(
             "compras del mes",
         )
     ):
-        return _responder_totales(session, settings, auth)
+        salida = _responder_totales(session, settings, auth)
+        return _enriquecer(salida, contexto, fuentes_conocimiento, "ESPECIALISTA_DATOS")
 
     if any(
         palabra in normalizado
         for palabra in (
             "sunat",
             "norma",
-            "regla",
             "actualización",
             "actualizacion",
             "internet",
             "buscar",
         )
-    ):
-        return _responder_busqueda_web(settings, texto)
+    ) and settings.nexus_search_url:
+        salida = _responder_busqueda_web(settings, texto)
+        return _enriquecer(salida, contexto, fuentes_conocimiento, "ESPECIALISTA_WEB")
 
-    contexto = _contexto_basico(session, auth, expediente_id)
-    respuesta = (
-        "Estoy conectado al contexto de FACT CENTRAL. Puedo revisar el expediente actual, "
-        "consultar RUC, calcular compras dentro de tu ámbito, explicar qué documentos faltan "
-        "y usar una integración externa para consultas SUNAT cuando esté configurada."
+    if settings.nexus_llm_url:
+        try:
+            return _responder_llm(
+                settings,
+                contexto,
+                texto,
+                historial or [],
+                conocimiento,
+                fuentes_conocimiento,
+            )
+        except (urllib.error.URLError, TimeoutError, ValueError, json.JSONDecodeError):
+            pass
+
+    return _responder_contextual(
+        contexto,
+        texto,
+        conocimiento,
+        fuentes_conocimiento,
+        requiere_llm=not bool(settings.nexus_llm_url),
     )
-    if contexto:
-        respuesta += " Contexto actual: " + contexto
+
+
+def _enriquecer(
+    salida: NexusChatOut,
+    contexto: ContextoNexus,
+    fuentes: list[NexusFuente],
+    motor: str,
+) -> NexusChatOut:
+    existentes = {(fuente.titulo, fuente.tipo) for fuente in salida.fuentes}
+    combinadas = list(salida.fuentes)
+    for fuente in fuentes:
+        clave = (fuente.titulo, fuente.tipo)
+        if clave not in existentes:
+            combinadas.append(fuente)
+            existentes.add(clave)
+    datos = dict(salida.datos)
+    datos["contexto"] = {
+        "seccion": contexto.seccion,
+        "ruta": contexto.ruta,
+        "advertencias": contexto.advertencias,
+    }
+    return salida.model_copy(
+        update={
+            "fuentes": combinadas,
+            "datos": datos,
+            "motor": motor,
+            "seccion": contexto.seccion,
+        }
+    )
+
+
+def _responder_contextual(
+    contexto: ContextoNexus,
+    consulta: str,
+    conocimiento: str,
+    fuentes: list[NexusFuente],
+    *,
+    requiere_llm: bool,
+) -> NexusChatOut:
+    datos = contexto.datos
+    partes = [
+        f"Estoy trabajando en el contexto de {contexto.seccion}.",
+        _resumen_contexto(datos),
+    ]
+    if contexto.advertencias:
+        partes.append("Límite de acceso: " + " ".join(contexto.advertencias))
+    if conocimiento:
+        partes.append(
+            "Encontré reglas o documentación relacionada en la base de conocimiento y las adjunto "
+            "como fuentes. Puedo explicarlas con más detalle."
+        )
+    if requiere_llm:
+        partes.append(
+            "El motor conversacional externo todavía no está configurado; por ahora respondo con "
+            "el contexto estructurado y los especialistas determinísticos de FACT CENTRAL."
+        )
+    return NexusChatOut(
+        respuesta=" ".join(parte for parte in partes if parte),
+        accion="CONTEXTO_NEXUS",
+        fuentes=fuentes,
+        datos={
+            "consulta": consulta,
+            "contexto": datos,
+            "advertencias": contexto.advertencias,
+        },
+        motor="CONTEXTUAL",
+        seccion=contexto.seccion,
+        requiere_configuracion_externa=requiere_llm,
+    )
+
+
+def _resumen_contexto(datos: dict[str, object]) -> str:
+    mes = datos.get("mes_actual")
+    estados = datos.get("expedientes_por_estado")
+    detalles: list[str] = []
+    if isinstance(mes, dict):
+        compras = mes.get("compras")
+        if isinstance(compras, dict) and compras:
+            segmentos = []
+            for moneda, valor in compras.items():
+                if isinstance(valor, dict):
+                    segmentos.append(
+                        f"{valor.get('expedientes', 0)} expedientes por {moneda} "
+                        f"{valor.get('importe', '0')}"
+                    )
+            if segmentos:
+                detalles.append("Mes actual: " + "; ".join(segmentos) + ".")
+    if isinstance(estados, dict) and estados:
+        detalles.append(
+            "Estados: " + ", ".join(f"{clave}={valor}" for clave, valor in estados.items()) + "."
+        )
+    if "expediente_actual" in datos:
+        actual = datos["expediente_actual"]
+        if isinstance(actual, dict):
+            detalles.append(
+                f"Expediente actual: {actual.get('numero')} · estado {actual.get('estado')} · "
+                f"{actual.get('moneda')} {actual.get('importe_total')}."
+            )
+    if "pagos" in datos:
+        pago = datos["pagos"]
+        if isinstance(pago, dict):
+            detalles.append(
+                f"Pagos: {pago.get('pedidos_mes', 0)} pedidos del mes por "
+                f"{pago.get('monto_solicitado_mes', '0')}."
+            )
+    return " ".join(detalles) or "No hay un resumen cuantitativo adicional para esta pantalla."
+
+
+def _responder_llm(
+    settings: Settings,
+    contexto: ContextoNexus,
+    consulta: str,
+    historial: list[NexusMensajeHistorial],
+    conocimiento: str,
+    fuentes: list[NexusFuente],
+) -> NexusChatOut:
+    assert settings.nexus_llm_url is not None
+    limite = max(1, settings.nexus_history_messages)
+    historial_reciente = historial[-limite:]
+
+    sistema = (
+        "Eres NEXUS, asistente operativo de FACT CENTRAL. Responde en español claro y profesional. "
+        "Tu autoridad está limitada al CONTEXTO AUTORIZADO recibido. Nunca amplíes permisos, nunca "
+        "cambies Tenant, nunca inventes datos y nunca afirmes haber modificado el sistema. "
+        "Los datos transaccionales de FACT CENTRAL tienen prioridad para cifras y estados. "
+        "La BASE DE CONOCIMIENTO sirve para explicar reglas y arquitectura. Si falta evidencia, "
+        "di exactamente qué falta. Diferencia hechos del sistema, reglas documentadas e inferencias. "
+        "No cierres expedientes, no apruebes pagos, no cambies reglas ni datos críticos. "
+        "Puedes explicar, detectar inconsistencias, sugerir pasos y responder preguntas contextuales."
+    )
+    mensajes: list[dict[str, str]] = [{"role": "system", "content": sistema}]
+    mensajes.append(
+        {
+            "role": "system",
+            "content": "CONTEXTO AUTORIZADO\n" + contexto.a_prompt(settings.nexus_context_max_chars),
+        }
+    )
+    if conocimiento:
+        mensajes.append(
+            {
+                "role": "system",
+                "content": "BASE DE CONOCIMIENTO RELEVANTE\n" + conocimiento,
+            }
+        )
+    for item in historial_reciente:
+        mensajes.append(
+            {
+                "role": "user" if item.autor == "usuario" else "assistant",
+                "content": item.texto,
+            }
+        )
+    mensajes.append({"role": "user", "content": consulta})
+
+    datos = _http_json(
+        settings.nexus_llm_url,
+        method="POST",
+        token=settings.nexus_llm_token,
+        timeout=settings.nexus_llm_timeout_seconds,
+        payload={
+            "model": settings.nexus_llm_model or "default",
+            "messages": mensajes,
+            "temperature": 0.2,
+        },
+    )
+    respuesta = _texto_llm(datos)
+    if not respuesta:
+        raise ValueError("El motor conversacional no devolvió texto")
+
     return NexusChatOut(
         respuesta=respuesta,
-        accion="AYUDA",
-        datos={"ruta": ruta},
+        accion="RESPUESTA_CONTEXTUAL",
+        fuentes=fuentes,
+        datos={
+            "contexto": {
+                "seccion": contexto.seccion,
+                "ruta": contexto.ruta,
+                "advertencias": contexto.advertencias,
+            }
+        },
+        llm_usado=True,
+        motor="LLM_CONTEXTUAL",
+        seccion=contexto.seccion,
     )
+
+
+def _texto_llm(datos: dict[str, object]) -> str | None:
+    for clave in ("answer", "respuesta", "output_text", "text"):
+        valor = datos.get(clave)
+        if isinstance(valor, str) and valor.strip():
+            return valor.strip()
+
+    choices = datos.get("choices")
+    if isinstance(choices, list) and choices:
+        primero = choices[0]
+        if isinstance(primero, dict):
+            message = primero.get("message")
+            if isinstance(message, dict):
+                content = message.get("content")
+                if isinstance(content, str) and content.strip():
+                    return content.strip()
+    return None
 
 
 def _responder_expediente(
