@@ -1,0 +1,56 @@
+name: verify-login-platform-vps-staging
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factcentral-staging-platform-login
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 15
+    steps:
+      - name: Verificar destino y secretos
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          test "$VPS_HOST" = "132.145.233.172"
+          test "$VPS_USER" = "ubuntu"
+          for name in VPS_DEPLOY_PATH VPS_SSH_PRIVATE_KEY VPS_SSH_KNOWN_HOSTS; do
+            test -n "${!name:-}" || { echo "::error::Falta $name"; exit 1; }
+          done
+      - name: Configurar acceso SSH existente
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+      - name: Probar inicio de sesión real sin publicar credenciales
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
+            "cd -- '$VPS_DEPLOY_PATH' && bash -s" <<'REMOTE' | tee "$RUNNER_TEMP/verify-platform-login.log"
+          set -Eeuo pipefail
+          test -s deploy/private/platform-bootstrap-credentials.txt
+          test -f deploy/.env.production
+          compose=(docker compose --env-file deploy/.env.production -f deploy/docker-compose.production.yml)
+          test "$(grep -c '^CLAVE_TEMPORAL=' deploy/private/platform-bootstrap-credentials.txt)" = 1
+          sed -n 's/^CLAVE_TEMPORAL=//p' deploy/private/platform-bootstrap-credentials.txt |
+            "${compose[@]}" exec -T backend uv run python -c 'import json,sys,urllib.request; password=sys.stdin.read().strip(); assert len(password)>=8; data=json.dumps({"espacio":"PLATFORM","login":"SUPADMIN01","clave":password}).encode(); req=urllib.request.Request("http://127.0.0.1:8000/api/v1/auth/login",data=data,headers={"Content-Type":"application/json"}); response=urllib.request.urlopen(req,timeout=12); result=json.load(response); response.close(); assert result["rol"]=="SUPERADMIN"; assert result["codigo"]=="SUPADMIN01"; print("LOGIN_SUPADMIN_PLATFORM_VERIFICADO")'
+          echo "CREDENCIAL_NO_PUBLICADA"
+          REMOTE
+          grep -Fxq "LOGIN_SUPADMIN_PLATFORM_VERIFICADO" "$RUNNER_TEMP/verify-platform-login.log"
