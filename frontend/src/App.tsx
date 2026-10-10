@@ -5,6 +5,7 @@ import { enviarJson, useDatos } from "./api";
 import NexusFlotante from "./componentes/NexusFlotante";
 import Alertas from "./paginas/Alertas";
 import Configuracion from "./paginas/Configuracion";
+import CarteraGerencia from "./paginas/CarteraGerencia";
 import Chat from "./paginas/Chat";
 import Comisiones from "./paginas/Comisiones";
 import ComisionesResponsables from "./paginas/ComisionesResponsables";
@@ -29,6 +30,7 @@ import type { SesionActual } from "./tipos";
 type RolSesion = SesionActual["rol"];
 
 const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = [
+  { a: "/mi-cartera", texto: "Mi cartera comercial", icono: "▥", roles: ["GERENTE"] },
   { a: "/mi-equipo", texto: "Mis Usuarios", icono: "♙", roles: ["RESPONSABLE"] },
   { a: "/mi-equipo/pedidos", texto: "Pedidos", icono: "▤", roles: ["RESPONSABLE"] },
   { a: "/mi-equipo/cobros", texto: "Cobros y clientes", icono: "◈", roles: ["RESPONSABLE"] },
@@ -202,6 +204,7 @@ export default function App() {
           <Route path="/pago-gestores" element={<PagoGestores />} />
           <Route path="/comisiones" element={<Comisiones sesion={sesion} />} />
           <Route path="/organizacion" element={<Organizacion sesion={sesion} />} />
+          <Route path="/mi-cartera" element={<CarteraGerencia />} />
           <Route path="/produccion" element={<Produccion />} />
           <Route path="/pagos" element={<Pagos sesion={sesion} />} />
           <Route path="/comisiones-responsables" element={<ComisionesResponsables sesion={sesion} />} />

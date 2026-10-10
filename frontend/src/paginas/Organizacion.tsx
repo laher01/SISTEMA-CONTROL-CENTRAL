@@ -32,7 +32,7 @@ function OrganizacionAdmin() {
   const { datos: gestores, recargar: recargarGestores } = useDatos<Gestor[]>("/api/v1/gestores");
   const { datos: vinculos, recargar: recargarVinculos } = useDatos<VinculoGerencia[]>("/api/v1/gerencias/vinculos");
   const { datos: cartera, recargar: recargarCartera } = useDatos<CarteraGerente[]>("/api/v1/gerencias/empresas");
-  const { datos: empresas } = useDatos<Empresa[]>("/api/v1/empresas");
+  const { datos: empresas, recargar: recargarEmpresas } = useDatos<Empresa[]>("/api/v1/empresas");
   const [pestanaAdmin, setPestanaAdmin] = useState<"GERENTE" | "SECRETARIA" | "RESPONSABLE" | "USUARIO" | "GESTOR">("RESPONSABLE");
   const [codigo, setCodigo] = useState("");
   const [nombre, setNombre] = useState("");
@@ -47,6 +47,11 @@ function OrganizacionAdmin() {
   const [gestorEditando, setGestorEditando] = useState<string | null>(null);
   const [credencial, setCredencial] = useState<CredencialTemporal | null>(null);
   const [mensaje, setMensaje] = useState("");
+  const [gerenteCartera, setGerenteCartera] = useState("");
+  const [rucAlta, setRucAlta] = useState("");
+  const [razonAlta, setRazonAlta] = useState("");
+  const [tipoAlta, setTipoAlta] = useState("CLIENTE");
+  const [textoImportacion, setTextoImportacion] = useState("");
 
   const administradores = (miembros ?? []).filter((m) => m.rol === "ADMINISTRADOR" || m.rol === "SUPERADMIN");
   const gerentes = useMemo(
@@ -74,6 +79,35 @@ function OrganizacionAdmin() {
     }
   };
 
+  const altaCartera = async (evento: FormEvent<HTMLFormElement>) => {
+    evento.preventDefault();
+    if (!gerenteCartera) { setMensaje("Seleccione un Gerente."); return; }
+    try {
+      const res = await enviarJson<{ resultado: string }>("/api/v1/gerencias/empresas/alta", "POST", {
+        gerente_id: gerenteCartera, ruc: rucAlta.trim(), razon_social: razonAlta.trim(),
+        tipo_relacion: tipoAlta,
+      });
+      setMensaje(res.resultado === "CREADA" ? "Empresa registrada y vinculada." : "Empresa existente vinculada.");
+      setRucAlta(""); setRazonAlta("");
+      recargarEmpresas(); recargarCartera();
+    } catch (e) { setMensaje(String(e)); }
+  };
+  const importarCartera = async () => {
+    if (!gerenteCartera) { setMensaje("Seleccione un Gerente."); return; }
+    const filas = textoImportacion.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const empresasImportadas = filas.map((linea) => {
+      const [ruc, razon_social, tipo_relacion = "SIN_CLASIFICAR"] = linea.split(";").map((v) => v.trim());
+      return { ruc, razon_social, tipo_relacion: tipo_relacion.toUpperCase() };
+    });
+    try {
+      const res = await enviarJson<{ creadas: number; vinculadas: number }>(
+        "/api/v1/gerencias/empresas/importar", "POST",
+        { gerente_id: gerenteCartera, empresas: empresasImportadas },
+      );
+      setMensaje(`Importación completada: ${res.creadas} nuevas y ${res.vinculadas} vinculadas.`);
+      setTextoImportacion(""); recargarEmpresas(); recargarCartera();
+    } catch (e) { setMensaje(String(e)); }
+  };
   const vincularEmpresa = async (gerenteId: string, empresaId: string, activo: boolean) => {
     try {
       await enviarJson<CarteraGerente>("/api/v1/gerencias/empresas", "PUT", {
@@ -260,6 +294,49 @@ function OrganizacionAdmin() {
       </section>}
       {pestanaAdmin === "GERENTE" && <section className="panel-configuracion">
         <h3>Empresas por Gerente</h3>
+        <div className="panel-configuracion">
+          <h4>Alta e importación de empresas a una cartera</h4>
+          <label>Gerente destinatario
+            <select value={gerenteCartera} onChange={(e) => setGerenteCartera(e.target.value)}>
+              <option value="">Seleccionar Gerente</option>
+              {gerentes.map((g) => <option key={g.id} value={g.id}>{g.codigo} · {g.nombre}</option>)}
+            </select>
+          </label>
+          <form className="filtros" onSubmit={(e) => void altaCartera(e)}>
+            <label>RUC
+              <input value={rucAlta} onChange={(e) => setRucAlta(e.target.value)}
+                pattern="[0-9]{11}" maxLength={11} required placeholder="11 dígitos" />
+            </label>
+            <label>Razón social
+              <input value={razonAlta} onChange={(e) => setRazonAlta(e.target.value)}
+                minLength={3} maxLength={300} required />
+            </label>
+            <label>Relación comercial
+              <select value={tipoAlta} onChange={(e) => setTipoAlta(e.target.value)}>
+                <option value="CLIENTE">Cliente</option>
+                <option value="PROVEEDOR">Proveedor</option>
+                <option value="AMBOS">Ambos</option>
+                <option value="SIN_CLASIFICAR">Sin clasificar</option>
+              </select>
+            </label>
+            <button type="submit">Registrar o vincular empresa</button>
+          </form>
+          <p className="tenue">Importación: una empresa por línea, RUC;RAZÓN SOCIAL;TIPO.
+            Si el RUC ya existe, se vincula sin modificar su ficha fiscal.</p>
+          <textarea rows={4} value={textoImportacion}
+            onChange={(e) => setTextoImportacion(e.target.value)}
+            placeholder="20538821374;MAREUF;CLIENTE" />
+          <label>Archivo CSV separado por punto y coma
+            <input type="file" accept=".csv,.txt,text/csv,text/plain"
+              onChange={(e) => {
+                const archivo = e.target.files?.[0];
+                if (archivo) void archivo.text().then(setTextoImportacion);
+              }} />
+          </label>
+          <button type="button" disabled={!textoImportacion.trim() || !gerenteCartera}
+            onClick={() => void importarCartera()}>Importar empresas</button>
+        </div>
+
         <p className="tenue">Las empresas comparten su RUC, pero solo los Gerentes
           autorizados pueden emitir pedidos de ellas.</p>
         <div style={{ overflowX: "auto" }}><table><thead><tr>

@@ -487,6 +487,8 @@ class GerenteEmpresa(ConId, ConTenant, ConCreacion, Base):
 
     gerente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
     empresa_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("empresas.id"), index=True)
+    alias_comercial: Mapped[str | None] = mapped_column(String(200))
+    rol_comercial: Mapped[str | None] = mapped_column(String(20))
     activo: Mapped[bool] = mapped_column(default=True, server_default="true")
 
 
