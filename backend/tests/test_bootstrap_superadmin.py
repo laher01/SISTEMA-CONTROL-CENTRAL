@@ -5,12 +5,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 from app import cli
-from app.models import CuentaAcceso, Miembro
+from app.models import CuentaAcceso, Miembro, Tenant
 from app.services.expedientes import obtener_tenant
 
 
 def test_bootstrap_superadmin_preserva_admin(engine, settings, monkeypatch):
-    monkeypatch.setattr(cli, "get_settings", lambda: settings)
     monkeypatch.setattr(cli, "get_sessionmaker", lambda: sessionmaker(engine))
     with sessionmaker(engine)() as s:
         tenant = obtener_tenant(s, settings.tenant_default)
@@ -50,9 +49,11 @@ def test_bootstrap_superadmin_preserva_admin(engine, settings, monkeypatch):
         assert admin is not None and admin.rol == "ADMINISTRADOR"
         assert cuenta is not None and cuenta.password_hash == "clave-vigente-no-modificar"
         assert cuenta.login == "ADMIN01"
+        platform = s.scalar(select(Tenant).where(Tenant.codigo == "PLATFORM"))
+        assert platform is not None and platform.id != admin.tenant_id
         sup = s.scalar(
             select(Miembro).where(
-                Miembro.tenant_id == admin.tenant_id,
+                Miembro.tenant_id == platform.id,
                 Miembro.codigo == "SUPADMIN01",
             )
         )
