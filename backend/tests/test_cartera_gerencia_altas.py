@@ -28,20 +28,34 @@ def test_admin_importa_y_reutiliza_empresa_del_tenant(
 
     segunda = client.post(
         "/api/v1/gerencias/empresas/importar",
-        json={"gerente_id": str(gerente_b.id), "empresas": [
-            {**empresa, "razon_social": "NO ALTERAR FICHA ORIGINAL"},
-            {"ruc": "20444444444", "razon_social": "Proveedor nuevo", "tipo_relacion": "PROVEEDOR"},
-        ]},
+        json={
+            "gerente_id": str(gerente_b.id),
+            "empresas": [
+                {**empresa, "razon_social": "NO ALTERAR FICHA ORIGINAL"},
+                {
+                    "ruc": "20444444444",
+                    "razon_social": "Proveedor nuevo",
+                    "tipo_relacion": "PROVEEDOR",
+                },
+            ],
+        },
     )
     assert segunda.status_code == 200, segunda.text
     assert segunda.json() == {"creadas": 1, "vinculadas": 1}
     assert len(session.scalars(select(Empresa).where(Empresa.tenant_id == tenant)).all()) == 2
     original = session.scalar(select(Empresa).where(Empresa.ruc == "20538821374"))
     assert original.razon_social == "MAREUF"
-    assert len(session.scalars(select(GerenteEmpresa).where(
-        GerenteEmpresa.empresa_id == original.id,
-        GerenteEmpresa.activo.is_(True),
-    )).all()) == 2
+    assert (
+        len(
+            session.scalars(
+                select(GerenteEmpresa).where(
+                    GerenteEmpresa.empresa_id == original.id,
+                    GerenteEmpresa.activo.is_(True),
+                )
+            ).all()
+        )
+        == 2
+    )
 
 
 def test_gerente_no_puede_operar_cartera_de_otro(
@@ -70,8 +84,7 @@ def test_importacion_rechaza_ruc_duplicado_y_rol_no_autorizado(
     client: TestClient, session: Session, auth_prueba: AuthPrueba
 ) -> None:
     gerente = Miembro(
-        tenant_id=auth_prueba.contexto.tenant_id,
-        rol="GERENTE", codigo="GER-E", nombre="Gerencia E"
+        tenant_id=auth_prueba.contexto.tenant_id, rol="GERENTE", codigo="GER-E", nombre="Gerencia E"
     )
     session.add(gerente)
     session.commit()
