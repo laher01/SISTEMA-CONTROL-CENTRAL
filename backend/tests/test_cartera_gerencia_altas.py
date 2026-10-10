@@ -101,3 +101,38 @@ def test_importacion_rechaza_ruc_duplicado_y_rol_no_autorizado(
         json={**datos, "gerente_id": str(gerente.id)},
     )
     assert prohibido.status_code == 403
+
+
+def test_edicion_comercial_no_modifica_ficha_fiscal_compartida(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    tenant = auth_prueba.contexto.tenant_id
+    gerente_a = Miembro(tenant_id=tenant, rol="GERENTE", codigo="GER-F", nombre="Gerencia F")
+    gerente_b = Miembro(tenant_id=tenant, rol="GERENTE", codigo="GER-G", nombre="Gerencia G")
+    session.add_all([gerente_a, gerente_b])
+    session.commit()
+    auth_prueba.como_admin()
+    datos = {"ruc": "20111111111", "razon_social": "Razón fiscal", "tipo_relacion": "CLIENTE"}
+    for gerente in (gerente_a, gerente_b):
+        respuesta = client.post(
+            "/api/v1/gerencias/empresas/alta", json={**datos, "gerente_id": str(gerente.id)}
+        )
+        assert respuesta.status_code == 201, respuesta.text
+    vinculos = session.scalars(select(GerenteEmpresa)).all()
+    propio = next(v for v in vinculos if v.gerente_id == gerente_a.id)
+    ajeno = next(v for v in vinculos if v.gerente_id == gerente_b.id)
+    auth_prueba.contexto = replace(
+        auth_prueba.contexto, rol="GERENTE", miembro_id=gerente_a.id, usuario_id=None
+    )
+    ruta = f"/api/v1/gerencias/empresas/{propio.id}"
+    edicion = client.patch(ruta, json={"alias_comercial": "Mi cliente", "rol_comercial": "AMBOS"})
+    assert edicion.status_code == 200, edicion.text
+    assert edicion.json()["alias_comercial"] == "Mi cliente"
+    session.refresh(ajeno)
+    assert ajeno.alias_comercial is None
+    fiscal = session.get(Empresa, propio.empresa_id)
+    assert fiscal.razon_social == "Razón fiscal"
+    assert client.patch(
+        f"/api/v1/gerencias/empresas/{ajeno.id}",
+        json={"alias_comercial": "Fuera de mi cartera"},
+    ).status_code == 403
