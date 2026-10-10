@@ -69,3 +69,26 @@ def test_alta_tenant_independiente_no_autorizada_para_admin(
 
     repetido = client.post("/api/v1/configuracion/administraciones", json=payload)
     assert repetido.status_code == 409
+
+
+def test_expedientes_globales_solo_superadmin(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    tenant = Tenant(nombre="Inspección auditada", codigo="INS-902-AD", estado="ACTIVO")
+    session.add(tenant)
+    session.commit()
+    auth_prueba.como_admin()
+    prohibido = client.get(
+        f"/api/v1/configuracion/administraciones/{tenant.id}/expedientes"
+    )
+    assert prohibido.status_code == 403
+    auth_prueba.como_superadmin()
+    permitido = client.get(
+        f"/api/v1/configuracion/administraciones/{tenant.id}/expedientes"
+    )
+    assert permitido.status_code == 200, permitido.text
+    assert permitido.json()["expedientes"] == []
+    invalido = client.get(
+        f"/api/v1/configuracion/administraciones/{tenant.id}/expedientes?limite=101"
+    )
+    assert invalido.status_code == 422
