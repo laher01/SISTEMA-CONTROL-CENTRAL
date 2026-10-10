@@ -378,3 +378,51 @@ def test_limpieza_rechaza_confirmacion_invalida_sin_borrar_datos(
     session.refresh(documento)
     assert documento.deleted_at is None
     assert session.get(Documento, documento.id) is not None
+
+def test_limpieza_fallo_de_archivo_deja_pendiente_recuperacion(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba, settings, monkeypatch
+) -> None:
+    from pathlib import Path
+
+    from app.models import Documento
+
+    auth_prueba.como_admin()
+    ruta = settings.storage_dir / "pruebas" / "pendiente.pdf"
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.write_bytes(b"archivo ficticio")
+    documento = Documento(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        creado_por_cuenta_id=auth_prueba.contexto.cuenta_id,
+        sha256="d" * 64,
+        nombre_original="pendiente.pdf",
+        mime_type="application/pdf",
+        tamano_bytes=16,
+        ruta_storage="pruebas/pendiente.pdf",
+        estado="PENDIENTE",
+    )
+    session.add(documento)
+    session.commit()
+    documento_id = documento.id
+
+    def fallar_borrado(self: Path, *args, **kwargs) -> None:
+        raise OSError("fallo simulado del almacenamiento")
+
+    monkeypatch.setattr(Path, "unlink", fallar_borrado)
+    respuesta = client.post(
+        "/api/v1/configuracion/mantenimiento/limpiar",
+        json={
+            "cuenta_ids": [str(auth_prueba.contexto.cuenta_id)],
+            "incluir_sin_trazabilidad": False,
+            "tipos": ["documentos"],
+            "fecha_desde": None,
+            "fecha_hasta": None,
+            "confirmacion": "ELIMINAR-DATOS-OPERATIVOS",
+        },
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["eliminados"]["documentos"] == 1
+    assert respuesta.json()["archivos_eliminados"] == 0
+    assert ruta.exists()
+    session.expire_all()
+    assert session.get(Documento, documento_id) is None
+    # Regresión documentada: la operación actual no crea una cola durable de reintento.
