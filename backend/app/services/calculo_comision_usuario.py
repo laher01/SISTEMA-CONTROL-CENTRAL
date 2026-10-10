@@ -6,7 +6,6 @@ el llamador debe aportar líneas YA clasificadas y con tasas históricas.
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
-
 CENTIMO = Decimal("0.01")
 
 
