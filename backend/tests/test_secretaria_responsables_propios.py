@@ -34,11 +34,8 @@ def test_secretaria_no_modifica_responsables_ajenos(
         nombre="Responsable gerencia",
         rol="RESPONSABLE",
         activo=True,
-        creado_por_cuenta_id=uuid.uuid4(),
+        creado_por_cuenta_id=None,
     )
-    # La referencia al creador debe existir: se reutiliza una cuenta real diferente
-    # únicamente en las pruebas de permisos que no requieren resolver el creador.
-    ajeno.creado_por_cuenta_id = None
     session.add(ajeno)
     session.commit()
 
@@ -51,7 +48,10 @@ def test_secretaria_no_modifica_responsables_ajenos(
 
     cambiar = client.patch(base + "/" + id_propio, json={"nombre": "Marta Actualizada"})
     assert cambiar.status_code == 200, cambiar.text
-    assert client.patch(base + "/" + str(ajeno.id), json={"nombre": "Intrusión"}).status_code == 403
+    assert (
+        client.patch(base + "/" + str(ajeno.id), json={"nombre": "Intrusión"}).status_code
+        == 403
+    )
     assert client.post(base + "/" + str(ajeno.id) + "/desactivar").status_code == 403
     assert client.post(base + "/" + str(ajeno.id) + "/restablecer-acceso").status_code == 403
     session.refresh(ajeno)
@@ -79,8 +79,11 @@ def test_secretaria_desactiva_solo_responsable_sin_usuarios(
     id_propio = nuevo.json()["miembro"]["id"]
     base = "/api/v1/miembros/responsables-operativos/" + id_propio
     usuario = Miembro(
-        tenant_id=actual.tenant_id, codigo="USER-TEST-SECR",
-        nombre="Usuario asignado", rol="USUARIO", activo=True,
+        tenant_id=actual.tenant_id,
+        codigo="USER-TEST-SECR",
+        nombre="Usuario asignado",
+        rol="USUARIO",
+        activo=True,
         responsable_id=uuid.UUID(id_propio),
     )
     session.add(usuario)
