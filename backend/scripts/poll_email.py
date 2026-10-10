@@ -8,14 +8,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.db import engine
+from app.core.db import get_engine
 from app.models import CorreoBuzon
 from app.services.recepcion_correo_imap import consultar_buzon
 
 
 def main() -> None:
     settings = get_settings()
-    with Session(engine) as session:
+    with Session(get_engine()) as session:
         buzones = list(session.scalars(select(CorreoBuzon.id).where(CorreoBuzon.activo.is_(True))))
         for buzon_id in buzones:
             try:
