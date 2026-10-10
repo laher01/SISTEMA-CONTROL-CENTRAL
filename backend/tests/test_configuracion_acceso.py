@@ -28,7 +28,7 @@ def configuracion_payload(
     }
 
 
-def test_configuracion_acceso_es_exclusiva_de_superadmin(
+def test_configuracion_acceso_es_exclusiva_de_administrador(
     client: TestClient,
     auth_prueba: AuthPrueba,
 ) -> None:
@@ -36,7 +36,7 @@ def test_configuracion_acceso_es_exclusiva_de_superadmin(
     respuesta = client.get("/api/v1/configuracion/acceso")
     assert respuesta.status_code == 403
 
-    auth_prueba.como_superadmin()
+    auth_prueba.como_admin()
     respuesta = client.get("/api/v1/configuracion/acceso")
     assert respuesta.status_code == 200
     datos = respuesta.json()
@@ -50,7 +50,7 @@ def test_superadmin_autoriza_correo_y_habilita_solicitudes(
     client: TestClient,
     auth_prueba: AuthPrueba,
 ) -> None:
-    auth_prueba.como_superadmin()
+    auth_prueba.como_admin()
 
     correo = client.post(
         "/api/v1/configuracion/acceso/correos",
@@ -85,7 +85,7 @@ def test_no_permite_solicitud_con_correo_no_autorizado(
     client: TestClient,
     auth_prueba: AuthPrueba,
 ) -> None:
-    auth_prueba.como_superadmin()
+    auth_prueba.como_admin()
     config = client.put(
         "/api/v1/configuracion/acceso",
         json=configuracion_payload(registro_publico=True),
@@ -107,7 +107,7 @@ def test_no_permite_desactivar_aprobacion_sin_verificacion_email(
     client: TestClient,
     auth_prueba: AuthPrueba,
 ) -> None:
-    auth_prueba.como_superadmin()
+    auth_prueba.como_admin()
     respuesta = client.put(
         "/api/v1/configuracion/acceso",
         json=configuracion_payload(registro_publico=True, requiere_aprobacion=False),
