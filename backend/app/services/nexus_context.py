@@ -11,7 +11,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, aliased
 
 from app.core.config import Settings
-from app.enums import RolMiembro
+from app.enums import Moneda, RolMiembro
 from app.models import (
     Documento,
     Empresa,
@@ -268,7 +268,7 @@ def _agregar_registros(
             func.coalesce(
                 func.sum(
                     case(
-                        (base.c.moneda == "PEN", base.c.importe_total),
+                        (base.c.moneda == Moneda.PEN, base.c.importe_total),
                         else_=0,
                     )
                 ),
@@ -277,7 +277,7 @@ def _agregar_registros(
             func.coalesce(
                 func.sum(
                     case(
-                        (base.c.moneda == "USD", base.c.importe_total),
+                        (base.c.moneda == Moneda.USD, base.c.importe_total),
                         else_=0,
                     )
                 ),
@@ -475,7 +475,16 @@ def _agregar_organizacion(
                 )
             )
         )
-        usuarios = _usuarios_visibles(session, auth) or []
+        usuarios = set(
+            session.scalars(
+                select(Expediente.usuario_id).where(
+                    Expediente.tenant_id == auth.tenant_id,
+                    Expediente.deleted_at.is_(None),
+                    alcance_expedientes_gerente(auth),
+                    Expediente.usuario_id.is_not(None),
+                )
+            )
+        )
         contexto.datos["organizacion"] = {
             "responsables_vinculados": len(responsables),
             "usuarios_bajo_gerencia": len(usuarios),
