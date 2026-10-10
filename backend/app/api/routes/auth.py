@@ -228,6 +228,46 @@ def solicitar_acceso(
     return solicitud
 
 
+class PreferenciasVisualesIn(BaseModel):
+    tema: str = "CLARO"
+    color: str = "AZUL"
+    densidad: str = "NORMAL"
+    barra: str = "AUTOMATICO"
+
+
+def _validar_apariencia(datos: PreferenciasVisualesIn) -> None:
+    opciones = {
+        "tema": {"CLARO", "OSCURO", "SISTEMA"},
+        "color": {"AZUL", "VERDE", "VIOLETA", "GRIS", "NARANJA"},
+        "densidad": {"COMPACTO", "NORMAL", "AMPLIO"},
+        "barra": {"AUTOMATICO", "MANUAL"},
+    }
+    for campo, valores in opciones.items():
+        if getattr(datos, campo) not in valores:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Opción visual inválida")
+
+
+@router.get("/mi-apariencia", response_model=PreferenciasVisualesIn)
+def leer_apariencia(contexto: AuthDep, session: SessionDep) -> PreferenciasVisualesIn:
+    cuenta = session.get(CuentaAcceso, contexto.cuenta_id)
+    if cuenta is None or cuenta.tenant_id != contexto.tenant_id or cuenta.deleted_at is not None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Cuenta no disponible")
+    return PreferenciasVisualesIn.model_validate(cuenta.preferencias_visuales or {})
+
+
+@router.put("/mi-apariencia", response_model=PreferenciasVisualesIn)
+def guardar_apariencia(
+    datos: PreferenciasVisualesIn, contexto: AuthDep, session: SessionDep
+) -> PreferenciasVisualesIn:
+    _validar_apariencia(datos)
+    cuenta = session.get(CuentaAcceso, contexto.cuenta_id)
+    if cuenta is None or cuenta.tenant_id != contexto.tenant_id or cuenta.deleted_at is not None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Cuenta no disponible")
+    cuenta.preferencias_visuales = datos.model_dump()
+    session.commit()
+    return datos
+
+
 @router.get("/me", response_model=SesionOut)
 def me(contexto: AuthDep, session: SessionDep) -> SesionOut:
     """Reconstruye en cada consulta la jerarquía real del usuario autenticado."""
