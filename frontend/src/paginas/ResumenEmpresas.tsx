@@ -4,7 +4,7 @@ import { useDatos } from "../api";
 import { formatearMonto } from "../formato";
 
 type Fila = {
-  empresa_id: string; ruc: string; razon_social: string; moneda: string;
+  empresa_id: string; ruc: string; razon_social: string; moneda: "PEN" | "USD";
   expedientes: number; total: string;
 };
 type Resumen = { proveedores: Fila[]; clientes: Fila[] };
@@ -23,9 +23,8 @@ export default function ResumenEmpresas() {
   const { datos, error, cargando } = useDatos<Resumen>(url);
   const filas = datos?.[pestana] ?? [];
   const resumenPorMoneda = filas.reduce<Record<string, { total: number; cantidad: number }>>((a, f) => {
-    if (!a[f.moneda]) a[f.moneda] = { total: 0, cantidad: 0 };
-    a[f.moneda].total += Number(f.total);
-    a[f.moneda].cantidad += f.expedientes;
+    const previo = a[f.moneda] ?? { total: 0, cantidad: 0 };
+    a[f.moneda] = { total: previo.total + Number(f.total), cantidad: previo.cantidad + f.expedientes };
     return a;
   }, {});
   return <section className="panel-configuracion">
@@ -43,7 +42,7 @@ export default function ResumenEmpresas() {
           const m = e.target.value;
           setMes(m);
           if (!m) { setDesde(""); setHasta(""); return; }
-          const [anio, numero] = m.split("-").map(Number);
+          const [anio = 2000, numero = 1] = m.split("-").map(Number);
           setDesde(m + "-01");
           setHasta(new Date(Date.UTC(anio, numero, 0)).toISOString().slice(0, 10));
         }} />
@@ -69,7 +68,7 @@ export default function ResumenEmpresas() {
     {error && <p role="alert">{error}</p>}
     <p><strong>Empresas:</strong> {filas.length}</p>
     {Object.entries(resumenPorMoneda).map(([divisa, valores]) =>
-      <p key={divisa}><strong>{divisa}:</strong> {formatearMonto(divisa, valores.total)}
+      <p key={divisa}><strong>{divisa}:</strong> {formatearMonto(divisa === "USD" ? "USD" : "PEN", valores.total)}
         {" · "}{valores.cantidad} expedientes</p>
     )}
     <div className="tabla-responsive"><table>
