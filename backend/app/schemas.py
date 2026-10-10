@@ -88,6 +88,8 @@ class MiembroOut(Orm):
     nombre: str
     rol: RolMiembro
     porcentaje_produccion: Decimal | None
+    porcentaje_sin_retencion: Decimal | None = None
+    porcentaje_con_retencion: Decimal | None = None
     activo: bool
 
 

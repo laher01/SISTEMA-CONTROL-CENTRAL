@@ -155,6 +155,14 @@ def _base_pago_usuario(
     usuario = session.get(Miembro, datos.usuario_id)
     if usuario is None or usuario.tenant_id != tenant_id or usuario.rol != RolMiembro.USUARIO:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Usuario inválido")
+    # El cálculo anterior aplica una única tasa a toda la producción.
+    # Las tarifas duales requieren clasificación histórica por documento:
+    # nunca aplicar una tasa única ni permitir que porcentaje_manual las eluda.
+    if usuario.porcentaje_sin_retencion is not None or usuario.porcentaje_con_retencion is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Liquidación dual pendiente de clasificación histórica; use desglose documental",
+        )
     plan = session.scalar(
         select(PlanLiquidacion)
         .where(
@@ -191,6 +199,78 @@ def _base_pago_usuario(
     tasa = Decimal(tasa)
     bruto = (produccion * tasa / Decimal("100")).quantize(Decimal("0.01"))
     return produccion, tasa, bruto, plan.id if plan is not None else None
+
+
+@router.get("/pagos/desglose")
+def desglose_documentado_usuario(
+    usuario_id: uuid.UUID,
+    desde: date,
+    hasta: date,
+    moneda: str,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, object]:
+    """Previsualización documental; no es liquidación ni genera obligación confirmada.
+
+    La bandera actual de agente de retención de la empresa no demuestra su
+    condición histórica al emitirse cada factura. Por ello no se presupone una tasa.
+    """
+    usuario = _autorizar_pago(session, tenant_id, auth, usuario_id)
+    if moneda not in ("PEN", "USD") or hasta < desde or (hasta - desde).days > 366:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Filtro inválido")
+    registros = session.execute(
+        select(
+            Empresa.id,
+            Empresa.ruc,
+            Empresa.razon_social,
+            func.count(Expediente.id),
+            func.coalesce(func.sum(Expediente.importe_total), 0),
+        )
+        .join(Empresa, Empresa.id == Expediente.receptor_id)
+        .where(
+            Expediente.tenant_id == tenant_id,
+            Expediente.usuario_id == usuario_id,
+            Expediente.deleted_at.is_(None),
+            Expediente.moneda == moneda,
+            Expediente.fecha_emision >= desde,
+            Expediente.fecha_emision <= hasta,
+            Empresa.tenant_id == tenant_id,
+        )
+        .group_by(Empresa.id, Empresa.ruc, Empresa.razon_social)
+        .order_by(Empresa.razon_social)
+    ).all()
+    clientes = [
+        {
+            "receptor_id": str(empresa_id),
+            "ruc": ruc,
+            "razon_social": razon_social,
+            "expedientes": cantidad,
+            "produccion_documentada": str(Decimal(importe)),
+            "clasificacion_retencion": "PENDIENTE_VERIFICACION_HISTORICA",
+            "comision": None,
+        }
+        for empresa_id, ruc, razon_social, cantidad, importe in registros
+    ]
+    total = sum((Decimal(fila["produccion_documentada"]) for fila in clientes), Decimal("0"))
+    return {
+        "usuario_id": str(usuario.id),
+        "desde": desde.isoformat(),
+        "hasta": hasta.isoformat(),
+        "moneda": moneda,
+        "produccion_documentada": str(total),
+        "porcentaje_sin_retencion": str(usuario.porcentaje_sin_retencion)
+        if usuario.porcentaje_sin_retencion is not None
+        else None,
+        "porcentaje_con_retencion": str(usuario.porcentaje_con_retencion)
+        if usuario.porcentaje_con_retencion is not None
+        else None,
+        "comision_liquidable": None,
+        "motivo_bloqueo": (
+            "Falta clasificación tributaria histórica por comprobante y vigencia de tarifas"
+        ),
+        "clientes": clientes,
+    }
 
 
 @router.get("/pagos/liquidaciones")

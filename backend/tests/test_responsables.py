@@ -133,3 +133,126 @@ def test_responsable_crea_usuario_en_su_equipo(
         ).status_code
         == 422
     )
+
+
+def test_responsable_edita_y_restablece_solo_su_usuario(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    tenant_id = auth_prueba.contexto.tenant_id
+    responsable = Miembro(
+        tenant_id=tenant_id, codigo="RESP-EDIT", nombre="Responsable edición",
+        rol="RESPONSABLE", activo=True,
+    )
+    otro = Miembro(
+        tenant_id=tenant_id, codigo="RESP-EXTRA", nombre="Otro responsable",
+        rol="RESPONSABLE", activo=True,
+    )
+    session.add_all([responsable, otro])
+    session.flush()
+    propio = Miembro(
+        tenant_id=tenant_id, codigo="USR-EDIT", nombre="Nombre anterior",
+        rol="USUARIO", responsable_id=responsable.id, activo=True,
+    )
+    ajeno = Miembro(
+        tenant_id=tenant_id, codigo="USR-EXTRA", nombre="No autorizado",
+        rol="USUARIO", responsable_id=otro.id, activo=True,
+    )
+    session.add_all([propio, ajeno])
+    session.commit()
+    auth_prueba.contexto = ContextoAcceso(
+        cuenta_id=auth_prueba.contexto.cuenta_id,
+        tenant_id=tenant_id,
+        rol="RESPONSABLE",
+        miembro_id=responsable.id,
+        gestor_id=None,
+        usuario_id=None,
+        codigo=responsable.codigo,
+        nombre=responsable.nombre,
+        cambio_clave_obligatorio=False,
+    )
+    ruta_propia = f"/api/v1/miembros/mis-usuarios/{propio.id}"
+    ruta_ajena = f"/api/v1/miembros/mis-usuarios/{ajeno.id}"
+    editar = client.patch(ruta_propia, json={"nombre": "Nombre corregido"})
+    assert editar.status_code == 200, editar.text
+    assert editar.json()["nombre"] == "Nombre corregido"
+    tasas = client.patch(
+        ruta_propia,
+        json={
+            "nombre": "Nombre corregido",
+            "porcentaje_sin_retencion": "1.2500",
+            "porcentaje_con_retencion": "0.8000",
+        },
+    )
+    assert tasas.status_code == 200, tasas.text
+    assert tasas.json()["porcentaje_sin_retencion"] == "1.2500"
+    assert tasas.json()["porcentaje_con_retencion"] == "0.8000"
+    bloqueo = client.post("/api/v1/responsable/pagos/cotizar", json={
+        "usuario_id": str(propio.id), "desde": "2026-10-01",
+        "hasta": "2026-10-31", "moneda": "PEN",
+        "porcentaje_manual": "99",
+    })
+    assert bloqueo.status_code == 409, bloqueo.text
+    assert "clasificación histórica" in bloqueo.json()["detail"]
+    programacion = client.post("/api/v1/responsable/pagos/programar", json={
+        "usuario_id": str(propio.id), "desde": "2026-10-01",
+        "hasta": "2026-10-31", "moneda": "PEN",
+    })
+    assert programacion.status_code == 409, programacion.text
+    invalido = client.patch(
+        ruta_propia,
+        json={"nombre": "Nombre corregido", "porcentaje_con_retencion": "101"},
+    )
+    assert invalido.status_code == 422
+    assert client.patch(ruta_ajena, json={"nombre": "Intento indebido"}).status_code == 404
+    assert client.patch(ruta_propia, json={"nombre": "  "}).status_code == 422
+    assert client.post(ruta_ajena + "/restablecer-acceso").status_code == 404
+    reset = client.post(ruta_propia + "/restablecer-acceso")
+    assert reset.status_code == 200, reset.text
+    assert reset.json()["login"] == "USR-EDIT"
+    assert len(reset.json()["clave_temporal"]) >= 8
+
+
+def test_desglose_responsable_no_calcula_comision_sin_evidencia(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    tenant_id = auth_prueba.contexto.tenant_id
+    responsable = Miembro(
+        tenant_id=tenant_id, codigo="RESP-DESG", nombre="Responsable desglose",
+        rol="RESPONSABLE", activo=True,
+    )
+    ajeno = Miembro(
+        tenant_id=tenant_id, codigo="RESP-OTDESG", nombre="Otro responsable",
+        rol="RESPONSABLE", activo=True,
+    )
+    session.add_all([responsable, ajeno])
+    session.flush()
+    propio = Miembro(
+        tenant_id=tenant_id, codigo="USR-DESG", nombre="Usuario desglose",
+        rol="USUARIO", responsable_id=responsable.id, activo=True,
+        porcentaje_sin_retencion=1.5, porcentaje_con_retencion=1.0,
+    )
+    otro_usuario = Miembro(
+        tenant_id=tenant_id, codigo="USR-OTDESG", nombre="Usuario ajeno",
+        rol="USUARIO", responsable_id=ajeno.id, activo=True,
+    )
+    session.add_all([propio, otro_usuario])
+    session.commit()
+    auth_prueba.contexto = ContextoAcceso(
+        cuenta_id=auth_prueba.contexto.cuenta_id, tenant_id=tenant_id,
+        rol="RESPONSABLE", miembro_id=responsable.id, gestor_id=None,
+        usuario_id=None, codigo=responsable.codigo, nombre=responsable.nombre,
+        cambio_clave_obligatorio=False,
+    )
+    ruta = "/api/v1/responsable/pagos/desglose"
+    filtros = {"desde": "2026-10-01", "hasta": "2026-10-31", "moneda": "PEN"}
+    respuesta = client.get(ruta, params={**filtros, "usuario_id": str(propio.id)})
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["produccion_documentada"] == "0"
+    assert respuesta.json()["comision_liquidable"] is None
+    assert respuesta.json()["clientes"] == []
+    assert client.get(
+        ruta, params={**filtros, "usuario_id": str(otro_usuario.id)}
+    ).status_code == 403
+    assert client.get(
+        ruta, params={**filtros, "usuario_id": str(propio.id), "moneda": "EUR"}
+    ).status_code == 422

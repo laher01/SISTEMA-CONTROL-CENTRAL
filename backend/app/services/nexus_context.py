@@ -420,13 +420,13 @@ def _agregar_empresas(
                 Expediente.usuario_id.in_(usuarios),
             )
         ).all()
-        empresas = {
+        empresas_vinculadas = {
             empresa_id
             for emisor_id, receptor_id in filas
             for empresa_id in (emisor_id, receptor_id)
             if empresa_id is not None
         }
-        consulta = consulta.where(Empresa.id.in_(empresas))
+        consulta = consulta.where(Empresa.id.in_(empresas_vinculadas))
     else:
         contexto.advertencias.append(
             "NEXUS no amplió la vista maestra de Empresas porque el rol actual "
@@ -434,9 +434,9 @@ def _agregar_empresas(
         )
         return
 
-    filas = session.execute(consulta.group_by(Empresa.tipo_relacion)).all()
+    filas_relacion = session.execute(consulta.group_by(Empresa.tipo_relacion)).all()
     contexto.datos["empresas_por_relacion"] = {
-        str(tipo): int(cantidad) for tipo, cantidad in filas
+        str(tipo): int(cantidad) for tipo, cantidad in filas_relacion
     }
 
 
@@ -475,7 +475,7 @@ def _agregar_organizacion(
                 )
             )
         )
-        usuarios = set(
+        usuarios_gerencia = set(
             session.scalars(
                 select(Expediente.usuario_id).where(
                     Expediente.tenant_id == auth.tenant_id,
@@ -487,7 +487,7 @@ def _agregar_organizacion(
         )
         contexto.datos["organizacion"] = {
             "responsables_vinculados": len(responsables),
-            "usuarios_bajo_gerencia": len(usuarios),
+            "usuarios_bajo_gerencia": len(usuarios_gerencia),
         }
     elif auth.rol == RolMiembro.RESPONSABLE and auth.miembro_id is not None:
         usuarios = _usuarios_visibles(session, auth) or []

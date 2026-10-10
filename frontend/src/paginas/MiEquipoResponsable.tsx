@@ -9,6 +9,8 @@ interface UsuarioResponsable {
   nombre: string;
   rol: string;
   activo: boolean;
+  porcentaje_sin_retencion: string | null;
+  porcentaje_con_retencion: string | null;
 }
 interface Equipo {
   usuarios: { id: string; codigo: string; nombre: string }[];
@@ -47,6 +49,44 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const [creandoUsuario, setCreandoUsuario] = useState(false);
   const [credencialNueva, setCredencialNueva] = useState<{ login: string; clave_temporal: string } | null>(null);
   const [errorAlta, setErrorAlta] = useState("");
+  const [editandoId, setEditandoId] = useState("");
+  const [tasaSinEditar, setTasaSinEditar] = useState("");
+  const [tasaConEditar, setTasaConEditar] = useState("");
+  const [tasaSinNueva, setTasaSinNueva] = useState("");
+  const [tasaConNueva, setTasaConNueva] = useState("");
+  const [nombreEdicion, setNombreEdicion] = useState("");
+  const [actualizandoUsuario, setActualizandoUsuario] = useState(false);
+  const editarUsuario = async () => {
+    if (!editandoId || nombreEdicion.trim().length < 3) return;
+    setActualizandoUsuario(true);
+    try {
+      await enviarJson(`/api/v1/miembros/mis-usuarios/${editandoId}`, "PATCH", {
+        nombre: nombreEdicion.trim(),
+        porcentaje_sin_retencion: tasaSinEditar === "" ? null : tasaSinEditar,
+        porcentaje_con_retencion: tasaConEditar === "" ? null : tasaConEditar,
+      });
+      setEditandoId("");
+      recargar(); recargarEquipo();
+      setMensaje("Usuario actualizado.");
+    } catch (error) {
+      setMensaje(error instanceof Error ? error.message : String(error));
+    } finally {
+      setActualizandoUsuario(false);
+    }
+  };
+  const restablecerUsuario = async (id: string) => {
+    if (!window.confirm("¿Generar una nueva contraseña temporal? La anterior dejará de funcionar.")) return;
+    try {
+      const credencial = await enviarJson<{ login: string; clave_temporal: string }>(
+        `/api/v1/miembros/mis-usuarios/${id}/restablecer-acceso`, "POST", {},
+      );
+      setCredencialNueva(credencial);
+      setMensaje("Contraseña temporal generada. Entrégala únicamente al titular.");
+    } catch (error) {
+      setMensaje(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   const crearUsuario = async (evento: React.FormEvent<HTMLFormElement>) => {
     evento.preventDefault();
     setCreandoUsuario(true);
@@ -57,6 +97,8 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
         "/api/v1/miembros/mis-usuarios", "POST", {
           nombre: nombreNuevo,
           porcentaje_produccion: porcentajeNuevo,
+          porcentaje_sin_retencion: tasaSinNueva === "" ? null : tasaSinNueva,
+          porcentaje_con_retencion: tasaConNueva === "" ? null : tasaConNueva,
         },
       );
       setCredencialNueva(alta.credencial);
@@ -73,6 +115,15 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const [desdePago, setDesdePago] = useState(new Date().toISOString().slice(0, 7) + "-01");
   const [hastaPago, setHastaPago] = useState(new Date().toISOString().slice(0, 10));
   const [cotizacion, setCotizacion] = useState<CotizacionUsuario | null>(null);
+  const desglose = useDatos<{
+    produccion_documentada: string;
+    motivo_bloqueo: string;
+    clientes: { receptor_id: string; ruc: string; razon_social: string; expedientes: number; produccion_documentada: string }[];
+  }>(usuarioPago
+    ? "/api/v1/responsable/pagos/desglose?usuario_id=" + encodeURIComponent(usuarioPago)
+      + "&desde=" + desdePago + "&hasta=" + hastaPago + "&moneda=" + moneda
+    : null);
+
   const [porcentajeManual, setPorcentajeManual] = useState("");
   const [saldosSeleccionados, setSaldosSeleccionados] = useState<string[]>([]);
   const [adelantosSeleccionados, setAdelantosSeleccionados] = useState<string[]>([]);
@@ -159,6 +210,11 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   };
   const nombreUsuario = (id: string) =>
     equipo?.usuarios.find((u) => u.id === id)?.codigo ?? "Usuario";
+  const usuarioElegido = (datos ?? []).find((u) => u.id === usuarioPago);
+  const requiereMotorDual = Boolean(usuarioElegido && (
+    usuarioElegido.porcentaje_sin_retencion !== null
+    || usuarioElegido.porcentaje_con_retencion !== null
+  ));
   const pedidos = (equipo?.pedidos ?? []).filter((p) => p.moneda === moneda);
   const clientes = (equipo?.clientes ?? []).filter((p) => p.moneda === moneda);
   const pagos = (equipo?.pagos ?? []).filter((p) => p.moneda === moneda);
@@ -194,6 +250,14 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
             <input type="number" min="0" max="100" step="0.0001" required
               value={porcentajeNuevo} onChange={(e) => setPorcentajeNuevo(e.target.value)} />
           </label>
+          <label>% sin agente de retención
+            <input type="number" min="0" max="100" step="0.0001" value={tasaSinNueva}
+              onChange={(e) => setTasaSinNueva(e.target.value)} placeholder="Pendiente de definir" />
+          </label>
+          <label>% con agente de retención
+            <input type="number" min="0" max="100" step="0.0001" value={tasaConNueva}
+              onChange={(e) => setTasaConNueva(e.target.value)} placeholder="Pendiente de definir" />
+          </label>
           <button type="submit" disabled={creandoUsuario}>
             {creandoUsuario ? "Creando…" : "Crear Usuario"}
           </button>
@@ -208,14 +272,33 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
         </div>}
       </section>}
       {pestana === "USUARIOS" && <table>
-        <thead><tr><th>Código</th><th>Nombre</th><th>Estado</th><th>Clientes con expedientes</th></tr></thead>
+        <thead><tr><th>Código de acceso</th><th>Nombre</th><th>Estado</th><th>Clientes con expedientes</th><th>% sin retención</th><th>% con retención</th><th>Acciones</th></tr></thead>
         <tbody>{(datos ?? []).map((u) => (
           <tr key={u.id}><td>{u.codigo}</td><td>{u.nombre}</td>
             <td>{u.activo ? "Activo" : "Inactivo"}</td>
             <td>{new Set(equipo?.clientes.filter((c) => c.usuario_id === u.id).map((c) => c.receptor_id) ?? []).size}</td>
+            <td>{u.porcentaje_sin_retencion ?? "Pendiente"}%</td>
+            <td>{u.porcentaje_con_retencion ?? "Pendiente"}%</td>
+            <td>
+              <button type="button" onClick={() => { setEditandoId(u.id); setNombreEdicion(u.nombre); setTasaSinEditar(u.porcentaje_sin_retencion ?? ""); setTasaConEditar(u.porcentaje_con_retencion ?? ""); }}>Editar</button>{" "}
+              <button type="button" disabled={!u.activo} onClick={() => void restablecerUsuario(u.id)}>Restablecer clave</button>
+            </td>
           </tr>
         ))}</tbody>
       </table>}
+      {pestana === "USUARIOS" && editandoId && <section className="panel-configuracion">
+        <h3>Editar Usuario</h3>
+        <div className="filtros">
+          <label>Nombre completo <input value={nombreEdicion} minLength={3} maxLength={200}
+            onChange={(e) => setNombreEdicion(e.target.value)} /></label>
+          <label>% sin retención <input type="number" min="0" max="100" step="0.0001" value={tasaSinEditar} onChange={(e) => setTasaSinEditar(e.target.value)} /></label>
+          <label>% con retención <input type="number" min="0" max="100" step="0.0001" value={tasaConEditar} onChange={(e) => setTasaConEditar(e.target.value)} /></label>
+          <button type="button" disabled={actualizandoUsuario || nombreEdicion.trim().length < 3}
+            onClick={() => void editarUsuario()}>Guardar cambios</button>
+          <button type="button" onClick={() => setEditandoId("")}>Cancelar</button>
+        </div>
+      </section>}
+      {pestana === "USUARIOS" && mensaje && <p role="status">{mensaje}</p>}
       {pestana === "PEDIDOS" && <>
         <h3>Presupuestos brutos recibidos de Gerencia</h3>
         <p>Total solicitado: <strong>{formatearMonto(moneda, sumar(pedidos.map((p) => p.monto_solicitado)))}</strong></p>
@@ -277,8 +360,28 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
           </select></label>
           <label>Desde <input type="date" value={desdePago} onChange={(e) => { setDesdePago(e.target.value); setCotizacion(null); }} /></label>
           <label>Hasta <input type="date" value={hastaPago} onChange={(e) => { setHastaPago(e.target.value); setCotizacion(null); }} /></label>
-          <button type="button" disabled={!usuarioPago} onClick={() => void cotizarPago()}>Calcular pago</button>
+          <button type="button" disabled={!usuarioPago || requiereMotorDual} onClick={() => void cotizarPago()}>Calcular pago</button>
         </div>
+        {requiereMotorDual && <p role="status" className="tenue">
+          La programación automática está temporalmente bloqueada: faltan clasificación
+          histórica de retención por factura y cálculo de tarifas duales. Consulte abajo
+          el desglose documental. No use una tarifa manual para reemplazarlo.
+        </p>}
+        {usuarioPago && <section className="panel-configuracion">
+          <h4>Producción documentada por cliente — vista preliminar</h4>
+          <p className="tenue">La producción no equivale a comisión liquidable hasta comprobar la condición histórica de retención de cada comprobante y la tarifa correspondiente.</p>
+          {desglose.error && <p role="alert">{desglose.error}</p>}
+          {desglose.datos && <>
+            <p>Producción registrada: <strong>{formatearMonto(moneda, desglose.datos.produccion_documentada)}</strong></p>
+            <p role="status">{desglose.datos.motivo_bloqueo}</p>
+            <table><thead><tr><th>RUC</th><th>Cliente / receptor</th><th>Expedientes</th><th>Producción</th></tr></thead>
+              <tbody>{desglose.datos.clientes.map((x) => <tr key={x.receptor_id}>
+                <td>{x.ruc}</td><td>{x.razon_social}</td><td>{x.expedientes}</td>
+                <td>{formatearMonto(moneda, x.produccion_documentada)}</td>
+              </tr>)}</tbody>
+            </table>
+          </>}
+        </section>}
         {usuarioPago && <>
           <h4>Saldos de compras pendientes por mes</h4>
           <div className="filtros">
@@ -313,9 +416,9 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
               onChange={(e) => setObservacionAdelantos(e.target.value)}
               placeholder="Motivo para dejar adelantos pendientes" />
           </label>
-          <label>% de producción (vacío = asignado al Usuario)
+          <label>% único del sistema anterior (no aplica a tarifas duales)
             <input type="number" min="0" max="100" step="0.0001"
-              value={porcentajeManual} onChange={(e) => { setPorcentajeManual(e.target.value); setCotizacion(null); }}
+              disabled={requiereMotorDual} value={porcentajeManual} onChange={(e) => { setPorcentajeManual(e.target.value); setCotizacion(null); }}
               placeholder="Porcentaje predeterminado" />
           </label>
         </>}
