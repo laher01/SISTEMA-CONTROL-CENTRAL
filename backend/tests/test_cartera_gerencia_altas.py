@@ -62,7 +62,8 @@ def test_gerente_no_puede_operar_cartera_de_otro(
     assert negado.status_code == 403
     permitido = client.post("/api/v1/gerencias/empresas/alta", json=datos)
     assert permitido.status_code == 201, permitido.text
-    assert client.post("/api/v1/gerencias/empresas/alta", json=datos).json()["resultado"] == "VINCULADA"
+    repetida = client.post("/api/v1/gerencias/empresas/alta", json=datos)
+    assert repetida.json()["resultado"] == "VINCULADA"
 
 
 def test_importacion_rechaza_ruc_duplicado_y_rol_no_autorizado(
