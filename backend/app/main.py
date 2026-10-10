@@ -24,6 +24,7 @@ from app.api.routes import (
     pagos_responsables,
     produccion,
     registros,
+    recepcion_correo,
     responsable,
 )
 from app.core.config import get_settings
@@ -53,6 +54,7 @@ for modulo in (
     comisiones,
     expedientes,
     registros,
+    recepcion_correo,
     empresas,
     miembros,
     gestores,
