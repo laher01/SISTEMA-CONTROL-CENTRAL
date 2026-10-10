@@ -24,6 +24,10 @@ from app.models import (
     PedidoGerencia,
 )
 from app.security import ContextoAcceso
+from app.services.ambito_gerencia import (
+    alcance_expedientes_gerente,
+    expediente_visible_gerente,
+)
 
 
 @dataclass
@@ -578,27 +582,6 @@ def _usuarios_visibles(
                 )
             )
         )
-    if auth.rol == RolMiembro.GERENTE and auth.miembro_id is not None:
-        responsables = list(
-            session.scalars(
-                select(GerenteResponsable.responsable_id).where(
-                    GerenteResponsable.tenant_id == auth.tenant_id,
-                    GerenteResponsable.gerente_id == auth.miembro_id,
-                    GerenteResponsable.activo.is_(True),
-                )
-            )
-        )
-        return list(
-            session.scalars(
-                select(Miembro.id).where(
-                    Miembro.tenant_id == auth.tenant_id,
-                    Miembro.responsable_id.in_(responsables),
-                    Miembro.rol == RolMiembro.USUARIO,
-                    Miembro.activo.is_(True),
-                    Miembro.deleted_at.is_(None),
-                )
-            )
-        )
     if auth.rol == "GESTOR":
         return [auth.usuario_id] if auth.usuario_id is not None else []
     return None
@@ -611,6 +594,8 @@ def condiciones_expedientes(
     condiciones: list[Any] = []
     if auth.rol == "GESTOR":
         condiciones.append(Expediente.gestor_id == auth.gestor_id)
+    elif auth.rol == RolMiembro.GERENTE:
+        condiciones.append(alcance_expedientes_gerente(auth))
     else:
         usuarios = _usuarios_visibles(session, auth)
         if usuarios is not None:
@@ -625,6 +610,8 @@ def puede_ver_expediente(
 ) -> bool:
     if auth.rol == "GESTOR":
         return expediente.gestor_id == auth.gestor_id
+    if auth.rol == RolMiembro.GERENTE:
+        return expediente_visible_gerente(expediente, auth)
 
     usuarios = _usuarios_visibles(session, auth)
     if usuarios is not None:
