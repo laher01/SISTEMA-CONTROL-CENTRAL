@@ -15,12 +15,13 @@ from pypdf.errors import PdfReadError
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 from starlette.background import BackgroundTask
 
 from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado
 from app.enums import EstadoExpediente, RolMiembro
-from app.models import Documento, Empresa, Expediente, ahora
+from app.models import Documento, Empresa, Expediente, Miembro, ahora
 from app.schemas import (
     ExpedienteDetalle,
     ExpedienteIn,
@@ -187,6 +188,84 @@ def listar(
         .offset(offset)
     )
     return list(session.scalars(consulta))
+
+
+@router.get("/resumen-empresas")
+def resumen_empresas_por_rol(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    moneda: Literal["PEN", "USD"] | None = None,
+) -> dict[str, object]:
+    """Totales de proveedores y clientes, por expedientes reales del ámbito permitido."""
+    if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Rango de fechas inválido")
+    if auth.rol not in (
+        RolMiembro.SUPERADMIN,
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.GERENTE,
+        RolMiembro.SECRETARIA,
+        RolMiembro.RESPONSABLE,
+        RolMiembro.USUARIO,
+        "GESTOR",
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin acceso al resumen")
+    condiciones = [Expediente.tenant_id == tenant_id, Expediente.deleted_at.is_(None)]
+    if fecha_desde:
+        condiciones.append(Expediente.fecha_emision >= fecha_desde)
+    if fecha_hasta:
+        condiciones.append(Expediente.fecha_emision <= fecha_hasta)
+    if moneda:
+        condiciones.append(Expediente.moneda == moneda)
+    if auth.rol == "GESTOR":
+        condiciones.append(Expediente.gestor_id == auth.gestor_id)
+    elif auth.rol == RolMiembro.USUARIO:
+        condiciones.append(Expediente.usuario_id == auth.usuario_id)
+    elif auth.rol == RolMiembro.RESPONSABLE:
+        if auth.miembro_id is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Responsable sin identidad")
+        propios = select(Miembro.id).where(
+            Miembro.tenant_id == tenant_id,
+            Miembro.responsable_id == auth.miembro_id,
+            Miembro.rol == RolMiembro.USUARIO,
+        )
+        condiciones.append(Expediente.usuario_id.in_(propios))
+    elif auth.rol == RolMiembro.GERENTE:
+        condiciones.append(alcance_expedientes_gerente(auth))
+
+    def agrupar(campo: InstrumentedAttribute[uuid.UUID]) -> list[dict[str, object]]:
+        filas = session.execute(
+            select(
+                Empresa.id,
+                Empresa.ruc,
+                Empresa.razon_social,
+                Expediente.moneda,
+                func.count(Expediente.id),
+                func.coalesce(func.sum(Expediente.importe_total), 0),
+            )
+            .join(Empresa, (Empresa.id == campo) & (Empresa.tenant_id == tenant_id))
+            .where(*condiciones)
+            .group_by(Empresa.id, Empresa.ruc, Empresa.razon_social, Expediente.moneda)
+            .order_by(Empresa.razon_social, Expediente.moneda)
+        ).all()
+        return [
+            {
+                "empresa_id": str(eid),
+                "ruc": ruc,
+                "razon_social": nombre,
+                "moneda": divisa,
+                "expedientes": cantidad,
+                "total": str(total),
+            }
+            for eid, ruc, nombre, divisa, cantidad, total in filas
+        ]
+
+    return {
+        "proveedores": agrupar(Expediente.emisor_id),
+        "clientes": agrupar(Expediente.receptor_id),
+    }
 
 
 @router.get("/resumen")
