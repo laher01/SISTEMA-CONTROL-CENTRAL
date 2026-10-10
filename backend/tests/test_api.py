@@ -835,14 +835,14 @@ def test_empresas_solo_se_eliminan_manual_y_se_reactivan_por_ruc(
     assert len(empresas) == 2
     ids = [empresa["id"] for empresa in empresas]
 
-    auth_prueba.como_admin()
+    auth_prueba.como_superadmin()
     prohibido = client.post(
         "/api/v1/empresas/eliminar-seleccion",
         json={"empresa_ids": ids},
     )
-    assert prohibido.status_code == 403
+    assert prohibido.status_code == 403, prohibido.text
 
-    auth_prueba.como_superadmin()
+    auth_prueba.como_admin()
     eliminado = client.post(
         "/api/v1/empresas/eliminar-seleccion",
         json={"empresa_ids": ids},
