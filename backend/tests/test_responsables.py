@@ -179,6 +179,18 @@ def test_responsable_edita_y_restablece_solo_su_usuario(
     assert tasas.status_code == 200, tasas.text
     assert tasas.json()["porcentaje_sin_retencion"] == "1.2500"
     assert tasas.json()["porcentaje_con_retencion"] == "0.8000"
+    bloqueo = client.post("/api/v1/responsable/pagos/cotizar", json={
+        "usuario_id": str(propio.id), "desde": "2026-10-01",
+        "hasta": "2026-10-31", "moneda": "PEN",
+        "porcentaje_manual": "99",
+    })
+    assert bloqueo.status_code == 409, bloqueo.text
+    assert "clasificación histórica" in bloqueo.json()["detail"]
+    programacion = client.post("/api/v1/responsable/pagos/programar", json={
+        "usuario_id": str(propio.id), "desde": "2026-10-01",
+        "hasta": "2026-10-31", "moneda": "PEN",
+    })
+    assert programacion.status_code == 409, programacion.text
     assert client.patch(ruta_propia, json={"nombre": "Nombre corregido", "porcentaje_con_retencion": "101"}).status_code == 422
     assert client.patch(ruta_ajena, json={"nombre": "Intento indebido"}).status_code == 404
     assert client.patch(ruta_propia, json={"nombre": "  "}).status_code == 422
