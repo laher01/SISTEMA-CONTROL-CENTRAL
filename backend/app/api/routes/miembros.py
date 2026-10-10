@@ -53,6 +53,8 @@ def crear(
             if datos.rol == RolMiembro.USUARIO
             else None
         ),
+        porcentaje_con_agente=(datos.porcentaje_con_agente if datos.porcentaje_con_agente is not None else (datos.porcentaje_produccion if datos.porcentaje_produccion is not None else Decimal("1.5000"))) if datos.rol == RolMiembro.USUARIO else None,
+        porcentaje_sin_agente=(datos.porcentaje_sin_agente if datos.porcentaje_sin_agente is not None else (datos.porcentaje_produccion if datos.porcentaje_produccion is not None else Decimal("1.5000"))) if datos.rol == RolMiembro.USUARIO else None,
         creado_por_cuenta_id=auth.cuenta_id,
         responsable_id=(
             auth.miembro_id
@@ -344,6 +346,18 @@ def actualizar(
             miembro.porcentaje_produccion = Decimal("1.5000")
         elif miembro.rol != RolMiembro.USUARIO:
             miembro.porcentaje_produccion = None
+        if miembro.rol == RolMiembro.USUARIO:
+            if "porcentaje_con_agente" in datos.model_fields_set:
+                miembro.porcentaje_con_agente = datos.porcentaje_con_agente
+            if "porcentaje_sin_agente" in datos.model_fields_set:
+                miembro.porcentaje_sin_agente = datos.porcentaje_sin_agente
+            if miembro.porcentaje_con_agente is None:
+                miembro.porcentaje_con_agente = miembro.porcentaje_produccion
+            if miembro.porcentaje_sin_agente is None:
+                miembro.porcentaje_sin_agente = miembro.porcentaje_produccion
+        else:
+            miembro.porcentaje_con_agente = None
+            miembro.porcentaje_sin_agente = None
         if datos.activo is not None:
             miembro.activo = datos.activo
         session.commit()
