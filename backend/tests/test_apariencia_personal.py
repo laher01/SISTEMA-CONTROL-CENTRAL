@@ -23,9 +23,7 @@ def test_preferencias_visual_personal_persisten_y_se_validan(
     cuenta = session.get(CuentaAcceso, auth_prueba.contexto.cuenta_id)
     assert cuenta is not None
     assert cuenta.preferencias_visuales == datos
-    invalido = client.put(
-        "/api/v1/auth/mi-apariencia", json={**datos, "color": "#ff0000"}
-    )
+    invalido = client.put("/api/v1/auth/mi-apariencia", json={**datos, "color": "#ff0000"})
     assert invalido.status_code == 422
     assert client.get("/api/v1/auth/mi-apariencia").json() == datos
 
