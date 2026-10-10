@@ -41,11 +41,11 @@ TIPOS = {
 }
 
 
-def _solo_superadmin(rol: str) -> None:
-    if rol != RolMiembro.SUPERADMIN:
+def _solo_administrador(rol: str) -> None:
+    if rol != RolMiembro.ADMINISTRADOR:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            "Solo SUPERADMIN puede ejecutar mantenimiento crítico",
+            "Solo el ADMINISTRADOR del tenant puede ejecutar mantenimiento crítico",
         )
 
 
@@ -122,7 +122,7 @@ def administradores(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> list[MantenimientoAdministradorOut]:
-    _solo_superadmin(auth.rol)
+    _solo_administrador(auth.rol)
     cuentas = list(
         session.scalars(
             select(CuentaAcceso).where(
@@ -180,7 +180,7 @@ def vista_previa(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> MantenimientoVistaPreviaOut:
-    _solo_superadmin(auth.rol)
+    _solo_administrador(auth.rol)
     _validar_seleccion(datos)
     totales = {
         nombre: _contar(session, TIPOS[nombre], _filtros(TIPOS[nombre], tenant_id, datos))
@@ -203,7 +203,7 @@ def limpiar(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> MantenimientoResultadoOut:
-    _solo_superadmin(auth.rol)
+    _solo_administrador(auth.rol)
     _validar_seleccion(datos)
     if datos.confirmacion != "ELIMINAR-DATOS-OPERATIVOS":
         raise HTTPException(
