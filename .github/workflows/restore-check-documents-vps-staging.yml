@@ -1,0 +1,58 @@
+name: restore-check-documents-vps-staging
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factcentral-staging-documents-restore
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 15
+    steps:
+      - name: Verificar destino y secretos
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          test "$VPS_HOST" = "132.145.233.172"
+          test "$VPS_USER" = "ubuntu"
+          for name in VPS_DEPLOY_PATH VPS_SSH_PRIVATE_KEY VPS_SSH_KNOWN_HOSTS; do
+            test -n "${!name:-}" || { echo "::error::Falta $name"; exit 1; }
+          done
+      - name: Configurar acceso SSH existente
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+      - name: Extraer respaldo a directorio temporal y comparar entradas
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+        run: |
+          ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
+            "cd -- '$VPS_DEPLOY_PATH' && bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          file="deploy/backups/documentos/documentos_20261010T054030Z.tar.gz"
+          test -s "$file"
+          sha256sum -c "$file.sha256"
+          tmp="$(mktemp -d /tmp/factcentral-doc-check.XXXXXXXX)"
+          trap 'rm -rf -- "$tmp"' EXIT
+          tar -xzf "$file" -C "$tmp" --no-same-owner --no-same-permissions
+          original="$(tar -tzf "$file" | wc -l)"
+          extracted="$(find "$tmp" -mindepth 1 | wc -l)"
+          test "$original" -eq "$extracted"
+          echo "DOCUMENTOS_RESTAURACION_VERIFICADA: entradas=$extracted"
+          echo "VOLUMEN_ORIGINAL_SIN_CAMBIOS"
+          REMOTE
