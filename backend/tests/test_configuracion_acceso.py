@@ -343,6 +343,7 @@ def test_administrador_no_accede_a_documento_de_otro_tenant(
     session.refresh(documento)
     assert documento.deleted_at is None
 
+
 def test_limpieza_rechaza_confirmacion_invalida_sin_borrar_datos(
     client: TestClient, session: Session, auth_prueba: AuthPrueba
 ) -> None:
