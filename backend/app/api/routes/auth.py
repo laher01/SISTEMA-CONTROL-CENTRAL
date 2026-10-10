@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
+from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 
 from app.api.deps import AuthDep, SessionDep, SettingsDep
