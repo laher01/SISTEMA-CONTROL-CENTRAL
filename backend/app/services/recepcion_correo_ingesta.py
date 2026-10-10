@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.models import CorreoRemitente, Documento, Empresa, Gestor
+from app.models import CorreoRemitente, Documento, Empresa, Gestor, Miembro
 from app.services.ingesta import (
     ArchivoSubido,
     ComprobanteYaRegistrado,
@@ -94,6 +94,17 @@ def admitir_adjunto_ubl(
     )
     if usuario_id is None:
         return ResultadoCorreo("GESTOR_SIN_USUARIO")
+    usuario_valido = session.scalar(
+        select(Miembro.id).where(
+            Miembro.id == usuario_id,
+            Miembro.tenant_id == tenant_id,
+            Miembro.rol == "USUARIO",
+            Miembro.activo.is_(True),
+            Miembro.deleted_at.is_(None),
+        )
+    )
+    if usuario_valido is None:
+        return ResultadoCorreo("USUARIO_NO_AUTORIZADO")
     try:
         documento: Documento = ingerir_documento(
             session,
