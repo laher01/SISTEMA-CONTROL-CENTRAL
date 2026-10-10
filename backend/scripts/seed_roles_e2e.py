@@ -19,17 +19,23 @@ with Session(get_engine()) as session:
         session.add(tenant)
         session.flush()
         miembro = Miembro(
-            tenant_id=tenant.id, codigo=codigo_usuario, nombre="Usuario E2E", rol=rol, activo=True,
+            tenant_id=tenant.id,
+            codigo=codigo_usuario,
+            nombre="Usuario E2E",
+            rol=rol,
+            activo=True,
         )
         session.add(miembro)
         session.flush()
-        session.add(CuentaAcceso(
-            tenant_id=tenant.id,
-            miembro_id=miembro.id,
-            login=codigo_usuario,
-            password_hash=hash_clave("ClaveE2e123!"),
-            activo=True,
-            cambio_clave_obligatorio=False,
-        ))
+        session.add(
+            CuentaAcceso(
+                tenant_id=tenant.id,
+                miembro_id=miembro.id,
+                login=codigo_usuario,
+                password_hash=hash_clave("ClaveE2e123!"),
+                activo=True,
+                cambio_clave_obligatorio=False,
+            )
+        )
     session.commit()
 print("DOS_TENANTS_E2E_CREADOS")
