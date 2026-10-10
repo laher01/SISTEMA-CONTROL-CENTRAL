@@ -5,7 +5,10 @@ from decimal import Decimal
 
 import pytest
 
-from app.services.comisiones import calcular_comisiones_por_receptor, comision_por_condicion_retencion
+from app.services.comisiones import (
+    calcular_comisiones_por_receptor,
+    comision_por_condicion_retencion,
+)
 
 
 def test_comision_dos_receptores_calcula_bruto_total() -> None:
