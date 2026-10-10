@@ -75,10 +75,8 @@ jobs:
             echo "Ya existe un archivo privado de credenciales; abortando sin restablecer."
             exit 1
           }
-          if "${compose[@]}" exec -T db sh -c 'psql -AtX -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT 1 FROM miembros WHERE codigo = '\''SUPADMIN01'\'' AND deleted_at IS NULL LIMIT 1"' | grep -q 1'; then
-            echo "SUPADMIN01 ya registrado; abortando sin cambiar contraseñas."
-            exit 1
-          fi
+          # La CLI comprueba la existencia de SUPADMIN01 y no restablece credenciales.
+          # Evitar una segunda comprobación SQL con comillas anidadas en Bash.
           clave_file="deploy/private/platform-bootstrap-credentials.txt"
           # El CLI emite una clave temporal: se captura solamente en archivo privado VPS.
           if ! "${compose[@]}" exec -T backend uv run python -m app.cli bootstrap-admin --crear > "$clave_file"; then
