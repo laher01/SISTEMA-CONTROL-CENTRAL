@@ -23,8 +23,7 @@ def test_rechaza_no_registrado():
 
 def test_gestor_ambiguo_o_ausente():
     assert (
-        decidir_recepcion(caso(gestores=frozenset({"g1", "g2"})))
-        == DecisionCorreo.PENDIENTE_GESTOR
+        decidir_recepcion(caso(gestores=frozenset({"g1", "g2"}))) == DecisionCorreo.PENDIENTE_GESTOR
     )
     assert decidir_recepcion(caso(gestores=frozenset())) == DecisionCorreo.PENDIENTE_GESTOR
 
