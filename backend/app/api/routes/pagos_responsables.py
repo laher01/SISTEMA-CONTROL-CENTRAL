@@ -374,6 +374,23 @@ def incorporar_historicos(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Operación reservada a GRTEGLOBAL")
     _periodo(datos.desde, datos.hasta, datos.moneda)
     _responsable(session, tenant_id, datos.responsable_id)
+    # Los periodos con liquidación existente, incluso legada, requieren revisión
+    # antes de incorporar más facturas: nunca reabrir pagos ya abonados.
+    solape = session.scalar(
+        select(PagoResponsableERP.id).where(
+            PagoResponsableERP.tenant_id == tenant_id,
+            PagoResponsableERP.responsable_id == datos.responsable_id,
+            PagoResponsableERP.moneda == datos.moneda,
+            PagoResponsableERP.periodo_desde <= datos.hasta,
+            PagoResponsableERP.periodo_hasta >= datos.desde,
+            PagoResponsableERP.estado != "ANULADO",
+        )
+    )
+    if solape is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Ya existe liquidación en el periodo; revisar pagos antes de incorporar",
+        )
     expedientes = list(
         session.scalars(
             select(Expediente)
