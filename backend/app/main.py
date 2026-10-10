@@ -23,6 +23,7 @@ from app.api.routes import (
     pagos_gestores,
     pagos_responsables,
     produccion,
+    recepcion_correo,
     registros,
     responsable,
 )
@@ -53,6 +54,7 @@ for modulo in (
     comisiones,
     expedientes,
     registros,
+    recepcion_correo,
     empresas,
     miembros,
     gestores,
