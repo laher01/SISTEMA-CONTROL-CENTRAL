@@ -1,8 +1,9 @@
 """El inventario global solo se expone a SUPERADMIN."""
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Miembro, Tenant
+from app.models import CuentaAcceso, Miembro, Tenant
 from tests.conftest import AuthPrueba
 
 
@@ -52,8 +53,6 @@ def test_alta_tenant_independiente_no_autorizada_para_admin(
     assert datos["subdominio"] == "pesquera-ensayo"
     assert datos["clave_temporal"]
 
-    from sqlalchemy import select
-    from app.models import CuentaAcceso
     tenant = session.scalar(select(Tenant).where(Tenant.nombre == "Pesquera de Ensayo"))
     assert tenant is not None
     admin = session.scalar(select(Miembro).where(
