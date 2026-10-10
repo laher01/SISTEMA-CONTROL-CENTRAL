@@ -154,7 +154,9 @@ export default function App() {
     }
   };
 
-  const menu = MENU.filter((item) => item.roles.includes(sesion.rol));
+  const menu = sesion.rol === "SUPERADMIN"
+    ? [{ a: "/configuracion", texto: "Consola SaaS", icono: "⚙", roles: ["SUPERADMIN" as RolSesion] }]
+    : MENU.filter((item) => item.roles.includes(sesion.rol));
   const cadena = sesion.rol === "GESTOR"
     ? [{ rol: "GESTOR", codigo: sesion.codigo, nombre: sesion.nombre }, ...(sesion.jerarquia ?? [])]
     : sesion.rol === "USUARIO"
@@ -196,6 +198,13 @@ export default function App() {
           </div>
         </header>
         <Routes>
+          {sesion.rol === "SUPERADMIN" ? (
+            <>
+              <Route path="/configuracion" element={<Configuracion sesion={sesion} />} />
+              <Route path="*" element={<Navigate to="/configuracion" replace />} />
+            </>
+          ) : (
+          <>
           <Route path="/" element={sesion.es_administracion_demo && sesion.rol === "ADMINISTRADOR" ? <Navigate to="/organizacion" replace /> : <Dashboard />} />
           <Route path="/ingresar" element={<Navigate to="/" replace />} />
           <Route path="/subir" element={<Subir sesion={sesion} />} />
@@ -225,6 +234,8 @@ export default function App() {
           <Route path="/comisiones-responsables" element={<ComisionesResponsables sesion={sesion} />} />
           <Route path="/configuracion" element={<Configuracion sesion={sesion} />} />
           <Route path="*" element={<p>Página no encontrada.</p>} />
+          </>
+          )}
         </Routes>
       </main>
       <NexusFlotante sesion={sesion} />
