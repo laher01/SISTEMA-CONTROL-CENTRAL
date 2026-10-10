@@ -1,5 +1,8 @@
 from fastapi.testclient import TestClient
 
+from app.core.config import Settings
+from app.services import nexus as nexus_service
+
 from tests.xml import EMISOR, factura
 
 
@@ -75,9 +78,85 @@ def test_nexus_consulta_ruc_local_sin_inventar_internet(client: TestClient) -> N
 def test_nexus_estado_informa_integraciones_pendientes(client: TestClient) -> None:
     respuesta = client.get("/api/v1/nexus/estado")
     assert respuesta.status_code == 200, respuesta.text
-    assert respuesta.json() == {
-        "asistente_activo": True,
-        "consulta_ruc_externa": False,
-        "busqueda_internet": False,
-        "fuente_oficial_preferida": "SUNAT",
-    }
+    datos = respuesta.json()
+    assert datos["asistente_activo"] is True
+    assert datos["consulta_ruc_externa"] is False
+    assert datos["busqueda_internet"] is False
+    assert datos["motor_conversacional"] is False
+    assert datos["knowledge_base"] is True
+    assert datos["fuente_oficial_preferida"] == "SUNAT"
+
+
+def test_nexus_responde_con_contexto_de_pantalla_y_knowledge_base(
+    client: TestClient,
+) -> None:
+    _subir(client, "F001-00000905", "750.00")
+    respuesta = client.post(
+        "/api/v1/nexus/chat",
+        json={
+            "mensaje": "¿Qué está pasando en esta pantalla y qué debería revisar?",
+            "ruta": "/empresas?vista=proveedores",
+            "expediente_id": None,
+            "historial": [],
+        },
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    datos = respuesta.json()
+    assert datos["accion"] == "CONTEXTO_NEXUS"
+    assert datos["seccion"] == "EMPRESAS"
+    assert datos["motor"] == "CONTEXTUAL"
+    assert datos["llm_usado"] is False
+    assert any(fuente["tipo"] == "KNOWLEDGE_BASE" for fuente in datos["fuentes"])
+    assert "EMPRESAS" in datos["respuesta"]
+
+
+def test_nexus_motor_conversacional_recibe_contexto_historial_y_conocimiento(
+    client: TestClient,
+    settings: Settings,
+    monkeypatch,
+) -> None:
+    settings.nexus_llm_url = "https://llm.example.test/chat"
+    settings.nexus_llm_model = "nexus-test"
+    capturado: dict[str, object] = {}
+
+    def falso_http(
+        url: str,
+        *,
+        method: str,
+        token: str | None,
+        timeout: int,
+        payload: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        capturado["url"] = url
+        capturado["payload"] = payload or {}
+        return {"choices": [{"message": {"content": "Respuesta contextual de prueba."}}]}
+
+    monkeypatch.setattr(nexus_service, "_http_json", falso_http)
+
+    respuesta = client.post(
+        "/api/v1/nexus/chat",
+        json={
+            "mensaje": "¿Y qué significa eso para este mes?",
+            "ruta": "/pagos",
+            "expediente_id": None,
+            "historial": [
+                {"autor": "usuario", "texto": "Explícame los pedidos de Gerencia"},
+                {"autor": "nexus", "texto": "Los pedidos controlan lo solicitado y ejecutado."},
+            ],
+        },
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    datos = respuesta.json()
+    assert datos["respuesta"] == "Respuesta contextual de prueba."
+    assert datos["llm_usado"] is True
+    assert datos["motor"] == "LLM_CONTEXTUAL"
+    assert datos["seccion"] == "PAGOS"
+
+    payload = capturado["payload"]
+    assert isinstance(payload, dict)
+    mensajes = payload["messages"]
+    assert isinstance(mensajes, list)
+    textos = [item["content"] for item in mensajes if isinstance(item, dict)]
+    assert any("CONTEXTO AUTORIZADO" in texto for texto in textos)
+    assert any("BASE DE CONOCIMIENTO" in texto for texto in textos)
+    assert any("Explícame los pedidos de Gerencia" in texto for texto in textos)
