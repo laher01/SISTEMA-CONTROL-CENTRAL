@@ -105,18 +105,7 @@ jobs:
           test "$(grep -c '^CLAVE_TEMPORAL=' "$clave_file")" = 1
           # Verificar HTTP /auth/login desde backend, sin mostrar la clave ni cookie.
           sed -n 's/^CLAVE_TEMPORAL=//p' "$clave_file" |
-            "${compose[@]}" exec -T backend uv run python -c '
-          import json, sys, urllib.request
-          password = sys.stdin.read().strip()
-          assert len(password) >= 8
-          data = json.dumps({"espacio": "PLATFORM", "login": "SUPADMIN01", "clave": password}).encode()
-          req = urllib.request.Request("http://127.0.0.1:8000/api/v1/auth/login", data=data, headers={"Content-Type": "application/json"})
-          with urllib.request.urlopen(req, timeout=10) as response:
-              result = json.load(response)
-              assert result["rol"] == "SUPERADMIN"
-              assert result["codigo"] == "SUPADMIN01"
-          print("LOGIN_SUPADMIN_PLATFORM_VERIFICADO")
-          '
+            "${compose[@]}" exec -T backend uv run python -c 'import json,sys,urllib.request; password=sys.stdin.read().strip(); assert len(password)>=8; data=json.dumps({"espacio":"PLATFORM","login":"SUPADMIN01","clave":password}).encode(); req=urllib.request.Request("http://127.0.0.1:8000/api/v1/auth/login",data=data,headers={"Content-Type":"application/json"}); response=urllib.request.urlopen(req,timeout=10); result=json.load(response); response.close(); assert result["rol"]=="SUPERADMIN"; assert result["codigo"]=="SUPADMIN01"; print("LOGIN_SUPADMIN_PLATFORM_VERIFICADO")'
           echo "CREDENCIAL_TEMPORAL_GUARDADA_SOLO_EN_VPS: deploy/private/platform-bootstrap-credentials.txt"
           echo "PLATFORM_SUPADMIN_CREADO_VERIFICADO"
           REMOTE
