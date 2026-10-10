@@ -47,6 +47,36 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const [creandoUsuario, setCreandoUsuario] = useState(false);
   const [credencialNueva, setCredencialNueva] = useState<{ login: string; clave_temporal: string } | null>(null);
   const [errorAlta, setErrorAlta] = useState("");
+  const [editandoId, setEditandoId] = useState("");
+  const [nombreEdicion, setNombreEdicion] = useState("");
+  const [actualizandoUsuario, setActualizandoUsuario] = useState(false);
+  const editarUsuario = async () => {
+    if (!editandoId || nombreEdicion.trim().length < 3) return;
+    setActualizandoUsuario(true);
+    try {
+      await enviarJson(`/api/v1/miembros/mis-usuarios/${editandoId}`, "PATCH", { nombre: nombreEdicion.trim() });
+      setEditandoId("");
+      recargar(); recargarEquipo();
+      setMensaje("Usuario actualizado.");
+    } catch (error) {
+      setMensaje(error instanceof Error ? error.message : String(error));
+    } finally {
+      setActualizandoUsuario(false);
+    }
+  };
+  const restablecerUsuario = async (id: string) => {
+    if (!window.confirm("¿Generar una nueva contraseña temporal? La anterior dejará de funcionar.")) return;
+    try {
+      const credencial = await enviarJson<{ login: string; clave_temporal: string }>(
+        `/api/v1/miembros/mis-usuarios/${id}/restablecer-acceso`, "POST", {},
+      );
+      setCredencialNueva(credencial);
+      setMensaje("Contraseña temporal generada. Entrégala únicamente al titular.");
+    } catch (error) {
+      setMensaje(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   const crearUsuario = async (evento: React.FormEvent<HTMLFormElement>) => {
     evento.preventDefault();
     setCreandoUsuario(true);
@@ -208,14 +238,29 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
         </div>}
       </section>}
       {pestana === "USUARIOS" && <table>
-        <thead><tr><th>Código</th><th>Nombre</th><th>Estado</th><th>Clientes con expedientes</th></tr></thead>
+        <thead><tr><th>Código de acceso</th><th>Nombre</th><th>Estado</th><th>Clientes con expedientes</th><th>Acciones</th></tr></thead>
         <tbody>{(datos ?? []).map((u) => (
           <tr key={u.id}><td>{u.codigo}</td><td>{u.nombre}</td>
             <td>{u.activo ? "Activo" : "Inactivo"}</td>
             <td>{new Set(equipo?.clientes.filter((c) => c.usuario_id === u.id).map((c) => c.receptor_id) ?? []).size}</td>
+            <td>
+              <button type="button" onClick={() => { setEditandoId(u.id); setNombreEdicion(u.nombre); }}>Editar</button>{" "}
+              <button type="button" disabled={!u.activo} onClick={() => void restablecerUsuario(u.id)}>Restablecer clave</button>
+            </td>
           </tr>
         ))}</tbody>
       </table>}
+      {pestana === "USUARIOS" && editandoId && <section className="panel-configuracion">
+        <h3>Editar Usuario</h3>
+        <div className="filtros">
+          <label>Nombre completo <input value={nombreEdicion} minLength={3} maxLength={200}
+            onChange={(e) => setNombreEdicion(e.target.value)} /></label>
+          <button type="button" disabled={actualizandoUsuario || nombreEdicion.trim().length < 3}
+            onClick={() => void editarUsuario()}>Guardar cambios</button>
+          <button type="button" onClick={() => setEditandoId("")}>Cancelar</button>
+        </div>
+      </section>}
+      {pestana === "USUARIOS" && mensaje && <p role="status">{mensaje}</p>}
       {pestana === "PEDIDOS" && <>
         <h3>Presupuestos brutos recibidos de Gerencia</h3>
         <p>Total solicitado: <strong>{formatearMonto(moneda, sumar(pedidos.map((p) => p.monto_solicitado)))}</strong></p>
