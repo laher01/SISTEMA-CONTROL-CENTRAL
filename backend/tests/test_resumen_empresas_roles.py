@@ -99,8 +99,14 @@ def test_resumen_por_empresa_respeta_fechas_monedas_y_usuario(
     acumulado = todas.json()
     assert sum(fila["expedientes"] for fila in acumulado["proveedores"]) == 3
     assert sum(fila["expedientes"] for fila in acumulado["clientes"]) == 3
-    assert sum(Decimal(fila["total"]) for fila in acumulado["proveedores"] if fila["moneda"] == "PEN") == Decimal("190.50")
-    assert sum(Decimal(fila["total"]) for fila in acumulado["clientes"] if fila["moneda"] == "USD") == Decimal("5")
+    total_proveedores_pen = sum(
+        Decimal(fila["total"]) for fila in acumulado["proveedores"] if fila["moneda"] == "PEN"
+    )
+    assert total_proveedores_pen == Decimal("190.50")
+    total_clientes_usd = sum(
+        Decimal(fila["total"]) for fila in acumulado["clientes"] if fila["moneda"] == "USD"
+    )
+    assert total_clientes_usd == Decimal("5")
     assert (
         client.get(
             "/api/v1/expedientes/resumen-empresas",
