@@ -674,3 +674,37 @@ class Auditoria(ConId, ConTenant, ConCreacion, Base):
     entidad: Mapped[str] = mapped_column(String(40))
     entidad_id: Mapped[uuid.UUID] = mapped_column(index=True)
     datos: Mapped[JsonDict | None]
+
+
+# Recepción documental: entidades de infraestructura, sin modificar Expediente/Documento.
+class CorreoBuzon(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "correo_buzones"
+    __table_args__ = (UniqueConstraint("tenant_id", "direccion"),)
+
+    direccion: Mapped[str] = mapped_column(String(320))
+    proveedor: Mapped[str] = mapped_column(String(20))
+    responsable_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    activo: Mapped[bool] = mapped_column(default=False, server_default="false")
+    cursor: Mapped[str | None] = mapped_column(String(500))
+    ultimo_error: Mapped[str | None] = mapped_column(String(500))
+
+
+class CorreoRemitente(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "correo_remitentes"
+    __table_args__ = (UniqueConstraint("tenant_id", "gestor_id", "direccion"),)
+
+    direccion: Mapped[str] = mapped_column(String(320))
+    gestor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("gestores.id"), index=True)
+    activo: Mapped[bool] = mapped_column(default=True, server_default="true")
+
+
+class CorreoMensaje(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "correo_mensajes"
+    __table_args__ = (UniqueConstraint("buzon_id", "identificador_externo"),)
+
+    buzon_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("correo_buzones.id"), index=True)
+    identificador_externo: Mapped[str] = mapped_column(String(500))
+    remitente: Mapped[str] = mapped_column(String(320))
+    gestor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"), index=True)
+    estado: Mapped[str] = mapped_column(String(32), default="PENDIENTE", server_default="PENDIENTE")
+    error: Mapped[str | None] = mapped_column(String(500))
