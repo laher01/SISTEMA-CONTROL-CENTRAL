@@ -342,3 +342,38 @@ def test_administrador_no_accede_a_documento_de_otro_tenant(
 
     session.refresh(documento)
     assert documento.deleted_at is None
+
+def test_limpieza_rechaza_confirmacion_invalida_sin_borrar_datos(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    from app.models import Documento
+
+    auth_prueba.como_admin()
+    documento = Documento(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        creado_por_cuenta_id=auth_prueba.contexto.cuenta_id,
+        sha256="c" * 64,
+        nombre_original="conservar.pdf",
+        mime_type="application/pdf",
+        tamano_bytes=1,
+        ruta_storage="pruebas/conservar.pdf",
+        estado="PENDIENTE",
+    )
+    session.add(documento)
+    session.commit()
+
+    seleccion = {
+        "cuenta_ids": [str(auth_prueba.contexto.cuenta_id)],
+        "incluir_sin_trazabilidad": False,
+        "tipos": ["documentos"],
+        "fecha_desde": None,
+        "fecha_hasta": None,
+    }
+    respuesta = client.post(
+        "/api/v1/configuracion/mantenimiento/limpiar",
+        json={**seleccion, "confirmacion": "CONFIRMACION-INCORRECTA"},
+    )
+    assert respuesta.status_code == 422, respuesta.text
+    session.refresh(documento)
+    assert documento.deleted_at is None
+    assert session.get(Documento, documento.id) is not None
