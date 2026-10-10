@@ -255,15 +255,13 @@ def resumen(
                 func.sum(Expediente.importe_total),
                 func.count(Expediente.id),
             )
-            .join(Miembro, Expediente.usuario_id == Miembro.id)
+            .outerjoin(Miembro, Expediente.usuario_id == Miembro.id)
             .where(
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
                 Expediente.gerente_id.is_(None),
                 Expediente.fecha_emision.between(desde, hasta),
                 Expediente.moneda == moneda,
-                Miembro.tenant_id == tenant_id,
-                Miembro.responsable_id.is_not(None),
             )
             .group_by(Miembro.responsable_id)
         )
@@ -279,12 +277,12 @@ def resumen(
         }
         resultado["pendientes_atribucion"] = [
             {
-                "responsable_id": str(rid),
-                "responsable": responsables[rid].codigo,
+                "responsable_id": str(rid) if rid else "sin-responsable",
+                "responsable": responsables[rid].codigo if rid in responsables else "SIN RESPONSABLE",
                 "registros": n,
                 "produccion": str(_redondear(Decimal(total))),
             }
-            for rid, total, n in historicos if rid in responsables
+            for rid, total, n in historicos
         ]
         resultado["total_pendiente_atribucion"] = str(
             _redondear(sum((Decimal(total) for _, total, _ in historicos), Decimal("0")))
