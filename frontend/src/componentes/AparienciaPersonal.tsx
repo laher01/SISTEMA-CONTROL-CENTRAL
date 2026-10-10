@@ -21,7 +21,7 @@ function aplicar(preferencias: Apariencia): void {
   const html = document.documentElement;
   html.dataset.fcTema = preferencias.tema.toLowerCase();
   html.dataset.fcDensidad = preferencias.densidad.toLowerCase();
-  html.style.setProperty("--primario", COLORES.find((x) => x.codigo === preferencias.color)?.hex ?? COLORES[0].hex);
+  html.style.setProperty("--primario", COLORES.find((x) => x.codigo === preferencias.color)?.hex ?? "#1c4e80");
 }
 
 export default function AparienciaPersonal({ onBarra }: { onBarra: (modo: Apariencia["barra"]) => void }) {
@@ -75,19 +75,19 @@ export default function AparienciaPersonal({ onBarra }: { onBarra: (modo: Aparie
         </select>
       </label>
       <label>Color principal
-        <select value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value as Apariencia["color"] })}>
+        <select value={actual.color} onChange={(e) => setForm({ ...actual, color: e.target.value as Apariencia["color"] })}>
           {COLORES.map((x) => <option key={x.codigo} value={x.codigo}>{x.nombre}</option>)}
         </select>
       </label>
       <label>Tamaño de interfaz
-        <select value={form.densidad} onChange={(e) => setForm({ ...form, densidad: e.target.value as Apariencia["densidad"] })}>
+        <select value={actual.densidad} onChange={(e) => setForm({ ...actual, densidad: e.target.value as Apariencia["densidad"] })}>
           <option value="COMPACTO">Compacto</option>
           <option value="NORMAL">Normal</option>
           <option value="AMPLIO">Amplio</option>
         </select>
       </label>
       <label>Barra lateral
-        <select value={form.barra} onChange={(e) => setForm({ ...form, barra: e.target.value as Apariencia["barra"] })}>
+        <select value={actual.barra} onChange={(e) => setForm({ ...actual, barra: e.target.value as Apariencia["barra"] })}>
           <option value="AUTOMATICO">Automática</option>
           <option value="MANUAL">Manual</option>
         </select>
