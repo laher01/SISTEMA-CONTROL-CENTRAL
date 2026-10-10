@@ -352,6 +352,89 @@ def resumen(
     return resultado
 
 
+class IncorporarHistoricosIn(BaseModel):
+    responsable_id: uuid.UUID
+    desde: date
+    hasta: date
+    moneda: str = Field(pattern="^(PEN|USD)$")
+
+
+@router.post("/incorporar-historicos")
+def incorporar_historicos(
+    datos: IncorporarHistoricosIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, object]:
+    """Decisión explícita del Gerente global para asumir facturas antiguas sin origen.
+
+    La operación nunca traslada facturas ya asignadas a otra Gerencia.
+    """
+    if auth.rol != RolMiembro.GERENTE or auth.codigo != "GRTEGLOBAL" or auth.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Operación reservada a GRTEGLOBAL")
+    _periodo(datos.desde, datos.hasta, datos.moneda)
+    _responsable(session, tenant_id, datos.responsable_id)
+    # Los periodos con liquidación existente, incluso legada, requieren revisión
+    # antes de incorporar más facturas: nunca reabrir pagos ya abonados.
+    solape = session.scalar(
+        select(PagoResponsableERP.id).where(
+            PagoResponsableERP.tenant_id == tenant_id,
+            PagoResponsableERP.responsable_id == datos.responsable_id,
+            PagoResponsableERP.moneda == datos.moneda,
+            PagoResponsableERP.periodo_desde <= datos.hasta,
+            PagoResponsableERP.periodo_hasta >= datos.desde,
+            PagoResponsableERP.estado != "ANULADO",
+        )
+    )
+    if solape is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Ya existe liquidación en el periodo; revisar pagos antes de incorporar",
+        )
+    expedientes = list(
+        session.scalars(
+            select(Expediente)
+            .join(Miembro, Miembro.id == Expediente.usuario_id)
+            .where(
+                Expediente.tenant_id == tenant_id,
+                Expediente.deleted_at.is_(None),
+                Expediente.gerente_id.is_(None),
+                Expediente.fecha_emision.between(datos.desde, datos.hasta),
+                Expediente.moneda == datos.moneda,
+                Miembro.tenant_id == tenant_id,
+                Miembro.rol == RolMiembro.USUARIO,
+                Miembro.responsable_id == datos.responsable_id,
+            )
+            .with_for_update(of=Expediente)
+        )
+    )
+    if not expedientes:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Sin facturas pendientes")
+    for expediente in expedientes:
+        expediente.gerente_id = auth.miembro_id
+    total = sum((Decimal(e.importe_total) for e in expedientes), Decimal("0"))
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "GERENTE_INCORPORA_PRODUCCION_HISTORICA",
+        "miembro",
+        datos.responsable_id,
+        {
+            "gerente_id": str(auth.miembro_id),
+            "responsable_id": str(datos.responsable_id),
+            "desde": datos.desde.isoformat(),
+            "hasta": datos.hasta.isoformat(),
+            "moneda": datos.moneda,
+            "expediente_ids": [str(e.id) for e in expedientes],
+            "cantidad": len(expedientes),
+            "produccion": str(_redondear(total)),
+            "actor": auth.codigo,
+        },
+    )
+    session.commit()
+    return {"cantidad": len(expedientes), "produccion": str(_redondear(total))}
+
+
 @router.put("/comision")
 def modificar_comision(
     datos: ReglaComisionIn,
@@ -645,10 +728,10 @@ def reprogramar_pago(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Liquidación no encontrada")
     if pago.estado in ("PAGADO", "ANULADO"):
         raise HTTPException(status.HTTP_409_CONFLICT, "Liquidación cerrada")
-    if datos.fecha.replace(day=1) <= pago.periodo_hasta.replace(day=1):
+    if datos.fecha <= date.today():
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "Reprogramación debe indicar un mes posterior al periodo",
+            "Indique una fecha futura para el pago postergado",
         )
     pago.fecha_reprogramada = datos.fecha
     pago.observacion = datos.motivo

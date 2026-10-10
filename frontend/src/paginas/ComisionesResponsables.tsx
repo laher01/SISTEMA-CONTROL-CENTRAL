@@ -76,6 +76,8 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
   const [hasta, setHasta] = useState(inicial.hasta);
   const [moneda, setMoneda] = useState<"PEN" | "USD">("PEN");
   const [responsableSeleccionado, setResponsableSeleccionado] = useState("");
+  const [accionPago, setAccionPago] = useState<"TOTAL" | "ADELANTO" | "POSTERGAR" | "">("");
+  const [pagoSeleccionado, setPagoSeleccionado] = useState("");
   const { datos: responsablesActivos } = useDatos<FiltroOpcion[]>("/api/v1/pagos/responsables");
   const [editando, setEditando] = useState("");
   const [porcentaje, setPorcentaje] = useState("");
@@ -95,6 +97,7 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
   );
   const pagos = useDatos<Pago[]>("/api/v1/pagos-responsables");
   const pagosFiltrados = (pagos.datos ?? []).filter(p =>
+    (!responsableSeleccionado || p.responsable_id === responsableSeleccionado) &&
     p.moneda === moneda && p.periodo_desde >= desde && p.periodo_hasta <= hasta
   );
   const filas = (datos?.filas ?? []).filter(f => !responsableSeleccionado || f.responsable_id === responsableSeleccionado);
@@ -106,8 +109,30 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
   const responsables = Array.from(
     new Map(filas.map((f) => [f.responsable_id, f.responsable_nombre])).entries(),
   );
-  const puedeProgramar = ["SUPERADMIN", "ADMINISTRADOR", "GERENTE"].includes(sesion.rol);
+  const puedeProgramar = sesion.rol === "GERENTE";
   const puedePagar = sesion.rol === "GERENTE";
+
+  const incorporarHistoricos = async () => {
+    if (!responsableSeleccionado || !window.confirm(
+      "¿Confirmas que esta producción histórica corresponde a tu Gerencia? " +
+      "La incorporación quedará auditada y no modificará facturas de otros Gerentes."
+    )) return;
+    setProcesando(true);
+    setMensaje("");
+    try {
+      const resultado = await enviarJson<{ cantidad: number; produccion: string }>(
+        "/api/v1/pagos-responsables/incorporar-historicos", "POST",
+        { responsable_id: responsableSeleccionado, desde, hasta, moneda }
+      );
+      recargar();
+      pagos.recargar();
+      setMensaje(`Incorporadas ${resultado.cantidad} facturas por ${formatearMonto(moneda, resultado.produccion)}. Ya puedes programar la liquidación y decidir su pago.`);
+    } catch (e) {
+      setMensaje(e instanceof Error ? e.message : String(e));
+    } finally {
+      setProcesando(false);
+    }
+  };
 
   const modificar = async (fila: Fila) => {
     setProcesando(true);
@@ -251,7 +276,7 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
     {sesion.rol === "GERENTE" && Number(datos?.total_pendiente_atribucion ?? 0) > 0 && <section className="panel-configuracion">
       <h4>Producción histórica pendiente de atribución</h4>
       <p className="tenue">Desglose referencial por cliente. Las comisiones mostradas aquí NO son saldos
-        pagables hasta que Administración confirme el Gerente y pedido de origen.</p>
+        pagables hasta que el Gerente confirme que pertenecen a su Gerencia.</p>
       {responsableSeleccionado ? <>
         <div className="tabla-responsive"><table>
           <thead><tr><th>Cliente receptor</th><th>Producción acumulada</th><th>% comisión</th><th>Comisión referencial</th></tr></thead>
@@ -263,6 +288,9 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
           <tfoot><tr><th>Total referencial</th><th>{formatearMonto(moneda, produccionHistorica)}</th><th>—</th>
             <th>{formatearMonto(moneda, comisionReferencial)}</th></tr></tfoot>
         </table></div>
+        {produccionHistorica > 0 && <button disabled={procesando} onClick={() => void incorporarHistoricos()}>
+          Incorporar a mi Gerencia para liquidar
+        </button>}
       </> : <>
         <strong>{formatearMonto(moneda, datos?.total_pendiente_atribucion ?? "0")}</strong>
         <p className="tenue">Seleccione un Responsable para ver el detalle por cliente.</p>
@@ -320,19 +348,30 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
     })}
     <h4>Pagos a Responsables</h4>
     <p className="resumen-carga">Saldo global de las liquidaciones: {formatearMonto(moneda, pagosFiltrados.reduce((a, p) => a + Number(p.saldo ?? (p.estado === "PAGADO" ? 0 : p.comision_total)), 0))}</p>
-    {puedePagar && <div className="filtros">
-      <label>Fecha de pago <input type="date" value={fechaPago}
-        onChange={(e) => setFechaPago(e.target.value)} /></label>
-      <input aria-label="Referencia de pago" placeholder="Referencia bancaria / voucher"
-        value={referenciaPago} onChange={(e) => setReferenciaPago(e.target.value)} />
-      <label>Adjuntar comprobante (PDF/JPG/PNG)
-        <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e => setComprobante(e.target.files?.[0] ?? null)} />
-      </label>
-      <input aria-label="Monto del adelanto" type="number" min="0.01" step="0.01"
-        placeholder="Monto adelanto" value={montoAdelanto} onChange={e => setMontoAdelanto(e.target.value)} />
-      <label>Nueva fecha <input type="date" value={nuevaFecha} onChange={e => setNuevaFecha(e.target.value)} /></label>
-      <input placeholder="Motivo reprogramación" value={motivoReprogramacion}
-        onChange={e => setMotivoReprogramacion(e.target.value)} />
+    {puedePagar && pagoSeleccionado && <div className="panel-configuracion">
+      <h4>{accionPago === "TOTAL" ? "Pagar saldo completo" :
+        accionPago === "ADELANTO" ? "Registrar pago parcial" : "Postergar pago"}</h4>
+      {accionPago === "POSTERGAR" ? <div className="filtros">
+        <label>Nueva fecha <input type="date" value={nuevaFecha} onChange={e => setNuevaFecha(e.target.value)} /></label>
+        <label>Motivo <input value={motivoReprogramacion} onChange={e => setMotivoReprogramacion(e.target.value)}
+          placeholder="Motivo de postergación" /></label>
+        <button disabled={procesando || !nuevaFecha || motivoReprogramacion.trim().length < 5}
+          onClick={() => void reprogramar(pagoSeleccionado)}>Confirmar postergación</button>
+      </div> : <div className="filtros">
+        <label>Fecha de pago <input type="date" value={fechaPago} onChange={e => setFechaPago(e.target.value)} /></label>
+        <label>Referencia bancaria <input value={referenciaPago} onChange={e => setReferenciaPago(e.target.value)} /></label>
+        <label>Voucher PDF/JPG/PNG <input type="file" accept=".pdf,.jpg,.jpeg,.png"
+          onChange={e => setComprobante(e.target.files?.[0] ?? null)} /></label>
+        {accionPago === "ADELANTO" && <label>Importe parcial
+          <input type="number" min="0.01" max={pagosFiltrados.find(p => p.id === pagoSeleccionado)?.saldo}
+            step="0.01" value={montoAdelanto} onChange={e => setMontoAdelanto(e.target.value)} />
+        </label>}
+        <button disabled={procesando || !comprobante || referenciaPago.trim().length < 4 ||
+          (accionPago === "ADELANTO" && !(Number(montoAdelanto) > 0))}
+          onClick={() => void pagar(pagoSeleccionado, accionPago === "TOTAL" ? "TOTAL" : "ADELANTO")}>
+          Confirmar {accionPago === "TOTAL" ? "pago completo" : "pago parcial"}
+        </button>
+      </div>}
     </div>}
     <div className="tabla-responsive"><table>
       <thead><tr><th>Responsable</th><th>Periodo</th><th>Comisión</th>
@@ -347,9 +386,19 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
         <td>{p.referencia_pago ?? "—"}</td>
         <td>
           {puedePagar && !["PAGADO", "ANULADO"].includes(p.estado) && <>
-            <button disabled={procesando} onClick={() => void pagar(p.id, "TOTAL")}>Pagar todo</button>{" "}
-            <button disabled={procesando} onClick={() => void pagar(p.id, "ADELANTO")}>Hacer adelanto</button>{" "}
-            <button disabled={procesando} onClick={() => void reprogramar(p.id)}>Reprogramar</button>
+            <select aria-label={`Decidir pago de ${p.responsable_id}`}
+              value={pagoSeleccionado === p.id ? accionPago : ""}
+              onChange={e => {
+                setPagoSeleccionado(p.id);
+                setAccionPago(e.target.value as "TOTAL" | "ADELANTO" | "POSTERGAR" | "");
+                setMontoAdelanto("");
+                setMensaje("");
+              }}>
+              <option value="">Decidir pago</option>
+              <option value="TOTAL">Pagar completo</option>
+              <option value="ADELANTO">Pagar parcial</option>
+              <option value="POSTERGAR">Postergar</option>
+            </select>{" "}
           </>}
           <button onClick={() => void verMovimientos(p.id)}>Movimientos</button>
           {(movimientos[p.id] ?? []).map(m => <div key={m.id}><a href={`/api/v1/pagos-responsables/${p.id}/movimientos/${m.id}/comprobante`} target="_blank" rel="noreferrer">{m.fecha} · {formatearMonto(p.moneda as "PEN" | "USD", m.monto)} · {m.referencia}</a></div>)}
