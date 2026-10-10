@@ -120,3 +120,11 @@ Diseñar migraciones, modelos, esquemas, RBAC y tests antes de exponer endpoints
 - Apertura inicial no se registra dos veces; anticipo no se descuenta dos veces.
 - Usuario no puede editar tarifa, resetear otra cuenta ni acceder a voucher de otro equipo.
 - Redondeo determinista, separación PEN/USD y pruebas de concurrencia de programación.
+
+## 11. Aclaración de titularidad y devengo (09/10/2026)
+
+- **Cobros del Responsable:** nacen de la producción elegible registrada por los Gestores de los Usuarios bajo ese Responsable, atribuida a cada cliente/receptor y multiplicada por la tarifa vigente de cobro aprobada por Gerencia. El importe por cobrar es visible aun si Gerencia no ha programado pagos. El Gerente únicamente programa/abona al Responsable y la ausencia de programación no oculta ni elimina el devengado. Distinguir producción cargada, producción validada y producción elegible; nunca considerar inválidos como cobrables.
+- **Pagos a Usuarios:** únicamente el Responsable correspondiente programa, registra y confirma los pagos a todos sus Usuarios. La base individual suma la producción elegible de los Gestores vinculados al Usuario, desglosada por empresa y clasificación con/sin agente de retención; aplica las dos tarifas del Usuario fijadas por el Responsable. No confundir pago Responsable→Usuario con pago Gerencia→Responsable.
+- **Saldos separados:** por cobrar a Gerencia = devengado a favor del Responsable + ajustes - cobros confirmados; por pagar a Usuarios = devengado de Usuarios + ajustes - pagos confirmados - anticipos imputados. Programaciones no alteran saldos de caja.
+- **Pantalla Cobros y clientes:** mostrar total calculado por cobrar antes de toda programación, además de programado, recibido y pendiente. La aprobación de tarifa corresponde a Gerencia; la programación del cobro no aprueba ni crea devengo.
+- **Pantalla Pago de Usuarios:** listar Usuarios, sus Gestores y clientes, producciones elegibles, categorías, comisiones, saldo anterior, pagos y adelantos; solo Responsable liquida sus Usuarios.
