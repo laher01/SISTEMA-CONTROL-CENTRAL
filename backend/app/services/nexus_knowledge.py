@@ -2,19 +2,22 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 from app.core.config import Settings
 from app.schemas import NexusFuente
 
-DOCUMENTOS_CONOCIMIENTO = (
+PATRONES_CONOCIMIENTO = (
     "MASTER_PLAN.md",
     "README.md",
-    "docs/BUSINESS_RULES.md",
-    "docs/DATA_MODEL.md",
-    "docs/CORE_ARCHITECTURE.md",
-    "docs/futuro/nexus/MULTI_AGENT_SYSTEM.md",
+    "docs/*.md",
+    "docs/CORE/*.md",
+    "docs/SAAS/*.md",
+    "docs/AI/*.md",
+    "docs/futuro/nexus/*.md",
 )
+
 
 PALABRAS_RUTA: dict[str, tuple[str, ...]] = {
     "DASHBOARD": ("dashboard", "indicadores", "alertas", "resumen"),
@@ -40,7 +43,7 @@ class FragmentoConocimiento:
 def knowledge_disponible(settings: Settings) -> bool:
     if not settings.nexus_knowledge_enabled:
         return False
-    return any(_resolver_ruta(path) is not None for path in DOCUMENTOS_CONOCIMIENTO)
+    return bool(_biblioteca())
 
 
 def recuperar_conocimiento(
@@ -57,31 +60,23 @@ def recuperar_conocimiento(
     terminos.update(PALABRAS_RUTA.get(seccion, ()))
     candidatos: list[FragmentoConocimiento] = []
 
-    for relativo in DOCUMENTOS_CONOCIMIENTO:
-        ruta = _resolver_ruta(relativo)
-        if ruta is None:
+    for relativo, titulo, texto in _biblioteca():
+        normal = _normalizar(f"{titulo} {texto}")
+        puntaje = sum(
+            3 if termino in _normalizar(titulo) else 1
+            for termino in terminos
+            if termino in normal
+        )
+        if puntaje <= 0:
             continue
-        try:
-            contenido = ruta.read_text(encoding="utf-8")
-        except (OSError, UnicodeError):
-            continue
-        for titulo, texto in _secciones(contenido):
-            normal = _normalizar(f"{titulo} {texto}")
-            puntaje = sum(
-                3 if termino in _normalizar(titulo) else 1
-                for termino in terminos
-                if termino in normal
+        candidatos.append(
+            FragmentoConocimiento(
+                titulo=titulo,
+                texto=texto.strip(),
+                archivo=relativo,
+                puntaje=puntaje,
             )
-            if puntaje <= 0:
-                continue
-            candidatos.append(
-                FragmentoConocimiento(
-                    titulo=titulo or ruta.name,
-                    texto=texto.strip(),
-                    archivo=relativo,
-                    puntaje=puntaje,
-                )
-            )
+        )
 
     candidatos.sort(key=lambda item: (item.puntaje, len(item.texto)), reverse=True)
     elegidos = candidatos[:max_fragmentos]
@@ -101,19 +96,38 @@ def recuperar_conocimiento(
     return "\n\n".join(partes), fuentes
 
 
-def _resolver_ruta(relativo: str) -> Path | None:
-    relativo_path = Path(relativo)
-    raices = (
-        Path.cwd(),
-        Path.cwd().parent,
-        Path("/app"),
-    )
-    for raiz in raices:
-        candidato = raiz / relativo_path
-        if candidato.is_file():
-            return candidato
-    return None
+@lru_cache(maxsize=1)
+def _biblioteca() -> tuple[tuple[str, str, str], ...]:
+    archivos: dict[str, Path] = {}
+    for raiz in _raices():
+        for patron in PATRONES_CONOCIMIENTO:
+            for ruta in raiz.glob(patron):
+                if not ruta.is_file():
+                    continue
+                try:
+                    relativo = str(ruta.relative_to(raiz))
+                except ValueError:
+                    relativo = ruta.name
+                archivos.setdefault(relativo, ruta)
 
+    fragmentos: list[tuple[str, str, str]] = []
+    for relativo, ruta in sorted(archivos.items()):
+        try:
+            contenido = ruta.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        for titulo, texto in _secciones(contenido):
+            fragmentos.append((relativo, titulo or ruta.name, texto))
+    return tuple(fragmentos)
+
+
+def _raices() -> tuple[Path, ...]:
+    candidatas = (Path.cwd(), Path.cwd().parent, Path("/app"))
+    unicas: list[Path] = []
+    for raiz in candidatas:
+        if raiz not in unicas:
+            unicas.append(raiz)
+    return tuple(unicas)
 
 def _secciones(contenido: str) -> list[tuple[str, str]]:
     lineas = contenido.splitlines()
