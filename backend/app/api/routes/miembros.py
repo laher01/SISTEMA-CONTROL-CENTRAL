@@ -201,14 +201,10 @@ def crear_usuario_responsable(
         responsable_id=responsable.id,
         porcentaje_produccion=porcentaje,
         porcentaje_con_agente=(
-            datos.porcentaje_con_agente
-            if datos.porcentaje_con_agente is not None
-            else porcentaje
+            datos.porcentaje_con_agente if datos.porcentaje_con_agente is not None else porcentaje
         ),
         porcentaje_sin_agente=(
-            datos.porcentaje_sin_agente
-            if datos.porcentaje_sin_agente is not None
-            else porcentaje
+            datos.porcentaje_sin_agente if datos.porcentaje_sin_agente is not None else porcentaje
         ),
         activo=True,
         creado_por_cuenta_id=auth.cuenta_id,
