@@ -15,12 +15,13 @@ from pypdf.errors import PdfReadError
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 from starlette.background import BackgroundTask
 
 from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado
 from app.enums import EstadoExpediente, RolMiembro
-from app.models import Documento, Empresa, Expediente, Gestor, Miembro, ahora
+from app.models import Documento, Empresa, Expediente, Miembro, ahora
 from app.schemas import (
     ExpedienteDetalle,
     ExpedienteIn,
@@ -229,7 +230,7 @@ def resumen_empresas_por_rol(
     elif auth.rol == RolMiembro.GERENTE:
         condiciones.append(alcance_expedientes_gerente(auth))
 
-    def agrupar(campo: object) -> list[dict[str, object]]:
+    def agrupar(campo: InstrumentedAttribute[uuid.UUID]) -> list[dict[str, object]]:
         filas = session.execute(
             select(
                 Empresa.id, Empresa.ruc, Empresa.razon_social, Expediente.moneda,
