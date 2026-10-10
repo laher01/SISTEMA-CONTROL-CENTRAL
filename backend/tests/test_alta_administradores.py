@@ -53,4 +53,29 @@ def test_alta_administrador_desde_superadmin(
     }
     assert next(item for item in tenants if item["id"] == str(tenant.id))["documentos"] == 0
 
+    # Comprobar inicio de sesión real: el ADMIN01 nuevo pertenece a su tenant.
+    login_nuevo = client.post(
+        "/api/v1/auth/login",
+        json={
+            "espacio": cuerpo["codigo"],
+            "login": cuerpo["login"],
+            "clave": cuerpo["clave_temporal"],
+        },
+    )
+    assert login_nuevo.status_code == 200, login_nuevo.text
+    assert login_nuevo.json()["rol"] == "ADMINISTRADOR"
+    assert login_nuevo.json()["codigo"] == "ADMIN01"
+    assert login_nuevo.json()["cambio_clave_obligatorio"] is True
+
+    # Las mismas credenciales no deben autenticar en el tenant original.
+    login_cruzado = client.post(
+        "/api/v1/auth/login",
+        json={
+            "espacio": "pruebas",
+            "login": cuerpo["login"],
+            "clave": cuerpo["clave_temporal"],
+        },
+    )
+    assert login_cruzado.status_code == 401, login_cruzado.text
+
     assert client.post("/api/v1/configuracion/administraciones", json=datos).status_code == 409
