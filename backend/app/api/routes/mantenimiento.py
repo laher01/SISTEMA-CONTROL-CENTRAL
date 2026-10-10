@@ -364,10 +364,14 @@ def reintentar_archivos(
     _solo_administrador(auth.rol)
     pendientes = list(
         session.scalars(
-            select(EliminacionArchivoPendiente).where(
+            select(EliminacionArchivoPendiente)
+            .where(
                 EliminacionArchivoPendiente.tenant_id == tenant_id,
                 EliminacionArchivoPendiente.estado == "PENDIENTE",
-            ).limit(100)
+            )
+            .order_by(EliminacionArchivoPendiente.created_at, EliminacionArchivoPendiente.id)
+            .limit(100)
+            .with_for_update(skip_locked=True)
         )
     )
     completados = 0
