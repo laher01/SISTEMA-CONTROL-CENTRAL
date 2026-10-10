@@ -6,11 +6,11 @@ Las credenciales solo se suministran por variables de entorno.
 
 import email
 import imaplib
-from email.utils import parseaddr
 import os
 import uuid
 from datetime import date
 from email.policy import default
+from email.utils import parseaddr
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
