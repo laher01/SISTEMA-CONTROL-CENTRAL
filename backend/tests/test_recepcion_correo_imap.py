@@ -30,8 +30,11 @@ def test_extrae_xml_de_correo_ficticio() -> None:
 def test_uid_duplicado_no_reprocesa(session: Session, settings: Settings) -> None:
     tenant = obtener_tenant(session, settings.tenant_default)
     responsable = Miembro(
-        tenant_id=tenant.id, codigo="RESP-IMAP", nombre="Responsable IMAP",
-        rol="RESPONSABLE", activo=True,
+        tenant_id=tenant.id,
+        codigo="RESP-IMAP",
+        nombre="Responsable IMAP",
+        rol="RESPONSABLE",
+        activo=True,
     )
     session.add(responsable)
     session.flush()
