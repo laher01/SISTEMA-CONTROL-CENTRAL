@@ -108,7 +108,11 @@ def listar(
     auth: OperativeAuthDep,
     rol: RolMiembro | None = None,
 ) -> list[Miembro]:
-    _solo_admin(auth.rol)
+    if auth.rol in (RolMiembro.GERENTE, RolMiembro.SECRETARIA):
+        if rol != RolMiembro.RESPONSABLE:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo puede consultar Responsables")
+    else:
+        _solo_admin(auth.rol)
     consulta = select(Miembro).where(
         Miembro.tenant_id == tenant_id,
         Miembro.deleted_at.is_(None),
@@ -117,6 +121,51 @@ def listar(
     if rol is not None:
         consulta = consulta.where(Miembro.rol == rol)
     return list(session.scalars(consulta.order_by(Miembro.rol, Miembro.codigo)))
+
+
+class AltaResponsableOperativoIn(BaseModel):
+    nombre: str = Field(min_length=3, max_length=200)
+
+
+@router.post(
+    "/responsables-operativos",
+    response_model=AltaMiembroOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def crear_responsable_operativo(
+    datos: AltaResponsableOperativoIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> AltaMiembroOut:
+    if auth.rol not in (
+        RolMiembro.GERENTE, RolMiembro.SECRETARIA,
+        RolMiembro.ADMINISTRADOR, RolMiembro.SUPERADMIN,
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin permiso para crear Responsables")
+    nombre = " ".join(datos.nombre.strip().split())
+    responsable = Miembro(
+        tenant_id=tenant_id,
+        codigo=codigo_automatico(session, tenant_id, nombre, RolMiembro.RESPONSABLE),
+        nombre=nombre,
+        rol=RolMiembro.RESPONSABLE,
+        activo=True,
+        creado_por_cuenta_id=auth.cuenta_id,
+    )
+    session.add(responsable)
+    try:
+        session.flush()
+        _, temporal = crear_o_restablecer_cuenta(
+            session, tenant_id, responsable.codigo, miembro_id=responsable.id
+        )
+        session.commit()
+    except (IntegrityError, ValueError) as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "No se pudo crear Responsable") from exc
+    return AltaMiembroOut(
+        miembro=MiembroOut.model_validate(responsable),
+        credencial=CredencialTemporalOut(login=responsable.codigo, clave_temporal=temporal),
+    )
 
 
 class AsignacionResponsableIn(BaseModel):
