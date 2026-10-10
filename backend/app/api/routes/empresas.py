@@ -313,10 +313,10 @@ def eliminar_seleccion(
     auth: OperativeAuthDep,
     datos: EmpresasEliminarIn,
 ) -> EmpresasEliminarOut:
-    if auth.rol != RolMiembro.SUPERADMIN:
+    if auth.rol != RolMiembro.ADMINISTRADOR:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            "Solo SUPERADMIN puede eliminar empresas registradas",
+            "Solo el ADMINISTRADOR del tenant puede eliminar empresas registradas",
         )
 
     empresas = list(
