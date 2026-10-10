@@ -276,3 +276,43 @@ def test_administrador_no_puede_modificar_cuenta_ni_revocar_sesion_de_otro_tenan
     session.refresh(sesion_externa)
     assert cuenta_externa.activo is True
     assert sesion_externa.revocada_at is None
+
+
+
+def test_administrador_no_modifica_ni_elimina_empresas_ajenas(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    from app.models import Empresa, Tenant
+
+    ajeno = Tenant(nombre="OTRO ESPACIO EMPRESAS", codigo="OTRO-EMP", estado="ACTIVO")
+    session.add(ajeno)
+    session.flush()
+    empresa = Empresa(
+        tenant_id=ajeno.id,
+        ruc="20123456789",
+        razon_social="Empresa externa de prueba",
+        tipo_relacion="PROVEEDOR",
+    )
+    session.add(empresa)
+    session.commit()
+
+    auth_prueba.como_admin()
+    listado = client.get("/api/v1/empresas")
+    assert listado.status_code == 200, listado.text
+    assert all(fila["id"] != str(empresa.id) for fila in listado.json())
+
+    respuesta = client.patch(
+        f"/api/v1/empresas/{empresa.id}",
+        json={"razon_social": "No debe aplicarse"},
+    )
+    assert respuesta.status_code == 404, respuesta.text
+
+    respuesta = client.post(
+        "/api/v1/empresas/eliminar-seleccion",
+        json={"empresa_ids": [str(empresa.id)]},
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["eliminadas"] == 0
+    session.refresh(empresa)
+    assert empresa.deleted_at is None
+    assert empresa.razon_social == "Empresa externa de prueba"
