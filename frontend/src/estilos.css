@@ -857,3 +857,49 @@ button.peligro {
 @media (prefers-reduced-motion: reduce) {
   .menu-ajustable { transition: none; }
 }
+
+/* FACT CENTRAL: apariencia visual por cuenta; no modifica reglas ni permisos. */
+.apariencia-personal { padding: 0 0.7rem 0.65rem; position: relative; }
+.apariencia-personal > button {
+  color: #fff; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.45);
+  width: 100%; cursor: pointer; text-align: left; border-radius: 8px;
+}
+.apariencia-panel {
+  display: grid; gap: .6rem; padding: .85rem; margin-top: .6rem;
+  background: #fff; color: #1f2933; border-radius: 10px; border: 1px solid #cbd5e1;
+  min-width: 195px; box-shadow: 0 8px 20px rgba(0,0,0,.15);
+}
+.apariencia-panel label { display: grid; gap: .2rem; font-size: .85rem; }
+.apariencia-panel select { width: 100%; }
+.apariencia-botones { display: flex; gap: .5rem; flex-wrap: wrap; }
+.apariencia-panel button { font-size: .8rem; }
+:root[data-fc-tema="oscuro"] {
+  color-scheme: dark; color: #e2e8f0; background: #0f172a;
+  --borde: #475569;
+}
+:root[data-fc-tema="oscuro"] .contenido { background: #0f172a; color: #e2e8f0; }
+:root[data-fc-tema="oscuro"] :is(table, .tarjeta, .panel-configuracion, .columnas section, .apariencia-panel) {
+  background: #1e293b; color: #f1f5f9; border-color: #475569;
+}
+:root[data-fc-tema="oscuro"] th { background: #334155; color: #f1f5f9; }
+:root[data-fc-tema="oscuro"] :is(input, select, textarea) {
+  background: #334155; color: #f8fafc; border-color: #64748b;
+}
+:root[data-fc-tema="oscuro"] a { color: #93c5fd; }
+:root[data-fc-tema="oscuro"] .menu a { color: #fff; }
+:root[data-fc-tema="sistema"] { color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+  :root[data-fc-tema="sistema"] { color-scheme: dark; color: #e2e8f0; background: #0f172a; --borde: #475569; }
+  :root[data-fc-tema="sistema"] .contenido { background: #0f172a; color: #e2e8f0; }
+  :root[data-fc-tema="sistema"] :is(table, .tarjeta, .panel-configuracion, .apariencia-panel) {
+    background: #1e293b; color: #f1f5f9; border-color: #475569;
+  }
+  :root[data-fc-tema="sistema"] th { background: #334155; color: #f1f5f9; }
+  :root[data-fc-tema="sistema"] :is(input, select, textarea) {
+    background: #334155; color: #f8fafc; border-color: #64748b;
+  }
+}
+:root[data-fc-densidad="compacto"] :is(th,td) { padding: .25rem .4rem; }
+:root[data-fc-densidad="amplio"] :is(th,td) { padding: .85rem 1rem; }
+:root[data-fc-densidad="compacto"] .contenido { padding: .75rem; }
+:root[data-fc-densidad="amplio"] .contenido { padding: 2rem 2.5rem; }
