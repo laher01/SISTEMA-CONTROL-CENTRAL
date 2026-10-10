@@ -33,7 +33,7 @@ import type { SesionActual } from "./tipos";
 type RolSesion = SesionActual["rol"];
 
 const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = [
-  { a: "/resumen-empresas", texto: "Resumen empresas", icono: "▤", roles: ["GESTOR", "USUARIO", "RESPONSABLE", "GERENTE"] },
+  { a: "/resumen-empresas", texto: "Resumen empresas", icono: "▤", roles: ["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA", "GESTOR", "USUARIO", "RESPONSABLE", "GERENTE"] },
   { a: "/crear-gestores", texto: "Creador de Gestor", icono: "♙", roles: ["USUARIO"] },
   { a: "/responsables-operativos", texto: "Crear Responsables", icono: "♙", roles: ["GERENTE", "SECRETARIA"] },
   { a: "/crear-usuarios", texto: "Crear Usuarios", icono: "♙", roles: ["RESPONSABLE"] },

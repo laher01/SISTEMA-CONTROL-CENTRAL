@@ -35,8 +35,8 @@ interface Resumen {
 }
 
 export default function Secretaria() {
-  const [desde, setDesde] = useState("2026-10-01");
-  const [hasta, setHasta] = useState("2026-10-31");
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
   const [dia, setDia] = useState("");
   const [emisor, setEmisor] = useState("");
   const [receptor, setReceptor] = useState("");
@@ -45,8 +45,8 @@ export default function Secretaria() {
   const [trabajando, setTrabajando] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const filtros = {
-    desde: dia || desde,
-    hasta: dia || hasta,
+    desde: dia || desde || "1900-01-01",
+    hasta: dia || hasta || "9999-12-31",
     emisor_ruc: emisor.length === 11 ? emisor : undefined,
     receptor_ruc: receptor.length === 11 ? receptor : undefined,
     estado,

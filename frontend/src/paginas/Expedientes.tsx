@@ -17,6 +17,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
   const [imprimiendo, setImprimiendo] = useState(false);
   const [descargando, setDescargando] = useState(false);
 
+  const responsableId = parametros.get("responsable_id") ?? "";
   const usuarioId = parametros.get("usuario_id") ?? "";
   const gestorId = parametros.get("gestor_id") ?? "";
   const estado = parametros.get("estado") ?? "";
@@ -32,6 +33,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
 
   const filtrosBase = {
     estado,
+    responsable_id: responsableId,
     usuario_id: usuarioId,
     gestor_id: gestorId,
     pendiente_aprobacion: pendiente,
@@ -63,6 +65,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
     if (valor) siguiente.set(clave, valor);
     else siguiente.delete(clave);
     if (clave === "usuario_id") siguiente.delete("gestor_id");
+    if (clave === "responsable_id") { siguiente.delete("usuario_id"); siguiente.delete("gestor_id"); }
     if (clave !== "pagina") siguiente.delete("pagina");
     setSeleccionados(new Set());
     setMensaje("");
@@ -146,7 +149,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
     <>
       <h2>Expedientes</h2>
       <div className="filtros">
-        <FiltroJerarquia sesion={sesion} usuarioId={usuarioId} gestorId={gestorId} cambiar={cambiar} />
+        <FiltroJerarquia sesion={sesion} responsableId={responsableId} usuarioId={usuarioId} gestorId={gestorId} cambiar={cambiar} />
         <select aria-label="Tipo de empresa" value={tipoEmpresa} onChange={(e) => cambiar("tipo_empresa", e.target.value)}>
           <option value="">Todas las empresas</option>
           <option value="A">Tipo A</option>

@@ -315,6 +315,7 @@ def listar_documentos(
     expediente_id: uuid.UUID | None = None,
     tipo_empresa: Literal["A", "B"] | None = None,
     dia: date | None = None,
+    responsable_id: uuid.UUID | None = None,
     usuario_id: uuid.UUID | None = None,
     gestor_id: uuid.UUID | None = None,
     emisor_ruc: Annotated[str | None, Query(min_length=11, max_length=11)] = None,
@@ -339,6 +340,14 @@ def listar_documentos(
         consulta = consulta.where(Documento.tipo_documento == tipo_documento)
     if expediente_id is not None:
         consulta = consulta.where(Documento.expediente_id == expediente_id)
+    if responsable_id is not None:
+        usuarios_del_responsable = select(Miembro.id).where(
+            Miembro.tenant_id == tenant_id,
+            Miembro.responsable_id == responsable_id,
+            Miembro.rol == RolMiembro.USUARIO,
+            Miembro.deleted_at.is_(None),
+        )
+        consulta = consulta.where(Documento.usuario_id.in_(usuarios_del_responsable))
     if usuario_id is not None:
         consulta = consulta.where(Documento.usuario_id == usuario_id)
     if gestor_id is not None:
@@ -379,6 +388,7 @@ def resumen_documentos(
     expediente_id: uuid.UUID | None = None,
     tipo_empresa: Literal["A", "B"] | None = None,
     dia: date | None = None,
+    responsable_id: uuid.UUID | None = None,
     usuario_id: uuid.UUID | None = None,
     gestor_id: uuid.UUID | None = None,
     emisor_ruc: Annotated[str | None, Query(min_length=11, max_length=11)] = None,
@@ -396,6 +406,14 @@ def resumen_documentos(
         consulta = consulta.where(Documento.tipo_documento == tipo_documento)
     if expediente_id is not None:
         consulta = consulta.where(Documento.expediente_id == expediente_id)
+    if responsable_id is not None:
+        usuarios_del_responsable = select(Miembro.id).where(
+            Miembro.tenant_id == tenant_id,
+            Miembro.responsable_id == responsable_id,
+            Miembro.rol == RolMiembro.USUARIO,
+            Miembro.deleted_at.is_(None),
+        )
+        consulta = consulta.where(Documento.usuario_id.in_(usuarios_del_responsable))
     if usuario_id is not None:
         consulta = consulta.where(Documento.usuario_id == usuario_id)
     if gestor_id is not None:

@@ -120,6 +120,7 @@ def listar(
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
     dia: date | None = None,
+    responsable_id: uuid.UUID | None = None,
     usuario_id: uuid.UUID | None = None,
     gestor_id: uuid.UUID | None = None,
     pendiente_aprobacion: bool | None = None,
@@ -140,6 +141,14 @@ def listar(
         consulta = consulta.where(Expediente.estado == estado)
     if pendiente_aprobacion is not None:
         consulta = consulta.where(Expediente.pendiente_aprobacion == pendiente_aprobacion)
+    if responsable_id is not None:
+        usuarios_del_responsable = select(Miembro.id).where(
+            Miembro.tenant_id == tenant_id,
+            Miembro.responsable_id == responsable_id,
+            Miembro.rol == RolMiembro.USUARIO,
+            Miembro.deleted_at.is_(None),
+        )
+        consulta = consulta.where(Expediente.usuario_id.in_(usuarios_del_responsable))
     if usuario_id is not None:
         consulta = consulta.where(Expediente.usuario_id == usuario_id)
     if gestor_id is not None:
@@ -277,6 +286,7 @@ def resumen_filtrado(
     receptor_ruc: str | None = None,
     emisor_ruc: str | None = None,
     tipo_empresa: Literal["A", "B"] | None = None,
+    responsable_id: uuid.UUID | None = None,
     usuario_id: uuid.UUID | None = None,
     gestor_id: uuid.UUID | None = None,
     pendiente_aprobacion: bool | None = None,
@@ -298,6 +308,14 @@ def resumen_filtrado(
         consulta = consulta.where(Expediente.estado == estado)
     if pendiente_aprobacion is not None:
         consulta = consulta.where(Expediente.pendiente_aprobacion == pendiente_aprobacion)
+    if responsable_id is not None:
+        usuarios_del_responsable = select(Miembro.id).where(
+            Miembro.tenant_id == tenant_id,
+            Miembro.responsable_id == responsable_id,
+            Miembro.rol == RolMiembro.USUARIO,
+            Miembro.deleted_at.is_(None),
+        )
+        consulta = consulta.where(Expediente.usuario_id.in_(usuarios_del_responsable))
     if usuario_id is not None:
         consulta = consulta.where(Expediente.usuario_id == usuario_id)
     if gestor_id is not None:
@@ -366,6 +384,7 @@ def listar_ids(
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
     dia: date | None = None,
+    responsable_id: uuid.UUID | None = None,
     usuario_id: uuid.UUID | None = None,
     gestor_id: uuid.UUID | None = None,
     pendiente_aprobacion: bool | None = None,
@@ -386,6 +405,14 @@ def listar_ids(
         consulta = consulta.where(Expediente.estado == estado)
     if pendiente_aprobacion is not None:
         consulta = consulta.where(Expediente.pendiente_aprobacion == pendiente_aprobacion)
+    if responsable_id is not None:
+        usuarios_del_responsable = select(Miembro.id).where(
+            Miembro.tenant_id == tenant_id,
+            Miembro.responsable_id == responsable_id,
+            Miembro.rol == RolMiembro.USUARIO,
+            Miembro.deleted_at.is_(None),
+        )
+        consulta = consulta.where(Expediente.usuario_id.in_(usuarios_del_responsable))
     if usuario_id is not None:
         consulta = consulta.where(Expediente.usuario_id == usuario_id)
     if gestor_id is not None:
