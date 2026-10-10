@@ -1,5 +1,7 @@
 """Permisos defensivos y aislamiento para actores operativos."""
 
+from dataclasses import replace
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -34,7 +36,7 @@ def _contacto(session: Session, tenant_id, codigo: str, rol: str) -> str:
 def test_ningun_actor_cliente_puede_listar_tenants_globales(
     client: TestClient, auth_prueba: AuthPrueba, rol: str
 ) -> None:
-    auth_prueba.contexto.rol = rol
+    auth_prueba.contexto = replace(auth_prueba.contexto, rol=rol)
     respuesta = client.get("/api/v1/configuracion/administraciones")
     assert respuesta.status_code == 403
 
