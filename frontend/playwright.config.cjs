@@ -1,9 +1,12 @@
+const tls = process.env.FC_E2E_TLS === "true";
+const protocol = tls ? "https" : "http";
+
 module.exports = {
   testDir: "./e2e",
-  use: { baseURL: "http://127.0.0.1:4173", headless: true },
+  use: { baseURL: `${protocol}://127.0.0.1:4173`, headless: true, ignoreHTTPSErrors: tls },
   webServer: {
     command: "npm run dev -- --host 127.0.0.1 --port 4173 --strictPort",
-    url: "http://127.0.0.1:4173",
+    url: `${protocol}://127.0.0.1:4173`,
     reuseExistingServer: false,
     timeout: 30000,
   },
