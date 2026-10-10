@@ -20,9 +20,7 @@ def test_responsable_edita_solo_tasas_de_su_usuario(
         tenant_id=tenant_id, codigo="RESP01", nombre="Responsable", rol="RESPONSABLE"
     )
     propio = session.query(Miembro).filter_by(tenant_id=tenant_id, codigo="TESTUSR").one()
-    ajeno = Miembro(
-        tenant_id=tenant_id, codigo="AJENO01", nombre="Ajeno", rol="USUARIO"
-    )
+    ajeno = Miembro(tenant_id=tenant_id, codigo="AJENO01", nombre="Ajeno", rol="USUARIO")
     session.add_all([responsable, ajeno])
     session.flush()
     propio.responsable_id = responsable.id
@@ -40,9 +38,7 @@ def test_responsable_edita_solo_tasas_de_su_usuario(
     session.refresh(propio)
     assert propio.porcentaje_con_agente == Decimal("2.35")
     assert propio.porcentaje_sin_agente == Decimal("2.85")
-    prohibido = client.patch(
-        f"/api/v1/miembros/mis-usuarios/{ajeno.id}/porcentajes", json=datos
-    )
+    prohibido = client.patch(f"/api/v1/miembros/mis-usuarios/{ajeno.id}/porcentajes", json=datos)
     assert prohibido.status_code == 403
     invalido = client.patch(ruta, json={**datos, "porcentaje_con_agente": "101"})
     assert invalido.status_code == 422
