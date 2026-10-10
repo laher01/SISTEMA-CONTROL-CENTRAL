@@ -48,8 +48,9 @@ jobs:
           CONFIRMACION: ${{ inputs.confirmacion }}
         run: |
           test "$CONFIRMACION" = CREAR_PLATFORM_SUPADMIN01 || { echo "::error::Confirmación incorrecta"; exit 1; }
+          set -euo pipefail
           ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
-            "cd -- '$VPS_DEPLOY_PATH' && bash -s" <<'REMOTE'
+            "cd -- '$VPS_DEPLOY_PATH' && bash -s" <<'REMOTE' | tee "$RUNNER_TEMP/platform-bootstrap.log"
           set -Eeuo pipefail
           umask 077
           test -f deploy/.env.production
@@ -61,8 +62,8 @@ jobs:
           echo "=== IDENTIDADES ACTUALES ==="
           # Evitar pasar una consulta SQL por stdin: SSH utiliza stdin para
           # enviar este script remoto, y un comando anidado puede agotarlo.
-          "${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT version_num FROM alembic_version;"'
-          "${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT codigo, nombre, estado FROM tenants ORDER BY nombre;"'
+          "${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT version_num FROM alembic_version;"' </dev/null
+          "${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT codigo, nombre, estado FROM tenants ORDER BY nombre;"' </dev/null
           echo "INVENTARIO_COMPLETADO_CONTINUANDO_BOOTSTRAP"
           test -s deploy/backups/audit/factcentral_20261010T053407Z.dump
           test -s deploy/backups/documentos/documentos_20261010T054030Z.tar.gz
@@ -76,7 +77,7 @@ jobs:
           # Evitar una segunda comprobación SQL con comillas anidadas en Bash.
           clave_file="deploy/private/platform-bootstrap-credentials.txt"
           # El CLI emite una clave temporal: se captura solamente en archivo privado VPS.
-          if ! "${compose[@]}" exec -T backend uv run python -m app.cli bootstrap-admin --crear > "$clave_file"; then
+          if ! "${compose[@]}" exec -T backend uv run python -m app.cli bootstrap-admin --crear </dev/null > "$clave_file"; then
             rm -f -- "$clave_file"
             echo "Falló alta de plataforma; comprobar base de datos."
             exit 1
@@ -89,3 +90,5 @@ jobs:
           echo "CREDENCIAL_TEMPORAL_GUARDADA_SOLO_EN_VPS: deploy/private/platform-bootstrap-credentials.txt"
           echo "PLATFORM_SUPADMIN_CREADO_VERIFICADO"
           REMOTE
+          grep -Fxq "LOGIN_SUPADMIN_PLATFORM_VERIFICADO" "$RUNNER_TEMP/platform-bootstrap.log"
+          grep -Fxq "PLATFORM_SUPADMIN_CREADO_VERIFICADO" "$RUNNER_TEMP/platform-bootstrap.log"
