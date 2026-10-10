@@ -73,6 +73,8 @@ def construir_contexto(
             "tenant_id": str(auth.tenant_id),
             "usuario_id": str(auth.usuario_id) if auth.usuario_id else None,
             "gestor_id": str(auth.gestor_id) if auth.gestor_id else None,
+            "proposito": f"asistencia_contextual:{seccion.lower()}",
+            "base_autorizacion": f"rol_activo:{auth.rol}",
         },
         filtros=parse_qs(split.query, keep_blank_values=False),
     )
@@ -258,6 +260,7 @@ def _agregar_empresas(
     contexto.datos["empresas_por_relacion"] = {
         str(tipo): int(cantidad) for tipo, cantidad in filas
     }
+
 
 def _agregar_organizacion(
     session: Session,
@@ -453,6 +456,45 @@ def puede_ver_expediente(
     if usuarios is not None:
         return expediente.usuario_id in usuarios
     return True
+
+
+def puede_ver_empresa(
+    session: Session,
+    auth: ContextoAcceso,
+    empresa: Empresa,
+) -> bool:
+    if empresa.tenant_id != auth.tenant_id or empresa.deleted_at is not None:
+        return False
+    if auth.rol in {RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR}:
+        return True
+    if auth.rol == RolMiembro.GERENTE and auth.miembro_id is not None:
+        vinculada = session.scalar(
+            select(GerenteEmpresa.id).where(
+                GerenteEmpresa.tenant_id == auth.tenant_id,
+                GerenteEmpresa.gerente_id == auth.miembro_id,
+                GerenteEmpresa.empresa_id == empresa.id,
+                GerenteEmpresa.activo.is_(True),
+            )
+        )
+        if vinculada is not None:
+            return True
+
+    condiciones = condiciones_expedientes(session, auth)
+    visible = session.scalar(
+        select(Expediente.id)
+        .where(
+            Expediente.tenant_id == auth.tenant_id,
+            Expediente.deleted_at.is_(None),
+            *condiciones,
+            (
+                (Expediente.emisor_id == empresa.id)
+                | (Expediente.receptor_id == empresa.id)
+            ),
+        )
+        .limit(1)
+    )
+    return visible is not None
+
 
 def _seccion(path: str) -> str:
     limpio = path.strip("/").split("/", 1)[0].lower()
