@@ -129,3 +129,35 @@ def test_usuario_inactivo_con_ubl_valido(session: Session, settings: Settings) -
         ArchivoSubido("factura.xml", "application/xml", factura()),
     )
     assert resultado.estado == "USUARIO_NO_AUTORIZADO"
+
+
+def test_xml_duplicado_no_crea_segundo_documento(session: Session, settings: Settings) -> None:
+    tenant = obtener_tenant(session, settings.tenant_default)
+    _registrar_gestor(session, tenant.id, "G6", "proveedor@example.com")
+    session.add(
+        Empresa(
+            tenant_id=tenant.id,
+            ruc=RECEPTOR,
+            razon_social="EMPRESA RECEPTORA",
+            autorizada=True,
+        )
+    )
+    session.flush()
+    archivo = ArchivoSubido("factura.xml", "application/xml", factura())
+    almacen = AlmacenLocal(settings.storage_dir)
+    primero = admitir_adjunto_ubl(
+        session, almacen, settings, date(2026, 10, 10), tenant.id, "proveedor@example.com", archivo
+    )
+    assert primero.estado == "INGRESADO"
+    assert primero.documento_id is not None
+    segundo = admitir_adjunto_ubl(
+        session, almacen, settings, date(2026, 10, 10), tenant.id, "proveedor@example.com", archivo
+    )
+    assert segundo.estado == "DUPLICADO"
+    from sqlalchemy import func, select
+
+    from app.models import Documento
+
+    assert session.scalar(
+        select(func.count()).select_from(Documento).where(Documento.tenant_id == tenant.id)
+    ) == 1
