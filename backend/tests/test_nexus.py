@@ -2,7 +2,6 @@ from fastapi.testclient import TestClient
 
 from app.core.config import Settings
 from app.services import nexus as nexus_service
-
 from tests.xml import EMISOR, factura
 
 
