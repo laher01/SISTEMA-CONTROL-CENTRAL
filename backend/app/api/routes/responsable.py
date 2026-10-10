@@ -264,7 +264,10 @@ def desglose_documentado_usuario(
         "porcentaje_con_retencion": str(usuario.porcentaje_con_retencion)
         if usuario.porcentaje_con_retencion is not None else None,
         "comision_liquidable": None,
-        "motivo_bloqueo": "Falta clasificación tributaria histórica por comprobante y vigencia de tarifas",
+        "motivo_bloqueo": (
+            "Falta clasificación tributaria histórica por comprobante "
+            "y vigencia de tarifas"
+        ),
         "clientes": clientes,
     }
 
