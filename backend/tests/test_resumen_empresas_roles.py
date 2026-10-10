@@ -85,6 +85,28 @@ def test_resumen_por_empresa_respeta_fechas_monedas_y_usuario(
     assert len(data["clientes"]) == 1
     assert Decimal(data["proveedores"][0]["total"]) == Decimal("100.50")
     assert data["clientes"][0]["expedientes"] == 1
+    assert data["proveedores"][0]["expedientes"] == 1
+    assert Decimal(data["clientes"][0]["total"]) == Decimal("100.50")
+    # Cada expediente se contabiliza una vez por perspectiva, no se suman ambas pestañas.
+    segunda_consulta = client.get(
+        "/api/v1/expedientes/resumen-empresas",
+        params={"fecha_desde": "2026-10-01", "fecha_hasta": "2026-10-31", "moneda": "PEN"},
+    )
+    assert segunda_consulta.status_code == 200
+    assert segunda_consulta.json() == data
+    todas = client.get("/api/v1/expedientes/resumen-empresas")
+    assert todas.status_code == 200
+    acumulado = todas.json()
+    assert sum(fila["expedientes"] for fila in acumulado["proveedores"]) == 3
+    assert sum(fila["expedientes"] for fila in acumulado["clientes"]) == 3
+    total_proveedores_pen = sum(
+        Decimal(fila["total"]) for fila in acumulado["proveedores"] if fila["moneda"] == "PEN"
+    )
+    assert total_proveedores_pen == Decimal("190.50")
+    total_clientes_usd = sum(
+        Decimal(fila["total"]) for fila in acumulado["clientes"] if fila["moneda"] == "USD"
+    )
+    assert total_clientes_usd == Decimal("5")
     assert (
         client.get(
             "/api/v1/expedientes/resumen-empresas",

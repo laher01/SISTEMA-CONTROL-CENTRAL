@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 
 import { useDatos } from "../api";
 import { formatearMonto } from "../formato";
@@ -15,19 +15,26 @@ export default function ResumenEmpresas() {
   const [hasta, setHasta] = useState("");
   const [mes, setMes] = useState("");
   const [moneda, setMoneda] = useState("");
+  const [buscar, setBuscar] = useState("");
   const params = new URLSearchParams();
   if (desde) params.set("fecha_desde", desde);
   if (hasta) params.set("fecha_hasta", hasta);
   if (moneda) params.set("moneda", moneda);
   const url = "/api/v1/expedientes/resumen-empresas" + (params.size ? "?" + params.toString() : "");
   const { datos, error, cargando } = useDatos<Resumen>(url);
-  const filas = datos?.[pestana] ?? [];
+  const filas = (datos?.[pestana] ?? []).filter((fila) =>
+    (fila.ruc + " " + fila.razon_social).toLocaleLowerCase("es").includes(buscar.trim().toLocaleLowerCase("es")),
+  );
+  const empresasDistintas = new Set(filas.map((fila) => fila.empresa_id)).size;
+  const expedientes = filas.reduce((total, fila) => total + fila.expedientes, 0);
+  const periodo = mes || (desde || hasta ? (desde || "Inicio") + " → " + (hasta || "Hoy") : "Todo el historial");
   const resumenPorMoneda = filas.reduce<Record<string, { total: number; cantidad: number }>>((a, f) => {
     const previo = a[f.moneda] ?? { total: 0, cantidad: 0 };
     a[f.moneda] = { total: previo.total + Number(f.total), cantidad: previo.cantidad + f.expedientes };
     return a;
   }, {});
-  return <section className="panel-configuracion">
+  const tarjeta: CSSProperties = { border: "1px solid #cbd5e1", borderRadius: 12, padding: 16, minWidth: 0 };
+  return <section className="panel-configuracion" style={{ width: "100%", maxWidth: "none" }}>
     <h2>Resumen de empresas</h2>
     <p>Acumulados según los expedientes visibles para tu usuario y sus permisos.</p>
     <div className="acciones" role="tablist" aria-label="Empresas por función">
@@ -37,6 +44,10 @@ export default function ResumenEmpresas() {
         onClick={() => setPestana("clientes")}>Clientes</button>
     </div>
     <div className="filtros">
+      <label>Buscar RUC o razón social
+        <input type="search" aria-label="Buscar empresa por RUC o razón social" value={buscar}
+          placeholder="RUC o empresa" onChange={(e) => setBuscar(e.target.value)} />
+      </label>
       <label>Mes
         <input type="month" value={mes} onChange={(e) => {
           const m = e.target.value;
@@ -60,23 +71,32 @@ export default function ResumenEmpresas() {
           <option value="USD">Dólares</option>
         </select>
       </label>
-      <button type="button" onClick={() => { setMes(""); setDesde(""); setHasta(""); setMoneda(""); }}>
+      <button type="button" onClick={() => { setMes(""); setDesde(""); setHasta(""); setMoneda(""); setBuscar(""); }}>
         Limpiar filtros
       </button>
     </div>
     {cargando && <p>Cargando resumen…</p>}
     {error && <p role="alert">{error}</p>}
-    <p><strong>Empresas:</strong> {filas.length}</p>
-    {Object.entries(resumenPorMoneda).map(([divisa, valores]) =>
-      <p key={divisa}><strong>{divisa}:</strong> {formatearMonto(divisa === "USD" ? "USD" : "PEN", valores.total)}
-        {" · "}{valores.cantidad} expedientes</p>
-    )}
-    <div className="tabla-responsive"><table>
+    <div aria-label="Indicadores de resumen" style={{
+      display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+      gap: 12, margin: "16px 0",
+    }}>
+      <div style={tarjeta}><small>Empresas</small><h3>{empresasDistintas}</h3></div>
+      <div style={tarjeta}><small>Expedientes</small><h3>{expedientes}</h3></div>
+      <div style={tarjeta}><small>Total facturado</small>
+        {Object.entries(resumenPorMoneda).length ? Object.entries(resumenPorMoneda).map(([divisa, valor]) =>
+          <h3 key={divisa}>{formatearMonto(divisa === "USD" ? "USD" : "PEN", valor.total)}</h3>
+        ) : <h3>Sin registros</h3>}
+      </div>
+      <div style={tarjeta}><small>Periodo</small><h3>{periodo}</h3></div>
+    </div>
+    <p>Los indicadores responden a los filtros de búsqueda; las monedas no se mezclan.</p>
+    <div className="tabla-responsive" style={{ width: "100%", overflowX: "auto" }}><table style={{ width: "100%", minWidth: 660 }}>
       <thead><tr><th>RUC</th><th>Empresa</th><th>Moneda</th><th>Expedientes</th><th>Total acumulado</th></tr></thead>
       <tbody>{filas.map((f) => <tr key={f.empresa_id + "-" + f.moneda}>
         <td>{f.ruc}</td><td>{f.razon_social}</td><td>{f.moneda}</td>
         <td>{f.expedientes}</td><td>{formatearMonto(f.moneda, Number(f.total))}</td>
-      </tr>)}</tbody>
+      </tr>)}{!filas.length && <tr><td colSpan={5}>No hay empresas para los filtros seleccionados.</td></tr>}</tbody>
     </table></div>
   </section>;
 }
