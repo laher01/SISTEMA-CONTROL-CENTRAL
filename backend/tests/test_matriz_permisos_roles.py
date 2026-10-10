@@ -89,6 +89,8 @@ def test_roles_no_admin_no_asignan_gerencias(
         ("/api/v1/empresas", "GET"),
         ("/api/v1/miembros", "GET"),
         ("/api/v1/configuracion/acceso", "GET"),
+        ("/api/v1/registros/opciones", "GET"),
+        ("/api/v1/configuracion/mantenimiento/administradores", "GET"),
     ],
 )
 def test_superadmin_no_accede_a_api_operativa(
