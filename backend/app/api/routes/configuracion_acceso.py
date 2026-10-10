@@ -32,11 +32,11 @@ from app.security import crear_o_restablecer_cuenta
 router = APIRouter(prefix="/configuracion/acceso", tags=["configuracion-acceso"])
 
 
-def _solo_superadmin(rol: str) -> None:
-    if rol != RolMiembro.SUPERADMIN:
+def _solo_administrador(rol: str) -> None:
+    if rol != RolMiembro.ADMINISTRADOR:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            "Solo SUPERADMIN puede administrar la configuración de acceso",
+            "Solo el ADMINISTRADOR del tenant puede administrar sus accesos",
         )
 
 
@@ -57,7 +57,7 @@ def obtener(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> ConfiguracionAcceso:
-    _solo_superadmin(auth.rol)
+    _solo_administrador(auth.rol)
     config = _configuracion(session, tenant_id)
     session.commit()
     return config
@@ -70,7 +70,7 @@ def actualizar(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> ConfiguracionAcceso:
-    _solo_superadmin(auth.rol)
+    _solo_administrador(auth.rol)
     config_actual = _configuracion(session, tenant_id)
     if datos.requiere_email_verificado and not config_actual.proveedor_email_configurado:
         raise HTTPException(
@@ -106,7 +106,7 @@ def listar_correos(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> list[CorreoAutorizado]:
-    _solo_superadmin(auth.rol)
+    _solo_administrador(auth.rol)
     return list(
         session.scalars(
             select(CorreoAutorizado)
@@ -126,7 +126,7 @@ def autorizar_correo(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> CorreoAutorizado:
-    _solo_superadmin(auth.rol)
+    _solo_administrador(auth.rol)
     email = datos.email.strip().lower()
     if "@" not in email:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Correo inválido")
@@ -157,7 +157,7 @@ def revocar_correo(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> None:
-    _solo_superadmin(auth.rol)
+    _solo_administrador(auth.rol)
     registro = session.get(CorreoAutorizado, correo_id)
     if registro is None or registro.tenant_id != tenant_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Correo no encontrado")
@@ -171,7 +171,7 @@ def listar_solicitudes(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> list[SolicitudAcceso]:
-    _solo_superadmin(auth.rol)
+    _solo_administrador(auth.rol)
     return list(
         session.scalars(
             select(SolicitudAcceso)
@@ -189,7 +189,7 @@ def resolver_solicitud(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> dict[str, object]:
-    _solo_superadmin(auth.rol)
+    _solo_administrador(auth.rol)
     solicitud = session.get(SolicitudAcceso, solicitud_id)
     if solicitud is None or solicitud.tenant_id != tenant_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Solicitud no encontrada")
@@ -260,7 +260,7 @@ def listar_cuentas(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> list[CuentaAcceso]:
-    _solo_superadmin(auth.rol)
+    _solo_administrador(auth.rol)
     return list(
         session.scalars(
             select(CuentaAcceso)
@@ -281,14 +281,14 @@ def actualizar_cuenta(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> CuentaAcceso:
-    _solo_superadmin(auth.rol)
+    _solo_administrador(auth.rol)
     cuenta = session.get(CuentaAcceso, cuenta_id)
     if cuenta is None or cuenta.tenant_id != tenant_id or cuenta.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Cuenta no encontrada")
     if datos.activo is False and cuenta.id == auth.cuenta_id:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "SUPERADMIN no puede desactivar su propia cuenta",
+            "El administrador no puede desactivar su propia cuenta",
         )
     if datos.activo is not None:
         cuenta.activo = datos.activo
@@ -311,7 +311,7 @@ def restablecer_clave(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> CredencialTemporalOut:
-    _solo_superadmin(auth.rol)
+    _solo_administrador(auth.rol)
     cuenta = session.get(CuentaAcceso, cuenta_id)
     if cuenta is None or cuenta.tenant_id != tenant_id or cuenta.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Cuenta no encontrada")
@@ -334,7 +334,7 @@ def listar_sesiones(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> list[SesionAccesoAdminOut]:
-    _solo_superadmin(auth.rol)
+    _solo_administrador(auth.rol)
     filas = session.execute(
         select(SesionAcceso, CuentaAcceso.login)
         .join(CuentaAcceso, CuentaAcceso.id == SesionAcceso.cuenta_id)
@@ -363,7 +363,7 @@ def revocar_sesion_admin(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> None:
-    _solo_superadmin(auth.rol)
+    _solo_administrador(auth.rol)
     sesion = session.get(SesionAcceso, sesion_id)
     if sesion is None or sesion.tenant_id != tenant_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Sesión no encontrada")
