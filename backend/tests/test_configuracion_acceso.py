@@ -213,3 +213,66 @@ def test_administrador_previsualiza_y_limpia_su_tenant(
     )
     assert limpieza.status_code == 200, limpieza.text
     assert limpieza.json()["eliminados"] == {"planes": 1, "cuentas_pago": 1}
+
+
+
+def test_administrador_no_puede_modificar_cuenta_ni_revocar_sesion_de_otro_tenant(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from app.models import SesionAcceso, Tenant
+
+    tenant_externo = Tenant(
+        nombre="TENANT EXTERNO AISLADO", codigo="EXTERNO-E2E", estado="ACTIVO"
+    )
+    session.add(tenant_externo)
+    session.flush()
+    miembro_externo = Miembro(
+        tenant_id=tenant_externo.id,
+        codigo="ADMIN-EXTERNO",
+        nombre="Administrador externo",
+        rol="ADMINISTRADOR",
+        activo=True,
+    )
+    session.add(miembro_externo)
+    session.flush()
+    cuenta_externa = CuentaAcceso(
+        tenant_id=tenant_externo.id,
+        login="ADMIN-EXTERNO",
+        password_hash="test-hash",
+        miembro_id=miembro_externo.id,
+        activo=True,
+        cambio_clave_obligatorio=False,
+    )
+    session.add(cuenta_externa)
+    session.flush()
+    sesion_externa = SesionAcceso(
+        tenant_id=tenant_externo.id,
+        cuenta_id=cuenta_externa.id,
+        token_hash="a" * 64,
+        rol_activo="ADMINISTRADOR",
+        expira_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    session.add(sesion_externa)
+    session.commit()
+
+    auth_prueba.como_admin()
+    base = "/api/v1/configuracion/acceso"
+    assert client.get(f"{base}/cuentas").status_code == 200
+    assert all(
+        item["id"] != str(cuenta_externa.id)
+        for item in client.get(f"{base}/cuentas").json()
+    )
+    assert client.patch(
+        f"{base}/cuentas/{cuenta_externa.id}", json={"activo": False}
+    ).status_code == 404
+    assert client.post(
+        f"{base}/cuentas/{cuenta_externa.id}/restablecer-clave"
+    ).status_code == 404
+    assert client.delete(f"{base}/sesiones/{sesion_externa.id}").status_code == 404
+
+    session.refresh(cuenta_externa)
+    session.refresh(sesion_externa)
+    assert cuenta_externa.activo is True
+    assert sesion_externa.revocada_at is None
