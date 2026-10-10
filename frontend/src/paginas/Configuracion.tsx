@@ -53,8 +53,8 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
       {seccion === "permisos" && sesion.rol !== "SUPERADMIN" && (
         <>
           <p className="tenue">
-            Administración controla permisos adicionales. SUPERADMIN hereda las capacidades
-            administrativas; la seguridad global se gestiona aparte.
+            La Administración controla los permisos operativos de su tenant.
+            SUPERADMIN administra únicamente la plataforma SaaS.
           </p>
           {cargando && <p>Cargando…</p>}
           {error && <p className="error">{error}</p>}
