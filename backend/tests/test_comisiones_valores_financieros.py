@@ -20,7 +20,7 @@ def test_comision_dos_receptores_calcula_bruto_total() -> None:
     )
     assert resultado["total_produccion"] == Decimal("15000.00")
     assert resultado["comision_total"] == Decimal("250.00")
-    assert [item["comision"] for item in resultado["detalle" ] ==["150.00", "100.00"]
+    assert [item["comision"] for item in resultado["detalle"]] == ["150.00", "100.00"]
 
 
 def test_redondeo_comision_al_centimo() -> None:
