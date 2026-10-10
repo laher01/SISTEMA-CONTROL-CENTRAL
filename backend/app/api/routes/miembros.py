@@ -130,6 +130,8 @@ def mis_usuarios_responsable(
 class AltaUsuarioResponsableIn(BaseModel):
     nombre: str
     porcentaje_produccion: Decimal | None = None
+    porcentaje_sin_retencion: Decimal | None = None
+    porcentaje_con_retencion: Decimal | None = None
 
 
 @router.post(
@@ -165,6 +167,9 @@ def crear_usuario_responsable(
     )
     if porcentaje < 0 or porcentaje > 100:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Porcentaje inválido")
+    for tasa in (datos.porcentaje_sin_retencion, datos.porcentaje_con_retencion):
+        if tasa is not None and (not tasa.is_finite() or tasa < 0 or tasa > 100):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Tarifa dual inválida")
     usuario = Miembro(
         tenant_id=tenant_id,
         codigo=codigo_automatico(session, tenant_id, nombre, RolMiembro.USUARIO),
@@ -172,6 +177,8 @@ def crear_usuario_responsable(
         rol=RolMiembro.USUARIO,
         responsable_id=responsable.id,
         porcentaje_produccion=porcentaje,
+        porcentaje_sin_retencion=datos.porcentaje_sin_retencion,
+        porcentaje_con_retencion=datos.porcentaje_con_retencion,
         activo=True,
         creado_por_cuenta_id=auth.cuenta_id,
     )
@@ -193,6 +200,8 @@ def crear_usuario_responsable(
 
 class EdicionUsuarioResponsableIn(BaseModel):
     nombre: str
+    porcentaje_sin_retencion: Decimal | None = None
+    porcentaje_con_retencion: Decimal | None = None
 
 
 def _usuario_de_mi_equipo(
@@ -228,6 +237,12 @@ def editar_mi_usuario(
     if not 3 <= len(nombre) <= 200:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Nombre inválido")
     usuario.nombre = nombre
+    for campo in ("porcentaje_sin_retencion", "porcentaje_con_retencion"):
+        if campo in datos.model_fields_set:
+            tasa = getattr(datos, campo)
+            if tasa is not None and (not tasa.is_finite() or tasa < 0 or tasa > 100):
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Tarifa inválida")
+            setattr(usuario, campo, tasa)
     session.commit()
     session.refresh(usuario)
     return usuario
