@@ -152,6 +152,7 @@ def listar_mensajes(
         select(ChatMensaje)
         .where(
             ChatMensaje.tenant_id == tenant_id,
+            ChatMensaje.deleted_at.is_(None),
             or_(
                 (
                     (ChatMensaje.remitente_cuenta_id == auth.cuenta_id)
@@ -252,7 +253,7 @@ def descargar_adjunto(
     mensaje_id: uuid.UUID,
 ) -> FileResponse:
     mensaje = session.get(ChatMensaje, mensaje_id)
-    if mensaje is None or mensaje.tenant_id != tenant_id or mensaje.archivo_ruta is None:
+    if mensaje is None or mensaje.tenant_id != tenant_id or mensaje.deleted_at is not None or mensaje.archivo_ruta is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Adjunto no encontrado")
     if auth.cuenta_id not in (mensaje.remitente_cuenta_id, mensaje.destinatario_cuenta_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Adjunto no encontrado")
