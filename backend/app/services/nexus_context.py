@@ -272,7 +272,7 @@ def _agregar_registros(
             ),
             func.coalesce(
                 func.sum(
-                    func.case(
+                    case(
                         (base.c.moneda == "USD", base.c.importe_total),
                         else_=0,
                     )
