@@ -22,7 +22,10 @@ def main() -> None:
                     Miembro.deleted_at.is_(None),
                 )
             ).all()
-            print(f"Tenant: {tenant.nombre}; codigo={tenant.codigo}; subdominio={tenant.subdominio}")
+            print(
+                f"Tenant: {tenant.nombre}; codigo={tenant.codigo}; "
+                f"subdominio={tenant.subdominio}"
+            )
             for miembro in miembros:
                 cuenta = session.scalar(
                     select(CuentaAcceso).where(
