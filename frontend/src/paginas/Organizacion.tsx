@@ -314,6 +314,7 @@ function OrganizacionAdmin() {
               {ROLES.filter((r) => r === pestanaAdmin).map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
             {rol === "USUARIO" && (
+              <>
               <label>
                 % con agente de retención
                 <input type="number" step="0.0001" min="0" max="100"
@@ -326,6 +327,7 @@ function OrganizacionAdmin() {
                   value={porcentajeSinAgente}
                   onChange={(e) => setPorcentajeSinAgente(e.target.value)} required />
               </label>
+              </>
             )}
             <button type="submit">{miembroEditando ? "Guardar" : "Crear y generar clave"}</button>
             {miembroEditando && (
