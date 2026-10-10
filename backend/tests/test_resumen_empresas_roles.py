@@ -59,11 +59,20 @@ def test_resumen_por_empresa_respeta_fechas_monedas_y_usuario(
         (otra_cuenta.id, date(2026, 10, 2), "999", "3", "PEN"),
         (usuario.id, date(2026, 10, 3), "5", "4", "USD"),
     ]:
-        session.add(Expediente(
-            tenant_id=tenant, usuario_id=uid, receptor_id=receptor.id, emisor_id=emisor.id,
-            tipo_comprobante="01", serie="F001", correlativo=correlativo,
-            fecha_emision=mes, moneda=moneda, importe_total=Decimal(monto),
-        ))
+        session.add(
+            Expediente(
+                tenant_id=tenant,
+                usuario_id=uid,
+                receptor_id=receptor.id,
+                emisor_id=emisor.id,
+                tipo_comprobante="01",
+                serie="F001",
+                correlativo=correlativo,
+                fecha_emision=mes,
+                moneda=moneda,
+                importe_total=Decimal(monto),
+            )
+        )
     session.commit()
     auth_prueba.como_usuario(usuario.id)
     respuesta = client.get(
@@ -76,7 +85,10 @@ def test_resumen_por_empresa_respeta_fechas_monedas_y_usuario(
     assert len(data["clientes"]) == 1
     assert Decimal(data["proveedores"][0]["total"]) == Decimal("100.50")
     assert data["clientes"][0]["expedientes"] == 1
-    assert client.get(
-        "/api/v1/expedientes/resumen-empresas",
-        params={"fecha_desde": "2026-11-01", "fecha_hasta": "2026-10-01"},
-    ).status_code == 422
+    assert (
+        client.get(
+            "/api/v1/expedientes/resumen-empresas",
+            params={"fecha_desde": "2026-11-01", "fecha_hasta": "2026-10-01"},
+        ).status_code
+        == 422
+    )
