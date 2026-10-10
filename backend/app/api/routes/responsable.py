@@ -155,6 +155,17 @@ def _base_pago_usuario(
     usuario = session.get(Miembro, datos.usuario_id)
     if usuario is None or usuario.tenant_id != tenant_id or usuario.rol != RolMiembro.USUARIO:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Usuario inválido")
+    # El cálculo anterior aplica una única tasa a toda la producción.
+    # Las tarifas duales requieren clasificación histórica por documento:
+    # nunca aplicar una tasa única ni permitir que porcentaje_manual las eluda.
+    if (
+        usuario.porcentaje_sin_retencion is not None
+        or usuario.porcentaje_con_retencion is not None
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Liquidación dual pendiente de clasificación histórica; use desglose documental",
+        )
     plan = session.scalar(
         select(PlanLiquidacion)
         .where(
