@@ -20,6 +20,7 @@ from app.services.nexus_context import (
     ContextoNexus,
     condiciones_expedientes,
     construir_contexto,
+    puede_ver_empresa,
     puede_ver_expediente,
 )
 from app.services.nexus_knowledge import recuperar_conocimiento
@@ -382,6 +383,8 @@ def _responder_ruc(
             Empresa.deleted_at.is_(None),
         )
     )
+    if empresa is not None and not puede_ver_empresa(session, auth, empresa):
+        empresa = None
     local = empresa.razon_social if empresa is not None else None
 
     if settings.nexus_ruc_url_template:
