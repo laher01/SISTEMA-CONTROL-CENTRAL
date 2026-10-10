@@ -18,11 +18,14 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("cuentas_acceso", sa.Column(
+    op.add_column(
+        "cuentas_acceso",
+        sa.Column(
             "preferencias_visuales",
             sa.JSON().with_variant(postgresql.JSONB(), "postgresql"),
             nullable=True,
-        ))
+        ),
+    )
 
 
 def downgrade() -> None:
