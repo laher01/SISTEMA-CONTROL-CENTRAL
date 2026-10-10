@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import aliased
 
-from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
+from app.api.deps import AuthDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.enums import Moneda, RolMiembro, TipoDocumento
 from app.models import Empresa, Expediente, Gestor, Miembro
 from app.schemas import FiltroOpcion, RegistroFila, RegistroOpciones, RegistroResumen
@@ -31,8 +31,9 @@ _OPCIONALES_BASE = [
 def opciones(
     session: SessionDep,
     tenant_id: TenantDep,
-    auth: OperativeAuthDep,
+    auth: AuthDep,
 ) -> RegistroOpciones:
+    responsables: list[FiltroOpcion] = []
     usuarios: list[FiltroOpcion] = []
     gestores: list[FiltroOpcion] = []
 
@@ -42,8 +43,9 @@ def opciones(
         RolMiembro.GERENTE,
         RolMiembro.SECRETARIA,
     ):
+        responsables = [FiltroOpcion(id=r.id, codigo=r.codigo, nombre=r.nombre) for r in session.scalars(select(Miembro).where(Miembro.tenant_id == tenant_id, Miembro.rol == RolMiembro.RESPONSABLE, Miembro.activo.is_(True), Miembro.deleted_at.is_(None)).order_by(Miembro.codigo))]
         usuarios = [
-            FiltroOpcion(id=u.id, codigo=u.codigo, nombre=u.nombre)
+            FiltroOpcion(id=u.id, codigo=u.codigo, nombre=u.nombre, responsable_id=u.responsable_id)
             for u in session.scalars(
                 select(Miembro)
                 .where(
@@ -68,6 +70,9 @@ def opciones(
                 .order_by(Gestor.codigo)
             )
         ]
+    elif auth.rol == RolMiembro.RESPONSABLE:
+        usuarios = [FiltroOpcion(id=u.id, codigo=u.codigo, nombre=u.nombre, responsable_id=u.responsable_id) for u in session.scalars(select(Miembro).where(Miembro.tenant_id == tenant_id, Miembro.responsable_id == auth.miembro_id, Miembro.rol == RolMiembro.USUARIO, Miembro.activo.is_(True), Miembro.deleted_at.is_(None)).order_by(Miembro.codigo))]
+        gestores = [FiltroOpcion(id=g.id, codigo=g.codigo, nombre=g.nombre, usuario_id=g.usuario_id) for g in session.scalars(select(Gestor).where(Gestor.tenant_id == tenant_id, Gestor.usuario_id.in_([u.id for u in usuarios]), Gestor.deleted_at.is_(None)).order_by(Gestor.codigo))]
     elif auth.rol == RolMiembro.USUARIO:
         gestores = [
             FiltroOpcion(id=g.id, codigo=g.codigo, nombre=g.nombre)
@@ -102,7 +107,7 @@ def opciones(
         )
         usuarios = [u for u in usuarios if u.id in ids_usuarios]
         gestores = [g for g in gestores if g.id in ids_gestores]
-    return RegistroOpciones(usuarios=usuarios, gestores=gestores)
+    return RegistroOpciones(responsables=responsables, usuarios=usuarios, gestores=gestores)
 
 
 @router.get("", response_model=RegistroResumen)
