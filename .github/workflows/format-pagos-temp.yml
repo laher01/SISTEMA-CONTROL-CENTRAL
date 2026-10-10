@@ -19,8 +19,8 @@ jobs:
         working-directory: backend
         run: |
           uv sync --locked
-          uv run ruff check --fix .
           uv run ruff format .
+          uv run ruff check --fix .
       - name: Commit formatted backend
         run: |
           git config user.name 'github-actions[bot]'
