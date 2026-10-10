@@ -14,7 +14,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Administración inicial de FACT CENTRAL")
     sub = parser.add_subparsers(dest="comando", required=True)
 
-    bootstrap = sub.add_parser("bootstrap-admin", help="Crear/restablecer el Administrador inicial")
+    bootstrap = sub.add_parser("bootstrap-admin", help="Crear exclusivamente SUPADMIN01")
     bootstrap.add_argument("--codigo", default="SUPADMIN01")
     bootstrap.add_argument("--nombre", default="Superadministrador FACT CENTRAL")
     bootstrap.add_argument("--crear", action="store_true", help="Solo crear SUPADMIN01 cuando no exista; nunca restablecer una cuenta existente")
@@ -31,6 +31,8 @@ def _bootstrap_admin(codigo: str, nombre: str, crear: bool = False) -> None:
         codigo_normalizado = codigo.strip().upper()
         if codigo_normalizado != "SUPADMIN01":
             raise SystemExit("Bootstrap reservado exclusivamente para SUPADMIN01")
+        if not crear:
+            raise SystemExit("Use --crear después de verificar el respaldo de la base")
         miembro = session.scalar(
             select(Miembro).where(
                 Miembro.tenant_id == tenant.id,
@@ -51,8 +53,6 @@ def _bootstrap_admin(codigo: str, nombre: str, crear: bool = False) -> None:
         else:
             raise SystemExit("SUPADMIN01 ya existe: no se restablecen contraseñas ni se modifica la cuenta")
 
-        if not crear:
-            raise SystemExit("Use --crear después de verificar el respaldo y la identidad de ADMIN01")
         _, temporal = crear_o_restablecer_cuenta(
             session,
             tenant.id,
