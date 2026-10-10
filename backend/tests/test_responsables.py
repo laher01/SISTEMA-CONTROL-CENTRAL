@@ -175,6 +175,11 @@ def test_responsable_edita_y_restablece_solo_su_usuario(
     editar = client.patch(ruta_propia, json={"nombre": "Nombre corregido"})
     assert editar.status_code == 200, editar.text
     assert editar.json()["nombre"] == "Nombre corregido"
+    tasas = client.patch(ruta_propia, json={"nombre": "Nombre corregido", "porcentaje_sin_retencion": "1.2500", "porcentaje_con_retencion": "0.8000"})
+    assert tasas.status_code == 200, tasas.text
+    assert tasas.json()["porcentaje_sin_retencion"] == "1.2500"
+    assert tasas.json()["porcentaje_con_retencion"] == "0.8000"
+    assert client.patch(ruta_propia, json={"nombre": "Nombre corregido", "porcentaje_con_retencion": "101"}).status_code == 422
     assert client.patch(ruta_ajena, json={"nombre": "Intento indebido"}).status_code == 404
     assert client.patch(ruta_propia, json={"nombre": "  "}).status_code == 422
     assert client.post(ruta_ajena + "/restablecer-acceso").status_code == 404
