@@ -41,7 +41,9 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy app
+        if: success() || failure()
       - run: uv run pytest
+        if: success() || failure()
 
   verify-frontend:
     runs-on: ubuntu-latest
