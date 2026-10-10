@@ -99,9 +99,7 @@ def test_superadmin_no_accede_a_api_operativa(
     assert respuesta.status_code == 403, respuesta.text
 
 
-def test_superadmin_conserva_inventario_global(
-    client: TestClient, auth_prueba: AuthPrueba
-) -> None:
+def test_superadmin_conserva_inventario_global(client: TestClient, auth_prueba: AuthPrueba) -> None:
     auth_prueba.como_superadmin()
     respuesta = client.get("/api/v1/configuracion/administraciones")
     assert respuesta.status_code == 200, respuesta.text
