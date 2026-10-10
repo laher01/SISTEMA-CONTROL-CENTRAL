@@ -115,16 +115,19 @@ def test_no_permite_desactivar_aprobacion_sin_verificacion_email(
     assert respuesta.status_code == 409
 
 
-def test_mantenimiento_es_exclusivo_de_superadmin(
+def test_mantenimiento_es_exclusivo_de_administrador(
     client: TestClient,
     auth_prueba: AuthPrueba,
 ) -> None:
-    auth_prueba.como_admin()
+    auth_prueba.como_superadmin()
     respuesta = client.get("/api/v1/configuracion/mantenimiento/administradores")
     assert respuesta.status_code == 403
+    auth_prueba.como_admin()
+    respuesta = client.get("/api/v1/configuracion/mantenimiento/administradores")
+    assert respuesta.status_code == 200, respuesta.text
 
 
-def test_superadmin_previsualiza_y_limpia_por_administrador(
+def test_administrador_previsualiza_y_limpia_su_tenant(
     client: TestClient,
     session: Session,
     auth_prueba: AuthPrueba,
@@ -183,7 +186,7 @@ def test_superadmin_previsualiza_y_limpia_por_administrador(
     session.add_all([plan, cuenta_pago])
     session.commit()
 
-    auth_prueba.como_superadmin()
+    auth_prueba.como_admin()
     listado = client.get("/api/v1/configuracion/mantenimiento/administradores")
     assert listado.status_code == 200, listado.text
     fila = next(item for item in listado.json() if item["login"] == "ADMIN02")
