@@ -67,7 +67,11 @@ def recuperar_conocimiento(
             continue
         for titulo, texto in _secciones(contenido):
             normal = _normalizar(f"{titulo} {texto}")
-            puntaje = sum(3 if termino in _normalizar(titulo) else 1 for termino in terminos if termino in normal)
+            puntaje = sum(
+                3 if termino in _normalizar(titulo) else 1
+                for termino in terminos
+                if termino in normal
+            )
             if puntaje <= 0:
                 continue
             candidatos.append(
@@ -143,4 +147,11 @@ def _terminos(texto: str) -> set[str]:
 
 
 def _normalizar(texto: str) -> str:
-    return texto.lower().replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+    return (
+        texto.lower()
+        .replace("á", "a")
+        .replace("é", "e")
+        .replace("í", "i")
+        .replace("ó", "o")
+        .replace("ú", "u")
+    )
