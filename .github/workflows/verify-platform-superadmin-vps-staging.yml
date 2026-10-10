@@ -50,7 +50,7 @@ jobs:
           "${compose[@]}" ps </dev/null
           echo "=== INVENTARIO SQL SIN CONTRASEÑAS NI TOKENS ==="
           echo "=== VERIFICAR PLATFORM Y CUENTA GLOBAL ==="
-          "${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT t.codigo AS tenant, m.codigo AS cuenta, m.rol, m.activo FROM tenants t LEFT JOIN miembros m ON m.tenant_id=t.id AND m.codigo = $SUPADMIN01$ WHERE t.codigo = $PLATFORM$;"' </dev/null
+          "${compose[@]}" exec -T backend uv run python -c 'from sqlalchemy import select; from app.core.db import get_sessionmaker; from app.models import Tenant,Miembro,CuentaAcceso; s=get_sessionmaker()(); t=s.scalar(select(Tenant).where(Tenant.codigo=="PLATFORM")); print("PLATFORM_EXISTE:",bool(t)); m=s.scalar(select(Miembro).where(Miembro.tenant_id==t.id,Miembro.codigo=="SUPADMIN01")) if t else None; print("SUPADMIN01_EXISTE:",bool(m)); print("SUPADMIN01_ROL:",m.rol if m else "NINGUNO"); print("SUPADMIN01_ACTIVO:",m.activo if m else False); cuenta=s.scalar(select(CuentaAcceso).where(CuentaAcceso.tenant_id==t.id,CuentaAcceso.miembro_id==m.id)) if m else None; print("CUENTA_ACCESO_EXISTE:",bool(cuenta)); print("CUENTA_ACCESO_ACTIVA:",cuenta.activo if cuenta else False); s.close()' </dev/null
           echo "ARCHIVO_PRIVADO_PRESENTE: $(test -s deploy/private/platform-bootstrap-credentials.txt && echo SI || echo NO)"
           echo "VERIFICACION_IDENTIDAD_SOLO_LECTURA"
           REMOTE
