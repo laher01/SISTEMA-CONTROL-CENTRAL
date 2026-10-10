@@ -2,7 +2,7 @@ import uuid
 from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
@@ -152,6 +152,8 @@ def mis_usuarios_responsable(
 class AltaUsuarioResponsableIn(BaseModel):
     nombre: str
     porcentaje_produccion: Decimal | None = None
+    porcentaje_con_agente: Decimal = Field(ge=0, le=100, max_digits=7, decimal_places=4)
+    porcentaje_sin_agente: Decimal = Field(ge=0, le=100, max_digits=7, decimal_places=4)
 
 
 @router.post(
@@ -194,6 +196,8 @@ def crear_usuario_responsable(
         rol=RolMiembro.USUARIO,
         responsable_id=responsable.id,
         porcentaje_produccion=porcentaje,
+        porcentaje_con_agente=datos.porcentaje_con_agente,
+        porcentaje_sin_agente=datos.porcentaje_sin_agente,
         activo=True,
         creado_por_cuenta_id=auth.cuenta_id,
     )
@@ -211,6 +215,38 @@ def crear_usuario_responsable(
         miembro=MiembroOut.model_validate(usuario),
         credencial=CredencialTemporalOut(login=usuario.codigo, clave_temporal=temporal),
     )
+
+
+class TasasUsuarioResponsableIn(BaseModel):
+    porcentaje_con_agente: Decimal = Field(ge=0, le=100, max_digits=7, decimal_places=4)
+    porcentaje_sin_agente: Decimal = Field(ge=0, le=100, max_digits=7, decimal_places=4)
+
+
+@router.patch("/mis-usuarios/{usuario_id}/porcentajes", response_model=MiembroOut)
+def editar_tasas_usuario_responsable(
+    usuario_id: uuid.UUID,
+    datos: TasasUsuarioResponsableIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> Miembro:
+    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
+    usuario = session.get(Miembro, usuario_id)
+    if (
+        usuario is None
+        or usuario.tenant_id != tenant_id
+        or usuario.responsable_id != auth.miembro_id
+        or usuario.rol != RolMiembro.USUARIO
+        or not usuario.activo
+        or usuario.deleted_at is not None
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Usuario fuera del equipo")
+    usuario.porcentaje_con_agente = datos.porcentaje_con_agente
+    usuario.porcentaje_sin_agente = datos.porcentaje_sin_agente
+    session.commit()
+    session.refresh(usuario)
+    return usuario
 
 
 class AsignacionAdministradorIn(BaseModel):
