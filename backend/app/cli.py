@@ -35,9 +35,7 @@ def _bootstrap_admin(codigo: str, nombre: str, crear: bool = False) -> None:
             raise SystemExit("Use --crear después de verificar el respaldo de la base")
         tenant = session.scalar(select(Tenant).where(Tenant.codigo == "PLATFORM"))
         if tenant is None:
-            tenant = Tenant(
-                nombre="FACT CENTRAL PLATAFORMA", codigo="PLATFORM", estado="ACTIVO"
-            )
+            tenant = Tenant(nombre="FACT CENTRAL PLATAFORMA", codigo="PLATFORM", estado="ACTIVO")
             session.add(tenant)
             session.flush()
         miembro = session.scalar(
