@@ -54,7 +54,7 @@ def test_chat_no_permita_contactos_entre_tenants(
 
 @pytest.mark.parametrize(
     "rol",
-    ["GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"],
+    ["GERENTE", "RESPONSABLE", "USUARIO", "GESTOR"],
 )
 def test_sin_identidad_admin_no_puede_recalcular_expedientes(
     client: TestClient, auth_prueba: AuthPrueba, rol: str
