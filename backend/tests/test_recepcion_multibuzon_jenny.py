@@ -35,9 +35,7 @@ def _correo(remitente: str, destino: str) -> bytes:
     return mensaje.as_bytes()
 
 
-def test_jenny_se_atribuye_a_willi_en_tres_buzones(
-    session: Session, settings: Settings
-) -> None:
+def test_jenny_se_atribuye_a_willi_en_tres_buzones(session: Session, settings: Settings) -> None:
     tenant = obtener_tenant(session, settings.tenant_default)
     willi = Miembro(
         tenant_id=tenant.id,
@@ -98,52 +96,51 @@ def test_jenny_se_atribuye_a_willi_en_tres_buzones(
     )
     session.commit()
 
-    assert procesar_mensaje(
+    buzon0 = procesar_mensaje(
         session,
         settings,
         buzones[0],
         "uid-10",
         _correo("Jenny <jenny2026@gmail.com>", destinos[0]),
-    ) == "INGRESADO"
-    assert procesar_mensaje(
+    )
+    assert buzon0 == "INGRESADO"
+    buzon1 = procesar_mensaje(
         session,
         settings,
         buzones[1],
         "uid-10",
         _correo("Jenny <astro15@gmail.com>", destinos[1]),
-    ) == "REVISION"
-    assert procesar_mensaje(
+    )
+    assert buzon1 == "REVISION"
+    buzon2 = procesar_mensaje(
         session,
         settings,
         buzones[2],
         "uid-11",
         _correo("Jenny <jenny2026@gmail.com>", destinos[2]),
-    ) == "REVISION"
-    documentos = list(
-        session.scalars(
-            select(Documento).where(Documento.tenant_id == tenant.id)
-        )
     )
+    assert buzon2 == "REVISION"
+    documentos = list(session.scalars(select(Documento).where(Documento.tenant_id == tenant.id)))
     assert len(documentos) == 1
     assert documentos[0].gestor_id == jenny.id
     assert documentos[0].usuario_id == willi.id
-    assert session.scalar(
+    cantidad = session.scalar(
         select(func.count())
         .select_from(CorreoMensaje)
         .where(CorreoMensaje.tenant_id == tenant.id)
-    ) == 3
-    assert procesar_mensaje(
+    )
+    assert cantidad == 3
+    mismo_uid = procesar_mensaje(
         session,
         settings,
         buzones[0],
         "uid-10",
         _correo("Jenny <jenny2026@gmail.com>", destinos[0]),
-    ) == "DUPLICADO_MENSAJE"
+    )
+    assert mismo_uid == "DUPLICADO_MENSAJE"
 
 
-def test_remitente_no_registrado_no_crea_documento(
-    session: Session, settings: Settings
-) -> None:
+def test_remitente_no_registrado_no_crea_documento(session: Session, settings: Settings) -> None:
     tenant = obtener_tenant(session, settings.tenant_default)
     responsable = Miembro(
         tenant_id=tenant.id,
@@ -163,15 +160,17 @@ def test_remitente_no_registrado_no_crea_documento(
     )
     session.add(buzon)
     session.commit()
-    assert procesar_mensaje(
+    estado = procesar_mensaje(
         session,
         settings,
         buzon,
         "uid-2",
         _correo("falso@example.test", buzon.direccion),
-    ) == "REVISION"
-    assert session.scalar(
+    )
+    assert estado == "REVISION"
+    cantidad = session.scalar(
         select(func.count())
         .select_from(Documento)
         .where(Documento.tenant_id == tenant.id)
-    ) == 0
+    )
+    assert cantidad == 0
