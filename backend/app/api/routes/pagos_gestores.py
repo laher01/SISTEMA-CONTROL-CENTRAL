@@ -44,8 +44,11 @@ def _calcular(
     gestor: Gestor,
     datos: SolicitudGestor,
 ) -> tuple[Decimal, Decimal, Decimal]:
-    if datos.hasta < datos.desde:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Periodo inválido")
+    if datos.hasta < datos.desde or (datos.hasta - datos.desde).days > 366:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Periodo inválido: máximo 367 días",
+        )
     if gestor.porcentaje_comision is None:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
