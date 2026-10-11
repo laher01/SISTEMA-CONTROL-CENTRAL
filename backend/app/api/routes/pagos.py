@@ -445,6 +445,62 @@ def consolidado_compras(
     }
 
 
+@router.get("/consolidado-flujos")
+def consolidado_flujos(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    desde: date,
+    hasta: date,
+    moneda: str = "PEN",
+) -> dict[str, str]:
+    """Flujos de un periodo, sin confundir abonos registrados con conciliación bancaria.
+
+    Los importes de facturación se agrupan por fecha de emisión; los abonos por
+    fecha de registro. Su diferencia NO constituye saldo de cartera.
+    """
+    if auth.rol != RolMiembro.ADMINISTRADOR:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Resumen financiero solo para Administración")
+    if hasta < desde or (hasta - desde).days > 366:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Rango inválido")
+    if moneda not in ("PEN", "USD"):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Moneda inválida")
+    producido = session.scalar(
+        select(func.coalesce(func.sum(Expediente.importe_total), 0))
+        .join(Empresa, Expediente.receptor_id == Empresa.id)
+        .where(
+            Expediente.tenant_id == tenant_id,
+            Expediente.deleted_at.is_(None),
+            Expediente.fecha_emision.between(desde, hasta),
+            Expediente.moneda == moneda,
+            Empresa.tenant_id == tenant_id,
+            Empresa.deleted_at.is_(None),
+        )
+    )
+    abonos = session.scalar(
+        select(func.coalesce(func.sum(AbonoClienteERP.monto), 0))
+        .join(Empresa, AbonoClienteERP.cliente_id == Empresa.id)
+        .where(
+            AbonoClienteERP.tenant_id == tenant_id,
+            AbonoClienteERP.fecha.between(desde, hasta),
+            AbonoClienteERP.moneda == moneda,
+            Empresa.tenant_id == tenant_id,
+            Empresa.deleted_at.is_(None),
+        )
+    )
+    return {
+        "desde": desde.isoformat(),
+        "hasta": hasta.isoformat(),
+        "moneda": moneda,
+        "produccion_periodo": str(Decimal(producido or 0)),
+        "abonos_registrados_periodo": str(Decimal(abonos or 0)),
+        "advertencia": (
+            "Los abonos registrados no acreditan conciliación bancaria. "
+            "La diferencia entre flujos del periodo no equivale al saldo pendiente."
+        ),
+    }
+
+
 @router.get("/clientes/resumen", response_model=CarteraClientesResumen)
 def resumen_clientes(
     session: SessionDep,
