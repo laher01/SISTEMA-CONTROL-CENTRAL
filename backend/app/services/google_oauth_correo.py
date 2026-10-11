@@ -6,11 +6,12 @@ Do not log or persist code_verifier, access tokens or refresh tokens in plaintex
 
 import base64
 import hashlib
+import base64
 import json
 import secrets
 from typing import cast
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 from cryptography.fernet import Fernet, urlsplit
@@ -122,3 +123,58 @@ def cifrar_refresh_token(token: str, llave: str) -> str:
         return Fernet(llave.encode("ascii")).encrypt(token.encode("utf-8")).decode("ascii")
     except (ValueError, TypeError) as exc:
         raise GoogleOAuthError("Clave de cifrado inválida") from exc
+
+
+def descifrar_refresh_token(token_cifrado: str, llave: str) -> str:
+    try:
+        return Fernet(llave.encode("ascii")).decrypt(token_cifrado.encode("ascii")).decode("utf-8")
+    except (ValueError, TypeError) as exc:
+        raise GoogleOAuthError("No fue posible descifrar la autorización") from exc
+
+
+def renovar_google_token(*, refresh_token: str, client_id: str, client_secret: str) -> str:
+    cuerpo = urlencode({
+        "refresh_token": refresh_token,
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "grant_type": "refresh_token",
+    }).encode("utf-8")
+    datos = _json_google(GOOGLE_TOKEN_URL, metodo="POST", cuerpo=cuerpo)
+    acceso = datos.get("access_token")
+    if not isinstance(acceso, str) or not acceso:
+        raise GoogleOAuthError("No se pudo renovar el acceso a Gmail")
+    return acceso
+
+
+def listar_ids_gmail(access_token: str, *, limite: int = 50) -> list[str]:
+    parametros = urlencode({"maxResults": max(1, min(limite, 100))})
+    datos = _json_google(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages?" + parametros,
+        autorizacion=access_token,
+    )
+    mensajes = datos.get("messages", [])
+    if not isinstance(mensajes, list):
+        raise GoogleOAuthError("Listado Gmail inválido")
+    return [
+        mensaje["id"] for mensaje in mensajes
+        if isinstance(mensaje, dict)
+        and isinstance(mensaje.get("id"), str)
+        and len(mensaje["id"]) <= 100
+    ]
+
+
+def obtener_correo_gmail(access_token: str, id_mensaje: str) -> bytes:
+    if not id_mensaje.isalnum() or len(id_mensaje) > 100:
+        raise GoogleOAuthError("Identificador de correo inválido")
+    datos = _json_google(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages/"
+        + quote(id_mensaje, safe="") + "?format=raw",
+        autorizacion=access_token,
+    )
+    raw = datos.get("raw")
+    if not isinstance(raw, str) or len(raw) > 35 * 1024 * 1024:
+        raise GoogleOAuthError("Correo Gmail inválido o demasiado grande")
+    try:
+        return base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4))
+    except (ValueError, TypeError) as exc:
+        raise GoogleOAuthError("Mensaje Gmail no decodificable") from exc
