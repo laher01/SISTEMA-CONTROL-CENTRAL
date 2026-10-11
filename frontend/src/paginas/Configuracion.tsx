@@ -1069,7 +1069,7 @@ function RecepcionAutomaticaPanel() {
       <label>Correo receptor
         <input type="email" required value={direccionBuzon}
           onChange={(e) => setDireccionBuzon(e.target.value)}
-          placeholder="factur.central.2023@gmail.com" />
+          placeholder="factura.central.2023@gmail.com" />
       </label>
       <label>Proveedor
         <select value={proveedor} onChange={(e) => setProveedor(e.target.value)}>
@@ -1085,11 +1085,11 @@ function RecepcionAutomaticaPanel() {
       <thead><tr><th>Dirección</th><th>Proveedor</th><th>Estado</th><th>Autorización</th></tr></thead>
       <tbody>{(buzones ?? []).map((b) => <tr key={b.id}>
         <td>{b.direccion}</td><td>{b.proveedor}</td>
-        <td>{b.activo ? "Autorizado" : "Pendiente de conexión"}</td>
+        <td>{b.activo ? "Google autorizado" : "Pendiente de conexión"}</td>
         <td>{b.proveedor === "GOOGLE" && !b.activo ?
           <button type="button" disabled={guardando || !estadoProveedores?.google_configurado}
             onClick={() => void conectarGoogle(b.id)}>Conectar con Google</button>
-          : b.activo ? "Conectado" : "OAuth pendiente"}</td>
+          : b.activo ? "Autorizado; revisar sincronización" : "OAuth pendiente"}</td>
       </tr>)}</tbody>
     </table>
     <h4>Remitentes asociados a Gestores</h4>
