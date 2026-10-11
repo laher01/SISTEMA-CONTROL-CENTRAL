@@ -18,9 +18,7 @@ def _mensaje(remitente: str, zip_bytes: bytes) -> bytes:
     correo["From"] = remitente
     correo["To"] = "recepcion@example.test"
     correo.set_content("Comprobante")
-    correo.add_attachment(
-        zip_bytes, maintype="application", subtype="zip", filename="paquete.zip"
-    )
+    correo.add_attachment(zip_bytes, maintype="application", subtype="zip", filename="paquete.zip")
     return correo.as_bytes()
 
 
@@ -36,29 +34,38 @@ def test_zip_malicioso_queda_en_revision_y_no_bloquea_siguiente(
 ) -> None:
     tenant = obtener_tenant(session, settings.tenant_default)
     usuario = Miembro(
-        tenant_id=tenant.id, codigo="USER-ZIP", nombre="Usuario",
-        rol="USUARIO", activo=True,
+        tenant_id=tenant.id,
+        codigo="USER-ZIP",
+        nombre="Usuario",
+        rol="USUARIO",
+        activo=True,
     )
     responsable = Miembro(
-        tenant_id=tenant.id, codigo="RESP-ZIP", nombre="Responsable",
-        rol="RESPONSABLE", activo=True,
+        tenant_id=tenant.id,
+        codigo="RESP-ZIP",
+        nombre="Responsable",
+        rol="RESPONSABLE",
+        activo=True,
     )
     session.add_all([usuario, responsable])
     session.flush()
-    gestor = Gestor(
-        tenant_id=tenant.id, codigo="G-ZIP", nombre="Jenny", usuario_id=usuario.id
-    )
+    gestor = Gestor(tenant_id=tenant.id, codigo="G-ZIP", nombre="Jenny", usuario_id=usuario.id)
     session.add(gestor)
     session.flush()
     session.add(
         CorreoRemitente(
-            tenant_id=tenant.id, direccion="jenny2026@gmail.com",
-            gestor_id=gestor.id, activo=True,
+            tenant_id=tenant.id,
+            direccion="jenny2026@gmail.com",
+            gestor_id=gestor.id,
+            activo=True,
         )
     )
     buzon = CorreoBuzon(
-        tenant_id=tenant.id, direccion="recepcion@example.test",
-        proveedor="IMAP", responsable_id=responsable.id, activo=True,
+        tenant_id=tenant.id,
+        direccion="recepcion@example.test",
+        proveedor="IMAP",
+        responsable_id=responsable.id,
+        activo=True,
     )
     session.add(buzon)
     session.commit()
