@@ -4,8 +4,11 @@ Una URL de consentimiento NO conecta el buzón: faltan callback seguro,
 canje de código, almacenamiento cifrado y autorización real del titular.
 """
 
+import json
 import secrets
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
+from urllib.request import Request, urlopen
 
 from app.services.google_oauth_correo import nuevo_desafio_pkce
 
@@ -51,10 +54,6 @@ __all__ = ["crear_url_microsoft", "nuevo_desafio_pkce", "nuevo_estado_oauth"]
 
 
 # Funciones auxiliares de Graph. Estas no activan ni conectan un buzón.
-import json
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
-
 MICROSOFT_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
 MICROSOFT_ME_URL = "https://graph.microsoft.com/v1.0/me"
 
