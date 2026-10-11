@@ -135,7 +135,7 @@ def mi_recepcion(
 ) -> dict[str, object]:
     """Bandeja de solo lectura acotada al Gestor autenticado."""
     if auth.rol != "GESTOR" or auth.gestor_id is None:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo el Gestor puede consultar su recepción")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Acceso exclusivo de Gestor")
     gestor = session.get(Gestor, auth.gestor_id)
     if gestor is None or gestor.tenant_id != tenant_id or gestor.deleted_at is not None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Gestor sin ámbito válido")
