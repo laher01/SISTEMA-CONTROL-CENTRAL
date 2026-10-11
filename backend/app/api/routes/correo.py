@@ -28,7 +28,7 @@ class BuzonIn(BaseModel):
 
 
 class RemitenteIn(BaseModel):
-    direccion: str = Field(min_length=5, max_length=320, pattern=r"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
+    direccion: str = Field(min_length=5, max_length=320, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     gestor_id: uuid.UUID
 
 
@@ -38,30 +38,39 @@ def listar_buzones(
 ) -> list[dict[str, object]]:
     _solo_administracion(auth.rol)
     return [
-        {"id": str(b.id), "direccion": b.direccion, "proveedor": b.proveedor,
-         "activo": b.activo, "ultimo_error": b.ultimo_error}
+        {
+            "id": str(b.id),
+            "direccion": b.direccion,
+            "proveedor": b.proveedor,
+            "activo": b.activo,
+            "ultimo_error": b.ultimo_error,
+        }
         for b in session.scalars(select(CorreoBuzon).where(CorreoBuzon.tenant_id == tenant_id))
     ]
 
 
 @router.post("/buzones", status_code=status.HTTP_201_CREATED)
 def registrar_buzon(
-    datos: BuzonIn,
-    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
+    datos: BuzonIn, session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
 ) -> dict[str, str]:
     _solo_administracion(auth.rol)
     proveedor = datos.proveedor.upper().strip()
     if proveedor not in ("GOOGLE", "MICROSOFT", "IMAP"):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Proveedor no soportado")
     direccion = str(datos.direccion).strip().lower()
-    existente = session.scalar(select(CorreoBuzon).where(
-        CorreoBuzon.tenant_id == tenant_id, CorreoBuzon.direccion == direccion
-    ))
+    existente = session.scalar(
+        select(CorreoBuzon).where(
+            CorreoBuzon.tenant_id == tenant_id, CorreoBuzon.direccion == direccion
+        )
+    )
     if existente:
         raise HTTPException(status.HTTP_409_CONFLICT, "Buzón ya registrado")
     nuevo = CorreoBuzon(
-        tenant_id=tenant_id, direccion=direccion, proveedor=proveedor,
-        responsable_id=auth.miembro_id, activo=False,
+        tenant_id=tenant_id,
+        direccion=direccion,
+        proveedor=proveedor,
+        responsable_id=auth.miembro_id,
+        activo=False,
     )
     session.add(nuevo)
     try:
@@ -78,32 +87,32 @@ def listar_remitentes(
 ) -> list[dict[str, str]]:
     _solo_administracion(auth.rol)
     registros = session.execute(
-        select(CorreoRemitente, Gestor).join(
-            Gestor, CorreoRemitente.gestor_id == Gestor.id
-        ).where(CorreoRemitente.tenant_id == tenant_id, Gestor.tenant_id == tenant_id)
+        select(CorreoRemitente, Gestor)
+        .join(Gestor, CorreoRemitente.gestor_id == Gestor.id)
+        .where(CorreoRemitente.tenant_id == tenant_id, Gestor.tenant_id == tenant_id)
     )
     return [
-        {"id": str(r.id), "direccion": r.direccion,
-         "gestor_id": str(g.id), "gestor": g.nombre}
+        {"id": str(r.id), "direccion": r.direccion, "gestor_id": str(g.id), "gestor": g.nombre}
         for r, g in registros
     ]
 
 
 @router.post("/remitentes", status_code=status.HTTP_201_CREATED)
 def registrar_remitente(
-    datos: RemitenteIn,
-    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
+    datos: RemitenteIn, session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
 ) -> dict[str, str]:
     _solo_administracion(auth.rol)
     gestor = session.get(Gestor, datos.gestor_id)
     if gestor is None or gestor.tenant_id != tenant_id or gestor.deleted_at is not None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Gestor no autorizado")
     direccion = str(datos.direccion).strip().lower()
-    registrado = session.scalar(select(CorreoRemitente).where(
-        CorreoRemitente.tenant_id == tenant_id,
-        CorreoRemitente.direccion == direccion,
-        CorreoRemitente.activo.is_(True),
-    ))
+    registrado = session.scalar(
+        select(CorreoRemitente).where(
+            CorreoRemitente.tenant_id == tenant_id,
+            CorreoRemitente.direccion == direccion,
+            CorreoRemitente.activo.is_(True),
+        )
+    )
     if registrado is not None:
         if registrado.gestor_id != gestor.id:
             raise HTTPException(status.HTTP_409_CONFLICT, "Remitente asignado a otro Gestor")
