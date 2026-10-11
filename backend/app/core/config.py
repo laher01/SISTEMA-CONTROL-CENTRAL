@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     cors_origins: list[str] = []
     session_cookie_name: str = "factcentral_session"
     session_hours: int = 12
+    google_oauth_client_id: str | None = None
+    google_oauth_redirect_uri: str | None = None
+    microsoft_oauth_client_id: str | None = None
+    microsoft_oauth_redirect_uri: str | None = None
     nexus_ruc_url_template: str | None = None
     nexus_ruc_token: str | None = None
     nexus_search_url: str | None = None

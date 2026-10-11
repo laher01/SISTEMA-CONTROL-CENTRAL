@@ -980,6 +980,7 @@ type BuzonCorreo = {
 };
 type RemitenteGestor = { id: string; direccion: string; gestor_id: string; gestor: string };
 type GestorCorreo = { id: string; codigo: string; nombre: string };
+type EstadoProveedores = { google_configurado: boolean; microsoft_configurado: boolean };
 type IncidenciaCorreo = { id: string; fecha: string; buzon: string; remitente: string; gestor: string | null; estado: string; motivo: string | null };
 
 function RecepcionAutomaticaPanel() {
@@ -988,6 +989,8 @@ function RecepcionAutomaticaPanel() {
   const { datos: remitentes, error: errorRemitentes, recargar: recargarRemitentes } =
     useDatos<RemitenteGestor[]>("/api/v1/correo/remitentes");
   const { datos: gestores } = useDatos<GestorCorreo[]>("/api/v1/gestores");
+  const { datos: estadoProveedores } =
+    useDatos<EstadoProveedores>("/api/v1/correo/estado-proveedores");
   const { datos: incidencias, error: errorIncidencias, recargar: recargarIncidencias } =
     useDatos<IncidenciaCorreo[]>("/api/v1/correo/incidencias");
   const [direccionBuzon, setDireccionBuzon] = useState("");
@@ -1042,6 +1045,9 @@ function RecepcionAutomaticaPanel() {
       La conexión a Gmail y Outlook requiere autorización OAuth independiente;
       registrar una dirección no activa la lectura automática.
     </p>
+    <h4>Preparación de conexiones OAuth</h4>
+    <p>Google: {estadoProveedores?.google_configurado ? "Configuración de aplicación disponible; autorización de buzón pendiente" : "Falta configurar la aplicación OAuth"}</p>
+    <p>Microsoft: {estadoProveedores?.microsoft_configurado ? "Configuración de aplicación disponible; autorización de buzón pendiente" : "Falta configurar la aplicación OAuth"}</p>
     <h4>Buzones receptores</h4>
     <form className="filtros" onSubmit={(e) => void crearBuzon(e)}>
       <label>Correo receptor
