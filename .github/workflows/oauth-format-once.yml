@@ -1,0 +1,36 @@
+name: Format OAuth Python files (one-shot)
+on:
+  push:
+    branches:
+      - feature/oauth-google-microsoft-integracion-20261011
+    paths:
+      - '.github/workflows/oauth-format-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.ref == 'refs/heads/feature/oauth-google-microsoft-integracion-20261011'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/oauth-google-microsoft-integracion-20261011
+          persist-credentials: true
+      - uses: astral-sh/setup-uv@v6
+      - name: Format OAuth changes
+        working-directory: backend
+        run: |
+          uv sync --locked
+          uv run ruff format app/api/routes/correo.py app/services/microsoft_oauth_correo.py tests/test_microsoft_oauth_helpers.py tests/test_oauth_preflight.py
+          uv run ruff check --fix app/api/routes/correo.py app/services/microsoft_oauth_correo.py tests/test_microsoft_oauth_helpers.py tests/test_oauth_preflight.py
+      - name: Commit formatting only on feature branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/app/api/routes/correo.py backend/app/services/microsoft_oauth_correo.py backend/tests/test_microsoft_oauth_helpers.py backend/tests/test_oauth_preflight.py
+          if ! git diff --cached --quiet; then
+            git commit -m "style(oauth): apply project Ruff formatting"
+            git push origin HEAD:feature/oauth-google-microsoft-integracion-20261011
+          fi
