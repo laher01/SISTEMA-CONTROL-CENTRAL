@@ -25,43 +25,62 @@ def test_worker_google_lee_una_vez_y_atribuye_a_jenny(
 ) -> None:
     tenant = obtener_tenant(session, settings.tenant_default)
     usuario = Miembro(
-        tenant_id=tenant.id, codigo="WILLI-GMAIL",
-        nombre="Willi", rol="USUARIO", activo=True,
+        tenant_id=tenant.id,
+        codigo="WILLI-GMAIL",
+        nombre="Willi",
+        rol="USUARIO",
+        activo=True,
     )
     responsable = Miembro(
-        tenant_id=tenant.id, codigo="RESP-GMAIL",
-        nombre="Responsable", rol="RESPONSABLE", activo=True,
+        tenant_id=tenant.id,
+        codigo="RESP-GMAIL",
+        nombre="Responsable",
+        rol="RESPONSABLE",
+        activo=True,
     )
     session.add_all([usuario, responsable])
     session.flush()
     jenny = Gestor(
-        tenant_id=tenant.id, codigo="JENNY-GMAIL",
-        nombre="Jenny", usuario_id=usuario.id,
+        tenant_id=tenant.id,
+        codigo="JENNY-GMAIL",
+        nombre="Jenny",
+        usuario_id=usuario.id,
     )
     session.add(jenny)
     session.flush()
     session.add(
         CorreoRemitente(
-            tenant_id=tenant.id, direccion="jenny2026@gmail.com",
-            gestor_id=jenny.id, activo=True,
+            tenant_id=tenant.id,
+            direccion="jenny2026@gmail.com",
+            gestor_id=jenny.id,
+            activo=True,
         )
     )
     buzon = CorreoBuzon(
-        tenant_id=tenant.id, direccion="factura.central.2023@gmail.com",
-        proveedor="GOOGLE", responsable_id=responsable.id, activo=True,
+        tenant_id=tenant.id,
+        direccion="factura.central.2023@gmail.com",
+        proveedor="GOOGLE",
+        responsable_id=responsable.id,
+        activo=True,
     )
     session.add(buzon)
     session.flush()
-    session.add(CorreoOAuthCredencial(
-        tenant_id=tenant.id, buzon_id=buzon.id,
-        proveedor="GOOGLE", token_cifrado="cifrado-ficticio",
-        permisos="https://www.googleapis.com/auth/gmail.readonly",
-        verificado_at=buzon.created_at,
-    ))
+    session.add(
+        CorreoOAuthCredencial(
+            tenant_id=tenant.id,
+            buzon_id=buzon.id,
+            proveedor="GOOGLE",
+            token_cifrado="cifrado-ficticio",
+            permisos="https://www.googleapis.com/auth/gmail.readonly",
+            verificado_at=buzon.created_at,
+        )
+    )
     session.add(
         Empresa(
-            tenant_id=tenant.id, ruc=RECEPTOR,
-            razon_social="CLIENTE AUTORIZADO", autorizada=True,
+            tenant_id=tenant.id,
+            ruc=RECEPTOR,
+            razon_social="CLIENTE AUTORIZADO",
+            autorizada=True,
         )
     )
     session.commit()

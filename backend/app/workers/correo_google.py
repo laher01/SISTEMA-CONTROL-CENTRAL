@@ -45,7 +45,8 @@ def revisar_ciclo_google(session: Session, settings: Settings) -> int:
     for buzon, credencial in buzones:
         try:
             refresh = descifrar_refresh_token(
-                credencial.token_cifrado, settings.correo_token_encryption_key,
+                credencial.token_cifrado,
+                settings.correo_token_encryption_key,
             )
             acceso = renovar_google_token(
                 refresh_token=refresh,

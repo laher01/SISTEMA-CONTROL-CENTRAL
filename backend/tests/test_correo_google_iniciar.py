@@ -103,15 +103,20 @@ def test_callback_activa_solo_buzon_que_google_verifica(
 
     tenant_id = auth_prueba.contexto.tenant_id
     responsable = Miembro(
-        tenant_id=tenant_id, codigo="RESP-CALLBACK",
-        nombre="Responsable", rol="RESPONSABLE", activo=True,
+        tenant_id=tenant_id,
+        codigo="RESP-CALLBACK",
+        nombre="Responsable",
+        rol="RESPONSABLE",
+        activo=True,
     )
     session.add(responsable)
     session.flush()
     buzon = CorreoBuzon(
         tenant_id=tenant_id,
         direccion="factura.central.2023@gmail.com",
-        proveedor="GOOGLE", responsable_id=responsable.id, activo=False,
+        proveedor="GOOGLE",
+        responsable_id=responsable.id,
+        activo=False,
     )
     session.add(buzon)
     session.commit()

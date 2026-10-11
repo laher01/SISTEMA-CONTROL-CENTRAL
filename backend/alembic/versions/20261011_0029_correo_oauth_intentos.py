@@ -22,8 +22,10 @@ def upgrade() -> None:
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("tenant_id", sa.Uuid(), nullable=False),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True),
-            server_default=sa.func.now(), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
         sa.Column("buzon_id", sa.Uuid(), nullable=False),
         sa.Column("cuenta_id", sa.Uuid(), nullable=False),
@@ -41,8 +43,10 @@ def upgrade() -> None:
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("tenant_id", sa.Uuid(), nullable=False),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True),
-            server_default=sa.func.now(), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
         sa.Column("buzon_id", sa.Uuid(), nullable=False),
         sa.Column("proveedor", sa.String(20), nullable=False),
@@ -56,16 +60,19 @@ def upgrade() -> None:
     )
     op.create_index(
         op.f("ix_correo_oauth_credenciales_tenant_id"),
-        "correo_oauth_credenciales", ["tenant_id"],
+        "correo_oauth_credenciales",
+        ["tenant_id"],
     )
     op.create_index(
         op.f("ix_correo_oauth_credenciales_buzon_id"),
-        "correo_oauth_credenciales", ["buzon_id"],
+        "correo_oauth_credenciales",
+        ["buzon_id"],
     )
     for columna in ("tenant_id", "buzon_id", "cuenta_id"):
         op.create_index(
             op.f(f"ix_correo_oauth_intentos_{columna}"),
-            "correo_oauth_intentos", [columna],
+            "correo_oauth_intentos",
+            [columna],
         )
 
 

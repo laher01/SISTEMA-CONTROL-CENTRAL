@@ -6,7 +6,6 @@ Do not log or persist code_verifier, access tokens or refresh tokens in plaintex
 
 import base64
 import hashlib
-import base64
 import json
 import secrets
 from typing import cast
@@ -72,8 +71,9 @@ class GoogleOAuthError(ValueError):
     """Error de autorización controlado: jamás registra secretos."""
 
 
-def _json_google(url: str, *, metodo: str = "GET", cuerpo: bytes | None = None,
-                 autorizacion: str | None = None) -> dict[str, object]:
+def _json_google(
+    url: str, *, metodo: str = "GET", cuerpo: bytes | None = None, autorizacion: str | None = None
+) -> dict[str, object]:
     headers = {"Accept": "application/json"}
     if cuerpo is not None:
         headers["Content-Type"] = "application/x-www-form-urlencoded"
@@ -92,14 +92,24 @@ def _json_google(url: str, *, metodo: str = "GET", cuerpo: bytes | None = None,
 
 
 def intercambiar_codigo_google(
-    *, code: str, verifier: str, client_id: str, client_secret: str, redirect_uri: str,
+    *,
+    code: str,
+    verifier: str,
+    client_id: str,
+    client_secret: str,
+    redirect_uri: str,
 ) -> tuple[str, str, str]:
     """Obtiene access + refresh token de Google; no persiste ni registra los tokens."""
-    cuerpo = urlencode({
-        "code": code, "client_id": client_id, "client_secret": client_secret,
-        "redirect_uri": redirect_uri, "grant_type": "authorization_code",
-        "code_verifier": verifier,
-    }).encode("utf-8")
+    cuerpo = urlencode(
+        {
+            "code": code,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code",
+            "code_verifier": verifier,
+        }
+    ).encode("utf-8")
     datos = _json_google(GOOGLE_TOKEN_URL, metodo="POST", cuerpo=cuerpo)
     acceso = datos.get("access_token")
     refresco = datos.get("refresh_token")
@@ -133,12 +143,14 @@ def descifrar_refresh_token(token_cifrado: str, llave: str) -> str:
 
 
 def renovar_google_token(*, refresh_token: str, client_id: str, client_secret: str) -> str:
-    cuerpo = urlencode({
-        "refresh_token": refresh_token,
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "grant_type": "refresh_token",
-    }).encode("utf-8")
+    cuerpo = urlencode(
+        {
+            "refresh_token": refresh_token,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "grant_type": "refresh_token",
+        }
+    ).encode("utf-8")
     datos = _json_google(GOOGLE_TOKEN_URL, metodo="POST", cuerpo=cuerpo)
     acceso = datos.get("access_token")
     if not isinstance(acceso, str) or not acceso:
@@ -156,7 +168,8 @@ def listar_ids_gmail(access_token: str, *, limite: int = 50) -> list[str]:
     if not isinstance(mensajes, list):
         raise GoogleOAuthError("Listado Gmail inválido")
     return [
-        mensaje["id"] for mensaje in mensajes
+        mensaje["id"]
+        for mensaje in mensajes
         if isinstance(mensaje, dict)
         and isinstance(mensaje.get("id"), str)
         and len(mensaje["id"]) <= 100
@@ -168,7 +181,8 @@ def obtener_correo_gmail(access_token: str, id_mensaje: str) -> bytes:
         raise GoogleOAuthError("Identificador de correo inválido")
     datos = _json_google(
         "https://gmail.googleapis.com/gmail/v1/users/me/messages/"
-        + quote(id_mensaje, safe="") + "?format=raw",
+        + quote(id_mensaje, safe="")
+        + "?format=raw",
         autorizacion=access_token,
     )
     raw = datos.get("raw")

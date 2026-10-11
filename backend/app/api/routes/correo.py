@@ -16,7 +16,6 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.core.config import get_settings
-from app.tenant_host import nombre_host, validar_sesion_host
 from app.enums import RolMiembro
 from app.models import (
     CorreoBuzon,
@@ -36,6 +35,7 @@ from app.services.google_oauth_correo import (
     intercambiar_codigo_google,
     nuevo_desafio_pkce,
 )
+from app.tenant_host import nombre_host, validar_sesion_host
 
 router = APIRouter(prefix="/correo", tags=["correo"])
 
@@ -271,12 +271,14 @@ def iniciar_google_oauth(
     """
     _solo_administracion(auth.rol)
     config = get_settings()
-    if not all((
-        config.google_oauth_client_id,
-        config.google_oauth_client_secret,
-        config.google_oauth_redirect_uri,
-        config.correo_token_encryption_key,
-    )):
+    if not all(
+        (
+            config.google_oauth_client_id,
+            config.google_oauth_client_secret,
+            config.google_oauth_redirect_uri,
+            config.correo_token_encryption_key,
+        )
+    ):
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Google OAuth no configurado")
     buzon = session.scalar(
         select(CorreoBuzon).where(
@@ -380,12 +382,14 @@ def callback_google_oauth(
     intento.consumido_at = ahora
     session.commit()
     config = get_settings()
-    if not all((
-        config.google_oauth_client_id,
-        config.google_oauth_client_secret,
-        config.google_oauth_redirect_uri,
-        config.correo_token_encryption_key,
-    )):
+    if not all(
+        (
+            config.google_oauth_client_id,
+            config.google_oauth_client_secret,
+            config.google_oauth_redirect_uri,
+            config.correo_token_encryption_key,
+        )
+    ):
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "OAuth no configurado")
     try:
         acceso, refresco, scope = intercambiar_codigo_google(
