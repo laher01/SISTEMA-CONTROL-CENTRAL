@@ -32,6 +32,10 @@ services:
       FC_DIA_LIMITE_EXPEDIENTE: ${FC_DIA_LIMITE_EXPEDIENTE:-7}
       FC_UMBRAL_BANCARIZACION_PEN: ${FC_UMBRAL_BANCARIZACION_PEN:-2000}
       FC_UMBRAL_BANCARIZACION_USD: ${FC_UMBRAL_BANCARIZACION_USD:-500}
+      FC_GOOGLE_OAUTH_CLIENT_ID: ${FC_GOOGLE_OAUTH_CLIENT_ID:-}
+      FC_GOOGLE_OAUTH_CLIENT_SECRET: ${FC_GOOGLE_OAUTH_CLIENT_SECRET:-}
+      FC_GOOGLE_OAUTH_REDIRECT_URI: ${FC_GOOGLE_OAUTH_REDIRECT_URI:-}
+      FC_CORREO_TOKEN_ENCRYPTION_KEY: ${FC_CORREO_TOKEN_ENCRYPTION_KEY:-}
       FC_MAX_UPLOAD_MB: ${FC_MAX_UPLOAD_MB:-20}
       FC_MAX_EXTRACTED_CHARS: ${FC_MAX_EXTRACTED_CHARS:-200000}
       FC_MAX_OCR_PDF_PAGES: ${FC_MAX_OCR_PDF_PAGES:-50}
@@ -57,6 +61,29 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+    volumes:
+      - fact_central_documentos:/data/documentos
+    networks: [fact_central_internal]
+
+  correo_google_worker:
+    profiles: ["correo"]
+    build:
+      context: ..
+      dockerfile: deploy/backend.Dockerfile
+    command: ["uv", "run", "python", "-m", "app.workers.correo_google"]
+    restart: unless-stopped
+    environment:
+      FC_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      FC_STORAGE_DIR: /data/documentos
+      FC_GOOGLE_OAUTH_CLIENT_ID: ${FC_GOOGLE_OAUTH_CLIENT_ID:-}
+      FC_GOOGLE_OAUTH_CLIENT_SECRET: ${FC_GOOGLE_OAUTH_CLIENT_SECRET:-}
+      FC_CORREO_TOKEN_ENCRYPTION_KEY: ${FC_CORREO_TOKEN_ENCRYPTION_KEY:-}
+      FC_CORREO_GOOGLE_WORKER_ENABLED: ${FC_CORREO_GOOGLE_WORKER_ENABLED:-false}
+      FC_CORREO_GOOGLE_INTERVAL_SECONDS: ${FC_CORREO_GOOGLE_INTERVAL_SECONDS:-300}
+      FC_ZONA_HORARIA: America/Lima
+    depends_on:
+      backend:
+        condition: service_healthy
     volumes:
       - fact_central_documentos:/data/documentos
     networks: [fact_central_internal]

@@ -3,9 +3,13 @@
 Las direcciones son registros, no conexiones activas: OAuth se autoriza aparte.
 """
 
+import hashlib
+import secrets
 import uuid
+from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -13,7 +17,25 @@ from sqlalchemy.exc import IntegrityError
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.core.config import get_settings
 from app.enums import RolMiembro
-from app.models import CorreoBuzon, CorreoMensaje, CorreoRemitente, Gestor
+from app.models import (
+    CorreoBuzon,
+    CorreoMensaje,
+    CorreoOAuthCredencial,
+    CorreoOAuthIntento,
+    CorreoRemitente,
+    CuentaAcceso,
+    Gestor,
+    Miembro,
+)
+from app.services.google_oauth_correo import (
+    GoogleOAuthError,
+    cifrar_refresh_token,
+    comprobar_buzon_google,
+    crear_url_autorizacion,
+    intercambiar_codigo_google,
+    nuevo_desafio_pkce,
+)
+from app.tenant_host import nombre_host, validar_sesion_host
 
 router = APIRouter(prefix="/correo", tags=["correo"])
 
@@ -223,6 +245,8 @@ def estado_proveedores(auth: OperativeAuthDep) -> dict[str, bool]:
     return {
         "google_configurado": bool(
             config.google_oauth_client_id
+            and config.google_oauth_client_secret
+            and config.correo_token_encryption_key
             and config.google_oauth_redirect_uri
             and config.google_oauth_redirect_uri.startswith("https://")
         ),
@@ -232,3 +256,174 @@ def estado_proveedores(auth: OperativeAuthDep) -> dict[str, bool]:
             and config.microsoft_oauth_redirect_uri.startswith("https://")
         ),
     }
+
+
+@router.post("/buzones/{buzon_id}/google/iniciar")
+def iniciar_google_oauth(
+    buzon_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str]:
+    """Crea autorización PKCE temporal, asociada al tenant y administrador.
+
+    Es únicamente el inicio. No activa buzones ni considera OAuth completado.
+    """
+    _solo_administracion(auth.rol)
+    config = get_settings()
+    if not all(
+        (
+            config.google_oauth_client_id,
+            config.google_oauth_client_secret,
+            config.google_oauth_redirect_uri,
+            config.correo_token_encryption_key,
+        )
+    ):
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Google OAuth no configurado")
+    buzon = session.scalar(
+        select(CorreoBuzon).where(
+            CorreoBuzon.id == buzon_id,
+            CorreoBuzon.tenant_id == tenant_id,
+            CorreoBuzon.proveedor == "GOOGLE",
+        )
+    )
+    if buzon is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Buzón Google no encontrado")
+    if buzon.activo:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Buzón ya activo")
+    state = secrets.token_urlsafe(48)
+    verifier, challenge = nuevo_desafio_pkce()
+    try:
+        url = crear_url_autorizacion(
+            client_id=config.google_oauth_client_id or "",
+            redirect_uri=config.google_oauth_redirect_uri or "",
+            state=state,
+            code_challenge=challenge,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "OAuth mal configurado") from exc
+    intento = CorreoOAuthIntento(
+        tenant_id=tenant_id,
+        buzon_id=buzon.id,
+        cuenta_id=auth.cuenta_id,
+        state_hash=hashlib.sha256(state.encode("ascii")).hexdigest(),
+        pkce_verifier=verifier,
+        vence_at=datetime.now(UTC) + timedelta(minutes=10),
+    )
+    session.add(intento)
+    session.commit()
+    return {"authorization_url": url, "estado": "PENDIENTE_CONSENTIMIENTO"}
+
+
+@router.get("/google/callback")
+def callback_google_oauth(
+    request: Request,
+    session: SessionDep,
+    state: str = "",
+    code: str = "",
+    error: str = "",
+) -> RedirectResponse:
+    """Valida state one-shot y buzón exacto sin depender de cookies cross-site."""
+    if not state or not code or error:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Autorización Google cancelada")
+    estado_hash = hashlib.sha256(state.encode("utf-8")).hexdigest()
+    intento = session.scalar(
+        select(CorreoOAuthIntento)
+        .where(
+            CorreoOAuthIntento.state_hash == estado_hash,
+            CorreoOAuthIntento.consumido_at.is_(None),
+        )
+        .with_for_update()
+    )
+    ahora = datetime.now(UTC)
+    if intento is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Estado OAuth inválido")
+    tenant_id = intento.tenant_id
+    config = get_settings()
+    from urllib.parse import urlparse
+
+    host_permitido = urlparse(config.google_oauth_redirect_uri or "").hostname
+    if not host_permitido or nombre_host(request) != host_permitido:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Dominio de callback no autorizado")
+    validar_sesion_host(request, session, config, tenant_id)
+    cuenta = session.scalar(
+        select(CuentaAcceso).where(
+            CuentaAcceso.id == intento.cuenta_id,
+            CuentaAcceso.tenant_id == tenant_id,
+            CuentaAcceso.activo.is_(True),
+        )
+    )
+    if cuenta is None or cuenta.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Administrador inválido")
+    miembro = session.scalar(
+        select(Miembro).where(
+            Miembro.id == cuenta.miembro_id,
+            Miembro.tenant_id == tenant_id,
+            Miembro.rol == "ADMINISTRADOR",
+            Miembro.activo.is_(True),
+        )
+    )
+    if miembro is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Administrador no autorizado")
+    vence = intento.vence_at
+    if vence.tzinfo is None:
+        vence = vence.replace(tzinfo=UTC)
+    if vence < ahora:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Autorización OAuth vencida")
+    buzon = session.scalar(
+        select(CorreoBuzon).where(
+            CorreoBuzon.id == intento.buzon_id,
+            CorreoBuzon.tenant_id == tenant_id,
+            CorreoBuzon.proveedor == "GOOGLE",
+        )
+    )
+    if buzon is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Buzón inválido")
+    intento.consumido_at = ahora
+    session.commit()
+    config = get_settings()
+    if not all(
+        (
+            config.google_oauth_client_id,
+            config.google_oauth_client_secret,
+            config.google_oauth_redirect_uri,
+            config.correo_token_encryption_key,
+        )
+    ):
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "OAuth no configurado")
+    try:
+        acceso, refresco, scope = intercambiar_codigo_google(
+            code=code,
+            verifier=intento.pkce_verifier,
+            client_id=config.google_oauth_client_id or "",
+            client_secret=config.google_oauth_client_secret or "",
+            redirect_uri=config.google_oauth_redirect_uri or "",
+        )
+        comprobar_buzon_google(access_token=acceso, direccion=buzon.direccion)
+        token_cifrado = cifrar_refresh_token(refresco, config.correo_token_encryption_key or "")
+    except GoogleOAuthError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    credencial = session.scalar(
+        select(CorreoOAuthCredencial).where(
+            CorreoOAuthCredencial.buzon_id == buzon.id,
+            CorreoOAuthCredencial.tenant_id == tenant_id,
+        )
+    )
+    if credencial is None:
+        credencial = CorreoOAuthCredencial(
+            tenant_id=tenant_id,
+            buzon_id=buzon.id,
+            proveedor="GOOGLE",
+            token_cifrado=token_cifrado,
+            permisos=scope,
+            verificado_at=ahora,
+        )
+        session.add(credencial)
+    else:
+        credencial.token_cifrado = token_cifrado
+        credencial.permisos = scope
+        credencial.verificado_at = ahora
+    buzon.activo = True
+    buzon.ultimo_error = None
+    session.commit()
+    return RedirectResponse(url="/configuracion?seccion=correos&oauth=conectado", status_code=303)
