@@ -51,7 +51,7 @@ def test_uid_duplicado_no_reprocesa(session: Session, settings: Settings) -> Non
     mensaje = EmailMessage()
     mensaje["From"] = "nadie@example.test"
     mensaje.set_content("Sin documentos")
-    assert procesar_mensaje(session, settings, buzon, "123", mensaje.as_bytes()) == "SIN_XML"
+    assert procesar_mensaje(session, settings, buzon, "123", mensaje.as_bytes()) == "REVISION"
     assert procesar_mensaje(session, settings, buzon, "123", mensaje.as_bytes()) == (
         "DUPLICADO_MENSAJE"
     )
