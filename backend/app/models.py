@@ -702,6 +702,19 @@ class CorreoOAuthIntento(ConId, ConTenant, ConCreacion, Base):
     consumido_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class CorreoOAuthCredencial(ConId, ConTenant, ConCreacion, Base):
+    """Refresh token de correo cifrado; nunca se entrega al cliente."""
+
+    __tablename__ = "correo_oauth_credenciales"
+    __table_args__ = (UniqueConstraint("buzon_id"),)
+
+    buzon_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("correo_buzones.id"), index=True)
+    proveedor: Mapped[str] = mapped_column(String(20))
+    token_cifrado: Mapped[str] = mapped_column(String(4096))
+    permisos: Mapped[str] = mapped_column(String(1000))
+    verificado_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class CorreoRemitente(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "correo_remitentes"
     __table_args__ = (UniqueConstraint("tenant_id", "gestor_id", "direccion"),)
