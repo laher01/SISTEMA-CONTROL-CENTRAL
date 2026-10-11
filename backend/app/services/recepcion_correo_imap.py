@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.models import CorreoBuzon, CorreoMensaje, CorreoRemitente, Gestor
 from app.services.ingesta import ArchivoSubido
+from app.services.paquetes_correo import extraer_xml_zip
 from app.services.recepcion_correo_ingesta import admitir_adjunto_ubl
 from app.storage import AlmacenLocal
 
@@ -32,14 +33,27 @@ def _adjuntos_xml(contenido: bytes) -> tuple[str, list[ArchivoSubido]]:
         if parte.is_multipart():
             continue
         nombre = parte.get_filename()
-        if not nombre or not nombre.lower().endswith(".xml"):
+        if not nombre:
+            continue
+        extension = nombre.lower().rsplit(".", 1)[-1]
+        if extension not in ("xml", "zip"):
             continue
         archivo = parte.get_payload(decode=True)
         if not isinstance(archivo, bytes) or len(archivo) > MAX_MENSAJE_BYTES:
             continue
-        adjuntos.append(
-            ArchivoSubido(nombre=nombre, mime_type="application/xml", contenido=archivo)
-        )
+        if extension == "zip":
+            for nombre_xml, contenido_xml in extraer_xml_zip(archivo):
+                adjuntos.append(
+                    ArchivoSubido(
+                        nombre=nombre_xml,
+                        mime_type="application/xml",
+                        contenido=contenido_xml,
+                    )
+                )
+        else:
+            adjuntos.append(
+                ArchivoSubido(nombre=nombre, mime_type="application/xml", contenido=archivo)
+            )
     return remitente, adjuntos
 
 
