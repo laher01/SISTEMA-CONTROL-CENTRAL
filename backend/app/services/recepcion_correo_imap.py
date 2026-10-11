@@ -74,7 +74,8 @@ def procesar_mensaje(
     )
     if existente is not None:
         return "DUPLICADO_MENSAJE"
-    remitente = parseaddr(str(email.message_from_bytes(contenido, policy=default).get("From", "")))[1].lower()
+    mensaje = email.message_from_bytes(contenido, policy=default)
+    remitente = parseaddr(str(mensaje.get("From", "")))[1].lower()
     candidatos = set(
         session.scalars(
             select(CorreoRemitente.gestor_id)
