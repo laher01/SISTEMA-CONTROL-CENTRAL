@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.models import CorreoBuzon, CorreoMensaje
+from app.models import CorreoBuzon, CorreoMensaje, CorreoRemitente, Gestor
 from app.services.ingesta import ArchivoSubido
 from app.services.recepcion_correo_ingesta import admitir_adjunto_ubl
 from app.storage import AlmacenLocal
@@ -61,11 +61,26 @@ def procesar_mensaje(
     if existente is not None:
         return "DUPLICADO_MENSAJE"
     remitente, archivos = _adjuntos_xml(contenido)
+    candidatos = set(
+        session.scalars(
+            select(CorreoRemitente.gestor_id)
+            .join(Gestor, CorreoRemitente.gestor_id == Gestor.id)
+            .where(
+                CorreoRemitente.tenant_id == buzon.tenant_id,
+                CorreoRemitente.direccion == remitente,
+                CorreoRemitente.activo.is_(True),
+                Gestor.tenant_id == buzon.tenant_id,
+                Gestor.deleted_at.is_(None),
+            )
+        )
+    )
+    gestor_id = next(iter(candidatos)) if len(candidatos) == 1 else None
     registro = CorreoMensaje(
         tenant_id=buzon.tenant_id,
         buzon_id=buzon.id,
         identificador_externo=uid,
         remitente=remitente,
+        gestor_id=gestor_id,
         estado="PENDIENTE",
     )
     session.add(registro)
