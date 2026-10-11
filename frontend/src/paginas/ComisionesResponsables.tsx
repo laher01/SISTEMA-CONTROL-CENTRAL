@@ -107,7 +107,10 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
   const produccionHistorica = detalleHistorico.reduce((total, f) => total + Number(f.produccion), 0);
   const comisionReferencial = detalleHistorico.reduce((total, f) => total + Number(f.comision_referencial), 0);
   const responsables = Array.from(
-    new Map(filas.map((f) => [f.responsable_id, f.responsable_nombre])).entries(),
+    new Map([
+      ...(responsablesActivos ?? []).map((r): [string, string] => [r.id, r.nombre]),
+      ...filas.map((f): [string, string] => [f.responsable_id, f.responsable_nombre]),
+    ]).entries(),
   );
   const puedeProgramar = sesion.rol === "GERENTE";
   const puedePagar = sesion.rol === "GERENTE";
@@ -341,7 +344,7 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
       const comision = f.reduce((total, fila) => total + Number(fila.comision), 0);
       return <p key={id}>Responsable {nombre}: {formatearMonto(moneda, produccion)} de producción
         {" · "}{formatearMonto(moneda, comision)} de comisión
-        {" "}<button disabled={procesando} onClick={() => void programar(id)}>
+        {" "}<button disabled={procesando || f.length === 0} title={f.length === 0 ? "Sin producción atribuida en este periodo" : undefined} onClick={() => void programar(id)}>
           Programar liquidación
         </button>
       </p>;

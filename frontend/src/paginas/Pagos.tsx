@@ -264,7 +264,8 @@ function PedidosGerencia({
 
   const crear = async (e: FormEvent) => {
     e.preventDefault();
-    await enviarJson<PedidoGerencia>("/api/v1/pagos/pedidos", "POST", {
+    try {
+      await enviarJson<PedidoGerencia>("/api/v1/pagos/pedidos", "POST", {
       cliente_id: clienteId,
       gerente_id: esGerente ? null : gerenteId,
       responsable_id: responsableId || null,
@@ -274,16 +275,21 @@ function PedidosGerencia({
       modalidad,
       modo_distribucion: responsableId ? "MANUAL" : modo,
       observacion: observacion || null,
-    });
-    setMonto("");
-    setObservacion("");
-    alCambiar();
+      });
+      setMonto("");
+      setObservacion("");
+      alCambiar();
+    } catch (error) {
+      alMensaje(error instanceof Error ? error.message : String(error));
+    }
   };
 
   return (
     <>
       <section>
         <h3>Nuevo Pedido de Gerencia</h3>
+        {responsables.length === 0 && <p className="error">No hay Responsables habilitados para esta Gerencia. Revise el vínculo Gerencia–Responsable antes de registrar el pedido.</p>}
+        {clientes.length === 0 && <p className="error">No hay clientes receptores habilitados para su acceso. Revise la cartera asignada a Gerencia.</p>}
         <form onSubmit={crear} className="formulario-linea">
           {!esGerente && <select value={gerenteId} onChange={(e) => setGerenteId(e.target.value)} required>
             <option value="">Seleccionar Gerente</option>
@@ -325,7 +331,7 @@ function PedidosGerencia({
             value={observacion}
             onChange={(e) => setObservacion(e.target.value)}
           />
-          <button type="submit">Crear pedido</button>
+          <button type="submit" disabled={responsables.length === 0 || clientes.length === 0 || (!esGerente && gerentes.length === 0)}>Crear pedido</button>
         </form>
         <p className="tenue">
           Gerencia asigna un presupuesto bruto al Responsable; el Responsable decide la distribución por Usuario.
