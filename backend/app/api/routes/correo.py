@@ -258,6 +258,8 @@ def estado_proveedores(auth: OperativeAuthDep) -> dict[str, bool]:
         ),
         "microsoft_configurado": bool(
             config.microsoft_oauth_client_id
+            and config.microsoft_oauth_client_secret
+            and config.correo_token_encryption_key
             and config.microsoft_oauth_redirect_uri
             and config.microsoft_oauth_redirect_uri.startswith("https://")
         ),
