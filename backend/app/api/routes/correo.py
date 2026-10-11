@@ -6,13 +6,13 @@ Las direcciones son registros, no conexiones activas: OAuth se autoriza aparte.
 import uuid
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
-from app.models import CorreoBuzon, CorreoRemitente, Gestor, Miembro
+from app.models import CorreoBuzon, CorreoRemitente, Gestor
 
 router = APIRouter(prefix="/correo", tags=["correo"])
 
@@ -23,7 +23,7 @@ def _solo_administracion(rol: str) -> None:
 
 
 class BuzonIn(BaseModel):
-    direccion: EmailStr
+    direccion: str = Field(min_length=5, max_length=320, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     proveedor: str = "GOOGLE"
 
 
