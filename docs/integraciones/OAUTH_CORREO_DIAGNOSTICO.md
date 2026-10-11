@@ -4,7 +4,7 @@
 
 - `backend/app/api/routes/correo.py` **sí** contiene: registro de buzones/remitentes, `POST /api/v1/correo/buzones/{buzon_id}/google/iniciar`, callback `GET /api/v1/correo/google/callback`, comprobación de identidad del buzón, persistencia cifrada y activación del buzón.
 - `backend/app/services/google_oauth_correo.py` **sí** contiene: URL de consentimiento con scope `gmail.readonly`, PKCE S256, intercambio/renovación de tokens, comprobación de cuenta y primitivas de lectura de mensajes Gmail.
-- `backend/app/core/config.py` declara variables OAuth Google, Microsoft y control de worker Google. Microsoft **solo** tiene configuración preliminar: no se confirmó callback/token/Graph en las rutas revisadas.
+- `backend/app/core/config.py` declara variables OAuth Google, Microsoft y control de worker Google. Microsoft tiene configuración preliminar **y un constructor de URL de consentimiento PKCE** en `backend/app/services/microsoft_oauth_correo.py`; no se confirmó callback, canje de token ni Graph operativo en las rutas revisadas.
 - `backend/app/api/routes/auth.py` mantiene login interno con sesión y RBAC. **No confundir** OAuth de acceso al buzón con OIDC para iniciar sesión en FACT CENTRAL.
 - `GET /api/v1/correo/estado-proveedores` indica **configuración**, no conexión operativa. Debemos diferenciar configurado, autorizado, activo, sincronizando y error.
 - Los antecedentes de conversación reportaban Google sin callback, pero el código actual ya lo incorpora. **No reimplementar lo que existe**.
@@ -17,7 +17,7 @@
 4. La cuenta autorizada no coincide exactamente con el buzón registrado. Revisar la diferencia histórica entre `factur.central.2023@gmail.com` y `factura.central.2023@gmail.com`. La dirección indicada por el usuario es **factura.central.2023@gmail.com**.
 5. Las cookies de sesión `SameSite=Strict` podrían no acompañar el retorno externo de Google. El callback llama `validar_sesion_host`: comprobar en pruebas si rechaza el callback legítimo sin abrir ataques CSRF; conservar `state` de un uso y validación tenant/cuenta.
 6. Un callback exitoso no garantiza worker activo: verificar `FC_CORREO_GOOGLE_WORKER_ENABLED`, proceso, scheduler y logs sin datos sensibles.
-7. OAuth de Microsoft/Graph no está completado en los archivos inspeccionados. No marcar Outlook como conectado solo porque exista Client ID.
+7. OAuth de Microsoft/Graph aún no está completado: existe `crear_url_microsoft`, pero el consentimiento por sí solo no conecta el buzón. No marcar Outlook como conectado solo porque exista Client ID.
 
 ## Diagnóstico sin publicar secretos
 
