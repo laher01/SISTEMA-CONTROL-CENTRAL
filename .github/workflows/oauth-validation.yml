@@ -8,6 +8,8 @@ on:
     paths:
       - 'scripts/oauth_preflight.py'
       - 'backend/tests/test_oauth_preflight.py'
+      - 'backend/tests/test_microsoft_oauth_helpers.py'
+      - 'backend/app/services/microsoft_oauth_correo.py'
       - '.github/workflows/oauth-validation.yml'
   workflow_dispatch:
 
@@ -25,4 +27,6 @@ jobs:
       - name: Install isolated test dependencies
         run: python -m pip install --disable-pip-version-check 'pytest>=8,<10' 'cryptography>=45,<47'
       - name: Run OAuth configuration validation tests
-        run: python -m pytest -q backend/tests/test_oauth_preflight.py
+        env:
+          PYTHONPATH: backend
+        run: python -m pytest -q backend/tests/test_oauth_preflight.py backend/tests/test_microsoft_oauth_helpers.py
