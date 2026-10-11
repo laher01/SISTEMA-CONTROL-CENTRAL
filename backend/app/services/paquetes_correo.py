@@ -11,6 +11,7 @@ from pathlib import PurePosixPath
 MAX_ENTRADAS = 100
 MAX_XML_BYTES = 5 * 1024 * 1024
 MAX_TOTAL_BYTES = 25 * 1024 * 1024
+MAX_RELACION_COMPRESION = 200
 
 
 class PaqueteNoSeguro(ValueError):
@@ -36,6 +37,13 @@ def extraer_xml_zip(contenido: bytes) -> list[tuple[str, bytes]]:
                     or entrada.flag_bits & 0x1
                 ):
                     raise PaqueteNoSeguro("Entrada ZIP no admitida")
+                if entrada.file_size > MAX_TOTAL_BYTES:
+                    raise PaqueteNoSeguro("Entrada ZIP demasiado grande")
+                if entrada.file_size and (
+                    not entrada.compress_size
+                    or entrada.file_size > entrada.compress_size * MAX_RELACION_COMPRESION
+                ):
+                    raise PaqueteNoSeguro("Relación de compresión ZIP no segura")
                 if ruta.suffix.lower() != ".xml":
                     continue
                 if entrada.file_size > MAX_XML_BYTES:

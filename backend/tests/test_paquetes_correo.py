@@ -46,3 +46,20 @@ def test_zip_rechaza_xml_demasiado_grande() -> None:
 
 def test_zip_ignora_otros_formatos() -> None:
     assert extraer_xml_zip(_zip("documento.pdf", b"%PDF")) == []
+
+
+def test_zip_rechaza_bomba_xml_comprimida() -> None:
+    memoria = io.BytesIO()
+    with zipfile.ZipFile(memoria, "w", compression=zipfile.ZIP_DEFLATED) as paquete:
+        paquete.writestr("factura.xml", b"A" * (1024 * 1024))
+    with pytest.raises(PaqueteNoSeguro, match="compresión"):
+        extraer_xml_zip(memoria.getvalue())
+
+
+def test_zip_rechaza_bomba_en_archivo_no_xml() -> None:
+    memoria = io.BytesIO()
+    with zipfile.ZipFile(memoria, "w", compression=zipfile.ZIP_DEFLATED) as paquete:
+        paquete.writestr("adjunto.txt", b"A" * (1024 * 1024))
+        paquete.writestr("factura.xml", b"<Invoice/>")
+    with pytest.raises(PaqueteNoSeguro, match="compresión"):
+        extraer_xml_zip(memoria.getvalue())
