@@ -39,11 +39,11 @@ def decidir_recepcion(datos: AutorizacionCorreo) -> DecisionCorreo:
 
 
 def puede_administrar_buzon(rol: str) -> bool:
-    return rol == "RESPONSABLE"
+    return rol == "ADMINISTRADOR"
 
 
 def puede_registrar_remitente(rol: str) -> bool:
-    return rol == "GESTOR"
+    return rol == "ADMINISTRADOR"
 
 
 def puede_habilitar_empresa(rol: str) -> bool:
