@@ -1,0 +1,74 @@
+name: OAuth preflight validation
+
+on:
+  push:
+    branches:
+      - feature/oauth-google-microsoft-integracion-20261011
+  pull_request:
+    paths:
+      - 'scripts/oauth_preflight.py'
+      - 'backend/tests/test_oauth_preflight.py'
+      - 'backend/tests/test_microsoft_oauth_helpers.py'
+      - 'backend/app/services/microsoft_oauth_correo.py'
+      - 'frontend/src/paginas/Configuracion.tsx'
+      - 'deploy/docker-compose.production.yml'
+      - '.github/workflows/oauth-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  oauth-preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install official backend dependencies
+        working-directory: backend
+        run: uv sync --locked
+      - name: Run OAuth configuration validation tests
+        working-directory: backend
+        run: uv run pytest -q tests/test_oauth_preflight.py tests/test_microsoft_oauth_helpers.py
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Typecheck and build frontend
+        working-directory: frontend
+        run: npm run build
+
+  oauth-format-on-feature:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/oauth-google-microsoft-integracion-20261011'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: astral-sh/setup-uv@v6
+      - name: Format only the OAuth Python changes
+        working-directory: backend
+        run: |
+          uv sync --locked
+          uv run ruff format app/api/routes/correo.py app/services/microsoft_oauth_correo.py tests/test_microsoft_oauth_helpers.py tests/test_oauth_preflight.py
+          uv run ruff check --fix app/api/routes/correo.py app/services/microsoft_oauth_correo.py tests/test_microsoft_oauth_helpers.py tests/test_oauth_preflight.py
+      - name: Save formatting to feature branch only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/app/api/routes/correo.py backend/app/services/microsoft_oauth_correo.py backend/tests/test_microsoft_oauth_helpers.py backend/tests/test_oauth_preflight.py
+          if ! git diff --cached --quiet; then
+            git commit -m "style(oauth): apply Ruff formatting"
+            git push origin HEAD:feature/oauth-google-microsoft-integracion-20261011
+          fi

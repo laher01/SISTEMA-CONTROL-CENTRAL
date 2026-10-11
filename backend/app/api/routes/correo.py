@@ -35,6 +35,12 @@ from app.services.google_oauth_correo import (
     intercambiar_codigo_google,
     nuevo_desafio_pkce,
 )
+from app.services.microsoft_oauth_correo import (
+    MicrosoftOAuthError,
+    comprobar_buzon_microsoft,
+    crear_url_microsoft,
+    intercambiar_codigo_microsoft,
+)
 from app.tenant_host import nombre_host, validar_sesion_host
 
 router = APIRouter(prefix="/correo", tags=["correo"])
@@ -252,6 +258,8 @@ def estado_proveedores(auth: OperativeAuthDep) -> dict[str, bool]:
         ),
         "microsoft_configurado": bool(
             config.microsoft_oauth_client_id
+            and config.microsoft_oauth_client_secret
+            and config.correo_token_encryption_key
             and config.microsoft_oauth_redirect_uri
             and config.microsoft_oauth_redirect_uri.startswith("https://")
         ),
@@ -422,6 +430,176 @@ def callback_google_oauth(
     else:
         credencial.token_cifrado = token_cifrado
         credencial.permisos = scope
+        credencial.verificado_at = ahora
+    buzon.activo = True
+    buzon.ultimo_error = None
+    session.commit()
+    return RedirectResponse(url="/configuracion?seccion=correos&oauth=conectado", status_code=303)
+
+
+@router.post("/buzones/{buzon_id}/microsoft/iniciar")
+def iniciar_microsoft_oauth(
+    buzon_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str]:
+    """Solo administración puede conectar un buzón de su tenant."""
+    _solo_administracion(auth.rol)
+    config = get_settings()
+    if not all(
+        (
+            config.microsoft_oauth_client_id,
+            config.microsoft_oauth_client_secret,
+            config.microsoft_oauth_redirect_uri,
+            config.correo_token_encryption_key,
+        )
+    ):
+        raise HTTPException(503, "Microsoft OAuth no configurado")
+    buzon = session.scalar(
+        select(CorreoBuzon).where(
+            CorreoBuzon.id == buzon_id,
+            CorreoBuzon.tenant_id == tenant_id,
+            CorreoBuzon.proveedor == "MICROSOFT",
+        )
+    )
+    if buzon is None:
+        raise HTTPException(404, "Buzón Microsoft no encontrado")
+    if buzon.activo:
+        raise HTTPException(409, "Buzón ya activo")
+    state = secrets.token_urlsafe(48)
+    verifier, challenge = nuevo_desafio_pkce()
+    try:
+        url = crear_url_microsoft(
+            client_id=config.microsoft_oauth_client_id or "",
+            redirect_uri=config.microsoft_oauth_redirect_uri or "",
+            state=state,
+            code_challenge=challenge,
+        )
+    except ValueError as exc:
+        raise HTTPException(503, "Configuración Microsoft OAuth inválida") from exc
+    session.add(
+        CorreoOAuthIntento(
+            tenant_id=tenant_id,
+            buzon_id=buzon.id,
+            cuenta_id=auth.cuenta_id,
+            state_hash=hashlib.sha256(state.encode("ascii")).hexdigest(),
+            pkce_verifier=verifier,
+            vence_at=datetime.now(UTC) + timedelta(minutes=10),
+        )
+    )
+    session.commit()
+    return {"authorization_url": url, "estado": "PENDIENTE_CONSENTIMIENTO"}
+
+
+@router.get("/microsoft/callback")
+def callback_microsoft_oauth(
+    request: Request,
+    session: SessionDep,
+    state: str = "",
+    code: str = "",
+    error: str = "",
+) -> RedirectResponse:
+    """Callback de un solo uso, con tenant, administrador y buzón verificados."""
+    if error or not code or not state:
+        raise HTTPException(400, "Autorización Microsoft cancelada")
+    config = get_settings()
+    from urllib.parse import urlparse
+
+    redirect_uri = config.microsoft_oauth_redirect_uri or ""
+    permitted_host = urlparse(redirect_uri).hostname
+    if not permitted_host or nombre_host(request) != permitted_host:
+        raise HTTPException(403, "Host de callback no autorizado")
+    intento = session.scalar(
+        select(CorreoOAuthIntento)
+        .where(
+            CorreoOAuthIntento.state_hash == hashlib.sha256(state.encode("utf-8")).hexdigest(),
+            CorreoOAuthIntento.consumido_at.is_(None),
+        )
+        .with_for_update()
+    )
+    if intento is None:
+        raise HTTPException(400, "Estado OAuth inválido")
+    ahora = datetime.now(UTC)
+    vence = intento.vence_at
+    if vence.tzinfo is None:
+        vence = vence.replace(tzinfo=UTC)
+    if vence < ahora:
+        raise HTTPException(400, "Autorización vencida")
+    validar_sesion_host(request, session, config, intento.tenant_id)
+    cuenta = session.scalar(
+        select(CuentaAcceso).where(
+            CuentaAcceso.id == intento.cuenta_id,
+            CuentaAcceso.tenant_id == intento.tenant_id,
+            CuentaAcceso.activo.is_(True),
+        )
+    )
+    miembro = (
+        session.scalar(
+            select(Miembro).where(
+                Miembro.id == cuenta.miembro_id,
+                Miembro.tenant_id == intento.tenant_id,
+                Miembro.rol == "ADMINISTRADOR",
+                Miembro.activo.is_(True),
+            )
+        )
+        if cuenta is not None and cuenta.miembro_id is not None
+        else None
+    )
+    if miembro is None:
+        raise HTTPException(403, "Administrador inválido")
+    buzon = session.scalar(
+        select(CorreoBuzon).where(
+            CorreoBuzon.id == intento.buzon_id,
+            CorreoBuzon.tenant_id == intento.tenant_id,
+            CorreoBuzon.proveedor == "MICROSOFT",
+        )
+    )
+    if buzon is None:
+        raise HTTPException(404, "Buzón no encontrado")
+    if not all(
+        (
+            config.microsoft_oauth_client_id,
+            config.microsoft_oauth_client_secret,
+            config.correo_token_encryption_key,
+            config.microsoft_oauth_redirect_uri,
+        )
+    ):
+        raise HTTPException(503, "Microsoft OAuth no configurado")
+    intento.consumido_at = ahora
+    session.commit()
+    try:
+        acceso, refresco, permisos = intercambiar_codigo_microsoft(
+            code=code,
+            verifier=intento.pkce_verifier,
+            client_id=config.microsoft_oauth_client_id or "",
+            client_secret=config.microsoft_oauth_client_secret,
+            redirect_uri=redirect_uri,
+        )
+        comprobar_buzon_microsoft(access_token=acceso, direccion=buzon.direccion)
+        cifrado = cifrar_refresh_token(refresco, config.correo_token_encryption_key or "")
+    except (MicrosoftOAuthError, GoogleOAuthError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    credencial = session.scalar(
+        select(CorreoOAuthCredencial).where(
+            CorreoOAuthCredencial.buzon_id == buzon.id,
+            CorreoOAuthCredencial.tenant_id == intento.tenant_id,
+        )
+    )
+    if credencial is None:
+        credencial = CorreoOAuthCredencial(
+            tenant_id=intento.tenant_id,
+            buzon_id=buzon.id,
+            proveedor="MICROSOFT",
+            token_cifrado=cifrado,
+            permisos=permisos,
+            verificado_at=ahora,
+        )
+        session.add(credencial)
+    else:
+        credencial.proveedor = "MICROSOFT"
+        credencial.token_cifrado = cifrado
+        credencial.permisos = permisos
         credencial.verificado_at = ahora
     buzon.activo = True
     buzon.ultimo_error = None

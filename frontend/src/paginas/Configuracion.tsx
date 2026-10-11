@@ -1014,6 +1014,20 @@ function RecepcionAutomaticaPanel() {
     }
   };
 
+  const conectarMicrosoft = async (id: string) => {
+    setGuardando(true);
+    setMensaje("");
+    try {
+      const respuesta = await enviarJson<{ authorization_url: string }>(
+        `/api/v1/correo/buzones/${id}/microsoft/iniciar`, "POST",
+      );
+      window.location.assign(respuesta.authorization_url);
+    } catch (err) {
+      setMensaje(err instanceof Error ? err.message : String(err));
+      setGuardando(false);
+    }
+  };
+
   const crearBuzon = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setGuardando(true);
@@ -1085,10 +1099,13 @@ function RecepcionAutomaticaPanel() {
       <thead><tr><th>Dirección</th><th>Proveedor</th><th>Estado</th><th>Autorización</th></tr></thead>
       <tbody>{(buzones ?? []).map((b) => <tr key={b.id}>
         <td>{b.direccion}</td><td>{b.proveedor}</td>
-        <td>{b.activo ? "Google autorizado" : "Pendiente de conexión"}</td>
+        <td>{b.activo ? "Autorizado; sincronización no verificada" : "Pendiente de conexión"}</td>
         <td>{b.proveedor === "GOOGLE" && !b.activo ?
           <button type="button" disabled={guardando || !estadoProveedores?.google_configurado}
             onClick={() => void conectarGoogle(b.id)}>Conectar con Google</button>
+          : b.proveedor === "MICROSOFT" && !b.activo ?
+          <button type="button" disabled={guardando || !estadoProveedores?.microsoft_configurado}
+            onClick={() => void conectarMicrosoft(b.id)}>Conectar con Outlook</button>
           : b.activo ? "Autorizado; revisar sincronización" : "OAuth pendiente"}</td>
       </tr>)}</tbody>
     </table>
