@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     google_oauth_client_id: str | None = None
     google_oauth_client_secret: str | None = None
     correo_token_encryption_key: str | None = None
+    correo_google_worker_enabled: bool = False
+    correo_google_interval_seconds: int = 300
     google_oauth_redirect_uri: str | None = None
     microsoft_oauth_client_id: str | None = None
     microsoft_oauth_redirect_uri: str | None = None
