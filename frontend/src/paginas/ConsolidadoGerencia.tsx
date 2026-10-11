@@ -26,7 +26,7 @@ export default function ConsolidadoGerencia() {
   const resumen = useDatos<Resumen>(conParametros("/api/v1/pagos/consolidado", { desde, hasta, moneda, agrupar: grupo }));
   const actualGlobal = useDatos<Resumen>(conParametros("/api/v1/pagos/consolidado", { ...actual, moneda, agrupar: grupo }));
   const anteriorGlobal = useDatos<Resumen>(conParametros("/api/v1/pagos/consolidado", { ...anterior, moneda, agrupar: grupo }));
-  return <section>
+  return <section className="consolidado-gerencia">
     <h3>Consolidado de compras</h3>
     <p className="tenue">Montos brutos de expedientes registrados. No representan pagos o cobros confirmados.</p>
     <div className="acciones">
