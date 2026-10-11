@@ -980,6 +980,7 @@ type BuzonCorreo = {
 };
 type RemitenteGestor = { id: string; direccion: string; gestor_id: string; gestor: string };
 type GestorCorreo = { id: string; codigo: string; nombre: string };
+type IncidenciaCorreo = { id: string; fecha: string; buzon: string; remitente: string; gestor: string | null; estado: string; motivo: string | null };
 
 function RecepcionAutomaticaPanel() {
   const { datos: buzones, error: errorBuzones, recargar: recargarBuzones } =
@@ -987,6 +988,8 @@ function RecepcionAutomaticaPanel() {
   const { datos: remitentes, error: errorRemitentes, recargar: recargarRemitentes } =
     useDatos<RemitenteGestor[]>("/api/v1/correo/remitentes");
   const { datos: gestores } = useDatos<GestorCorreo[]>("/api/v1/gestores");
+  const { datos: incidencias, error: errorIncidencias, recargar: recargarIncidencias } =
+    useDatos<IncidenciaCorreo[]>("/api/v1/correo/incidencias");
   const [direccionBuzon, setDireccionBuzon] = useState("");
   const [proveedor, setProveedor] = useState("GOOGLE");
   const [direccionRemitente, setDireccionRemitente] = useState("");
@@ -1086,6 +1089,18 @@ function RecepcionAutomaticaPanel() {
         <td>{r.direccion}</td><td>{r.gestor}</td>
       </tr>)}</tbody>
     </table>
+    <h4>Incidencias pendientes de revisión</h4>
+    <button type="button" onClick={recargarIncidencias}>Actualizar incidencias</button>
+    {errorIncidencias && <p role="alert">{errorIncidencias}</p>}
+    <table>
+      <thead><tr><th>Fecha</th><th>Buzón receptor</th><th>Remitente</th><th>Gestor</th><th>Estado</th><th>Motivo</th></tr></thead>
+      <tbody>{(incidencias ?? []).map((i) => <tr key={i.id}>
+        <td>{new Date(i.fecha).toLocaleString("es-PE")}</td>
+        <td>{i.buzon}</td><td>{i.remitente}</td><td>{i.gestor ?? "Sin asignar"}</td>
+        <td>{i.estado}</td><td>{i.motivo ?? "Pendiente"}</td>
+      </tr>)}</tbody>
+    </table>
+    {incidencias?.length === 0 && <p>No hay incidencias pendientes registradas.</p>}
     {mensaje && <p role="status">{mensaje}</p>}
   </section>;
 }
