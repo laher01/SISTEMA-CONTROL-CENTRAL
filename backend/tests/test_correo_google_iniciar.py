@@ -134,6 +134,8 @@ def test_callback_activa_solo_buzon_que_google_verifica(
         "app.api.routes.correo.comprobar_buzon_google",
         lambda **kwargs: comprobadas.append(kwargs["direccion"]),
     )
+    session.get(Miembro, auth_prueba.contexto.miembro_id).rol = "ADMINISTRADOR"
+    session.commit()
     auth_prueba.como_admin()
     inicio = client.post(f"/api/v1/correo/buzones/{buzon.id}/google/iniciar")
     assert inicio.status_code == 200, inicio.text
@@ -142,6 +144,7 @@ def test_callback_activa_solo_buzon_que_google_verifica(
         "/api/v1/correo/google/callback",
         params={"code": "codigo-simulado", "state": state},
         follow_redirects=False,
+        headers={"host": "app.nexomarnegocioseirl.online"},
     )
     assert respuesta.status_code == 303, respuesta.text
     assert comprobadas == ["factura.central.2023@gmail.com"]
@@ -156,5 +159,6 @@ def test_callback_activa_solo_buzon_que_google_verifica(
         "/api/v1/correo/google/callback",
         params={"code": "codigo-simulado", "state": state},
         follow_redirects=False,
+        headers={"host": "app.nexomarnegocioseirl.online"},
     )
     assert repetido.status_code == 400
