@@ -3,7 +3,10 @@
 Las direcciones son registros, no conexiones activas: OAuth se autoriza aparte.
 """
 
+import hashlib
+import secrets
 import uuid
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
@@ -13,7 +16,8 @@ from sqlalchemy.exc import IntegrityError
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.core.config import get_settings
 from app.enums import RolMiembro
-from app.models import CorreoBuzon, CorreoMensaje, CorreoRemitente, Gestor
+from app.models import CorreoBuzon, CorreoMensaje, CorreoOAuthIntento, CorreoRemitente, Gestor
+from app.services.google_oauth_correo import crear_url_autorizacion, nuevo_desafio_pkce
 
 router = APIRouter(prefix="/correo", tags=["correo"])
 
@@ -232,3 +236,53 @@ def estado_proveedores(auth: OperativeAuthDep) -> dict[str, bool]:
             and config.microsoft_oauth_redirect_uri.startswith("https://")
         ),
     }
+
+
+@router.post("/buzones/{buzon_id}/google/iniciar")
+def iniciar_google_oauth(
+    buzon_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str]:
+    """Crea autorización PKCE temporal, asociada al tenant y administrador.
+
+    Es únicamente el inicio. No activa buzones ni considera OAuth completado.
+    """
+    _solo_administracion(auth.rol)
+    config = get_settings()
+    if not config.google_oauth_client_id or not config.google_oauth_redirect_uri:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Google OAuth no configurado")
+    buzon = session.scalar(
+        select(CorreoBuzon).where(
+            CorreoBuzon.id == buzon_id,
+            CorreoBuzon.tenant_id == tenant_id,
+            CorreoBuzon.proveedor == "GOOGLE",
+        )
+    )
+    if buzon is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Buzón Google no encontrado")
+    if buzon.activo:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Buzón ya activo")
+    state = secrets.token_urlsafe(48)
+    verifier, challenge = nuevo_desafio_pkce()
+    try:
+        url = crear_url_autorizacion(
+            client_id=config.google_oauth_client_id,
+            redirect_uri=config.google_oauth_redirect_uri,
+            state=state,
+            code_challenge=challenge,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "OAuth mal configurado") from exc
+    intento = CorreoOAuthIntento(
+        tenant_id=tenant_id,
+        buzon_id=buzon.id,
+        cuenta_id=auth.cuenta_id,
+        state_hash=hashlib.sha256(state.encode("ascii")).hexdigest(),
+        pkce_verifier=verifier,
+        vence_at=datetime.now(UTC) + timedelta(minutes=10),
+    )
+    session.add(intento)
+    session.commit()
+    return {"authorization_url": url, "estado": "PENDIENTE_CONSENTIMIENTO"}
