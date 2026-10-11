@@ -7,6 +7,7 @@ Revises: 0028
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "0029"
@@ -20,7 +21,10 @@ def upgrade() -> None:
         "correo_oauth_intentos",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("tenant_id", sa.Uuid(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True),
+            server_default=sa.func.now(), nullable=False,
+        ),
         sa.Column("buzon_id", sa.Uuid(), nullable=False),
         sa.Column("cuenta_id", sa.Uuid(), nullable=False),
         sa.Column("state_hash", sa.String(64), nullable=False, unique=True),
@@ -33,10 +37,16 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     for columna in ("tenant_id", "buzon_id", "cuenta_id"):
-        op.create_index(op.f(f"ix_correo_oauth_intentos_{columna}"), "correo_oauth_intentos", [columna])
+        op.create_index(
+            op.f(f"ix_correo_oauth_intentos_{columna}"),
+            "correo_oauth_intentos", [columna],
+        )
 
 
 def downgrade() -> None:
     for columna in ("cuenta_id", "buzon_id", "tenant_id"):
-        op.drop_index(op.f(f"ix_correo_oauth_intentos_{columna}"), table_name="correo_oauth_intentos")
+        op.drop_index(
+            op.f(f"ix_correo_oauth_intentos_{columna}"),
+            table_name="correo_oauth_intentos",
+        )
     op.drop_table("correo_oauth_intentos")
