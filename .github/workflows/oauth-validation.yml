@@ -10,6 +10,8 @@ on:
       - 'backend/tests/test_oauth_preflight.py'
       - 'backend/tests/test_microsoft_oauth_helpers.py'
       - 'backend/app/services/microsoft_oauth_correo.py'
+      - 'frontend/src/paginas/Configuracion.tsx'
+      - 'deploy/docker-compose.production.yml'
       - '.github/workflows/oauth-validation.yml'
   workflow_dispatch:
 
@@ -30,3 +32,19 @@ jobs:
         env:
           PYTHONPATH: backend
         run: python -m pytest -q backend/tests/test_oauth_preflight.py backend/tests/test_microsoft_oauth_helpers.py
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Typecheck and build frontend
+        working-directory: frontend
+        run: npm run build
