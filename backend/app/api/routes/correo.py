@@ -242,6 +242,8 @@ def estado_proveedores(auth: OperativeAuthDep) -> dict[str, bool]:
     return {
         "google_configurado": bool(
             config.google_oauth_client_id
+            and config.google_oauth_client_secret
+            and config.correo_token_encryption_key
             and config.google_oauth_redirect_uri
             and config.google_oauth_redirect_uri.startswith("https://")
         ),
