@@ -8,6 +8,7 @@ import base64
 import hashlib
 import json
 import secrets
+from typing import cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -86,7 +87,7 @@ def _json_google(url: str, *, metodo: str = "GET", cuerpo: bytes | None = None,
         raise GoogleOAuthError("Google rechazó la solicitud OAuth") from exc
     if not isinstance(datos, dict):
         raise GoogleOAuthError("Respuesta OAuth inesperada")
-    return datos
+    return cast(dict[str, object], datos)
 
 
 def intercambiar_codigo_google(
