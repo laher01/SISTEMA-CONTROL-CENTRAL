@@ -23,7 +23,9 @@ export default function ConsolidadoGerencia() {
   const [hasta, setHasta] = useState(actual.hasta);
   const [moneda, setMoneda] = useState<Moneda>("PEN");
   const [filtrado, setFiltrado] = useState(false);
-  const resumen = useDatos<Resumen>(conParametros("/api/v1/pagos/consolidado", { desde, hasta, moneda, agrupar: grupo }));
+  const rangoValido = Boolean(desde && hasta && desde <= hasta);
+  const mensajeRango = rangoValido ? "" : "Seleccione un rango de fechas válido: Desde no puede ser posterior a Hasta.";
+  const resumen = useDatos<Resumen>(rangoValido ? conParametros("/api/v1/pagos/consolidado", { desde, hasta, moneda, agrupar: grupo }) : null);
   const actualGlobal = useDatos<Resumen>(conParametros("/api/v1/pagos/consolidado", { ...actual, moneda, agrupar: grupo }));
   const anteriorGlobal = useDatos<Resumen>(conParametros("/api/v1/pagos/consolidado", { ...anterior, moneda, agrupar: grupo }));
   return <section>
@@ -42,15 +44,17 @@ export default function ConsolidadoGerencia() {
       <button type="button" onClick={() => { setDesde(actual.desde); setHasta(actual.hasta); setFiltrado(false); }}>Restablecer meses</button>
     </div>
     <div className="tarjetas">
-      {filtrado ? <div className="tarjeta"><strong>Rango seleccionado</strong><span className="cifra">{formatearMonto(moneda, resumen.datos?.total ?? "0")}</span></div> : <>
+      {filtrado ? <div className="tarjeta"><strong>Rango seleccionado</strong><span className="cifra">{formatearMonto(moneda, rangoValido ? (resumen.datos?.total ?? "0") : "0")}</span></div> : <>
         <div className="tarjeta"><strong>Mes actual</strong><span className="cifra">{formatearMonto(moneda, actualGlobal.datos?.total ?? "0")}</span></div>
         <div className="tarjeta"><strong>Mes anterior</strong><span className="cifra">{formatearMonto(moneda, anteriorGlobal.datos?.total ?? "0")}</span></div>
       </>}
     </div>
-    {resumen.error && <p className="error">{resumen.error}</p>}
+    {!rangoValido && <p className="error" role="alert">{mensajeRango}</p>}
+    {rangoValido && resumen.error && <p className="error">{resumen.error}</p>}
+    {rangoValido && !resumen.cargando && !resumen.error && resumen.datos && resumen.datos.filas.length === 0 && <p className="tenue">No hay expedientes registrados para el periodo y la agrupación seleccionados.</p>}
     <div className="tabla-responsive"><table><thead><tr>
       <th>{grupo === "CLIENTE" ? "Cliente receptor" : "Responsable"}</th><th>Registros</th><th className="num">Producción del periodo</th>
-    </tr></thead><tbody>{(resumen.datos?.filas ?? []).map(f => <tr key={f.id}>
+    </tr></thead><tbody>{(rangoValido ? (resumen.datos?.filas ?? []) : []).map(f => <tr key={f.id}>
       <td>{f.codigo} · {f.nombre}</td><td>{f.registros}</td><td className="num">{formatearMonto(moneda, f.monto)}</td>
     </tr>)}</tbody></table></div>
   </section>;
