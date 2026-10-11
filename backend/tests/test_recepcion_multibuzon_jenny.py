@@ -124,7 +124,9 @@ def test_jenny_se_atribuye_a_willi_en_tres_buzones(session: Session, settings: S
     assert len(documentos) == 1
     assert documentos[0].gestor_id == jenny.id
     assert documentos[0].usuario_id == willi.id
-    mensajes = list(session.scalars(select(CorreoMensaje).where(CorreoMensaje.tenant_id == tenant.id)))
+    mensajes = list(
+        session.scalars(select(CorreoMensaje).where(CorreoMensaje.tenant_id == tenant.id))
+    )
     assert len(mensajes) == 3
     mismo_uid = procesar_mensaje(
         session,
