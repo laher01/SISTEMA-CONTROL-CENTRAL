@@ -295,8 +295,8 @@ def iniciar_google_oauth(
     verifier, challenge = nuevo_desafio_pkce()
     try:
         url = crear_url_autorizacion(
-            client_id=config.google_oauth_client_id,
-            redirect_uri=config.google_oauth_redirect_uri,
+            client_id=config.google_oauth_client_id or "",
+            redirect_uri=config.google_oauth_redirect_uri or "",
             state=state,
             code_challenge=challenge,
         )
