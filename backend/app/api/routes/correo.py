@@ -141,19 +141,24 @@ def mi_recepcion(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Gestor sin ámbito válido")
     remitentes = list(
         session.scalars(
-            select(CorreoRemitente.direccion).where(
+            select(CorreoRemitente.direccion)
+            .where(
                 CorreoRemitente.tenant_id == tenant_id,
                 CorreoRemitente.gestor_id == gestor.id,
                 CorreoRemitente.activo.is_(True),
-            ).order_by(CorreoRemitente.direccion)
+            )
+            .order_by(CorreoRemitente.direccion)
         )
     )
     mensajes = list(
         session.scalars(
-            select(CorreoMensaje).where(
+            select(CorreoMensaje)
+            .where(
                 CorreoMensaje.tenant_id == tenant_id,
                 CorreoMensaje.gestor_id == gestor.id,
-            ).order_by(CorreoMensaje.created_at.desc()).limit(100)
+            )
+            .order_by(CorreoMensaje.created_at.desc())
+            .limit(100)
         )
     )
     return {
