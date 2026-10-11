@@ -460,7 +460,9 @@ def consolidado_flujos(
     fecha de registro. Su diferencia NO constituye saldo de cartera.
     """
     if auth.rol != RolMiembro.ADMINISTRADOR:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Resumen financiero solo para Administración")
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Resumen financiero solo para Administración"
+        )
     if hasta < desde or (hasta - desde).days > 366:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Rango inválido")
     if moneda not in ("PEN", "USD"):
