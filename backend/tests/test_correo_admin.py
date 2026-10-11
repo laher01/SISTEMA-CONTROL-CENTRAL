@@ -84,23 +84,24 @@ def test_remitente_no_se_asigna_a_dos_gestores(
     session.commit()
     auth_prueba.como_admin()
     url = "/api/v1/correo/remitentes"
-    assert client.post(
+    primero = client.post(
         url,
         json={"direccion": "jenny2026@gmail.com", "gestor_id": str(gestores[0].id)},
-    ).status_code == 201
-    assert client.post(
+    )
+    assert primero.status_code == 201
+    segundo = client.post(
         url,
         json={"direccion": "jenny2026@gmail.com", "gestor_id": str(gestores[1].id)},
-    ).status_code == 409
+    )
+    assert segundo.status_code == 409
 
 
-def test_solo_admin_configura_recepcion(
-    client: TestClient, auth_prueba: AuthPrueba
-) -> None:
+def test_solo_admin_configura_recepcion(client: TestClient, auth_prueba: AuthPrueba) -> None:
     auth_prueba.como_gerente()
     assert client.get("/api/v1/correo/buzones").status_code == 403
     assert client.get("/api/v1/correo/remitentes").status_code == 403
-    assert client.post(
+    prohibido = client.post(
         "/api/v1/correo/buzones",
         json={"direccion": "facturacion@example.com", "proveedor": "GOOGLE"},
-    ).status_code == 403
+    )
+    assert prohibido.status_code == 403
