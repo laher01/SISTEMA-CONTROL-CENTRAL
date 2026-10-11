@@ -48,6 +48,10 @@ def test_flujos_por_periodo_y_acceso(
     params = {"desde": "2026-10-01", "hasta": "2026-10-31", "moneda": "PEN"}
     auth_prueba.como_gerente()
     assert client.get(url, params=params).status_code == 403
+    auth_prueba.como_superadmin()
+    assert client.get(url, params=params).status_code == 403
+    auth_prueba.como_usuario(auth_prueba.contexto.miembro_id)
+    assert client.get(url, params=params).status_code == 403
     auth_prueba.como_admin()
     respuesta = client.get(url, params=params)
     assert respuesta.status_code == 200, respuesta.text
