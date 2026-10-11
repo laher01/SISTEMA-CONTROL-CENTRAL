@@ -151,30 +151,13 @@ def responsables_pedido(
             GerenteResponsable.activo.is_(True),
         )
     if auth.rol == RolMiembro.GERENTE and auth.codigo == "GRTEGLOBAL":
-        historicos = (
-            select(Miembro.responsable_id)
-            .join(Expediente, Expediente.usuario_id == Miembro.id)
-            .where(
-                Expediente.tenant_id == tenant_id,
-                Expediente.deleted_at.is_(None),
-                alcance_expedientes_gerente(auth),
-                Miembro.tenant_id == tenant_id,
-                Miembro.responsable_id.is_not(None),
-            )
-        )
+        # El gerente global consulta todo el padrón activo, incluso los nuevos
+        # responsables sin producción. No concede derechos de pago ni atribución.
         consulta = select(Miembro).where(
             Miembro.tenant_id == tenant_id,
             Miembro.rol == RolMiembro.RESPONSABLE,
             Miembro.activo.is_(True),
             Miembro.deleted_at.is_(None),
-            Miembro.id.in_(historicos)
-            | Miembro.id.in_(
-                select(GerenteResponsable.responsable_id).where(
-                    GerenteResponsable.tenant_id == tenant_id,
-                    GerenteResponsable.gerente_id == auth.miembro_id,
-                    GerenteResponsable.activo.is_(True),
-                )
-            ),
         )
     return [
         FiltroOpcion(id=r.id, codigo=r.codigo, nombre=r.nombre)
