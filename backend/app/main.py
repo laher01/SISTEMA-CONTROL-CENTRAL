@@ -6,6 +6,7 @@ from app.api.routes import (
     alertas,
     auth,
     chat,
+    correo,
     comisiones,
     configuracion,
     configuracion_acceso,
@@ -48,6 +49,7 @@ api = APIRouter(prefix="/api/v1")
 api.include_router(auth.router)
 for modulo in (
     administraciones,
+    correo,
     documentos,
     chat,
     comisiones,
