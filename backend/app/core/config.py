@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     session_cookie_name: str = "factcentral_session"
     session_hours: int = 12
     google_oauth_client_id: str | None = None
+    google_oauth_client_secret: str | None = None
+    correo_token_encryption_key: str | None = None
     google_oauth_redirect_uri: str | None = None
     microsoft_oauth_client_id: str | None = None
     microsoft_oauth_redirect_uri: str | None = None
