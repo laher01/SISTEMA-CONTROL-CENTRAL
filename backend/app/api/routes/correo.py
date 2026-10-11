@@ -175,3 +175,41 @@ def mi_recepcion(
             for m in mensajes
         ],
     }
+
+
+@router.get("/incidencias")
+def listar_incidencias(
+    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
+) -> list[dict[str, str | None]]:
+    """Incidencias de correo del tenant para la Administración, solo lectura."""
+    _solo_administracion(auth.rol)
+    registros = session.execute(
+        select(CorreoMensaje, CorreoBuzon, Gestor)
+        .join(
+            CorreoBuzon,
+            (CorreoMensaje.buzon_id == CorreoBuzon.id)
+            & (CorreoBuzon.tenant_id == tenant_id),
+        )
+        .outerjoin(
+            Gestor,
+            (CorreoMensaje.gestor_id == Gestor.id) & (Gestor.tenant_id == tenant_id),
+        )
+        .where(
+            CorreoMensaje.tenant_id == tenant_id,
+            CorreoMensaje.estado.in_(("REVISION", "PENDIENTE")),
+        )
+        .order_by(CorreoMensaje.created_at.desc(), CorreoMensaje.id.desc())
+        .limit(100)
+    )
+    return [
+        {
+            "id": str(m.id),
+            "fecha": m.created_at.isoformat(),
+            "buzon": b.direccion,
+            "remitente": m.remitente,
+            "gestor": g.nombre if g else None,
+            "estado": m.estado,
+            "motivo": m.error,
+        }
+        for m, b, g in registros
+    ]
