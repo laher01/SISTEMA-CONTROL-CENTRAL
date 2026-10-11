@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
+from app.core.config import get_settings
 from app.enums import RolMiembro
 from app.models import CorreoBuzon, CorreoMensaje, CorreoRemitente, Gestor
 
@@ -212,3 +213,22 @@ def listar_incidencias(
         }
         for m, b, g in registros
     ]
+
+
+@router.get("/estado-proveedores")
+def estado_proveedores(auth: OperativeAuthDep) -> dict[str, bool]:
+    """Informa preparación de OAuth sin exponer credenciales ni simular una conexión."""
+    _solo_administracion(auth.rol)
+    config = get_settings()
+    return {
+        "google_configurado": bool(
+            config.google_oauth_client_id
+            and config.google_oauth_redirect_uri
+            and config.google_oauth_redirect_uri.startswith("https://")
+        ),
+        "microsoft_configurado": bool(
+            config.microsoft_oauth_client_id
+            and config.microsoft_oauth_redirect_uri
+            and config.microsoft_oauth_redirect_uri.startswith("https://")
+        ),
+    }
