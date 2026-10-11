@@ -80,7 +80,11 @@ def _consultar_json(url: str, *, datos: bytes | None = None, token: str | None =
 
 
 def intercambiar_codigo_microsoft(
-    *, code: str, verifier: str, client_id: str, redirect_uri: str,
+    *,
+    code: str,
+    verifier: str,
+    client_id: str,
+    redirect_uri: str,
     client_secret: str | None = None,
 ) -> tuple[str, str, str]:
     """Canje OAuth de autorización; no almacena tokens."""

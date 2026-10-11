@@ -1,4 +1,5 @@
 """Pruebas de preflight OAuth sin llamadas externas."""
+
 import importlib.util
 from pathlib import Path
 
