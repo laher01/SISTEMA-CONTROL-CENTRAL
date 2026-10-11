@@ -1,5 +1,6 @@
 """Pruebas de Microsoft OAuth sin llamadas de red ni secretos reales."""
 import pytest
+
 from app.services import microsoft_oauth_correo as oauth
 
 
