@@ -26,7 +26,7 @@ def crear_url_microsoft(
         or destino.password is not None
         or destino.fragment
     ):
-        raise ValueError("El callback OAuth debe ser HTTPS y no contener credenciales ni fragmentos")
+        raise ValueError("Callback OAuth inválido: use HTTPS sin credenciales ni fragmentos")
     parametros = urlencode(
         {
             "client_id": client_id,
