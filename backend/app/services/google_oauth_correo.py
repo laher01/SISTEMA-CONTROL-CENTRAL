@@ -7,7 +7,7 @@ Do not log or persist code_verifier, access tokens or refresh tokens in plaintex
 import base64
 import hashlib
 import secrets
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
@@ -32,8 +32,15 @@ def crear_url_autorizacion(
 ) -> str:
     if not client_id or not state or not code_challenge:
         raise ValueError("OAuth requiere client_id, state y PKCE")
-    if not redirect_uri.startswith("https://"):
-        raise ValueError("El callback OAuth debe utilizar HTTPS")
+    destino = urlsplit(redirect_uri)
+    if (
+        destino.scheme != "https"
+        or not destino.hostname
+        or destino.username is not None
+        or destino.password is not None
+        or destino.fragment
+    ):
+        raise ValueError("Callback OAuth inválido: use HTTPS sin credenciales ni fragmentos")
     parametros = urlencode(
         {
             "client_id": client_id,

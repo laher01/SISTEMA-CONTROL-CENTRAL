@@ -5,7 +5,7 @@ canje de código, almacenamiento cifrado y autorización real del titular.
 """
 
 import secrets
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from app.services.google_oauth_correo import nuevo_desafio_pkce
 
@@ -18,8 +18,15 @@ def crear_url_microsoft(
 ) -> str:
     if not all((client_id, state, code_challenge)):
         raise ValueError("OAuth Microsoft requiere client_id, state y PKCE")
-    if not redirect_uri.startswith("https://"):
-        raise ValueError("El callback OAuth debe utilizar HTTPS")
+    destino = urlsplit(redirect_uri)
+    if (
+        destino.scheme != "https"
+        or not destino.hostname
+        or destino.username is not None
+        or destino.password is not None
+        or destino.fragment
+    ):
+        raise ValueError("Callback OAuth inválido: use HTTPS sin credenciales ni fragmentos")
     parametros = urlencode(
         {
             "client_id": client_id,
