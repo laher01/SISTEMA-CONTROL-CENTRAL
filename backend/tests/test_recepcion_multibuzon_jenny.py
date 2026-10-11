@@ -2,7 +2,7 @@
 
 from email.message import EmailMessage
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -124,12 +124,8 @@ def test_jenny_se_atribuye_a_willi_en_tres_buzones(session: Session, settings: S
     assert len(documentos) == 1
     assert documentos[0].gestor_id == jenny.id
     assert documentos[0].usuario_id == willi.id
-    cantidad = session.scalar(
-        select(func.count())
-        .select_from(CorreoMensaje)
-        .where(CorreoMensaje.tenant_id == tenant.id)
-    )
-    assert cantidad == 3
+    mensajes = list(session.scalars(select(CorreoMensaje).where(CorreoMensaje.tenant_id == tenant.id)))
+    assert len(mensajes) == 3
     mismo_uid = procesar_mensaje(
         session,
         settings,
@@ -168,9 +164,5 @@ def test_remitente_no_registrado_no_crea_documento(session: Session, settings: S
         _correo("falso@example.test", buzon.direccion),
     )
     assert estado == "REVISION"
-    cantidad = session.scalar(
-        select(func.count())
-        .select_from(Documento)
-        .where(Documento.tenant_id == tenant.id)
-    )
-    assert cantidad == 0
+    documentos = list(session.scalars(select(Documento).where(Documento.tenant_id == tenant.id)))
+    assert len(documentos) == 0
