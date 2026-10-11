@@ -56,6 +56,4 @@ def test_flujos_por_periodo_y_acceso(
     assert Decimal(datos["abonos_registrados_periodo"]) == Decimal("70.00")
     assert "no equivale al saldo" in datos["advertencia"]
     assert client.get(url, params={**params, "moneda": "USD"}).json()["produccion_periodo"] == "0"
-    assert client.get(
-        url, params={**params, "desde": "2026-11-01"}
-    ).status_code == 422
+    assert client.get(url, params={**params, "desde": "2026-11-01"}).status_code == 422
