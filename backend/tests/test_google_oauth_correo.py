@@ -25,6 +25,8 @@ def test_google_oauth_solicita_solo_lectura_y_pkce() -> None:
 def test_google_oauth_rechaza_callback_inseguro() -> None:
     with pytest.raises(ValueError):
         crear_url_autorizacion(
-            client_id="a", redirect_uri="http://localhost/callback",
-            state="s", code_challenge="c",
+            client_id="a",
+            redirect_uri="http://localhost/callback",
+            state="s",
+            code_challenge="c",
         )
