@@ -9,7 +9,6 @@ from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
 from app.models import Empresa, Expediente, Gestor, Miembro
 from app.schemas import ComprasProveedorFila, ProduccionFila, ProduccionResumen
-from app.services.ambito_gerencia import alcance_expedientes_gerente
 
 router = APIRouter(prefix="/produccion", tags=["produccion"])
 
@@ -144,8 +143,6 @@ def _scope(auth: OperativeAuthDep) -> tuple[ColumnElement[bool], ...]:
         return (Expediente.gestor_id == auth.gestor_id,)
     if auth.rol == RolMiembro.USUARIO:
         return (Expediente.usuario_id == auth.usuario_id,)
-    if auth.rol == RolMiembro.GERENTE:
-        return (alcance_expedientes_gerente(auth),)
     return ()
 
 
@@ -153,7 +150,6 @@ def _validar_acceso_produccion(rol: str) -> None:
     if rol not in (
         RolMiembro.SUPERADMIN,
         RolMiembro.ADMINISTRADOR,
-        RolMiembro.GERENTE,
         RolMiembro.USUARIO,
         "GESTOR",
     ):
