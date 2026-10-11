@@ -22,7 +22,7 @@ const PERMISO = "ELIMINAR_REGISTROS";
 export default function Configuracion({ sesion }: { sesion: SesionActual }) {
   const [seccion, setSeccion] = useState<
     "permisos" | "acceso" | "empresas" | "mantenimiento" | "administraciones" | "correos"
-  >(sesion.rol === "SUPERADMIN" ? "administraciones" : "permisos");
+  >(sesion.rol === "SUPERADMIN" ? "administraciones" : window.location.search.includes("seccion=correos") ? "correos" : "permisos");
   const { datos, error, cargando, recargar } = useDatos<PermisoConfigurado[]>(
     "/api/v1/configuracion/permisos",
   );
@@ -1000,6 +1000,20 @@ function RecepcionAutomaticaPanel() {
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState("");
 
+  const conectarGoogle = async (id: string) => {
+    setGuardando(true);
+    setMensaje("");
+    try {
+      const respuesta = await enviarJson<{ authorization_url: string }>(
+        `/api/v1/correo/buzones/${id}/google/iniciar`, "POST",
+      );
+      window.location.assign(respuesta.authorization_url);
+    } catch (err) {
+      setMensaje(err instanceof Error ? err.message : String(err));
+      setGuardando(false);
+    }
+  };
+
   const crearBuzon = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setGuardando(true);
@@ -1048,6 +1062,8 @@ function RecepcionAutomaticaPanel() {
     <h4>Preparación de conexiones OAuth</h4>
     <p>Google: {estadoProveedores?.google_configurado ? "Configuración de aplicación disponible; autorización de buzón pendiente" : "Falta configurar la aplicación OAuth"}</p>
     <p>Microsoft: {estadoProveedores?.microsoft_configurado ? "Configuración de aplicación disponible; autorización de buzón pendiente" : "Falta configurar la aplicación OAuth"}</p>
+    {window.location.search.includes("oauth=conectado") &&
+      <p role="status">Autorización Google completada. Buzón conectado.</p>}
     <h4>Buzones receptores</h4>
     <form className="filtros" onSubmit={(e) => void crearBuzon(e)}>
       <label>Correo receptor
@@ -1066,10 +1082,14 @@ function RecepcionAutomaticaPanel() {
     </form>
     {errorBuzones && <p role="alert">{errorBuzones}</p>}
     <table>
-      <thead><tr><th>Dirección</th><th>Proveedor</th><th>Estado</th></tr></thead>
+      <thead><tr><th>Dirección</th><th>Proveedor</th><th>Estado</th><th>Autorización</th></tr></thead>
       <tbody>{(buzones ?? []).map((b) => <tr key={b.id}>
         <td>{b.direccion}</td><td>{b.proveedor}</td>
-        <td>{b.activo ? "Activo" : "Pendiente de conexión"}</td>
+        <td>{b.activo ? "Autorizado" : "Pendiente de conexión"}</td>
+        <td>{b.proveedor === "GOOGLE" && !b.activo ?
+          <button type="button" disabled={guardando || !estadoProveedores?.google_configurado}
+            onClick={() => void conectarGoogle(b.id)}>Conectar con Google</button>
+          : b.activo ? "Conectado" : "OAuth pendiente"}</td>
       </tr>)}</tbody>
     </table>
     <h4>Remitentes asociados a Gestores</h4>
