@@ -62,7 +62,9 @@ class MicrosoftOAuthError(ValueError):
     """Error sin exponer códigos de autorización ni tokens."""
 
 
-def _consultar_json(url: str, *, datos: bytes | None = None, token: str | None = None) -> dict[str, object]:
+def _consultar_json(
+    url: str, *, datos: bytes | None = None, token: str | None = None
+) -> dict[str, object]:
     headers = {"Accept": "application/json"}
     if datos is not None:
         headers["Content-Type"] = "application/x-www-form-urlencoded"
