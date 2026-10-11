@@ -28,7 +28,7 @@ class BuzonIn(BaseModel):
 
 
 class RemitenteIn(BaseModel):
-    direccion: EmailStr
+    direccion: str = Field(min_length=5, max_length=320, pattern=r"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
     gestor_id: uuid.UUID
 
 
