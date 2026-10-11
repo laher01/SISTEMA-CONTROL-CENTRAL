@@ -107,7 +107,7 @@ const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = 
     a: "/produccion",
     texto: "Producción",
     icono: "▥",
-    roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "USUARIO", "GESTOR"],
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "USUARIO", "GESTOR"],
   },
   {
     a: "/pagos",
@@ -232,7 +232,7 @@ export default function App() {
           <Route path="/resumen-empresas" element={<ResumenEmpresas />} />
           <Route path="/responsables-operativos" element={<ResponsablesOperativos />} />
           <Route path="/mi-cartera" element={<CarteraGerencia />} />
-          <Route path="/produccion" element={<Produccion />} />
+          <Route path="/produccion" element={sesion.rol === "GERENTE" ? <Navigate to="/mi-cartera" replace /> : <Produccion />} />
           <Route path="/pagos" element={<Pagos sesion={sesion} />} />
           <Route path="/comisiones-responsables" element={<ComisionesResponsables sesion={sesion} />} />
           <Route path="/configuracion" element={<Configuracion sesion={sesion} />} />
