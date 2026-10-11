@@ -187,8 +187,7 @@ def listar_incidencias(
         select(CorreoMensaje, CorreoBuzon, Gestor)
         .join(
             CorreoBuzon,
-            (CorreoMensaje.buzon_id == CorreoBuzon.id)
-            & (CorreoBuzon.tenant_id == tenant_id),
+            (CorreoMensaje.buzon_id == CorreoBuzon.id) & (CorreoBuzon.tenant_id == tenant_id),
         )
         .outerjoin(
             Gestor,
