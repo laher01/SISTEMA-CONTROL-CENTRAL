@@ -1,0 +1,33 @@
+name: Formateo temporal OAuth
+on:
+  push:
+    branches:
+      - feature/f-google-oauth-inicio-seguro
+    paths:
+      - .github/workflows/oauth-format-once.yml
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/f-google-oauth-inicio-seguro
+      - uses: astral-sh/setup-uv@v6
+      - name: Instalar dependencias
+        run: cd backend && uv sync --locked
+      - name: Revisar y formatear Python
+        run: |
+          cd backend
+          uv run ruff check --fix app tests alembic
+          uv run ruff format app tests alembic
+      - name: Publicar formateo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/app backend/tests backend/alembic
+          if ! git diff --cached --quiet; then
+            git commit -m "style(oauth): apply canonical Python formatting"
+            git push origin HEAD:feature/f-google-oauth-inicio-seguro
+          fi
