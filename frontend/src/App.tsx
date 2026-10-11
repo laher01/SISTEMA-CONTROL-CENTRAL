@@ -24,6 +24,7 @@ import PagoGestores from "./paginas/PagoGestores";
 import Pendientes from "./paginas/Pendientes";
 import Produccion from "./paginas/Produccion";
 import Registros from "./paginas/Registros";
+import RecepcionGestor from "./paginas/RecepcionGestor";
 import ResumenEmpresas from "./paginas/ResumenEmpresas";
 import ResponsablesOperativos from "./paginas/ResponsablesOperativos";
 import Secretaria from "./paginas/Secretaria";
@@ -52,6 +53,7 @@ const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = 
     roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"],
   },
   { a: "/subir", texto: "Subir documentos", icono: "↑", roles: ["USUARIO", "GESTOR"] },
+  { a: "/mi-recepcion", texto: "Recepción Automática", icono: "✉", roles: ["GESTOR"] },
   {
     a: "/registros",
     texto: "Registros",
@@ -209,6 +211,7 @@ export default function App() {
           <Route path="/ingresar" element={<Navigate to="/" replace />} />
           <Route path="/subir" element={<Subir sesion={sesion} />} />
           <Route path="/registros" element={<Registros sesion={sesion} />} />
+          <Route path="/mi-recepcion" element={sesion.rol === "GESTOR" ? <RecepcionGestor /> : <Navigate to="/" replace />} />
           <Route path="/chat" element={<Chat />} />
           <Route path="/secretaria" element={["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA"].includes(sesion.rol) ? <Secretaria /> : <Navigate to="/" replace />} />
           <Route path="/documentos" element={<Documentos sesion={sesion} />} />

@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
-from app.models import CorreoBuzon, CorreoRemitente, Gestor
+from app.models import CorreoBuzon, CorreoMensaje, CorreoRemitente, Gestor
 
 router = APIRouter(prefix="/correo", tags=["correo"])
 
@@ -127,3 +127,51 @@ def registrar_remitente(
         session.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "Remitente ya registrado") from exc
     return {"id": str(nuevo.id), "gestor_id": str(gestor.id)}
+
+
+@router.get("/mi-recepcion")
+def mi_recepcion(
+    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
+) -> dict[str, object]:
+    """Bandeja de solo lectura acotada al Gestor autenticado."""
+    if auth.rol != "GESTOR" or auth.gestor_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Acceso exclusivo de Gestor")
+    gestor = session.get(Gestor, auth.gestor_id)
+    if gestor is None or gestor.tenant_id != tenant_id or gestor.deleted_at is not None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Gestor sin ámbito válido")
+    remitentes = list(
+        session.scalars(
+            select(CorreoRemitente.direccion)
+            .where(
+                CorreoRemitente.tenant_id == tenant_id,
+                CorreoRemitente.gestor_id == gestor.id,
+                CorreoRemitente.activo.is_(True),
+            )
+            .order_by(CorreoRemitente.direccion)
+        )
+    )
+    mensajes = list(
+        session.scalars(
+            select(CorreoMensaje)
+            .where(
+                CorreoMensaje.tenant_id == tenant_id,
+                CorreoMensaje.gestor_id == gestor.id,
+            )
+            .order_by(CorreoMensaje.created_at.desc())
+            .limit(100)
+        )
+    )
+    return {
+        "gestor": gestor.nombre,
+        "remitentes": remitentes,
+        "mensajes": [
+            {
+                "id": str(m.id),
+                "buzon_id": str(m.buzon_id),
+                "remitente": m.remitente,
+                "estado": m.estado,
+                "fecha": m.created_at.isoformat(),
+            }
+            for m in mensajes
+        ],
+    }
