@@ -1,4 +1,4 @@
-"""Simulación offline: dos remitentes de Jenny, tres buzones, un expediente."""
+"""Simulación offline: dos remitentes de Jenny, tres buzones, un documento."""
 
 from email.message import EmailMessage
 
@@ -6,7 +6,15 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.models import CorreoBuzon, CorreoMensaje, CorreoRemitente, Documento, Empresa, Gestor, Miembro
+from app.models import (
+    CorreoBuzon,
+    CorreoMensaje,
+    CorreoRemitente,
+    Documento,
+    Empresa,
+    Gestor,
+    Miembro,
+)
 from app.services.expedientes import obtener_tenant
 from app.services.recepcion_correo_imap import procesar_mensaje
 from tests.xml import RECEPTOR, factura
@@ -31,63 +39,139 @@ def test_jenny_se_atribuye_a_willi_en_tres_buzones(
     session: Session, settings: Settings
 ) -> None:
     tenant = obtener_tenant(session, settings.tenant_default)
-    willi = Miembro(tenant_id=tenant.id, codigo="WILLI01", nombre="Willi",
-                    rol="USUARIO", activo=True)
-    responsable = Miembro(tenant_id=tenant.id, codigo="RESP-JENNY",
-                          nombre="Responsable Jenny", rol="RESPONSABLE", activo=True)
+    willi = Miembro(
+        tenant_id=tenant.id,
+        codigo="WILLI01",
+        nombre="Willi",
+        rol="USUARIO",
+        activo=True,
+    )
+    responsable = Miembro(
+        tenant_id=tenant.id,
+        codigo="RESP-JENNY",
+        nombre="Responsable Jenny",
+        rol="RESPONSABLE",
+        activo=True,
+    )
     session.add_all([willi, responsable])
     session.flush()
-    jenny = Gestor(tenant_id=tenant.id, codigo="JENNY01", nombre="Jenny", usuario_id=willi.id)
+    jenny = Gestor(
+        tenant_id=tenant.id,
+        codigo="JENNY01",
+        nombre="Jenny",
+        usuario_id=willi.id,
+    )
     session.add(jenny)
     session.flush()
     for direccion in ("jenny2026@gmail.com", "astro15@gmail.com"):
-        session.add(CorreoRemitente(tenant_id=tenant.id, gestor_id=jenny.id,
-                                   direccion=direccion, activo=True))
+        session.add(
+            CorreoRemitente(
+                tenant_id=tenant.id,
+                gestor_id=jenny.id,
+                direccion=direccion,
+                activo=True,
+            )
+        )
     destinos = (
         "factur.central.2023@gmail.com",
         "factura_central@outlook.com",
         "laher01.paita@gmail.com",
     )
     buzones = [
-        CorreoBuzon(tenant_id=tenant.id, responsable_id=responsable.id,
-                    direccion=destino, proveedor="IMAP", activo=True)
+        CorreoBuzon(
+            tenant_id=tenant.id,
+            responsable_id=responsable.id,
+            direccion=destino,
+            proveedor="IMAP",
+            activo=True,
+        )
         for destino in destinos
     ]
     session.add_all(buzones)
-    session.add(Empresa(tenant_id=tenant.id, ruc=RECEPTOR,
-                       razon_social="CLIENTE AUTORIZADO", autorizada=True))
+    session.add(
+        Empresa(
+            tenant_id=tenant.id,
+            ruc=RECEPTOR,
+            razon_social="CLIENTE AUTORIZADO",
+            autorizada=True,
+        )
+    )
     session.commit()
-    assert procesar_mensaje(session, settings, buzones[0], "uid-10",
-                            _correo("Jenny <jenny2026@gmail.com>", destinos[0])) == "INGRESADO"
-    assert procesar_mensaje(session, settings, buzones[1], "uid-10",
-                            _correo("Jenny <astro15@gmail.com>", destinos[1])) == "REVISION"
-    assert procesar_mensaje(session, settings, buzones[2], "uid-11",
-                            _correo("Jenny <jenny2026@gmail.com>", destinos[2])) == "REVISION"
-    documentos = list(session.scalars(select(Documento).where(Documento.tenant_id == tenant.id)))
+
+    assert procesar_mensaje(
+        session,
+        settings,
+        buzones[0],
+        "uid-10",
+        _correo("Jenny <jenny2026@gmail.com>", destinos[0]),
+    ) == "INGRESADO"
+    assert procesar_mensaje(
+        session,
+        settings,
+        buzones[1],
+        "uid-10",
+        _correo("Jenny <astro15@gmail.com>", destinos[1]),
+    ) == "REVISION"
+    assert procesar_mensaje(
+        session,
+        settings,
+        buzones[2],
+        "uid-11",
+        _correo("Jenny <jenny2026@gmail.com>", destinos[2]),
+    ) == "REVISION"
+    documentos = list(
+        session.scalars(
+            select(Documento).where(Documento.tenant_id == tenant.id)
+        )
+    )
     assert len(documentos) == 1
     assert documentos[0].gestor_id == jenny.id
     assert documentos[0].usuario_id == willi.id
-    assert session.scalar(select(func.count()).select_from(CorreoMensaje).where(
-        CorreoMensaje.tenant_id == tenant.id,
-    )) == 3
-    assert procesar_mensaje(session, settings, buzones[0], "uid-10",
-                            _correo("Jenny <jenny2026@gmail.com>", destinos[0])) == "DUPLICADO_MENSAJE"
+    assert session.scalar(
+        select(func.count())
+        .select_from(CorreoMensaje)
+        .where(CorreoMensaje.tenant_id == tenant.id)
+    ) == 3
+    assert procesar_mensaje(
+        session,
+        settings,
+        buzones[0],
+        "uid-10",
+        _correo("Jenny <jenny2026@gmail.com>", destinos[0]),
+    ) == "DUPLICADO_MENSAJE"
 
 
 def test_remitente_no_registrado_no_crea_documento(
     session: Session, settings: Settings
 ) -> None:
     tenant = obtener_tenant(session, settings.tenant_default)
-    responsable = Miembro(tenant_id=tenant.id, codigo="RESP-UNKNOWN",
-                          nombre="Responsable", rol="RESPONSABLE", activo=True)
+    responsable = Miembro(
+        tenant_id=tenant.id,
+        codigo="RESP-UNKNOWN",
+        nombre="Responsable",
+        rol="RESPONSABLE",
+        activo=True,
+    )
     session.add(responsable)
     session.flush()
-    buzon = CorreoBuzon(tenant_id=tenant.id, responsable_id=responsable.id,
-                        direccion="entrada@example.test", proveedor="IMAP", activo=True)
+    buzon = CorreoBuzon(
+        tenant_id=tenant.id,
+        responsable_id=responsable.id,
+        direccion="entrada@example.test",
+        proveedor="IMAP",
+        activo=True,
+    )
     session.add(buzon)
     session.commit()
-    assert procesar_mensaje(session, settings, buzon, "uid-2",
-                            _correo("falso@example.test", buzon.direccion)) == "REVISION"
-    assert session.scalar(select(func.count()).select_from(Documento).where(
-        Documento.tenant_id == tenant.id,
-    )) == 0
+    assert procesar_mensaje(
+        session,
+        settings,
+        buzon,
+        "uid-2",
+        _correo("falso@example.test", buzon.direccion),
+    ) == "REVISION"
+    assert session.scalar(
+        select(func.count())
+        .select_from(Documento)
+        .where(Documento.tenant_id == tenant.id)
+    ) == 0
