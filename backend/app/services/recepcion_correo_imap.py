@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.models import CorreoBuzon, CorreoMensaje, CorreoRemitente, Gestor
 from app.services.ingesta import ArchivoSubido
-from app.services.paquetes_correo import extraer_xml_zip
+from app.services.paquetes_correo import PaqueteNoSeguro, extraer_xml_zip
 from app.services.recepcion_correo_ingesta import admitir_adjunto_ubl
 from app.storage import AlmacenLocal
 
@@ -74,7 +74,8 @@ def procesar_mensaje(
     )
     if existente is not None:
         return "DUPLICADO_MENSAJE"
-    remitente, archivos = _adjuntos_xml(contenido)
+    mensaje = email.message_from_bytes(contenido, policy=default)
+    remitente = parseaddr(str(mensaje.get("From", "")))[1].lower()
     candidatos = set(
         session.scalars(
             select(CorreoRemitente.gestor_id)
@@ -98,6 +99,18 @@ def procesar_mensaje(
         estado="PENDIENTE",
     )
     session.add(registro)
+    if gestor_id is None:
+        registro.estado = "REVISION"
+        registro.error = "REMITENTE_NO_REGISTRADO" if not candidatos else "GESTOR_AMBIGUO"
+        session.commit()
+        return registro.estado
+    try:
+        _, archivos = _adjuntos_xml(contenido)
+    except PaqueteNoSeguro:
+        registro.estado = "REVISION"
+        registro.error = "PAQUETE_NO_SEGURO"
+        session.commit()
+        return registro.estado
     resultados = [
         admitir_adjunto_ubl(
             session,
