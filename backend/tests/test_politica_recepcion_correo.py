@@ -37,9 +37,11 @@ def test_receptor_autorizado():
 
 
 def test_roles():
-    assert puede_administrar_buzon("RESPONSABLE")
+    assert puede_administrar_buzon("ADMINISTRADOR")
+    assert not puede_administrar_buzon("RESPONSABLE")
     assert not puede_administrar_buzon("GESTOR")
-    assert puede_registrar_remitente("GESTOR")
+    assert puede_registrar_remitente("ADMINISTRADOR")
+    assert not puede_registrar_remitente("GESTOR")
     assert not puede_registrar_remitente("USUARIO")
     assert puede_habilitar_empresa("GERENTE")
     assert not puede_habilitar_empresa("GESTOR")
