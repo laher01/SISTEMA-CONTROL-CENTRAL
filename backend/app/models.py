@@ -689,6 +689,19 @@ class CorreoBuzon(ConId, ConTenant, ConCreacion, Base):
     ultimo_error: Mapped[str | None] = mapped_column(String(500))
 
 
+class CorreoOAuthIntento(ConId, ConTenant, ConCreacion, Base):
+    """Estado OAuth temporal vinculado a tenant, buzón y cuenta administradora."""
+
+    __tablename__ = "correo_oauth_intentos"
+
+    buzon_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("correo_buzones.id"), index=True)
+    cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"), index=True)
+    state_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    pkce_verifier: Mapped[str] = mapped_column(String(180))
+    vence_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consumido_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class CorreoRemitente(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "correo_remitentes"
     __table_args__ = (UniqueConstraint("tenant_id", "gestor_id", "direccion"),)
