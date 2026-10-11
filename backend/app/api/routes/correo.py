@@ -9,6 +9,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, status
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -16,8 +17,22 @@ from sqlalchemy.exc import IntegrityError
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.core.config import get_settings
 from app.enums import RolMiembro
-from app.models import CorreoBuzon, CorreoMensaje, CorreoOAuthIntento, CorreoRemitente, Gestor
-from app.services.google_oauth_correo import crear_url_autorizacion, nuevo_desafio_pkce
+from app.models import (
+    CorreoBuzon,
+    CorreoMensaje,
+    CorreoOAuthCredencial,
+    CorreoOAuthIntento,
+    CorreoRemitente,
+    Gestor,
+)
+from app.services.google_oauth_correo import (
+    GoogleOAuthError,
+    cifrar_refresh_token,
+    comprobar_buzon_google,
+    crear_url_autorizacion,
+    intercambiar_codigo_google,
+    nuevo_desafio_pkce,
+)
 
 router = APIRouter(prefix="/correo", tags=["correo"])
 
@@ -251,7 +266,12 @@ def iniciar_google_oauth(
     """
     _solo_administracion(auth.rol)
     config = get_settings()
-    if not config.google_oauth_client_id or not config.google_oauth_redirect_uri:
+    if not all((
+        config.google_oauth_client_id,
+        config.google_oauth_client_secret,
+        config.google_oauth_redirect_uri,
+        config.correo_token_encryption_key,
+    )):
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Google OAuth no configurado")
     buzon = session.scalar(
         select(CorreoBuzon).where(
@@ -286,3 +306,92 @@ def iniciar_google_oauth(
     session.add(intento)
     session.commit()
     return {"authorization_url": url, "estado": "PENDIENTE_CONSENTIMIENTO"}
+
+
+@router.get("/google/callback")
+def callback_google_oauth(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    state: str = "",
+    code: str = "",
+    error: str = "",
+) -> RedirectResponse:
+    """Valida state one-shot y buzón exacto antes de cifrar token de renovación."""
+    _solo_administracion(auth.rol)
+    if not state or not code or error:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Autorización Google cancelada")
+    estado_hash = hashlib.sha256(state.encode("utf-8")).hexdigest()
+    intento = session.scalar(
+        select(CorreoOAuthIntento)
+        .where(
+            CorreoOAuthIntento.state_hash == estado_hash,
+            CorreoOAuthIntento.tenant_id == tenant_id,
+            CorreoOAuthIntento.cuenta_id == auth.cuenta_id,
+            CorreoOAuthIntento.consumido_at.is_(None),
+        )
+        .with_for_update()
+    )
+    ahora = datetime.now(UTC)
+    if intento is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Estado OAuth inválido")
+    vence = intento.vence_at
+    if vence.tzinfo is None:
+        vence = vence.replace(tzinfo=UTC)
+    if vence < ahora:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Autorización OAuth vencida")
+    buzon = session.scalar(
+        select(CorreoBuzon).where(
+            CorreoBuzon.id == intento.buzon_id,
+            CorreoBuzon.tenant_id == tenant_id,
+            CorreoBuzon.proveedor == "GOOGLE",
+        )
+    )
+    if buzon is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Buzón inválido")
+    intento.consumido_at = ahora
+    session.commit()
+    config = get_settings()
+    if not all((
+        config.google_oauth_client_id,
+        config.google_oauth_client_secret,
+        config.google_oauth_redirect_uri,
+        config.correo_token_encryption_key,
+    )):
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "OAuth no configurado")
+    try:
+        acceso, refresco, scope = intercambiar_codigo_google(
+            code=code,
+            verifier=intento.pkce_verifier,
+            client_id=config.google_oauth_client_id or "",
+            client_secret=config.google_oauth_client_secret or "",
+            redirect_uri=config.google_oauth_redirect_uri or "",
+        )
+        comprobar_buzon_google(access_token=acceso, direccion=buzon.direccion)
+        token_cifrado = cifrar_refresh_token(refresco, config.correo_token_encryption_key or "")
+    except GoogleOAuthError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    credencial = session.scalar(
+        select(CorreoOAuthCredencial).where(
+            CorreoOAuthCredencial.buzon_id == buzon.id,
+            CorreoOAuthCredencial.tenant_id == tenant_id,
+        )
+    )
+    if credencial is None:
+        credencial = CorreoOAuthCredencial(
+            tenant_id=tenant_id,
+            buzon_id=buzon.id,
+            proveedor="GOOGLE",
+            token_cifrado=token_cifrado,
+            permisos=scope,
+            verificado_at=ahora,
+        )
+        session.add(credencial)
+    else:
+        credencial.token_cifrado = token_cifrado
+        credencial.permisos = scope
+        credencial.verificado_at = ahora
+    buzon.activo = True
+    buzon.ultimo_error = None
+    session.commit()
+    return RedirectResponse(url="/configuracion?seccion=correos&oauth=conectado", status_code=303)
