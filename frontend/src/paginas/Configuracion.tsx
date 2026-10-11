@@ -21,7 +21,7 @@ const PERMISO = "ELIMINAR_REGISTROS";
 
 export default function Configuracion({ sesion }: { sesion: SesionActual }) {
   const [seccion, setSeccion] = useState<
-    "permisos" | "acceso" | "empresas" | "mantenimiento" | "administraciones"
+    "permisos" | "acceso" | "empresas" | "mantenimiento" | "administraciones" | "correos"
   >(sesion.rol === "SUPERADMIN" ? "administraciones" : "permisos");
   const { datos, error, cargando, recargar } = useDatos<PermisoConfigurado[]>(
     "/api/v1/configuracion/permisos",
@@ -47,6 +47,7 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
             <button onClick={() => setSeccion("acceso")}>Configuración de acceso</button>
             <button onClick={() => setSeccion("empresas")}>Empresas registradas</button>
             <button onClick={() => setSeccion("mantenimiento")}>Mantenimiento</button>
+            <button onClick={() => setSeccion("correos")}>Recepción Automática</button>
           </>
         )}
         {sesion.rol === "SUPERADMIN" && (
@@ -113,6 +114,7 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
       {seccion === "acceso" && sesion.rol === "ADMINISTRADOR" && <ConfiguracionAccesoPanel />}
       {seccion === "empresas" && sesion.rol === "ADMINISTRADOR" && <EmpresasRegistradasPanel />}
       {seccion === "mantenimiento" && sesion.rol === "ADMINISTRADOR" && <MantenimientoPanel />}
+      {seccion === "correos" && sesion.rol === "ADMINISTRADOR" && <RecepcionAutomaticaPanel />}
     </>
   );
 }
@@ -966,4 +968,124 @@ function AdministracionesPanel() {
       </p>
     </section>
   );
+}
+
+
+type BuzonCorreo = {
+  id: string;
+  direccion: string;
+  proveedor: string;
+  activo: boolean;
+  ultimo_error: string | null;
+};
+type RemitenteGestor = { id: string; direccion: string; gestor_id: string; gestor: string };
+type GestorCorreo = { id: string; codigo: string; nombre: string };
+
+function RecepcionAutomaticaPanel() {
+  const { datos: buzones, error: errorBuzones, recargar: recargarBuzones } =
+    useDatos<BuzonCorreo[]>("/api/v1/correo/buzones");
+  const { datos: remitentes, error: errorRemitentes, recargar: recargarRemitentes } =
+    useDatos<RemitenteGestor[]>("/api/v1/correo/remitentes");
+  const { datos: gestores } = useDatos<GestorCorreo[]>("/api/v1/gestores");
+  const [direccionBuzon, setDireccionBuzon] = useState("");
+  const [proveedor, setProveedor] = useState("GOOGLE");
+  const [direccionRemitente, setDireccionRemitente] = useState("");
+  const [gestorId, setGestorId] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [mensaje, setMensaje] = useState("");
+
+  const crearBuzon = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setGuardando(true);
+    setMensaje("");
+    try {
+      await enviarJson("/api/v1/correo/buzones", "POST", {
+        direccion: direccionBuzon.trim().toLowerCase(),
+        proveedor,
+      });
+      setDireccionBuzon("");
+      setMensaje("Buzón registrado. Pendiente de autorizar OAuth antes de activar la lectura.");
+      recargarBuzones();
+    } catch (err) {
+      setMensaje(err instanceof Error ? err.message : String(err));
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const crearRemitente = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setGuardando(true);
+    setMensaje("");
+    try {
+      await enviarJson("/api/v1/correo/remitentes", "POST", {
+        direccion: direccionRemitente.trim().toLowerCase(),
+        gestor_id: gestorId,
+      });
+      setDireccionRemitente("");
+      setMensaje("Remitente vinculado al Gestor seleccionado.");
+      recargarRemitentes();
+    } catch (err) {
+      setMensaje(err instanceof Error ? err.message : String(err));
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return <section className="panel-configuracion">
+    <h3>Recepción Automática de documentos</h3>
+    <p className="tenue">
+      Solo Administración registra los buzones y vincula remitentes a Gestores de este tenant.
+      La conexión a Gmail y Outlook requiere autorización OAuth independiente;
+      registrar una dirección no activa la lectura automática.
+    </p>
+    <h4>Buzones receptores</h4>
+    <form className="filtros" onSubmit={(e) => void crearBuzon(e)}>
+      <label>Correo receptor
+        <input type="email" required value={direccionBuzon}
+          onChange={(e) => setDireccionBuzon(e.target.value)}
+          placeholder="factur.central.2023@gmail.com" />
+      </label>
+      <label>Proveedor
+        <select value={proveedor} onChange={(e) => setProveedor(e.target.value)}>
+          <option value="GOOGLE">Gmail / Google</option>
+          <option value="MICROSOFT">Outlook / Microsoft</option>
+          <option value="IMAP">IMAP corporativo</option>
+        </select>
+      </label>
+      <button type="submit" disabled={guardando}>Registrar buzón</button>
+    </form>
+    {errorBuzones && <p role="alert">{errorBuzones}</p>}
+    <table>
+      <thead><tr><th>Dirección</th><th>Proveedor</th><th>Estado</th></tr></thead>
+      <tbody>{(buzones ?? []).map((b) => <tr key={b.id}>
+        <td>{b.direccion}</td><td>{b.proveedor}</td>
+        <td>{b.activo ? "Activo" : "Pendiente de conexión"}</td>
+      </tr>)}</tbody>
+    </table>
+    <h4>Remitentes asociados a Gestores</h4>
+    <form className="filtros" onSubmit={(e) => void crearRemitente(e)}>
+      <label>Correo remitente
+        <input type="email" required value={direccionRemitente}
+          onChange={(e) => setDireccionRemitente(e.target.value)}
+          placeholder="jenny2026@gmail.com" />
+      </label>
+      <label>Gestor propietario
+        <select required value={gestorId} onChange={(e) => setGestorId(e.target.value)}>
+          <option value="">Seleccionar Gestor</option>
+          {(gestores ?? []).map((g) =>
+            <option key={g.id} value={g.id}>{g.codigo} · {g.nombre}</option>)}
+        </select>
+      </label>
+      <button type="submit" disabled={guardando || !gestorId}>Registrar remitente</button>
+    </form>
+    {errorRemitentes && <p role="alert">{errorRemitentes}</p>}
+    <table>
+      <thead><tr><th>Remitente autorizado</th><th>Gestor</th></tr></thead>
+      <tbody>{(remitentes ?? []).map((r) => <tr key={r.id}>
+        <td>{r.direccion}</td><td>{r.gestor}</td>
+      </tr>)}</tbody>
+    </table>
+    {mensaje && <p role="status">{mensaje}</p>}
+  </section>;
 }
