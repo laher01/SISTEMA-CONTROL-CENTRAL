@@ -10,10 +10,10 @@ import json
 import secrets
 from typing import cast
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit
 from urllib.request import Request, urlopen
 
-from cryptography.fernet import Fernet, urlsplit
+from cryptography.fernet import Fernet
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
