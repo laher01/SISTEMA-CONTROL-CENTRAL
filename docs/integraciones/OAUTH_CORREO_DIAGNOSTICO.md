@@ -49,3 +49,27 @@ Callback Google previsto según `correo.py`: `/api/v1/correo/google/callback`. C
 ## Límites
 
 Esta rama aún **no** completa Microsoft ni confirma conexión efectiva con Google. El script es únicamente preflight; ningún resultado debe mostrarse como «OAuth conectado». Mantener tokens/credenciales fuera de Git y preservar aislamiento multi-tenant, jerarquías y registros de auditoría.
+
+
+## Actualización de implementación (11-10-2026)
+
+- Se incorporaron en la rama `POST /api/v1/correo/buzones/{buzon_id}/microsoft/iniciar` y `GET /api/v1/correo/microsoft/callback`.
+- Se añadió `FC_MICROSOFT_OAUTH_CLIENT_SECRET` a la configuración. Debe entregarse al **backend** exclusivamente mediante secretos del entorno; nunca al frontend ni a Git.
+- El callback usa estado temporal de un solo uso, PKCE, aislamiento de tenant, rol administrador, comparación exacta de dirección y cifrado Fernet del refresh token.
+- El estado de proveedor Microsoft necesita client ID, client secret, redirect URI HTTPS y clave de cifrado; sigue sin demostrar consentimiento real.
+- Microsoft Graph todavía requiere sincronizador de mensajes, manejo de renovación, paginación, límites de API, archivos adjuntos, errores y pruebas de integración.
+- **El flujo descrito conecta un buzón; no implementa login social OIDC en la pantalla de acceso.**
+- Pendiente de comprobar que el estado OAuth y el callback se asocian de forma segura a la sesión inicial del navegador, sin depender exclusivamente del conocimiento del `state` en un escenario de fijación de autorización.
+
+## Variables de staging (solo nombres, no valores)
+
+```dotenv
+FC_MICROSOFT_OAUTH_CLIENT_ID=
+FC_MICROSOFT_OAUTH_CLIENT_SECRET=
+FC_MICROSOFT_OAUTH_REDIRECT_URI=https://DOMINIO-STAGING/api/v1/correo/microsoft/callback
+FC_CORREO_TOKEN_ENCRYPTION_KEY=
+```
+
+La URI configurada en Microsoft Entra debe coincidir exactamente. Activar permiso delegado `Mail.Read` y consentimiento para la aplicación correspondiente. Validar en staging con buzón que pertenece al propio entorno de prueba, sin utilizar correos ni facturas reales hasta superar las verificaciones.
+
+**Prohibido declarar listo para producción sin CI exitoso, aprobación de permisos, funcionamiento real de callback, pruebas de aislamiento y revisión de secretos.**
