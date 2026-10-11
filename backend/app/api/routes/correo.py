@@ -8,7 +8,7 @@ import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.core.config import get_settings
+from app.tenant_host import nombre_host, validar_sesion_host
 from app.enums import RolMiembro
 from app.models import (
     CorreoBuzon,
@@ -23,7 +24,9 @@ from app.models import (
     CorreoOAuthCredencial,
     CorreoOAuthIntento,
     CorreoRemitente,
+    CuentaAcceso,
     Gestor,
+    Miembro,
 )
 from app.services.google_oauth_correo import (
     GoogleOAuthError,
@@ -312,15 +315,13 @@ def iniciar_google_oauth(
 
 @router.get("/google/callback")
 def callback_google_oauth(
+    request: Request,
     session: SessionDep,
-    tenant_id: TenantDep,
-    auth: OperativeAuthDep,
     state: str = "",
     code: str = "",
     error: str = "",
 ) -> RedirectResponse:
-    """Valida state one-shot y buzón exacto antes de cifrar token de renovación."""
-    _solo_administracion(auth.rol)
+    """Valida state one-shot y buzón exacto sin depender de cookies cross-site."""
     if not state or not code or error:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Autorización Google cancelada")
     estado_hash = hashlib.sha256(state.encode("utf-8")).hexdigest()
@@ -328,8 +329,6 @@ def callback_google_oauth(
         select(CorreoOAuthIntento)
         .where(
             CorreoOAuthIntento.state_hash == estado_hash,
-            CorreoOAuthIntento.tenant_id == tenant_id,
-            CorreoOAuthIntento.cuenta_id == auth.cuenta_id,
             CorreoOAuthIntento.consumido_at.is_(None),
         )
         .with_for_update()
@@ -337,6 +336,33 @@ def callback_google_oauth(
     ahora = datetime.now(UTC)
     if intento is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Estado OAuth inválido")
+    tenant_id = intento.tenant_id
+    config = get_settings()
+    from urllib.parse import urlparse
+
+    host_permitido = urlparse(config.google_oauth_redirect_uri or "").hostname
+    if not host_permitido or nombre_host(request) != host_permitido:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Dominio de callback no autorizado")
+    validar_sesion_host(request, session, config, tenant_id)
+    cuenta = session.scalar(
+        select(CuentaAcceso).where(
+            CuentaAcceso.id == intento.cuenta_id,
+            CuentaAcceso.tenant_id == tenant_id,
+            CuentaAcceso.activo.is_(True),
+        )
+    )
+    if cuenta is None or cuenta.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Administrador inválido")
+    miembro = session.scalar(
+        select(Miembro).where(
+            Miembro.id == cuenta.miembro_id,
+            Miembro.tenant_id == tenant_id,
+            Miembro.rol == "ADMINISTRADOR",
+            Miembro.activo.is_(True),
+        )
+    )
+    if miembro is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Administrador no autorizado")
     vence = intento.vence_at
     if vence.tzinfo is None:
         vence = vence.replace(tzinfo=UTC)
