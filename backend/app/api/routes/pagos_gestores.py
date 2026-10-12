@@ -58,7 +58,9 @@ def _calcular(
                 Expediente.usuario_id == usuario_id,
                 Expediente.gestor_id == gestor.id,
                 Expediente.deleted_at.is_(None),
-                Expediente.receptor.has(\n                    Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)\n                ),
+                Expediente.receptor.has(
+                    Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
+                ),
                 Expediente.moneda == datos.moneda,
                 Expediente.fecha_emision >= datos.desde,
                 Expediente.fecha_emision <= datos.hasta,
