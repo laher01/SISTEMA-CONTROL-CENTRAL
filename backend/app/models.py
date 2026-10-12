@@ -278,6 +278,39 @@ class Documento(ConId, ConTenant, ConCreacion, Base):
         return self.expediente.receptor if self.expediente is not None else None
 
 
+
+class ReferenciaGRE(ConId, ConTenant, ConCreacion, Base):
+    """Expediente provisional identificado por GRE, pendiente de factura.
+
+    No almacena importes ni fechas de facturas no recibidas.
+    """
+
+    __tablename__ = "referencias_gre"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "documento_id"),
+        Index(
+            "ix_referencias_gre_busqueda_factura",
+            "tenant_id",
+            "serie",
+            "correlativo",
+            "emisor_ruc",
+            "receptor_ruc",
+        ),
+    )
+
+    documento_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documentos.id"), index=True)
+    serie: Mapped[str] = mapped_column(String(4))
+    correlativo: Mapped[str] = mapped_column(String(8))
+    emisor_ruc: Mapped[str] = mapped_column(String(11))
+    receptor_ruc: Mapped[str] = mapped_column(String(11))
+    usuario_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"))
+    gestor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"))
+    expediente_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("expedientes.id"), index=True
+    )
+    resuelta_at: Mapped[datetime | None]
+
+
 class Alerta(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "alertas"
     __table_args__ = (UniqueConstraint("expediente_id", "tipo"),)
