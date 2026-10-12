@@ -191,6 +191,24 @@ def ingerir_documento(
     )
     if expediente is not None:
         actualizar_expediente(session, expediente, hoy, settings)
+        if tipo_documento == TipoDocumento.FACT:
+            _conciliar_guias_de_factura(session, settings, hoy, expediente)
+    elif (
+        comprobante is not None
+        and tipo_documento == TipoDocumento.GRR
+        and comprobante.referencia is not None
+    ):
+        referencia = comprobante.referencia
+        registrar_referencia_gre(
+            session,
+            documento,
+            ReferenciaFacturaGRE(
+                referencia.serie,
+                str(int(referencia.correlativo)),
+                referencia.emisor_ruc or comprobante.emisor.ruc,
+                comprobante.receptor.ruc,
+            ),
+        )
     return documento
 
 
