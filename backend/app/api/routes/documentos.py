@@ -49,6 +49,7 @@ from app.services.ingesta import (
     vincular_documento,
 )
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
+from app.services.cache_ocr import procesar_con_cache
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 from app.services.relaciones_documentales import sugerir_relaciones
 from app.services.separador_pdf import analizar_paquete, extraer_fragmento
@@ -697,9 +698,16 @@ def _procesar_y_aplicar(
     else:
         contenido = almacen.ruta_absoluta(documento.ruta_storage).read_bytes()
         with _PROCESAMIENTO_LOCK:
-            procesamiento = procesar(
-                contenido, settings.max_extracted_chars, settings.max_ocr_pdf_pages
-            ).a_dict()
+            procesamiento = procesar_con_cache(
+                contenido,
+                str(documento.tenant_id),
+                settings.storage_dir / "_ocr_cache",
+                settings.max_extracted_chars,
+                settings.max_ocr_pdf_pages,
+                lambda: procesar(
+                    contenido, settings.max_extracted_chars, settings.max_ocr_pdf_pages
+                ).a_dict(),
+            )
         aplicar_perfiles_aprendidos(session, documento, procesamiento)
         guardar_procesamiento(session, documento, procesamiento)
     return aplicar_automaticamente(session, settings, hoy, documento, procesamiento)
