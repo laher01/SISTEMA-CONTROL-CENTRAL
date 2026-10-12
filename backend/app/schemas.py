@@ -322,6 +322,7 @@ class ProduccionResumen(BaseModel):
 
 
 class ComprasProveedorFila(BaseModel):
+    cliente_autorizado: bool
     usuario_codigo: str
     gestor_codigo: str
     emisor_ruc: str
