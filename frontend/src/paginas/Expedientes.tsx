@@ -232,7 +232,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
               <th>Tipo</th>
               <th>Comprobante</th>
               <th>Fecha documento</th>
-               <th>Fecha de registro</th>
+               <th>Fecha de carga</th>
               <th>Emisor</th>
               <th>Receptor</th>
               <th className="num">Importe</th>
@@ -265,7 +265,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
                   </Link>
                 </td>
                 <td>{formatearFecha(e.fecha_emision)}</td>
-                 <td>{formatearFecha(e.created_at)}</td>
+                 <td>{e.fecha_carga ? formatearFecha(e.fecha_carga) : "Sin carga"}</td>
                 <td><strong>{e.emisor.razon_social}</strong><small className="bloque tenue">RUC {e.emisor.ruc}</small></td>
                 <td>
                   <strong>{e.receptor.razon_social}</strong>
