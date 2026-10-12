@@ -66,6 +66,7 @@ jobs:
     environment: staging
     timeout-minutes: 20
     steps:
+      - uses: actions/checkout@v4
       - name: Validar secretos de despliegue
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
