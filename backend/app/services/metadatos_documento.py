@@ -1,7 +1,7 @@
 """Metadatos del archivo individual, independientes del expediente asociado."""
 
-import re
 from contextlib import suppress
+import re
 from datetime import date
 
 from app.models import Documento
