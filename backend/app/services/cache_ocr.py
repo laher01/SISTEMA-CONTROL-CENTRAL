@@ -17,10 +17,13 @@ def procesar_con_cache(
     limite_caracteres: int,
     max_paginas_ocr: int,
     extractor: Callable[[], dict[str, object]],
+    forzar: bool = False,
 ) -> dict[str, object]:
     """Almacena solo extracción técnica; nunca aprobación o vinculación fiscal."""
     if not tenant_id or "/" in tenant_id or "\\" in tenant_id or tenant_id in {".", ".."}:
         raise ValueError("Identificador de tenant inválido")
+    if forzar:
+        return extractor()
     huella = hashlib.sha256(contenido).hexdigest()
     clave = hashlib.sha256(
         f"{VERSION_CACHE}:{huella}:{limite_caracteres}:{max_paginas_ocr}".encode()
