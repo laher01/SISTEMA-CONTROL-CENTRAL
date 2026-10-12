@@ -268,7 +268,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
                 <td>
                   <strong>{e.receptor.razon_social}</strong>
                   <small className="bloque tenue">RUC {e.receptor.ruc}</small>
-                  {e.pendiente_aprobacion && <span className="etiqueta">No autorizado</span>}
+                  {(!e.receptor.autorizada || e.pendiente_aprobacion) && <strong className="bloque" style={{ color: "#b91c1c" }}>NO VÁLIDO — CLIENTE NO AUTORIZADO · NO CONTABILIZA</strong>}
                 </td>
                 <td className="num">{formatearMonto(e.moneda, e.importe_total)}</td>
                 <td>
