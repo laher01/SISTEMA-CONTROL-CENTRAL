@@ -75,6 +75,20 @@ def get_contexto_operativo(
         or (
             request.method == "GET"
             and (
+                request.url.path == "/api/v1/documentos"
+                or request.url.path == "/api/v1/documentos/resumen"
+                or (
+                    request.url.path.startswith("/api/v1/documentos/")
+                    and (
+                        len(request.url.path.split("/")) == 5
+                        or request.url.path.endswith("/archivo")
+                    )
+                )
+            )
+        )
+        or (
+            request.method == "GET"
+            and (
                 request.url.path == "/api/v1/expedientes"
                 or request.url.path == "/api/v1/expedientes/ids"
                 or (
