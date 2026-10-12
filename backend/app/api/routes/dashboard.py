@@ -136,6 +136,8 @@ def detalle_secretaria(
             else None
         )
         faltantes = [tipo.value for tipo in documentos_faltantes(e, settings)]
+        fechas_carga = [doc.created_at for doc in e.documentos if doc.deleted_at is None]
+        primera_carga = min(fechas_carga) if fechas_carga else None
         filas.append(
             {
                 "id": str(e.id),
@@ -144,10 +146,7 @@ def detalle_secretaria(
                 "tipo_comprobante": e.tipo_comprobante,
                 "fecha_emision": e.fecha_emision.isoformat(),
                 "fecha_registro": e.created_at.isoformat(),
-                "fecha_carga": min(
-                    (doc.created_at for doc in e.documentos if doc.deleted_at is None),
-                    default=None,
-                ).isoformat() if any(doc.deleted_at is None for doc in e.documentos) else None,
+                "fecha_carga": primera_carga.isoformat() if primera_carga else None,
                 "moneda": e.moneda,
                 "importe_total": str(e.importe_total),
                 "estado": e.estado,
