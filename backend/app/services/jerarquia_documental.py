@@ -1,4 +1,5 @@
 """Proyección de jerarquía operativa para listados de Secretaría, sin alterar propiedad."""
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
