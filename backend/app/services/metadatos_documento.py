@@ -1,13 +1,13 @@
 """Metadatos del archivo individual, independientes del expediente asociado."""
 
-from contextlib import suppress
 import re
+from contextlib import suppress
 from datetime import date
 
 from app.models import Documento
 
 
-NUMERO_EN_ARCHIVO = re.compile(r"(?i)(?<![A-Z0-9])([A-Z]{1,4}[0-9]{2,3})-(\\d{1,12})(?!\\d)")
+NUMERO_EN_ARCHIVO = re.compile(r"(?i)(?<![A-Z0-9])([A-Z]{1,4}[0-9]{2,3})-(\d{1,12})(?!\d)")
 
 
 def _valor(datos: object, clave: str) -> str | None:
