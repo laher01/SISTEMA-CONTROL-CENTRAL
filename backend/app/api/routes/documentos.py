@@ -475,7 +475,9 @@ def _documento(session: SessionDep, tenant_id: uuid.UUID, documento_id: uuid.UUI
     return documento
 
 
-def _documento_de_responsable(session: SessionDep, auth: OperativeAuthDep, usuario_id: uuid.UUID | None) -> bool:
+def _documento_de_responsable(
+    session: SessionDep, auth: OperativeAuthDep, usuario_id: uuid.UUID | None
+) -> bool:
     if auth.miembro_id is None or usuario_id is None:
         return False
     return session.scalar(
