@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Inspección de solo lectura: no despliega, no migra, no cambia servicios.
 set -Eeuo pipefail
-DEPLOY_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+DEPLOY_DIR="$(pwd -P)"
 cd "$DEPLOY_DIR"
 echo "FACT CENTRAL | preflight Secretaría"
 echo "UTC: $(date -u +%FT%TZ)"
