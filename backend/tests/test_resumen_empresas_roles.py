@@ -178,4 +178,3 @@ def test_responsable_resumen_incluye_solo_usuarios_propios(
         fuera = client.get("/api/v1/expedientes/resumen-empresas", params=params)
         assert fuera.status_code == 200, fuera.text
         assert fuera.json()["clientes"] == []
-
