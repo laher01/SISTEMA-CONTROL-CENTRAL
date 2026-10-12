@@ -293,6 +293,9 @@ function FilaDocumento({
         <a href={urlArchivo(documento.id)} target="_blank" rel="noreferrer">
           {documento.nombre_original}
         </a>
+        {documento.serie_documento && documento.correlativo_documento && (
+          <small className="bloque tenue">{documento.serie_documento}-{documento.correlativo_documento}</small>
+        )
         {error && <small className="error bloque">{error}</small>}
       </td>
       <td>
@@ -300,7 +303,7 @@ function FilaDocumento({
           ? ETIQUETA_TIPO_DOCUMENTO[documento.tipo_documento as TipoDocumento]
           : "Sin clasificar"}
       </td>
-      <td>{documento.fecha_emision ? formatearFecha(documento.fecha_emision) : "Pendiente de identificar"}</td>
+      <td>{documento.fecha_documento ? formatearFecha(documento.fecha_documento) : "Pendiente de identificar"}</td>
        <td>{formatearFecha(documento.created_at)}</td>
       <td>
         {lectura ? (
