@@ -128,4 +128,4 @@ jobs:
           EXPECTED_COMMIT: ${{ github.sha }}
         run: |
           ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
-            "cd -- '$VPS_DEPLOY_PATH' && EXPECTED_COMMIT='$EXPECTED_COMMIT' bash deploy/deploy.sh"
+            "cd -- '$VPS_DEPLOY_PATH' && EXPECTED_COMMIT='$EXPECTED_COMMIT' bash -s" < deploy/bootstrap-main.sh
