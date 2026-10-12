@@ -38,3 +38,29 @@ def test_secretaria_jerarquia_no_altera_resumen_y_filtra(
         assert filtrada.status_code == 200, filtrada.text
         assert filtrada.json()["total_expedientes"] == 0
         assert filtrada.json()["total_pen"] == "0"
+
+
+def test_documentos_y_expedientes_exponen_propietario_sin_inventarlo(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    subida = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("factura_identidad.xml", factura(numero="F001-00000978"))},
+    )
+    assert subida.status_code == 201, subida.text
+    documento_id = subida.json()["id"]
+    usuario_id = subida.json()["usuario_id"]
+    auth_prueba.como_admin()
+    documentos = client.get("/api/v1/documentos")
+    assert documentos.status_code == 200, documentos.text
+    fila = next(d for d in documentos.json() if d["id"] == documento_id)
+    assert fila["usuario_id"] == usuario_id
+    assert fila["usuario_nombre"]
+    assert "responsable_nombre" in fila
+    assert "gestor_nombre" in fila
+    if fila["expediente_id"]:
+        expedientes = client.get("/api/v1/expedientes")
+        assert expedientes.status_code == 200, expedientes.text
+        expediente = next(e for e in expedientes.json() if e["id"] == fila["expediente_id"])
+        assert expediente["usuario_nombre"] == fila["usuario_nombre"]
+        assert expediente["usuario_codigo"] == fila["usuario_codigo"]
