@@ -324,6 +324,8 @@ def listar_documentos(
     receptor_ruc: Annotated[str | None, Query(min_length=11, max_length=11)] = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
+    fecha_emision: date | None = None,
+    serie_correlativo: Annotated[str | None, Query(min_length=1, max_length=60)] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[DocumentoOut]:
@@ -354,6 +356,13 @@ def listar_documentos(
         consulta = consulta.where(Documento.usuario_id == usuario_id)
     if gestor_id is not None:
         consulta = consulta.where(Documento.gestor_id == gestor_id)
+    if fecha_emision is not None:
+        consulta = consulta.where(Documento.fecha_emision == fecha_emision)
+    if serie_correlativo:
+        texto = serie_correlativo.strip().upper()
+        consulta = consulta.where(
+            func.upper(Documento.serie + "-" + Documento.correlativo).contains(texto)
+        )
     if dia is not None:
         consulta = consulta.where(func.date(Documento.created_at) == dia)
     if fecha_desde is not None:
@@ -401,6 +410,8 @@ def resumen_documentos(
     receptor_ruc: Annotated[str | None, Query(min_length=11, max_length=11)] = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
+    fecha_emision: date | None = None,
+    serie_correlativo: Annotated[str | None, Query(min_length=1, max_length=60)] = None,
 ) -> dict[str, int | Decimal]:
     consulta = select(Documento.id, Documento.expediente_id).where(
         Documento.tenant_id == tenant_id, Documento.deleted_at.is_(None)
@@ -424,6 +435,13 @@ def resumen_documentos(
         consulta = consulta.where(Documento.usuario_id == usuario_id)
     if gestor_id is not None:
         consulta = consulta.where(Documento.gestor_id == gestor_id)
+    if fecha_emision is not None:
+        consulta = consulta.where(Documento.fecha_emision == fecha_emision)
+    if serie_correlativo:
+        texto = serie_correlativo.strip().upper()
+        consulta = consulta.where(
+            func.upper(Documento.serie + "-" + Documento.correlativo).contains(texto)
+        )
     if dia is not None:
         consulta = consulta.where(func.date(Documento.created_at) == dia)
     if fecha_desde is not None:
