@@ -5,6 +5,7 @@ on:
     paths:
       - "deploy/preflight-secretaria.sh"
       - "deploy/bootstrap-main.sh"
+      - "deploy/test_preflight_safety.py"
       - ".github/workflows/deploy-staging.yml"
       - ".github/workflows/preflight-safety-ci.yml"
 
@@ -20,6 +21,8 @@ jobs:
         run: |
           bash -n deploy/preflight-secretaria.sh
           bash -n deploy/bootstrap-main.sh
+      - name: Probar preflight sin afectar la VPS
+        run: python3 deploy/test_preflight_safety.py
       - name: Verificar reglas de protección
         run: |
           python3 - <<'PY'
