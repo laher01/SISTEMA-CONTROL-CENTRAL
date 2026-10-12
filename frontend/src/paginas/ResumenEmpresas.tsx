@@ -8,18 +8,27 @@ type Fila = {
   expedientes: number; total: string;
 };
 type Resumen = { proveedores: Fila[]; clientes: Fila[] };
+type UsuarioEquipo = { id: string; codigo: string; nombre: string };
+type GestorEquipo = { id: string; usuario_id: string; codigo: string; nombre: string };
 
-export default function ResumenEmpresas() {
+export default function ResumenEmpresas({ esResponsable = false }: { esResponsable?: boolean }) {
   const [pestana, setPestana] = useState<"proveedores" | "clientes">("proveedores");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [mes, setMes] = useState("");
   const [moneda, setMoneda] = useState("");
   const [buscar, setBuscar] = useState("");
+  const [usuario, setUsuario] = useState("");
+  const [gestor, setGestor] = useState("");
+  const { datos: usuarios } = useDatos<UsuarioEquipo[]>(esResponsable ? "/api/v1/miembros/mis-usuarios" : null);
+  const { datos: gestores } = useDatos<GestorEquipo[]>(esResponsable ? "/api/v1/gestores" : null);
+  const gestoresDelUsuario = (gestores ?? []).filter((g) => !usuario || g.usuario_id === usuario);
   const params = new URLSearchParams();
   if (desde) params.set("fecha_desde", desde);
   if (hasta) params.set("fecha_hasta", hasta);
   if (moneda) params.set("moneda", moneda);
+  if (esResponsable && usuario) params.set("usuario_id", usuario);
+  if (esResponsable && gestor) params.set("gestor_id", gestor);
   const url = "/api/v1/expedientes/resumen-empresas" + (params.size ? "?" + params.toString() : "");
   const { datos, error, cargando } = useDatos<Resumen>(url);
   const filas = (datos?.[pestana] ?? []).filter((fila) =>
@@ -43,6 +52,20 @@ export default function ResumenEmpresas() {
       <button type="button" role="tab" aria-selected={pestana === "clientes"}
         onClick={() => setPestana("clientes")}>Clientes</button>
     </div>
+    {esResponsable && <div className="filtros">
+      <label>Usuario de mi equipo
+        <select value={usuario} onChange={(e) => { setUsuario(e.target.value); setGestor(""); }}>
+          <option value="">Todos mis Usuarios</option>
+          {(usuarios ?? []).map((u) => <option key={u.id} value={u.id}>{u.codigo} — {u.nombre}</option>)}
+        </select>
+      </label>
+      <label>Gestor del Usuario
+        <select value={gestor} onChange={(e) => setGestor(e.target.value)}>
+          <option value="">Todos los Gestores</option>
+          {gestoresDelUsuario.map((g) => <option key={g.id} value={g.id}>{g.codigo} — {g.nombre}</option>)}
+        </select>
+      </label>
+    </div>}
     <div className="filtros">
       <label>Buscar RUC o razón social
         <input type="search" aria-label="Buscar empresa por RUC o razón social" value={buscar}
@@ -71,7 +94,7 @@ export default function ResumenEmpresas() {
           <option value="USD">Dólares</option>
         </select>
       </label>
-      <button type="button" onClick={() => { setMes(""); setDesde(""); setHasta(""); setMoneda(""); setBuscar(""); }}>
+      <button type="button" onClick={() => { setMes(""); setDesde(""); setHasta(""); setMoneda(""); setBuscar(""); setUsuario(""); setGestor(""); }}>
         Limpiar filtros
       </button>
     </div>
