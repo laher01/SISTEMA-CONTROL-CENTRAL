@@ -480,15 +480,18 @@ def _documento_de_responsable(
 ) -> bool:
     if auth.miembro_id is None or usuario_id is None:
         return False
-    return session.scalar(
-        select(Miembro.id).where(
-            Miembro.id == usuario_id,
-            Miembro.tenant_id == auth.tenant_id,
-            Miembro.rol == RolMiembro.USUARIO,
-            Miembro.responsable_id == auth.miembro_id,
-            Miembro.deleted_at.is_(None),
+    return (
+        session.scalar(
+            select(Miembro.id).where(
+                Miembro.id == usuario_id,
+                Miembro.tenant_id == auth.tenant_id,
+                Miembro.rol == RolMiembro.USUARIO,
+                Miembro.responsable_id == auth.miembro_id,
+                Miembro.deleted_at.is_(None),
+            )
         )
-    ) is not None
+        is not None
+    )
 
 
 def _validar_ambito_documento(
@@ -523,9 +526,7 @@ def _validar_ambito_expediente(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Expediente no encontrado")
 
 
-def _aplicar_ambito_documentos(
-    consulta: Any, auth: OperativeAuthDep
-) -> Any:
+def _aplicar_ambito_documentos(consulta: Any, auth: OperativeAuthDep) -> Any:
     if auth.rol == "GESTOR":
         return consulta.where(Documento.gestor_id == auth.gestor_id)
     if auth.rol == RolMiembro.USUARIO:
