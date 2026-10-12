@@ -38,6 +38,7 @@ from app.services.automatizacion_documental import (
     guardar_procesamiento,
     registrar_fallo,
 )
+from app.services.cache_ocr import procesar_con_cache
 from app.services.expedientes import actualizar_expediente, buscar_expediente
 from app.services.ingesta import (
     ArchivoSubido,
@@ -669,6 +670,7 @@ def procesar_pendientes(
                 hoy,
                 documento,
                 reutilizar=not forzar,
+                forzar_cache=forzar,
             )
         except DocumentoNoProcesable as exc:
             resultado = registrar_fallo(session, documento, str(exc))
@@ -694,6 +696,7 @@ def _procesar_y_aplicar(
     hoy: date,
     documento: Documento,
     reutilizar: bool = False,
+    forzar_cache: bool = False,
 ) -> ResultadoAutomatizacion:
     datos = documento.datos_extraidos or {}
     existente = datos.get("procesamiento_documental")
@@ -702,9 +705,17 @@ def _procesar_y_aplicar(
     else:
         contenido = almacen.ruta_absoluta(documento.ruta_storage).read_bytes()
         with _PROCESAMIENTO_LOCK:
-            procesamiento = procesar(
-                contenido, settings.max_extracted_chars, settings.max_ocr_pdf_pages
-            ).a_dict()
+            procesamiento = procesar_con_cache(
+                contenido,
+                str(documento.tenant_id),
+                settings.storage_dir / "_ocr_cache",
+                settings.max_extracted_chars,
+                settings.max_ocr_pdf_pages,
+                lambda: procesar(
+                    contenido, settings.max_extracted_chars, settings.max_ocr_pdf_pages
+                ).a_dict(),
+                forzar=forzar_cache,
+            )
         aplicar_perfiles_aprendidos(session, documento, procesamiento)
         guardar_procesamiento(session, documento, procesamiento)
     return aplicar_automaticamente(session, settings, hoy, documento, procesamiento)

@@ -65,6 +65,8 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
   const [filas, setFilas] = useState<Fila[]>([]);
   const [arrastrando, setArrastrando] = useState(false);
   const entrada = useRef<HTMLInputElement>(null);
+  const entradaCamara = useRef<HTMLInputElement>(null);
+  const entradaEscaneos = useRef<HTMLInputElement>(null);
   const cola = useRef<Fila[]>([]);
   const activos = useRef(0);
   const actualizar = (clave: string, resultado: Resultado) =>
@@ -328,6 +330,38 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
           }}
         />
       </div>
+
+      <section className="resumen-carga" aria-label="Captura de documentos" style={{ marginTop: 16, marginBottom: 20 }}>
+        <h3>Capturar documentos con cámara o escáner</h3>
+        <p>Puede fotografiar un documento desde el celular o cargar varias páginas digitalizadas a la vez. Los originales se procesan con el mismo OCR y control de duplicados.</p>
+        <div className="acciones">
+          <button type="button" onClick={() => entradaCamara.current?.click()}>
+            Tomar foto de un documento
+          </button>
+          <button type="button" onClick={() => entradaEscaneos.current?.click()}>
+            Cargar varios escaneos o fotos
+          </button>
+        </div>
+        <input
+          ref={entradaCamara}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          hidden
+          aria-label="Tomar foto con la cámara posterior"
+          onChange={(e) => { agregar(e.target.files); e.target.value = ""; }}
+        />
+        <input
+          ref={entradaEscaneos}
+          type="file"
+          accept=".pdf,image/jpeg,image/png,image/tiff,image/webp"
+          multiple
+          hidden
+          aria-label="Seleccionar varios documentos escaneados"
+          onChange={(e) => { agregar(e.target.files); e.target.value = ""; }}
+        />
+        <p className="tenue">La cámara se abre en dispositivos compatibles. Cada archivo se conserva como evidencia independiente; la unión de páginas, recorte automático y corrección de perspectiva son mejoras posteriores.</p>
+      </section>
 
       {filas.length > 0 && (
         <>
