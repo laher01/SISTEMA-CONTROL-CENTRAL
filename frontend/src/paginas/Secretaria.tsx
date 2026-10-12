@@ -15,6 +15,7 @@ interface RegistroSecretaria {
   correlativo: string;
   tipo_comprobante: string;
   fecha_emision: string;
+  fecha_registro: string;
   estado: string;
   moneda: "PEN" | "USD";
   importe_total: string;
@@ -188,7 +189,7 @@ export default function Secretaria({ sesion }: { sesion: SesionActual }) {
           <thead>
             <tr>
               <th><input type="checkbox" aria-label="Seleccionar visibles" checked={todos} onChange={(e) => setSeleccionados(e.target.checked ? new Set(filas.map((f) => f.id)) : new Set())} /></th>
-              <th>Comprobante</th><th>Fecha</th><th>Proveedor/emisor</th><th>Cliente/receptor</th>
+              <th>Comprobante</th><th>Fecha documento</th><th>Fecha de registro</th><th>Proveedor/emisor</th><th>Cliente/receptor</th>
               {!responsableId && <th>Responsable</th>}
               {!usuarioId && <th>Usuario</th>}
               {!gestorId && <th>Gestor</th>}
@@ -202,6 +203,7 @@ export default function Secretaria({ sesion }: { sesion: SesionActual }) {
                 <td><input type="checkbox" aria-label={`Seleccionar ${f.serie}-${f.correlativo}`} checked={seleccionados.has(f.id)} onChange={(e) => alternar(f.id, e.target.checked)} /></td>
                 <td><Link to={`/expedientes/${f.id}`}>{f.tipo_comprobante} {f.serie}-{f.correlativo}</Link></td>
                 <td>{formatearFecha(f.fecha_emision)}</td>
+                 <td>{formatearFecha(f.fecha_registro)}</td>
                 <td>{f.emisor}<small className="bloque tenue">{f.emisor_ruc}</small></td>
                 <td>{f.receptor}<small className="bloque tenue">{f.receptor_ruc}</small></td>
                 {!responsableId && <td>{f.responsable}<small className="bloque tenue">{f.responsable_codigo}</small></td>}
