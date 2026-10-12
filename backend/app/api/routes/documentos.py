@@ -27,6 +27,7 @@ from app.schemas import (
 )
 from app.security import cuenta_administradora_responsable
 from app.services import auditoria
+from app.services.metadatos_documento import metadatos_individuales
 from app.services.ambito_gerencia import alcance_expedientes_gerente, expediente_visible_gerente
 from app.services.aprendizaje_documental import (
     aplicar_perfiles_aprendidos,
@@ -38,7 +39,6 @@ from app.services.automatizacion_documental import (
     guardar_procesamiento,
     registrar_fallo,
 )
-from app.services.metadatos_documento import metadatos_individuales
 from app.services.cache_ocr import procesar_con_cache
 from app.services.expedientes import actualizar_expediente, buscar_expediente
 from app.services.ingesta import (
