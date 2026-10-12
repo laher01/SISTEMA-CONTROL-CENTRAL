@@ -1,12 +1,16 @@
 """Proyección de jerarquía operativa para listados de Secretaría, sin alterar propiedad."""
 
+from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Gestor, Miembro
+from app.models import Documento, Expediente, Gestor, Miembro
 
 
-def nombres_jerarquia(session: Session, tenant_id, filas) -> dict:
+def nombres_jerarquia(
+    session: Session, tenant_id: UUID, filas: list[Documento] | list[Expediente]
+) -> dict[UUID, dict[str, str | None]]:
     usuarios_ids = {f.usuario_id for f in filas if f.usuario_id is not None}
     gestores_ids = {f.gestor_id for f in filas if f.gestor_id is not None}
     usuarios = {
@@ -30,8 +34,8 @@ def nombres_jerarquia(session: Session, tenant_id, filas) -> dict:
     }
     resultado = {}
     for fila in filas:
-        usuario = usuarios.get(fila.usuario_id)
-        gestor = gestores.get(fila.gestor_id)
+        usuario = usuarios.get(fila.usuario_id) if fila.usuario_id is not None else None
+        gestor = gestores.get(fila.gestor_id) if fila.gestor_id is not None else None
         responsable = responsables.get(usuario.responsable_id) if usuario else None
         resultado[fila.id] = {
             "responsable_nombre": responsable.nombre if responsable else None,
