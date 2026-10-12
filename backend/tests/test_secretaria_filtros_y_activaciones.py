@@ -86,10 +86,11 @@ def test_documento_busca_correlativo_y_expone_fecha_carga(
         assert any(fila["id"] == documento["id"] for fila in por_fecha.json())
 
     if documento["expediente_id"]:
+        carga = datetime.fromisoformat(documento["created_at"])
         exp = client.get("/api/v1/expedientes")
         assert exp.status_code == 200, exp.text
         fila = next(fila for fila in exp.json() if fila["id"] == documento["expediente_id"])
-        assert datetime.fromisoformat(fila["fecha_carga"]) == datetime.fromisoformat(documento["created_at"])
+        assert datetime.fromisoformat(fila["fecha_carga"]) == carga
         registros = client.get("/api/v1/registros")
         assert registros.status_code == 200, registros.text
         registro = next(
@@ -97,7 +98,7 @@ def test_documento_busca_correlativo_y_expone_fecha_carga(
             for fila in registros.json()["filas"]
             if fila["expediente_id"] == documento["expediente_id"]
         )
-        assert datetime.fromisoformat(registro["fecha_carga"]) == datetime.fromisoformat(documento["created_at"])
+        assert datetime.fromisoformat(registro["fecha_carga"]) == carga
         tablero = client.get(
             "/api/v1/dashboard/secretaria-expedientes",
             params={"desde": date(2025, 1, 1), "hasta": date(2027, 12, 31)},
@@ -106,4 +107,4 @@ def test_documento_busca_correlativo_y_expone_fecha_carga(
         control = next(
             fila for fila in tablero.json()["filas"] if fila["id"] == documento["expediente_id"]
         )
-        assert datetime.fromisoformat(control["fecha_carga"]) == datetime.fromisoformat(documento["created_at"])
+        assert datetime.fromisoformat(control["fecha_carga"]) == carga
