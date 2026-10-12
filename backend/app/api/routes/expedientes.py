@@ -3,7 +3,7 @@ import re
 import tempfile
 import uuid
 import zipfile
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Annotated, Literal
@@ -203,7 +203,7 @@ def listar(
     filas = list(session.scalars(consulta))
     jerarquias = nombres_jerarquia(session, tenant_id, filas)
     ids = [fila.id for fila in filas]
-    primeras_cargas = {}
+    primeras_cargas: dict[uuid.UUID | None, datetime] = {}
     if ids:
         primeras_cargas = dict(
             session.execute(
@@ -214,7 +214,7 @@ def listar(
                     Documento.deleted_at.is_(None),
                 )
                 .group_by(Documento.expediente_id)
-            )
+            ).all()
         )
     return [
         ExpedienteOut.model_validate(fila).model_copy(
