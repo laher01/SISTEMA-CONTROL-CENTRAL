@@ -7,7 +7,28 @@ cd "$ROOT"
 : "${DEPLOY_BRANCH:?Rama obligatoria}"
 [[ "$DEPLOY_BRANCH" == "integration/document-capture-main-20261011" ]] || { echo "Rama no autorizada" >&2; exit 1; }
 [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || exit 1
-[[ -z "$(git status --porcelain)" ]] || { echo "Árbol local modificado" >&2; exit 1; }
+# Permitir exclusivamente archivos operativos no rastreados de esta VPS.
+# Cualquier cambio a archivos versionados sigue bloqueando la instalación.
+check_worktree() {
+  local line path
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    if [[ "${line:0:2}" != "??" ]]; then
+      echo "Cambio local versionado: $line" >&2
+      return 1
+    fi
+    path="${line:3}"
+    case "$path" in
+      actualizar-fact-central.sh|deploy/auto-update.log|deploy/local-backups/*|deploy/private/*)
+        echo "Archivo operativo local preservado: $path" ;;
+      *)
+        echo "Archivo local no reconocido: $path" >&2
+        return 1 ;;
+    esac
+  done < <(git status --porcelain --untracked-files=all)
+}
+
+check_worktree || { echo "Árbol local con cambios no autorizados" >&2; exit 1; }
 [[ -f deploy/.env.production ]] || exit 1
 [[ "$(df -Pk "$ROOT" | awk 'NR==2 {print $4}')" -ge 2097152 ]] || { echo "Disco insuficiente" >&2; exit 1; }
 if systemctl is-active --quiet factcentral-update.timer 2>/dev/null; then
