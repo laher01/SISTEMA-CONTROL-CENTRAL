@@ -9,7 +9,7 @@ from sqlalchemy.orm import aliased
 
 from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.enums import Moneda, RolMiembro, TipoDocumento
-from app.models import Empresa, Expediente, Gestor, Miembro
+from app.models import Documento, Empresa, Expediente, Gestor, Miembro
 from app.schemas import FiltroOpcion, RegistroFila, RegistroOpciones, RegistroResumen
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.expedientes import documentos_faltantes, documentos_principales, tipos_presentes
@@ -303,6 +303,13 @@ def listar(
                 gestor_nombre=gestor_nombre if mostrar_propiedad else None,
                 fecha_emision=expediente.fecha_emision,
                 fecha_registro=expediente.created_at,
+                fecha_carga=session.scalar(
+                    select(func.min(Documento.created_at)).where(
+                        Documento.tenant_id == tenant_id,
+                        Documento.expediente_id == expediente.id,
+                        Documento.deleted_at.is_(None),
+                    )
+                ),
                 tipo_comprobante=expediente.tipo_comprobante,
                 serie=expediente.serie,
                 correlativo=expediente.correlativo,
