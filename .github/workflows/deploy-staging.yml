@@ -66,6 +66,7 @@ jobs:
     environment: staging
     timeout-minutes: 20
     steps:
+      - uses: actions/checkout@v4
       - name: Validar secretos de despliegue
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -101,9 +102,10 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          EXPECTED_COMMIT: ${{ github.sha }}
         run: |
           ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
-            "cd -- '$VPS_DEPLOY_PATH' && bash -s" < deploy/preflight-secretaria.sh
+            "cd -- '$VPS_DEPLOY_PATH' && EXPECTED_COMMIT='$EXPECTED_COMMIT' bash -s" < deploy/preflight-secretaria.sh
 
       - name: Desplegar rama documental en VPS antigua (manual, sin main)
         if: github.event_name == 'workflow_dispatch'
@@ -126,4 +128,4 @@ jobs:
           EXPECTED_COMMIT: ${{ github.sha }}
         run: |
           ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
-            "cd -- '$VPS_DEPLOY_PATH' && EXPECTED_COMMIT='$EXPECTED_COMMIT' bash deploy/deploy.sh"
+            "cd -- '$VPS_DEPLOY_PATH' && EXPECTED_COMMIT='$EXPECTED_COMMIT' bash -s" < deploy/bootstrap-main.sh
