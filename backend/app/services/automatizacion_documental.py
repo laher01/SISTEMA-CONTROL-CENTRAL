@@ -20,7 +20,11 @@ from app.services.referencias_gre import extraer_referencias_factura_gre
 from app.services import auditoria
 from app.services.expedientes import buscar_expediente, obtener_o_crear_empresa
 from app.services.extraccion_campos import razon_social_confiable
-from app.services.ingesta import crear_expediente, registrar_referencia_gre, vincular_documento\nfrom app.services.referencias_gre import extraer_referencias_factura_gre
+from app.services.ingesta import (
+    crear_expediente,
+    registrar_referencia_gre,
+    vincular_documento,
+)
 
 CAMPOS_FISCALES = (
     "serie",
