@@ -665,6 +665,7 @@ def procesar_pendientes(
                 hoy,
                 documento,
                 reutilizar=not forzar,
+                forzar_cache=forzar,
             )
         except DocumentoNoProcesable as exc:
             resultado = registrar_fallo(session, documento, str(exc))
@@ -690,6 +691,7 @@ def _procesar_y_aplicar(
     hoy: date,
     documento: Documento,
     reutilizar: bool = False,
+    forzar_cache: bool = False,
 ) -> ResultadoAutomatizacion:
     datos = documento.datos_extraidos or {}
     existente = datos.get("procesamiento_documental")
@@ -707,6 +709,7 @@ def _procesar_y_aplicar(
                 lambda: procesar(
                     contenido, settings.max_extracted_chars, settings.max_ocr_pdf_pages
                 ).a_dict(),
+                forzar=forzar_cache,
             )
         aplicar_perfiles_aprendidos(session, documento, procesamiento)
         guardar_procesamiento(session, documento, procesamiento)
