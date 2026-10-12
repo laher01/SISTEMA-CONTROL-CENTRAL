@@ -489,9 +489,7 @@ def _usuarios_responsable(tenant_id: uuid.UUID, auth: OperativeAuthDep):
     )
 
 
-def _visible_para_auth(
-    expediente: Expediente, auth: OperativeAuthDep, session: SessionDep
-) -> bool:
+def _visible_para_auth(expediente: Expediente, auth: OperativeAuthDep, session: SessionDep) -> bool:
     if auth.rol == "GESTOR":
         return expediente.gestor_id == auth.gestor_id
     if auth.rol == RolMiembro.USUARIO:
