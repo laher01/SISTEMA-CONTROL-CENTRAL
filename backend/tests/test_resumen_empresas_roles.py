@@ -117,7 +117,6 @@ def test_resumen_por_empresa_respeta_fechas_monedas_y_usuario(
 
 
 
-
 def test_responsable_resumen_incluye_solo_usuarios_propios(
     client: TestClient, session: Session, auth_prueba: AuthPrueba
 ) -> None:
@@ -126,9 +125,7 @@ def test_responsable_resumen_incluye_solo_usuarios_propios(
     responsable = Miembro(
         tenant_id=tenant, codigo="RESP-RESUMEN", nombre="Responsable", rol="RESPONSABLE"
     )
-    ajeno = Miembro(
-        tenant_id=tenant, codigo="USR-AJENO", nombre="Ajeno", rol="USUARIO"
-    )
+    ajeno = Miembro(tenant_id=tenant, codigo="USR-AJENO", nombre="Ajeno", rol="USUARIO")
     emisor = Empresa(tenant_id=tenant, ruc="20999999991", razon_social="Proveedor")
     receptor = Empresa(tenant_id=tenant, ruc="20999999992", razon_social="Cliente")
     session.add_all([responsable, ajeno, emisor, receptor])
