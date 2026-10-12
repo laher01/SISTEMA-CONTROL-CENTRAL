@@ -7,7 +7,6 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
-
 VERSION_CACHE = "ocr-core-v1"
 
 
