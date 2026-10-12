@@ -128,7 +128,7 @@ jobs:
           echo "Despliegue aislado autorizado, VPS antigua 132.145.233.172, commit documental fijo 2e68eb0834465839fadc7bff6a843c8eef2a5b4d"
 
       - name: Desplegar PR140 desde rama aislada, VPS antigua solamente
-        if: github.event_name == 'push' && github.ref_name == 'deploy/legacy-pr140-chat-trigger-20261011'
+        if: github.event_name == 'workflow_dispatch' && github.ref_name == 'integration/document-capture-main-20261011'
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -137,6 +137,38 @@ jobs:
         run: |
           ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
             "cd -- '$VPS_DEPLOY_PATH' && EXPECTED_COMMIT='$EXPECTED_COMMIT' DEPLOY_BRANCH='integration/document-capture-main-20261011' bash -s" < deploy/deploy-legacy-pr140.sh
+
+      - name: Certificar estado instalado (solo lectura, no desplegar)
+        if: github.event_name == 'push' && github.ref_name == 'deploy/legacy-pr140-chat-trigger-20261011'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+        run: |
+          ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
+            "cd -- '$VPS_DEPLOY_PATH' && bash -s" <<'VERIFY'
+          set -Eeuo pipefail
+          expected="2e68eb0834465839fadc7bff6a843c8eef2a5b4d"
+          actual="$(git rev-parse HEAD)"
+          echo "COMMIT_INSTALADO=$actual"
+          echo "COMMIT_ESPERADO=$expected"
+          compose=(docker compose --env-file deploy/.env.production -f deploy/docker-compose.production.yml)
+          echo "CONTENEDORES:"
+          "${compose[@]}" ps
+          echo "BACKUPS_RECIENTES:"
+          find deploy/backups -maxdepth 1 -type f -name '*pr140.dump' -printf '%TY-%Tm-%TdT%TH:%TM %s %p\n' 2>/dev/null | sort | tail -n 5 || true
+          if [[ "$actual" != "$expected" ]]; then
+            echo "::error::El commit documental todavía NO está instalado."
+            exit 1
+          fi
+          curl --fail --silent --show-error --max-time 10 http://127.0.0.1:18080/health > /dev/null
+          echo "HEALTHCHECK_POSTERIOR=OK"
+          latest="$(find deploy/backups -maxdepth 1 -type f -name '*pr140.dump' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-)"
+          [[ -n "$latest" && -s "$latest" ]] || { echo "::error::No existe respaldo PR140 verificable"; exit 1; }
+          pg_restore --list "$latest" >/dev/null
+          echo "BACKUP_PR140_VALIDADO=$latest"
+          echo "INSTALACION_CERTIFICADA=$actual"
+          VERIFY
 
       - name: Desplegar main en VPS (flujo anterior)
         if: github.event_name == 'push' && github.ref_name == 'main'
