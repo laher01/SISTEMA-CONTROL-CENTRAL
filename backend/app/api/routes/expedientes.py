@@ -479,9 +479,7 @@ def listar_ids(
     return list(session.scalars(consulta))
 
 
-def _usuarios_responsable(
-    tenant_id: uuid.UUID, auth: OperativeAuthDep
-) -> Select[tuple[uuid.UUID]]:
+def _usuarios_responsable(tenant_id: uuid.UUID, auth: OperativeAuthDep) -> Select[tuple[uuid.UUID]]:
     if auth.miembro_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Responsable sin ámbito")
     return select(Miembro.id).where(
