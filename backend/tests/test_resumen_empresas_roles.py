@@ -115,8 +115,6 @@ def test_resumen_por_empresa_respeta_fechas_monedas_y_usuario(
         == 422
     )
 
-
-
 def test_responsable_resumen_incluye_solo_usuarios_propios(
     client: TestClient, session: Session, auth_prueba: AuthPrueba
 ) -> None:
