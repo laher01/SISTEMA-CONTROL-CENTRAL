@@ -21,7 +21,7 @@ check_worktree() {
     fi
     path="${line:3}"
     case "$path" in
-      actualizar-fact-central.sh|deploy/auto-update.log|deploy/local-backups/*|deploy/private/*)
+      actualizar-fact-central.sh|deploy/auto-update.log|deploy/local-backups/*|deploy/private/*|deploy/.deploy.lock|deploy/backups/*)
         echo "Archivo operativo local preservado: $path" ;;
       *)
         echo "Archivo local no reconocido: $path" >&2
