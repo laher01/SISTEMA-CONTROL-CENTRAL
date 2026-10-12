@@ -159,6 +159,15 @@ def test_responsable_resumen_incluye_solo_usuarios_propios(
     auth_prueba.contexto = replace(
         auth_prueba.contexto, rol="RESPONSABLE", miembro_id=responsable.id
     )
+    propios = session.query(Expediente).filter_by(tenant_id=tenant, correlativo="501").one()
+    ajenos = session.query(Expediente).filter_by(tenant_id=tenant, correlativo="502").one()
+    listado = client.get("/api/v1/expedientes")
+    assert listado.status_code == 200, listado.text
+    assert {item["id"] for item in listado.json()} == {str(propios.id)}
+    detalle_propio = client.get(f"/api/v1/expedientes/{propios.id}")
+    assert detalle_propio.status_code == 200, detalle_propio.text
+    detalle_ajeno = client.get(f"/api/v1/expedientes/{ajenos.id}")
+    assert detalle_ajeno.status_code == 404, detalle_ajeno.text
     response = client.get("/api/v1/expedientes/resumen-empresas")
     assert response.status_code == 200, response.text
     data = response.json()
