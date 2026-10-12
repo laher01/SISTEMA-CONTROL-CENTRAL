@@ -92,7 +92,7 @@ def compras(
             receptor.autorizada,
             Expediente.moneda,
             func.count(Expediente.id),
-            func.coalesce(func.sum(case((receptor.autorizada.is_(True), Expediente.importe_total), else_=0)), 0),
+            func.coalesce(\n                func.sum(\n                    case((receptor.autorizada.is_(True), Expediente.importe_total), else_=0)\n                ),\n                0,\n            ),
         )
         .outerjoin(Miembro, Expediente.usuario_id == Miembro.id)
         .outerjoin(Gestor, Expediente.gestor_id == Gestor.id)
