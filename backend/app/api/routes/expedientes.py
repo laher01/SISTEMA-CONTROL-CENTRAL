@@ -21,7 +21,7 @@ from starlette.background import BackgroundTask
 from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado
 from app.enums import EstadoExpediente, RolMiembro
-from app.models import Documento, Empresa, Expediente, Miembro, ahora
+from app.models import Documento, Empresa, Expediente, Gestor, Miembro, ahora
 from app.schemas import (
     ExpedienteDetalle,
     ExpedienteIn,
@@ -207,6 +207,8 @@ def resumen_empresas_por_rol(
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
     moneda: Literal["PEN", "USD"] | None = None,
+    usuario_id: uuid.UUID | None = None,
+    gestor_id: uuid.UUID | None = None,
 ) -> dict[str, object]:
     """Totales de proveedores y clientes, por expedientes reales del ámbito permitido."""
     if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
@@ -228,6 +230,16 @@ def resumen_empresas_por_rol(
         condiciones.append(Expediente.fecha_emision <= fecha_hasta)
     if moneda:
         condiciones.append(Expediente.moneda == moneda)
+    if usuario_id is not None:
+        condiciones.append(Expediente.usuario_id == usuario_id)
+    if gestor_id is not None:
+        condiciones.append(Expediente.gestor_id == gestor_id)
+        condiciones.append(
+            Expediente.usuario_id
+            == select(Gestor.usuario_id)
+            .where(Gestor.id == gestor_id, Gestor.tenant_id == tenant_id)
+            .scalar_subquery()
+        )
     if auth.rol == "GESTOR":
         condiciones.append(Expediente.gestor_id == auth.gestor_id)
     elif auth.rol == RolMiembro.USUARIO:
