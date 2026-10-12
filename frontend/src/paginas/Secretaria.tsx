@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import FiltroJerarquia from "../componentes/FiltroJerarquia";
+import type { SesionActual } from "../tipos";
 
 import {
   conParametros, descargarPdfExpedientes, imprimirExpedientes, urlPdfExpediente,
@@ -20,6 +22,8 @@ interface RegistroSecretaria {
   emisor_ruc: string;
   receptor: string;
   receptor_ruc: string;
+  responsable: string;
+  responsable_codigo: string;
   usuario: string;
   usuario_codigo: string;
   gestor: string;
@@ -34,7 +38,17 @@ interface Resumen {
   filas: RegistroSecretaria[];
 }
 
-export default function Secretaria() {
+export default function Secretaria({ sesion }: { sesion: SesionActual }) {
+  const [responsableId, setResponsableId] = useState("");
+  const [usuarioId, setUsuarioId] = useState("");
+  const [gestorId, setGestorId] = useState("");
+  const cambiarJerarquia = (clave: string, valor: string) => {
+    cambiarFiltro(() => {
+      if (clave === "responsable_id") { setResponsableId(valor); setUsuarioId(""); setGestorId(""); }
+      if (clave === "usuario_id") { setUsuarioId(valor); setGestorId(""); }
+      if (clave === "gestor_id") setGestorId(valor);
+    });
+  };
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [dia, setDia] = useState("");
@@ -47,6 +61,9 @@ export default function Secretaria() {
   const [trabajando, setTrabajando] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const filtros = {
+    responsable_id: responsableId,
+    usuario_id: usuarioId,
+    gestor_id: gestorId,
     desde: dia || desde || "1900-01-01",
     hasta: dia || hasta || "9999-12-31",
     emisor_ruc: emisor.length === 11 ? emisor : undefined,
@@ -108,6 +125,7 @@ export default function Secretaria() {
         crédito fiscal validado; los documentos pendientes requieren revisión.
       </p>
       <div className="filtros">
+        <FiltroJerarquia sesion={sesion} responsableId={responsableId} usuarioId={usuarioId} gestorId={gestorId} cambiar={cambiarJerarquia} />
         <label>Día <input type="date" value={dia} onChange={(e) => cambiarFiltro(() => setDia(e.target.value))} /></label>
         <label>Desde <input type="date" value={desde} onChange={(e) => cambiarFiltro(() => setDesde(e.target.value))} /></label>
         <label>Hasta <input type="date" value={hasta} onChange={(e) => cambiarFiltro(() => setHasta(e.target.value))} /></label>
@@ -171,7 +189,10 @@ export default function Secretaria() {
             <tr>
               <th><input type="checkbox" aria-label="Seleccionar visibles" checked={todos} onChange={(e) => setSeleccionados(e.target.checked ? new Set(filas.map((f) => f.id)) : new Set())} /></th>
               <th>Comprobante</th><th>Fecha</th><th>Proveedor/emisor</th><th>Cliente/receptor</th>
-              <th>Usuario responsable</th><th>Gestor responsable</th><th>Estado</th>
+              {!responsableId && <th>Responsable</th>}
+              {!usuarioId && <th>Usuario</th>}
+              {!gestorId && <th>Gestor</th>}
+              <th>Estado</th>
               <th>Documentos faltantes</th><th>Registrados</th><th>Importe</th><th>Acciones</th>
             </tr>
           </thead>
@@ -183,8 +204,9 @@ export default function Secretaria() {
                 <td>{formatearFecha(f.fecha_emision)}</td>
                 <td>{f.emisor}<small className="bloque tenue">{f.emisor_ruc}</small></td>
                 <td>{f.receptor}<small className="bloque tenue">{f.receptor_ruc}</small></td>
-                <td>{f.usuario}<small className="bloque tenue">{f.usuario_codigo}</small></td>
-                <td>{f.gestor}<small className="bloque tenue">{f.gestor_codigo}</small></td>
+                {!responsableId && <td>{f.responsable}<small className="bloque tenue">{f.responsable_codigo}</small></td>}
+                {!usuarioId && <td>{f.usuario}<small className="bloque tenue">{f.usuario_codigo}</small></td>}
+                {!gestorId && <td>{f.gestor}<small className="bloque tenue">{f.gestor_codigo}</small></td>}
                 <td><strong>{f.estado}</strong></td>
                 <td>{f.faltantes.length ? f.faltantes.join(", ") : "Sin faltantes"}</td>
                 <td>{f.documentos}</td>
