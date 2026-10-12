@@ -147,7 +147,7 @@ def test_responsable_resumen_incluye_solo_usuarios_propios(
                 gestor_id=gestor.id if uid == usuario.id else gestor_ajeno.id,
                 emisor_id=emisor.id,
                 receptor_id=receptor.id,
-                tipo_comprobante="01",
+                tipo_comprobante="FACT",
                 serie="F009",
                 correlativo=correlativo,
                 fecha_emision=date(2026, 10, 11),
