@@ -19,7 +19,7 @@ check_worktree() {
     fi
     path="${line:3}"
     case "$path" in
-      actualizar-fact-central.sh|deploy/auto-update.log|deploy/local-backups/*|deploy/private/*)
+      actualizar-fact-central.sh|deploy/auto-update.log|deploy/local-backups/*|deploy/private/*|deploy/.deploy.lock|deploy/backups/*)
         echo "Archivo operativo local preservado: $path" ;;
       *)
         echo "Archivo local no reconocido: $path" >&2
@@ -45,16 +45,18 @@ git fetch origin "+refs/heads/$DEPLOY_BRANCH:refs/remotes/origin/$DEPLOY_BRANCH"
 previous="$(git rev-parse HEAD)"
 mkdir -p deploy/backups
 backup="deploy/backups/fact_central_$(date -u +%Y%m%dT%H%M%SZ)_pr140.dump"
-"${compose[@]}" exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' > "$backup"
+"${compose[@]}" exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' </dev/null > "$backup"
 [[ -s "$backup" ]] || { echo "Backup vacío"; exit 1; }
 pg_restore --list "$backup" >/dev/null || { echo "Backup ilegible"; exit 1; }
 echo "BACKUP_VALIDADO: $backup"
+echo "BACKUP_PR140_READY=$backup"
 git checkout --detach "$EXPECTED_COMMIT"
 echo "DEPLOY_PREVIOUS=$previous DEPLOY_TARGET=$EXPECTED_COMMIT"
 "${compose[@]}" build --pull
 "${compose[@]}" up -d --remove-orphans
 for attempt in $(seq 1 30); do
   if curl -fsS --max-time 5 http://127.0.0.1:18080/health >/dev/null; then
+    [[ "$(git rev-parse HEAD)" == "$EXPECTED_COMMIT" ]] || { echo "Commit final incorrecto" >&2; exit 1; }
     echo "DESPLIEGUE_VALIDADO=$EXPECTED_COMMIT"
     "${compose[@]}" ps
     exit 0
