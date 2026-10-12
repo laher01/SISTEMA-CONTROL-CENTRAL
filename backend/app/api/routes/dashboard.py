@@ -144,6 +144,10 @@ def detalle_secretaria(
                 "tipo_comprobante": e.tipo_comprobante,
                 "fecha_emision": e.fecha_emision.isoformat(),
                 "fecha_registro": e.created_at.isoformat(),
+                "fecha_carga": min(
+                    (doc.created_at for doc in e.documentos if doc.deleted_at is None),
+                    default=None,
+                ).isoformat() if any(doc.deleted_at is None for doc in e.documentos) else None,
                 "moneda": e.moneda,
                 "importe_total": str(e.importe_total),
                 "estado": e.estado,
