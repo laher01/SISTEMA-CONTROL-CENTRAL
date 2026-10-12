@@ -17,6 +17,8 @@ from app.models import (
     Gestor,
     Miembro,
     PedidoGerencia,
+    ReferenciaGRE,
+    ahora,
 )
 from app.services import auditoria
 from app.services.expedientes import (
@@ -25,6 +27,7 @@ from app.services.expedientes import (
     obtener_o_crear_empresa,
     requiere_bancarizacion,
 )
+from app.services.referencias_gre import ReferenciaFacturaGRE
 from app.services.ubl import ComprobanteUbl, parece_xml, parse_ubl
 from app.storage import AlmacenLocal
 
@@ -219,7 +222,102 @@ def vincular_documento(
     actualizar_expediente(session, expediente, hoy, settings)
     if anterior is not None and anterior.id != expediente.id:
         actualizar_expediente(session, anterior, hoy, settings)
+    if tipo_documento == TipoDocumento.FACT:
+        _conciliar_guias_de_factura(session, settings, hoy, expediente)
     return documento
+
+
+def registrar_referencia_gre(
+    session: Session,
+    documento: Documento,
+    referencia: ReferenciaFacturaGRE,
+) -> ReferenciaGRE:
+    """Registra un expediente provisional sin inventar fecha ni monto fiscal."""
+    if referencia.emisor_ruc is None or referencia.receptor_ruc is None:
+        raise ValueError("La referencia requiere RUC de emisor de factura y receptor")
+    registro = session.scalar(
+        select(ReferenciaGRE).where(
+            ReferenciaGRE.tenant_id == documento.tenant_id,
+            ReferenciaGRE.documento_id == documento.id,
+        )
+    )
+    if registro is None:
+        registro = ReferenciaGRE(tenant_id=documento.tenant_id, documento_id=documento.id)
+        session.add(registro)
+    registro.serie = referencia.serie
+    registro.correlativo = referencia.correlativo
+    registro.emisor_ruc = referencia.emisor_ruc
+    registro.receptor_ruc = referencia.receptor_ruc
+    registro.usuario_id = documento.usuario_id
+    registro.gestor_id = documento.gestor_id
+    session.flush()
+    auditoria.registrar(
+        session,
+        documento.tenant_id,
+        "EXPEDIENTE_PROVISIONAL_DESDE_GRE",
+        "documento",
+        documento.id,
+        {"factura": f"{referencia.serie}-{referencia.correlativo}"},
+    )
+    return registro
+
+
+def _conciliar_guias_de_factura(
+    session: Session,
+    settings: Settings,
+    hoy: date,
+    expediente: Expediente,
+) -> None:
+    """Busca por índice las GRE provisionales; no vuelve a ejecutar OCR."""
+    referencias = list(
+        session.scalars(
+            select(ReferenciaGRE).where(
+                ReferenciaGRE.tenant_id == expediente.tenant_id,
+                ReferenciaGRE.expediente_id.is_(None),
+                ReferenciaGRE.serie == expediente.serie,
+                ReferenciaGRE.correlativo == expediente.correlativo,
+                ReferenciaGRE.emisor_ruc == expediente.emisor.ruc,
+                ReferenciaGRE.receptor_ruc == expediente.receptor.ruc,
+            )
+        )
+    )
+    for referencia in referencias:
+        guia = session.get(Documento, referencia.documento_id)
+        if guia is None or guia.deleted_at is not None:
+            continue
+        if guia.expediente_id is not None:
+            continue
+        if (
+            guia.usuario_id is not None
+            and expediente.usuario_id is not None
+            and guia.usuario_id != expediente.usuario_id
+        ):
+            continue
+        if (
+            guia.gestor_id is not None
+            and expediente.gestor_id is not None
+            and guia.gestor_id != expediente.gestor_id
+        ):
+            continue
+        vincular_documento(session, settings, hoy, guia, expediente.id, TipoDocumento.GRR)
+        referencia.expediente_id = expediente.id
+        referencia.resuelta_at = ahora()
+        datos = dict(guia.datos_extraidos or {})
+        datos["automatizacion_documental"] = {
+            "version": 1,
+            "estado": "COMPLETADO",
+            "expediente_id": str(expediente.id),
+            "conciliado_sin_ocr": True,
+        }
+        guia.datos_extraidos = datos
+        auditoria.registrar(
+            session,
+            guia.tenant_id,
+            "GRE_CONCILIADA_AL_LLEGAR_FACTURA",
+            "documento",
+            guia.id,
+            {"expediente_id": str(expediente.id)},
+        )
 
 
 def crear_expediente(
