@@ -14,7 +14,7 @@ from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, Setti
 from app.api.errores import no_encontrado
 from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, RolMiembro, TipoDocumento
-from app.models import Documento, Empresa, Expediente, Gestor, Miembro, ahora
+from app.models import Documento, Empresa, Expediente, Gestor, Miembro, ReferenciaGRE, ahora
 from app.schemas import (
     DocumentoOut,
     DocumentoVincular,
@@ -553,6 +553,46 @@ def _aplicar_ambito_documentos(consulta: Any, auth: OperativeAuthDep) -> Any:
     if auth.rol == RolMiembro.GERENTE:
         return consulta.where(Documento.expediente.has(alcance_expedientes_gerente(auth)))
     return consulta
+
+
+@router.get("/provisionales-gre")
+def provisionales_gre(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    limit: Annotated[int, Query(ge=1, le=2000)] = 100,
+) -> list[dict[str, str | bool]]:
+    """Expedientes provisionales identificados por una guía, sin factura ni importe."""
+    consulta = (
+        select(ReferenciaGRE, Empresa)
+        .join(Documento, Documento.id == ReferenciaGRE.documento_id)
+        .outerjoin(
+            Empresa,
+            (Empresa.tenant_id == ReferenciaGRE.tenant_id)
+            & (Empresa.ruc == ReferenciaGRE.receptor_ruc),
+        )
+        .where(
+            ReferenciaGRE.tenant_id == tenant_id,
+            ReferenciaGRE.expediente_id.is_(None),
+            Documento.deleted_at.is_(None),
+            Documento.expediente_id.is_(None),
+        )
+        .order_by(ReferenciaGRE.created_at.desc())
+        .limit(limit)
+    )
+    consulta = _aplicar_ambito_documentos(consulta, auth)
+    return [
+        {
+            "documento_id": str(ref.documento_id),
+            "factura": f"{ref.serie}-{ref.correlativo}",
+            "emisor_ruc": ref.emisor_ruc,
+            "receptor_ruc": ref.receptor_ruc,
+            "cliente_autorizado": bool(
+                empresa and empresa.autorizada and empresa.deleted_at is None
+            ),
+        }
+        for ref, empresa in session.execute(consulta)
+    ]
 
 
 @router.get("/{documento_id}", response_model=DocumentoOut)
