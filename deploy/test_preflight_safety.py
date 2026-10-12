@@ -49,7 +49,7 @@ def test_preflight() -> None:
         env = dict(os.environ, EXPECTED_COMMIT=target, PATH=str(fakebin) + os.pathsep + os.environ["PATH"])
 
         def preflight():
-            return run("bash", "-s", cwd=server, env=env, check=False) if False else subprocess.run(
+            return subprocess.run(
                 ["bash", "-s"], input=SOURCE, text=True, capture_output=True, cwd=server, env=env
             )
 
