@@ -195,7 +195,9 @@ def actualizar_expediente(
         expediente.requiere_guia = False
     estado = calcular_estado(expediente, hoy, settings)
     expediente.estado = estado
-    expediente.pendiente_aprobacion = (\n        not expediente.receptor.autorizada or expediente.receptor.deleted_at is not None\n    )
+    expediente.pendiente_aprobacion = (
+        not expediente.receptor.autorizada or expediente.receptor.deleted_at is not None
+    )
     _sincronizar_alertas(session, expediente, alertas_activas(expediente, estado, settings))
 
 
