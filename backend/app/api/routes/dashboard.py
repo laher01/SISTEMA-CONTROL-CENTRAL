@@ -143,6 +143,7 @@ def detalle_secretaria(
                 "correlativo": e.correlativo,
                 "tipo_comprobante": e.tipo_comprobante,
                 "fecha_emision": e.fecha_emision.isoformat(),
+                "fecha_registro": e.created_at.isoformat(),
                 "moneda": e.moneda,
                 "importe_total": str(e.importe_total),
                 "estado": e.estado,
