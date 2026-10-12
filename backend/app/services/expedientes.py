@@ -40,8 +40,10 @@ def obtener_o_crear_empresa(
         session.add(empresa)
         session.flush()
     else:
+        # Una ingesta nunca reactiva una empresa eliminada por Administración.
+        # Se conserva la referencia fiscal y su estado deshabilitado.
         if empresa.deleted_at is not None:
-            empresa.deleted_at = None
+            return empresa
         actual = empresa.razon_social.strip()
         actual_compacto = "".join(ch for ch in actual.upper() if ch.isalnum())
         placeholder = (
@@ -171,7 +173,7 @@ def alertas_activas(
         activas[TipoAlerta.RETENCION_PENDIENTE] = (
             f"{numero}: el receptor es agente de retención y falta la constancia."
         )
-    if not expediente.receptor.autorizada:
+    if not expediente.receptor.autorizada or expediente.receptor.deleted_at is not None:
         activas[TipoAlerta.RECEPTOR_NO_AUTORIZADO] = (
             f"{numero}: el receptor {expediente.receptor.ruc} no está autorizado."
         )
@@ -193,7 +195,7 @@ def actualizar_expediente(
         expediente.requiere_guia = False
     estado = calcular_estado(expediente, hoy, settings)
     expediente.estado = estado
-    expediente.pendiente_aprobacion = not expediente.receptor.autorizada
+    expediente.pendiente_aprobacion = (\n        not expediente.receptor.autorizada or expediente.receptor.deleted_at is not None\n    )
     _sincronizar_alertas(session, expediente, alertas_activas(expediente, estado, settings))
 
 
