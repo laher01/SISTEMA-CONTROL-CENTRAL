@@ -213,7 +213,7 @@ export default function App() {
           <Route path="/registros" element={<Registros sesion={sesion} />} />
           <Route path="/mi-recepcion" element={sesion.rol === "GESTOR" ? <RecepcionGestor /> : <Navigate to="/" replace />} />
           <Route path="/chat" element={<Chat />} />
-          <Route path="/secretaria" element={["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA"].includes(sesion.rol) ? <Secretaria /> : <Navigate to="/" replace />} />
+          <Route path="/secretaria" element={["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA"].includes(sesion.rol) ? <Secretaria sesion={sesion} /> : <Navigate to="/" replace />} />
           <Route path="/documentos" element={<Documentos sesion={sesion} />} />
           <Route path="/expedientes" element={<Expedientes sesion={sesion} />} />
           <Route path="/expedientes/:id" element={<ExpedienteDetalle />} />
