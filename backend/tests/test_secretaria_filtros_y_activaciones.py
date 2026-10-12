@@ -1,7 +1,7 @@
 """Regresiones: visibilidad configurable y trazabilidad de fechas de Secretaría."""
 
 from dataclasses import replace
-from datetime import date
+from datetime import date, datetime
 
 from fastapi.testclient import TestClient
 
@@ -89,7 +89,7 @@ def test_documento_busca_correlativo_y_expone_fecha_carga(
         exp = client.get("/api/v1/expedientes")
         assert exp.status_code == 200, exp.text
         fila = next(fila for fila in exp.json() if fila["id"] == documento["expediente_id"])
-        assert fila["fecha_carga"] == documento["created_at"]
+        assert datetime.fromisoformat(fila["fecha_carga"]) == datetime.fromisoformat(documento["created_at"])
         registros = client.get("/api/v1/registros")
         assert registros.status_code == 200, registros.text
         registro = next(
@@ -97,7 +97,7 @@ def test_documento_busca_correlativo_y_expone_fecha_carga(
             for fila in registros.json()["filas"]
             if fila["expediente_id"] == documento["expediente_id"]
         )
-        assert registro["fecha_carga"] == documento["created_at"]
+        assert datetime.fromisoformat(registro["fecha_carga"]) == datetime.fromisoformat(documento["created_at"])
         tablero = client.get(
             "/api/v1/dashboard/secretaria-expedientes",
             params={"desde": date(2025, 1, 1), "hasta": date(2027, 12, 31)},
@@ -106,4 +106,4 @@ def test_documento_busca_correlativo_y_expone_fecha_carga(
         control = next(
             fila for fila in tablero.json()["filas"] if fila["id"] == documento["expediente_id"]
         )
-        assert control["fecha_carga"] == documento["created_at"]
+        assert datetime.fromisoformat(control["fecha_carga"]) == datetime.fromisoformat(documento["created_at"])
