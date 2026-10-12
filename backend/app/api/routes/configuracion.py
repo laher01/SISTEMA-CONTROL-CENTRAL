@@ -9,7 +9,6 @@ from app.schemas import PermisoConfiguradoIn, PermisoConfiguradoOut
 router = APIRouter(prefix="/configuracion/permisos", tags=["configuracion"])
 
 
-
 # Visibilidad configurable de módulos de Secretaría; Expedientes siempre habilitado.
 MODULOS_SECRETARIA = {
     "registros": "SECRETARIA_MENU_REGISTROS",
@@ -20,7 +19,9 @@ MODULOS_SECRETARIA = {
 
 @router.get("/secretaria")
 def modulos_secretaria(
-    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
 ) -> dict[str, bool]:
     valores = {
         fila.permiso: fila.habilitado
