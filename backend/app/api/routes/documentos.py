@@ -263,7 +263,7 @@ async def subir_documento(
         expediente = session.get(Expediente, expediente_id)
         if expediente is None or expediente.tenant_id != tenant_id or expediente.deleted_at:
             raise no_encontrado("Expediente")
-        _validar_ambito_expediente(auth, expediente)
+        _validar_ambito_expediente(auth, expediente, session)
         # Los adjuntos heredan siempre la propiedad del expediente.
         usuario_id = expediente.usuario_id
         gestor_id = expediente.gestor_id
@@ -481,10 +481,35 @@ def _documento(session: SessionDep, tenant_id: uuid.UUID, documento_id: uuid.UUI
     return documento
 
 
-def _validar_ambito_documento(auth: OperativeAuthDep, documento: Documento) -> None:
+def _documento_de_responsable(
+    session: SessionDep, auth: OperativeAuthDep, usuario_id: uuid.UUID | None
+) -> bool:
+    if auth.miembro_id is None or usuario_id is None:
+        return False
+    return (
+        session.scalar(
+            select(Miembro.id).where(
+                Miembro.id == usuario_id,
+                Miembro.tenant_id == auth.tenant_id,
+                Miembro.rol == RolMiembro.USUARIO,
+                Miembro.responsable_id == auth.miembro_id,
+                Miembro.deleted_at.is_(None),
+            )
+        )
+        is not None
+    )
+
+
+def _validar_ambito_documento(
+    auth: OperativeAuthDep, documento: Documento, session: SessionDep
+) -> None:
     if auth.rol == "GESTOR" and documento.gestor_id != auth.gestor_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Documento no encontrado")
     if auth.rol == RolMiembro.USUARIO and documento.usuario_id != auth.usuario_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Documento no encontrado")
+    if auth.rol == RolMiembro.RESPONSABLE and not _documento_de_responsable(
+        session, auth, documento.usuario_id
+    ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Documento no encontrado")
     if auth.rol == RolMiembro.GERENTE and (
         documento.expediente is None or not expediente_visible_gerente(documento.expediente, auth)
@@ -492,10 +517,16 @@ def _validar_ambito_documento(auth: OperativeAuthDep, documento: Documento) -> N
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Documento no encontrado")
 
 
-def _validar_ambito_expediente(auth: OperativeAuthDep, expediente: Expediente) -> None:
+def _validar_ambito_expediente(
+    auth: OperativeAuthDep, expediente: Expediente, session: SessionDep
+) -> None:
     if auth.rol == "GESTOR" and expediente.gestor_id != auth.gestor_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Expediente no encontrado")
     if auth.rol == RolMiembro.USUARIO and expediente.usuario_id != auth.usuario_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Expediente no encontrado")
+    if auth.rol == RolMiembro.RESPONSABLE and not _documento_de_responsable(
+        session, auth, expediente.usuario_id
+    ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Expediente no encontrado")
     if auth.rol == RolMiembro.GERENTE and not expediente_visible_gerente(expediente, auth):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Expediente no encontrado")
@@ -506,6 +537,19 @@ def _aplicar_ambito_documentos(consulta: Any, auth: OperativeAuthDep) -> Any:
         return consulta.where(Documento.gestor_id == auth.gestor_id)
     if auth.rol == RolMiembro.USUARIO:
         return consulta.where(Documento.usuario_id == auth.usuario_id)
+    if auth.rol == RolMiembro.RESPONSABLE:
+        if auth.miembro_id is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Responsable sin ámbito")
+        return consulta.where(
+            Documento.usuario_id.in_(
+                select(Miembro.id).where(
+                    Miembro.tenant_id == auth.tenant_id,
+                    Miembro.responsable_id == auth.miembro_id,
+                    Miembro.rol == RolMiembro.USUARIO,
+                    Miembro.deleted_at.is_(None),
+                )
+            )
+        )
     if auth.rol == RolMiembro.GERENTE:
         return consulta.where(Documento.expediente.has(alcance_expedientes_gerente(auth)))
     return consulta
@@ -519,7 +563,7 @@ def obtener_documento(
     documento_id: uuid.UUID,
 ) -> Documento:
     documento = _documento(session, tenant_id, documento_id)
-    _validar_ambito_documento(auth, documento)
+    _validar_ambito_documento(auth, documento, session)
     return documento
 
 
@@ -533,7 +577,7 @@ def eliminar_documento(
     documento_id: uuid.UUID,
 ) -> None:
     documento = _documento(session, tenant_id, documento_id)
-    _validar_ambito_documento(auth, documento)
+    _validar_ambito_documento(auth, documento, session)
     if not permiso_habilitado(
         session,
         tenant_id,
@@ -578,7 +622,7 @@ def descargar_archivo(
     documento_id: uuid.UUID,
 ) -> FileResponse:
     documento = _documento(session, tenant_id, documento_id)
-    _validar_ambito_documento(auth, documento)
+    _validar_ambito_documento(auth, documento, session)
     en_linea = documento.mime_type in MIME_EN_LINEA
     return FileResponse(
         almacen.ruta_absoluta(documento.ruta_storage),
@@ -600,7 +644,7 @@ def procesar_documento(
     documento_id: uuid.UUID,
 ) -> Documento:
     documento = _documento(session, tenant_id, documento_id)
-    _validar_ambito_documento(auth, documento)
+    _validar_ambito_documento(auth, documento, session)
     try:
         _procesar_y_aplicar(session, settings, almacen, hoy, documento)
     except DocumentoNoProcesable as exc:
@@ -746,7 +790,7 @@ def confirmar_extraccion(
     confirmacion: ExtraccionConfirmar,
 ) -> Documento:
     documento = _documento(session, tenant_id, documento_id)
-    _validar_ambito_documento(auth, documento)
+    _validar_ambito_documento(auth, documento, session)
     campos = confirmacion.model_dump(mode="json", exclude_none=True)
     datos = dict(documento.datos_extraidos or {})
     datos["extraccion_confirmada"] = {"version": 2, "campos": campos}
@@ -783,7 +827,7 @@ def crear_expediente_asistido(
 ) -> ExpedienteAsistidoOut:
     """Materializa una extracción ya confirmada y vincula su documento atómicamente."""
     documento = _documento(session, tenant_id, documento_id)
-    _validar_ambito_documento(auth, documento)
+    _validar_ambito_documento(auth, documento, session)
     gestor_id = documento.gestor_id
     campos = _campos_confirmados(documento)
     faltantes = [
@@ -882,7 +926,7 @@ def relaciones_sugeridas(
     documento_id: uuid.UUID,
 ) -> list[RelacionSugeridaOut]:
     documento = _documento(session, tenant_id, documento_id)
-    _validar_ambito_documento(auth, documento)
+    _validar_ambito_documento(auth, documento, session)
     sugerencias = sugerir_relaciones(session, documento)
     if auth.rol == "GESTOR":
         sugerencias = [s for s in sugerencias if s.expediente.gestor_id == auth.gestor_id]
@@ -911,11 +955,11 @@ def vincular(
     datos: DocumentoVincular,
 ) -> Documento:
     documento = _documento(session, tenant_id, documento_id)
-    _validar_ambito_documento(auth, documento)
+    _validar_ambito_documento(auth, documento, session)
     expediente = session.get(Expediente, datos.expediente_id)
     if expediente is None or expediente.tenant_id != tenant_id or expediente.deleted_at:
         raise no_encontrado("Expediente")
-    _validar_ambito_expediente(auth, expediente)
+    _validar_ambito_expediente(auth, expediente, session)
     try:
         vincular_documento(
             session, settings, hoy, documento, datos.expediente_id, datos.tipo_documento

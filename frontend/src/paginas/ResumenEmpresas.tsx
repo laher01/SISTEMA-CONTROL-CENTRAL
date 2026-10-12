@@ -8,20 +8,41 @@ type Fila = {
   expedientes: number; total: string;
 };
 type Resumen = { proveedores: Fila[]; clientes: Fila[] };
+type DocumentoDetalle = { id: string; nombre_original: string; tipo_documento: string | null; estado: string; fecha_emision: string | null; serie: string | null; correlativo: string | null; moneda: string | null; importe_total: string | null }; 
+type UsuarioEquipo = { id: string; codigo: string; nombre: string };
+type GestorEquipo = { id: string; usuario_id: string; codigo: string; nombre: string };
 
-export default function ResumenEmpresas() {
+export default function ResumenEmpresas({ esResponsable = false }: { esResponsable?: boolean }) {
   const [pestana, setPestana] = useState<"proveedores" | "clientes">("proveedores");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [mes, setMes] = useState("");
   const [moneda, setMoneda] = useState("");
   const [buscar, setBuscar] = useState("");
+  const [usuario, setUsuario] = useState("");
+  const [gestor, setGestor] = useState("");
+  const [empresaDetalle, setEmpresaDetalle] = useState<{ ruc: string; nombre: string; pestana: "proveedores" | "clientes" } | null>(null);
+  const { datos: usuarios } = useDatos<UsuarioEquipo[]>(esResponsable ? "/api/v1/miembros/mis-usuarios" : null);
+  const { datos: gestores } = useDatos<GestorEquipo[]>(esResponsable ? "/api/v1/gestores" : null);
+  const gestoresDelUsuario = (gestores ?? []).filter((g) => !usuario || g.usuario_id === usuario);
   const params = new URLSearchParams();
   if (desde) params.set("fecha_desde", desde);
   if (hasta) params.set("fecha_hasta", hasta);
   if (moneda) params.set("moneda", moneda);
+  if (esResponsable && usuario) params.set("usuario_id", usuario);
+  if (esResponsable && gestor) params.set("gestor_id", gestor);
   const url = "/api/v1/expedientes/resumen-empresas" + (params.size ? "?" + params.toString() : "");
   const { datos, error, cargando } = useDatos<Resumen>(url);
+  const detalleParams = new URLSearchParams();
+  if (empresaDetalle) detalleParams.set(empresaDetalle.pestana === "proveedores" ? "emisor_ruc" : "receptor_ruc", empresaDetalle.ruc);
+  if (usuario) detalleParams.set("usuario_id", usuario);
+  if (gestor) detalleParams.set("gestor_id", gestor);
+  if (desde) detalleParams.set("fecha_desde", desde);
+  if (hasta) detalleParams.set("fecha_hasta", hasta);
+  detalleParams.set("limit", "100");
+  const { datos: documentosDetalle, error: errorDetalle, cargando: cargandoDetalle } = useDatos<DocumentoDetalle[]>(
+    esResponsable && empresaDetalle ? "/api/v1/documentos?" + detalleParams.toString() : null,
+  );
   const filas = (datos?.[pestana] ?? []).filter((fila) =>
     (fila.ruc + " " + fila.razon_social).toLocaleLowerCase("es").includes(buscar.trim().toLocaleLowerCase("es")),
   );
@@ -39,10 +60,24 @@ export default function ResumenEmpresas() {
     <p>Acumulados según los expedientes visibles para tu usuario y sus permisos.</p>
     <div className="acciones" role="tablist" aria-label="Empresas por función">
       <button type="button" role="tab" aria-selected={pestana === "proveedores"}
-        onClick={() => setPestana("proveedores")}>Proveedores</button>
+        onClick={() => { setPestana("proveedores"); setEmpresaDetalle(null); }}>Proveedores</button>
       <button type="button" role="tab" aria-selected={pestana === "clientes"}
-        onClick={() => setPestana("clientes")}>Clientes</button>
+        onClick={() => { setPestana("clientes"); setEmpresaDetalle(null); }}>Clientes</button>
     </div>
+    {esResponsable && <div className="filtros">
+      <label>Usuario de mi equipo
+        <select value={usuario} onChange={(e) => { setUsuario(e.target.value); setGestor(""); }}>
+          <option value="">Todos mis Usuarios</option>
+          {(usuarios ?? []).map((u) => <option key={u.id} value={u.id}>{u.codigo} — {u.nombre}</option>)}
+        </select>
+      </label>
+      <label>Gestor del Usuario
+        <select value={gestor} onChange={(e) => setGestor(e.target.value)}>
+          <option value="">Todos los Gestores</option>
+          {gestoresDelUsuario.map((g) => <option key={g.id} value={g.id}>{g.codigo} — {g.nombre}</option>)}
+        </select>
+      </label>
+    </div>}
     <div className="filtros">
       <label>Buscar RUC o razón social
         <input type="search" aria-label="Buscar empresa por RUC o razón social" value={buscar}
@@ -71,7 +106,7 @@ export default function ResumenEmpresas() {
           <option value="USD">Dólares</option>
         </select>
       </label>
-      <button type="button" onClick={() => { setMes(""); setDesde(""); setHasta(""); setMoneda(""); setBuscar(""); }}>
+      <button type="button" onClick={() => { setMes(""); setDesde(""); setHasta(""); setMoneda(""); setBuscar(""); setUsuario(""); setGestor(""); }}>
         Limpiar filtros
       </button>
     </div>
@@ -92,11 +127,26 @@ export default function ResumenEmpresas() {
     </div>
     <p>Los indicadores responden a los filtros de búsqueda; las monedas no se mezclan.</p>
     <div className="tabla-responsive" style={{ width: "100%", overflowX: "auto" }}><table style={{ width: "100%", minWidth: 660 }}>
-      <thead><tr><th>RUC</th><th>Empresa</th><th>Moneda</th><th>Expedientes</th><th>Total acumulado</th></tr></thead>
+      <thead><tr><th>RUC</th><th>Empresa</th><th>Moneda</th><th>Expedientes</th><th>Total acumulado</th>{esResponsable && <th>Detalle</th>}</tr></thead>
       <tbody>{filas.map((f) => <tr key={f.empresa_id + "-" + f.moneda}>
         <td>{f.ruc}</td><td>{f.razon_social}</td><td>{f.moneda}</td>
         <td>{f.expedientes}</td><td>{formatearMonto(f.moneda, Number(f.total))}</td>
-      </tr>)}{!filas.length && <tr><td colSpan={5}>No hay empresas para los filtros seleccionados.</td></tr>}</tbody>
+        {esResponsable && <td><button type="button" onClick={() => setEmpresaDetalle({ ruc: f.ruc, nombre: f.razon_social, pestana })}>Ver documentos</button></td>}
+      </tr>)}{!filas.length && <tr><td colSpan={esResponsable ? 6 : 5}>No hay empresas para los filtros seleccionados.</td></tr>}</tbody>
     </table></div>
+    {esResponsable && empresaDetalle && <div className="tabla-responsive" aria-label="Detalle de documentos" style={{ marginTop: 20, overflowX: "auto" }}>
+      <h3>Documentos de {empresaDetalle.nombre}</h3>
+      <p>Se muestran hasta 100 documentos autorizados. Las fechas del detalle corresponden al registro del documento; el resumen utiliza la fecha de emisión del expediente.</p>
+      <button type="button" onClick={() => setEmpresaDetalle(null)}>Cerrar detalle</button>
+      {cargandoDetalle && <p>Cargando documentos…</p>}
+      {errorDetalle && <p role="alert">{errorDetalle}</p>}
+      <table style={{ width: "100%", minWidth: 660 }}>
+        <thead><tr><th>Archivo</th><th>Tipo</th><th>Estado</th><th>Fecha emisión</th><th>Comprobante</th></tr></thead>
+        <tbody>{(documentosDetalle ?? []).map((d) => <tr key={d.id}>
+          <td>{d.nombre_original}</td><td>{d.tipo_documento ?? "—"}</td><td>{d.estado}</td>
+          <td>{d.fecha_emision ?? "—"}</td><td>{[d.serie, d.correlativo].filter(Boolean).join("-") || "—"}</td>
+        </tr>)}{!cargandoDetalle && !documentosDetalle?.length && <tr><td colSpan={5}>Sin documentos para los filtros seleccionados.</td></tr>}</tbody>
+      </table>
+    </div>}
   </section>;
 }
