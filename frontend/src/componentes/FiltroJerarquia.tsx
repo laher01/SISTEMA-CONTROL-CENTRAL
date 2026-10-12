@@ -19,7 +19,7 @@ export default function FiltroJerarquia({
   const idsUsuariosVisibles = new Set(usuarios.map((u) => u.id));
   const gestores = (datos?.gestores ?? []).filter(
     (g) => (!usuarioId || g.usuario_id === usuarioId) &&
-      (!responsableId || idsUsuariosVisibles.has(g.usuario_id)),
+      (!responsableId || (g.usuario_id !== null && idsUsuariosVisibles.has(g.usuario_id))),
   );
   if (sesion.rol === "GESTOR") return null;
   return (
