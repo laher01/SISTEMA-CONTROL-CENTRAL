@@ -139,6 +139,7 @@ export interface Expediente {
   gestor_codigo?: string | null;
   estado: EstadoExpediente;
   pendiente_aprobacion: boolean;
+  fecha_carga?: string | null;
   created_at: string;
 }
 
@@ -242,6 +243,7 @@ export interface AltaGestor {
 
 export interface RegistroFila {
   fecha_registro: string;
+  fecha_carga: string | null;
   tipo_empresa: ClasificacionProveedor | null;
   expediente_id: string;
   estado: EstadoExpediente;
