@@ -1,0 +1,33 @@
+name: preflight-safety-ci
+
+on:
+  pull_request:
+    paths:
+      - "deploy/preflight-secretaria.sh"
+      - ".github/workflows/deploy-staging.yml"
+      - ".github/workflows/preflight-safety-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  syntax-and-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Revisar sintaxis Bash
+        run: bash -n deploy/preflight-secretaria.sh
+      - name: Verificar reglas de protección
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          script = Path("deploy/preflight-secretaria.sh").read_text()
+          workflow = Path(".github/workflows/deploy-staging.yml").read_text()
+          assert 'git diff --quiet' in script
+          assert 'git diff --cached --quiet' in script
+          assert 'ls-files", "--others", "--exclude-standard", "-z' in script
+          assert 'git merge-base --is-ancestor' in script
+          assert 'actions/checkout@v4' in workflow.split("  deploy:", 1)[1]
+          assert "EXPECTED_COMMIT: ${{ github.sha }}" in workflow.split("  deploy:", 1)[1]
+          print("Protecciones estructurales verificadas")
+          PY
