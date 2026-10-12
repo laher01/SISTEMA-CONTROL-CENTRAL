@@ -295,7 +295,7 @@ function FilaDocumento({
         </a>
         {documento.serie_documento && documento.correlativo_documento && (
           <small className="bloque tenue">{documento.serie_documento}-{documento.correlativo_documento}</small>
-        )
+        )}
         {error && <small className="error bloque">{error}</small>}
       </td>
       <td>
