@@ -39,6 +39,7 @@ from app.services.automatizacion_documental import (
     registrar_fallo,
 )
 from app.services.expedientes import actualizar_expediente, buscar_expediente
+from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.ingesta import (
     ArchivoSubido,
     ComprobanteYaRegistrado,
@@ -324,7 +325,7 @@ def listar_documentos(
     fecha_hasta: date | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[Documento]:
+) -> list[DocumentoOut]:
     consulta = (
         select(Documento)
         .options(
@@ -375,7 +376,12 @@ def listar_documentos(
             )
 
     consulta = consulta.order_by(Documento.created_at.desc()).limit(limit).offset(offset)
-    return list(session.scalars(consulta))
+    filas = list(session.scalars(consulta))
+    jerarquias = nombres_jerarquia(session, tenant_id, filas)
+    return [
+        DocumentoOut.model_validate(fila).model_copy(update=jerarquias[fila.id])
+        for fila in filas
+    ]
 
 
 @router.get("/resumen")
