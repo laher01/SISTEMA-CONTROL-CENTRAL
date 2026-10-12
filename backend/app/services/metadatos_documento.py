@@ -27,17 +27,11 @@ def metadatos_individuales(documento: Documento) -> dict[str, str | date | None]
     confirmado = datos.get("extraccion_confirmada")
     campos_confirmados = confirmado.get("campos") if isinstance(confirmado, dict) else None
     procesado = datos.get("procesamiento_documental")
-    estructurado = (
-        procesado.get("extraccion_estructurada") if isinstance(procesado, dict) else None
-    )
-    campos_extraidos = (
-        estructurado.get("campos") if isinstance(estructurado, dict) else None
-    )
+    estructurado = procesado.get("extraccion_estructurada") if isinstance(procesado, dict) else None
+    campos_extraidos = estructurado.get("campos") if isinstance(estructurado, dict) else None
     fuentes = (campos_confirmados, datos, campos_extraidos)
     serie = next((valor for fuente in fuentes if (valor := _valor(fuente, "serie"))), None)
-    numero = next(
-        (valor for fuente in fuentes if (valor := _valor(fuente, "correlativo"))), None
-    )
+    numero = next((valor for fuente in fuentes if (valor := _valor(fuente, "correlativo"))), None)
     fecha_texto = next(
         (valor for fuente in fuentes if (valor := _valor(fuente, "fecha_emision"))), None
     )
