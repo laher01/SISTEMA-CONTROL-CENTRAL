@@ -379,8 +379,7 @@ def listar_documentos(
     filas = list(session.scalars(consulta))
     jerarquias = nombres_jerarquia(session, tenant_id, filas)
     return [
-        DocumentoOut.model_validate(fila).model_copy(update=jerarquias[fila.id])
-        for fila in filas
+        DocumentoOut.model_validate(fila).model_copy(update=jerarquias[fila.id]) for fila in filas
     ]
 
 
