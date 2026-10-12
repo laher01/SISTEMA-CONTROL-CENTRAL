@@ -38,6 +38,7 @@ from app.services.automatizacion_documental import (
     guardar_procesamiento,
     registrar_fallo,
 )
+from app.services.cache_ocr import procesar_con_cache
 from app.services.expedientes import actualizar_expediente, buscar_expediente
 from app.services.ingesta import (
     ArchivoSubido,
@@ -49,7 +50,6 @@ from app.services.ingesta import (
     vincular_documento,
 )
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
-from app.services.cache_ocr import procesar_con_cache
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 from app.services.relaciones_documentales import sugerir_relaciones
 from app.services.separador_pdf import analizar_paquete, extraer_fragmento
