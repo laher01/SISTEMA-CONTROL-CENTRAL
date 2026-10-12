@@ -200,8 +200,7 @@ def listar(
     filas = list(session.scalars(consulta))
     jerarquias = nombres_jerarquia(session, tenant_id, filas)
     return [
-        ExpedienteOut.model_validate(fila).model_copy(update=jerarquias[fila.id])
-        for fila in filas
+        ExpedienteOut.model_validate(fila).model_copy(update=jerarquias[fila.id]) for fila in filas
     ]
 
 
