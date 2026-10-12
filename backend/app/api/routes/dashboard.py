@@ -130,7 +130,11 @@ def detalle_secretaria(
         totales[e.moneda] = totales.get(e.moneda, Decimal("0")) + e.importe_total
         usuario = usuarios.get(e.usuario_id) if e.usuario_id is not None else None
         gestor = gestores.get(e.gestor_id) if e.gestor_id is not None else None
-        responsable = usuarios.get(usuario.responsable_id) if usuario and usuario.responsable_id else None
+        responsable = (
+            usuarios.get(usuario.responsable_id)
+            if usuario is not None and usuario.responsable_id is not None
+            else None
+        )
         faltantes = [tipo.value for tipo in documentos_faltantes(e, settings)]
         filas.append(
             {
