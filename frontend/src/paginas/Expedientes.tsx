@@ -225,6 +225,9 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
                   onChange={(e) => alternarTodosVisibles(e.target.checked)}
                 />
               </th>
+              {!responsableId && <th>Responsable</th>}
+              {!usuarioId && <th>Usuario</th>}
+              {!gestorId && <th>Gestor</th>}
               <th>Estado</th>
               <th>Tipo</th>
               <th>Comprobante</th>
@@ -246,6 +249,9 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
                     onChange={(ev) => alternarVisible(e.id, ev.target.checked)}
                   />
                 </td>
+                {!responsableId && <td>{e.responsable_nombre ?? "Sin asignar"}<small className="bloque tenue">{e.responsable_codigo}</small></td>}
+                {!usuarioId && <td>{e.usuario_nombre ?? "Sin asignar"}<small className="bloque tenue">{e.usuario_codigo}</small></td>}
+                {!gestorId && <td>{e.gestor_nombre ?? "Sin asignar"}<small className="bloque tenue">{e.gestor_codigo}</small></td>}
                 <td>
                   <Semaforo estado={e.estado} />
                 </td>

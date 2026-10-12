@@ -190,6 +190,9 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
           <table>
             <thead>
               <tr>
+                {!responsableId && <th>Responsable</th>}
+                {!usuarioId && <th>Usuario</th>}
+                {!gestorId && <th>Gestor</th>}
                 <th>Estado</th>
                 <th>Archivo</th>
                 <th>Tipo</th>
@@ -203,7 +206,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
             </thead>
             <tbody>
               {datos?.map((documento) => (
-                <FilaDocumento key={documento.id} documento={documento} alCambiar={recargar} />
+                <FilaDocumento key={documento.id} documento={documento} alCambiar={recargar} mostrarResponsable={!responsableId} mostrarUsuario={!usuarioId} mostrarGestor={!gestorId} />
               ))}
             </tbody>
           </table>
@@ -222,9 +225,15 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
 function FilaDocumento({
   documento,
   alCambiar,
+  mostrarResponsable,
+  mostrarUsuario,
+  mostrarGestor,
 }: {
   documento: Documento;
   alCambiar: () => void;
+  mostrarResponsable: boolean;
+  mostrarUsuario: boolean;
+  mostrarGestor: boolean;
 }) {
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState("");
@@ -263,6 +272,9 @@ function FilaDocumento({
 
   return (
     <tr>
+      {mostrarResponsable && <td>{documento.responsable_nombre ?? "Sin asignar"}<small className="bloque tenue">{documento.responsable_codigo}</small></td>}
+      {mostrarUsuario && <td>{documento.usuario_nombre ?? "Sin asignar"}<small className="bloque tenue">{documento.usuario_codigo}</small></td>}
+      {mostrarGestor && <td>{documento.gestor_nombre ?? "Sin asignar"}<small className="bloque tenue">{documento.gestor_codigo}</small></td>}
       <td>
         <span className={`estado-documento estado-${documento.estado.toLowerCase()}`}>
           {ETIQUETA_ESTADO_DOCUMENTO[documento.estado as EstadoDocumento]}

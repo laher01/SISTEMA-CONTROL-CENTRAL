@@ -48,6 +48,7 @@ from app.services.ingesta import (
     ingerir_documento,
     vincular_documento,
 )
+from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 from app.services.relaciones_documentales import sugerir_relaciones
@@ -324,7 +325,7 @@ def listar_documentos(
     fecha_hasta: date | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[Documento]:
+) -> list[DocumentoOut]:
     consulta = (
         select(Documento)
         .options(
@@ -375,7 +376,11 @@ def listar_documentos(
             )
 
     consulta = consulta.order_by(Documento.created_at.desc()).limit(limit).offset(offset)
-    return list(session.scalars(consulta))
+    filas = list(session.scalars(consulta))
+    jerarquias = nombres_jerarquia(session, tenant_id, filas)
+    return [
+        DocumentoOut.model_validate(fila).model_copy(update=jerarquias[fila.id]) for fila in filas
+    ]
 
 
 @router.get("/resumen")

@@ -33,6 +33,9 @@ def detalle_secretaria(
     monto_desde: Decimal | None = None,
     monto_hasta: Decimal | None = None,
     guia_remitente: str | None = None,
+    responsable_id: uuid.UUID | None = None,
+    usuario_id: uuid.UUID | None = None,
+    gestor_id: uuid.UUID | None = None,
 ) -> dict[str, object]:
     """Consulta transversal de Secretaría sin exponer pagos ni comisiones."""
     from fastapi import HTTPException, status
@@ -61,6 +64,17 @@ def detalle_secretaria(
         )
         .order_by(Expediente.fecha_emision.desc(), Expediente.id)
     )
+    if responsable_id is not None:
+        responsables_usuarios = select(Miembro.id).where(
+            Miembro.tenant_id == tenant_id,
+            Miembro.rol == RolMiembro.USUARIO,
+            Miembro.responsable_id == responsable_id,
+        )
+        consulta = consulta.where(Expediente.usuario_id.in_(responsables_usuarios))
+    if usuario_id is not None:
+        consulta = consulta.where(Expediente.usuario_id == usuario_id)
+    if gestor_id is not None:
+        consulta = consulta.where(Expediente.gestor_id == gestor_id)
     if emisor_ruc:
         emisor_empresa = aliased(Empresa)
         consulta = consulta.join(emisor_empresa, Expediente.emisor_id == emisor_empresa.id).where(
@@ -116,6 +130,11 @@ def detalle_secretaria(
         totales[e.moneda] = totales.get(e.moneda, Decimal("0")) + e.importe_total
         usuario = usuarios.get(e.usuario_id) if e.usuario_id is not None else None
         gestor = gestores.get(e.gestor_id) if e.gestor_id is not None else None
+        responsable = (
+            usuarios.get(usuario.responsable_id)
+            if usuario is not None and usuario.responsable_id is not None
+            else None
+        )
         faltantes = [tipo.value for tipo in documentos_faltantes(e, settings)]
         filas.append(
             {
@@ -131,6 +150,8 @@ def detalle_secretaria(
                 "emisor_ruc": e.emisor.ruc,
                 "receptor": e.receptor.razon_social,
                 "receptor_ruc": e.receptor.ruc,
+                "responsable": responsable.nombre if responsable else "Sin asignar",
+                "responsable_codigo": responsable.codigo if responsable else "",
                 "usuario": usuario.nombre if usuario else "Sin asignar",
                 "usuario_codigo": usuario.codigo if usuario else "",
                 "gestor": gestor.nombre if gestor else "Sin asignar",

@@ -158,6 +158,12 @@ class DocumentoOut(Orm):
     importe_total: Decimal | None = None
     gestor_id: uuid.UUID | None
     usuario_id: uuid.UUID | None
+    responsable_nombre: str | None = None
+    responsable_codigo: str | None = None
+    usuario_nombre: str | None = None
+    usuario_codigo: str | None = None
+    gestor_nombre: str | None = None
+    gestor_codigo: str | None = None
     created_at: datetime
 
 
@@ -236,6 +242,12 @@ class ExpedienteOut(Orm):
     requiere_guia: bool
     gestor_id: uuid.UUID | None
     usuario_id: uuid.UUID | None
+    responsable_nombre: str | None = None
+    responsable_codigo: str | None = None
+    usuario_nombre: str | None = None
+    usuario_codigo: str | None = None
+    gestor_nombre: str | None = None
+    gestor_codigo: str | None = None
     estado: EstadoExpediente
     pendiente_aprobacion: bool
     created_at: datetime
