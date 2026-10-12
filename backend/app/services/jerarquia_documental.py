@@ -36,7 +36,11 @@ def nombres_jerarquia(
     for fila in filas:
         usuario = usuarios.get(fila.usuario_id) if fila.usuario_id is not None else None
         gestor = gestores.get(fila.gestor_id) if fila.gestor_id is not None else None
-        responsable = responsables.get(usuario.responsable_id) if usuario else None
+        responsable = (
+            responsables.get(usuario.responsable_id)
+            if usuario is not None and usuario.responsable_id is not None
+            else None
+        )
         resultado[fila.id] = {
             "responsable_nombre": responsable.nombre if responsable else None,
             "responsable_codigo": responsable.codigo if responsable else None,
