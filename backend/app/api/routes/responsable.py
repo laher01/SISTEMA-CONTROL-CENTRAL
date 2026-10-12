@@ -758,6 +758,8 @@ def resumen_equipo(
             .where(
                 Expediente.tenant_id == tenant_id,
                 Empresa.tenant_id == tenant_id,
+                Empresa.autorizada.is_(True),
+                Empresa.deleted_at.is_(None),
                 Expediente.usuario_id.in_(ids),
                 Expediente.deleted_at.is_(None),
             )
