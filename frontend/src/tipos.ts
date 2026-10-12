@@ -93,6 +93,9 @@ export interface Documento {
   datos_extraidos: Record<string, unknown> | null;
   formato_origen: string | null;
   fecha_emision: string | null;
+  fecha_documento?: string | null;
+  serie_documento?: string | null;
+  correlativo_documento?: string | null;
   serie: string | null;
   correlativo: string | null;
   moneda: Moneda | null;
