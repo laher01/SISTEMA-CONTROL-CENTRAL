@@ -1,11 +1,10 @@
 """Cache persistente de resultados OCR; aislada por tenant y version de procesamiento."""
 
-from collections.abc import Callable
-
 import hashlib
 import json
 import os
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 
 
