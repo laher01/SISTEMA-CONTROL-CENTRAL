@@ -497,7 +497,9 @@ def _visible_para_auth(
     if auth.rol == RolMiembro.USUARIO:
         return expediente.usuario_id == auth.usuario_id
     if auth.rol == RolMiembro.RESPONSABLE:
-        return expediente.usuario_id in set(session.scalars(_usuarios_responsable(expediente.tenant_id, auth)))
+        return expediente.usuario_id in set(
+            session.scalars(_usuarios_responsable(expediente.tenant_id, auth))
+        )
     if auth.rol == RolMiembro.GERENTE:
         return expediente_visible_gerente(expediente, auth)
     return True
