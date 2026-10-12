@@ -9,8 +9,29 @@ echo "Commit VPS: $(git rev-parse HEAD)"
 echo "Rama VPS: $(git branch --show-current)"
 echo "Estado local:"
 git status --porcelain
-if [ -n "$(git status --porcelain)" ]; then
-  echo "::error::VPS tiene cambios locales: bloquear despliegue."
+# Permitir exclusivamente archivos operativos no rastreados de esta VPS.
+# Cualquier cambio a archivos versionados sigue bloqueando la instalación.
+check_worktree() {
+  local line path
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    if [[ "${line:0:2}" != "??" ]]; then
+      echo "Cambio local versionado: $line" >&2
+      return 1
+    fi
+    path="${line:3}"
+    case "$path" in
+      actualizar-fact-central.sh|deploy/auto-update.log|deploy/local-backups/*|deploy/private/*)
+        echo "Archivo operativo local preservado: $path" ;;
+      *)
+        echo "Archivo local no reconocido: $path" >&2
+        return 1 ;;
+    esac
+  done < <(git status --porcelain --untracked-files=all)
+}
+
+if ! check_worktree; then
+  echo "::error::VPS presenta cambios no autorizados; bloquear despliegue."
   exit 1
 fi
 echo "Uso de disco:"
