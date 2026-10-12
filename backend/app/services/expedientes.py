@@ -40,8 +40,7 @@ def obtener_o_crear_empresa(
         session.add(empresa)
         session.flush()
     else:
-        # Una ingesta nunca reactiva una empresa eliminada por Administración.
-        # Se conserva la referencia fiscal y su estado deshabilitado.
+        # La ingesta no puede reactivar una empresa eliminada por Administración.
         if empresa.deleted_at is not None:
             return empresa
         actual = empresa.razon_social.strip()
