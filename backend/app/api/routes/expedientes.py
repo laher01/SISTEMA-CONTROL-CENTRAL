@@ -14,6 +14,7 @@ from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.sql import Select
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from starlette.background import BackgroundTask
@@ -478,7 +479,9 @@ def listar_ids(
     return list(session.scalars(consulta))
 
 
-def _usuarios_responsable(tenant_id: uuid.UUID, auth: OperativeAuthDep):
+def _usuarios_responsable(
+    tenant_id: uuid.UUID, auth: OperativeAuthDep
+) -> Select[tuple[uuid.UUID]]:
     if auth.miembro_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Responsable sin ámbito")
     return select(Miembro.id).where(
