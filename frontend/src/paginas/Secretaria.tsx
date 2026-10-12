@@ -109,7 +109,7 @@ export default function Secretaria({ sesion }: { sesion: SesionActual }) {
   };
   const notificar = (r: RegistroSecretaria) => {
     const texto = `Revisión documental: ${r.tipo_comprobante} ${r.serie}-${r.correlativo}. ` +
-      `Responsable: ${r.usuario} / ${r.gestor}. Faltantes: ${r.faltantes.join(", ") || "Sin faltantes obligatorios"}. ` +
+      `Responsable: ${r.responsable} / Usuario: ${r.usuario} / Gestor: ${r.gestor}. Faltantes: ${r.faltantes.join(", ") || "Sin faltantes obligatorios"}. ` +
       `Expediente: ${r.id}`;
     void navigator.clipboard.writeText(texto).then(
       () => setMensaje("Aviso copiado. Abra el chat interno y envíelo al responsable."),
