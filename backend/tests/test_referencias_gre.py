@@ -2,7 +2,6 @@
 
 from app.services.referencias_gre import extraer_referencias_factura_gre
 
-
 EJEMPLO = (
     "Datos del Destinatario :INVERSIONES Y NEGOCIACIONES MAREUF E.I.R.L. - "
     "REGISTRO ÚNICO DE CONTRIBUYENTES N° 20538821374\n"
