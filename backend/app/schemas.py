@@ -250,6 +250,7 @@ class ExpedienteOut(Orm):
     gestor_codigo: str | None = None
     estado: EstadoExpediente
     pendiente_aprobacion: bool
+    fecha_carga: datetime | None = None
     created_at: datetime
 
 
@@ -379,6 +380,7 @@ class AltaGestorOut(BaseModel):
 
 class RegistroFila(BaseModel):
     fecha_registro: datetime
+    fecha_carga: datetime | None = None
     tipo_empresa: str | None = None
     expediente_id: uuid.UUID
     estado: EstadoExpediente
