@@ -1,12 +1,13 @@
 """Metadatos del archivo individual, independientes del expediente asociado."""
 
 import re
+from contextlib import suppress
 from datetime import date
 
 from app.models import Documento
 
 
-NUMERO_EN_ARCHIVO = re.compile(r"(?i)(?<![A-Z0-9])([A-Z]{1,4}[0-9]{2,3})-(\d{1,12})(?!\d)")
+NUMERO_EN_ARCHIVO = re.compile(r"(?i)(?<![A-Z0-9])([A-Z]{1,4}[0-9]{2,3})-(\\d{1,12})(?!\\d)")
 
 
 def _valor(datos: object, clave: str) -> str | None:
@@ -43,10 +44,8 @@ def metadatos_individuales(documento: Documento) -> dict[str, str | date | None]
     )
     fecha: date | None = None
     if fecha_texto:
-        try:
+        with suppress(ValueError):
             fecha = date.fromisoformat(fecha_texto[:10])
-        except ValueError:
-            pass
     if documento.tipo_documento in ("FACT", "RHE") and documento.expediente is not None:
         serie = serie or documento.expediente.serie
         numero = numero or documento.expediente.correlativo
