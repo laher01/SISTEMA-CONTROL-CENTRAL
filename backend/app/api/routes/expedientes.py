@@ -202,8 +202,22 @@ def listar(
     )
     filas = list(session.scalars(consulta))
     jerarquias = nombres_jerarquia(session, tenant_id, filas)
+    ids = [fila.id for fila in filas]
+    primeras_cargas = dict(
+        session.execute(
+            select(Documento.expediente_id, func.min(Documento.created_at))
+            .where(
+                Documento.tenant_id == tenant_id,
+                Documento.expediente_id.in_(ids),
+                Documento.deleted_at.is_(None),
+            )
+            .group_by(Documento.expediente_id)
+        )
+    ) if ids else {}
     return [
-        ExpedienteOut.model_validate(fila).model_copy(update=jerarquias[fila.id]) for fila in filas
+        ExpedienteOut.model_validate(fila).model_copy(
+            update={**jerarquias[fila.id], "fecha_carga": primeras_cargas.get(fila.id)}
+        ) for fila in filas
     ]
 
 
