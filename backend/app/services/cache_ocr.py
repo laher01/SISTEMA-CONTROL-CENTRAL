@@ -1,4 +1,5 @@
 """Cache persistente de resultados OCR; aislada por tenant y version de procesamiento."""
+
 import hashlib
 import json
 import os
