@@ -205,8 +205,9 @@ def listar(
     ids = [fila.id for fila in filas]
     primeras_cargas: dict[uuid.UUID | None, datetime] = {}
     if ids:
-        primeras_cargas = dict(
-            session.execute(
+        primeras_cargas = {
+            expediente_id: fecha
+            for expediente_id, fecha in session.execute(
                 select(Documento.expediente_id, func.min(Documento.created_at))
                 .where(
                     Documento.tenant_id == tenant_id,
@@ -215,7 +216,7 @@ def listar(
                 )
                 .group_by(Documento.expediente_id)
             ).all()
-        )
+        }
     return [
         ExpedienteOut.model_validate(fila).model_copy(
             update={**jerarquias[fila.id], "fecha_carga": primeras_cargas.get(fila.id)}
