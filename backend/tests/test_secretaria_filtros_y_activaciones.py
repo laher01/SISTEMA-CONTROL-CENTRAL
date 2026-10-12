@@ -10,7 +10,8 @@ from tests.xml import factura
 
 
 def test_menu_secretaria_se_configura_y_se_aplica_en_api(
-    client: TestClient, auth_prueba: AuthPrueba,
+    client: TestClient,
+    auth_prueba: AuthPrueba,
 ) -> None:
     auth_prueba.como_admin()
     configuracion = client.get("/api/v1/configuracion/permisos/secretaria")
@@ -52,7 +53,8 @@ def test_menu_secretaria_se_configura_y_se_aplica_en_api(
 
 
 def test_documento_busca_correlativo_y_expone_fecha_carga(
-    client: TestClient, auth_prueba: AuthPrueba,
+    client: TestClient,
+    auth_prueba: AuthPrueba,
 ) -> None:
     subida = client.post(
         "/api/v1/documentos",
@@ -72,9 +74,7 @@ def test_documento_busca_correlativo_y_expone_fecha_carga(
     resumen = client.get("/api/v1/documentos/resumen", params=query)
     assert resumen.status_code == 200, resumen.text
     assert resumen.json()["total_documentos"] >= 1
-    ninguna = client.get(
-        "/api/v1/documentos", params={"serie_correlativo": "ZZZ-99999999"}
-    )
+    ninguna = client.get("/api/v1/documentos", params={"serie_correlativo": "ZZZ-99999999"})
     assert ninguna.status_code == 200, ninguna.text
     assert ninguna.json() == []
     if documento["fecha_emision"]:
@@ -88,9 +88,7 @@ def test_documento_busca_correlativo_y_expone_fecha_carga(
     if documento["expediente_id"]:
         exp = client.get("/api/v1/expedientes")
         assert exp.status_code == 200, exp.text
-        fila = next(
-            fila for fila in exp.json() if fila["id"] == documento["expediente_id"]
-        )
+        fila = next(fila for fila in exp.json() if fila["id"] == documento["expediente_id"])
         assert fila["fecha_carga"] == documento["created_at"]
         registros = client.get("/api/v1/registros")
         assert registros.status_code == 200, registros.text
@@ -106,8 +104,6 @@ def test_documento_busca_correlativo_y_expone_fecha_carga(
         )
         assert tablero.status_code == 200, tablero.text
         control = next(
-            fila
-            for fila in tablero.json()["filas"]
-            if fila["id"] == documento["expediente_id"]
+            fila for fila in tablero.json()["filas"] if fila["id"] == documento["expediente_id"]
         )
         assert control["fecha_carga"] == documento["created_at"]
