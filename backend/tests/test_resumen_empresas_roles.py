@@ -114,3 +114,34 @@ def test_resumen_por_empresa_respeta_fechas_monedas_y_usuario(
         ).status_code
         == 422
     )
+
+
+
+def test_responsable_resumen_incluye_solo_usuarios_propios(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    tenant = auth_prueba.contexto.tenant_id
+    usuario = session.query(Miembro).filter_by(tenant_id=tenant, codigo="TESTUSR").one()
+    responsable = Miembro(tenant_id=tenant, codigo="RESP-RESUMEN", nombre="Responsable", rol="RESPONSABLE")
+    ajeno = Miembro(tenant_id=tenant, codigo="USR-AJENO", nombre="Ajeno", rol="USUARIO")
+    emisor = Empresa(tenant_id=tenant, ruc="20999999991", razon_social="Proveedor")
+    receptor = Empresa(tenant_id=tenant, ruc="20999999992", razon_social="Cliente")
+    session.add_all([responsable, ajeno, emisor, receptor])
+    session.flush()
+    usuario.responsable_id = responsable.id
+    for uid, correlativo, monto in [(usuario.id, "501", "120"), (ajeno.id, "502", "800")]:
+        session.add(Expediente(
+            tenant_id=tenant, usuario_id=uid, emisor_id=emisor.id,
+            receptor_id=receptor.id, tipo_comprobante="01", serie="F009",
+            correlativo=correlativo, fecha_emision=date(2026, 10, 11),
+            moneda="PEN", importe_total=Decimal(monto),
+        ))
+    session.commit()
+    auth_prueba.contexto = replace(
+        auth_prueba.contexto, rol="RESPONSABLE", miembro_id=responsable.id,
+    )
+    response = client.get("/api/v1/expedientes/resumen-empresas")
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert sum(Decimal(x["total"]) for x in data["clientes"]) == Decimal("120")
+    assert sum(x["expedientes"] for x in data["clientes"]) == 1
