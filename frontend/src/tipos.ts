@@ -99,6 +99,12 @@ export interface Documento {
   importe_total: string | null;
   gestor_id: string | null;
   usuario_id: string | null;
+  responsable_nombre?: string | null;
+  responsable_codigo?: string | null;
+  usuario_nombre?: string | null;
+  usuario_codigo?: string | null;
+  gestor_nombre?: string | null;
+  gestor_codigo?: string | null;
   created_at: string;
 }
 
@@ -125,6 +131,12 @@ export interface Expediente {
   requiere_guia: boolean;
   gestor_id: string | null;
   usuario_id: string | null;
+  responsable_nombre?: string | null;
+  responsable_codigo?: string | null;
+  usuario_nombre?: string | null;
+  usuario_codigo?: string | null;
+  gestor_nombre?: string | null;
+  gestor_codigo?: string | null;
   estado: EstadoExpediente;
   pendiente_aprobacion: boolean;
   created_at: string;
