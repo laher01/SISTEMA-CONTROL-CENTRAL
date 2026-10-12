@@ -19,6 +19,25 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   exit 1
 fi
 
+# Comprobación de seguridad antes de modificar el árbol de trabajo.
+bash "$DEPLOY_DIR/deploy/preflight-secretaria.sh"
+
+# Respaldo obligatorio antes de cualquier actualización.
+compose=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+if ! "${compose[@]}" ps --status running db | grep -q db; then
+  echo "Base PostgreSQL detenida: se bloquea la actualización." >&2
+  exit 1
+fi
+timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+backup="$BACKUP_DIR/fact_central_$timestamp.dump"
+"${compose[@]}" exec -T db sh -c \
+  'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' > "$backup"
+if [ ! -s "$backup" ]; then
+  echo "No se produjo un respaldo PostgreSQL válido." >&2
+  exit 1
+fi
+echo "Respaldo PostgreSQL creado: $backup"
+
 previous_commit="$(git rev-parse HEAD)"
 git fetch origin main
 git checkout main
@@ -31,16 +50,6 @@ if [ -n "${EXPECTED_COMMIT:-}" ] && [ "$current_commit" != "$EXPECTED_COMMIT" ];
 fi
 
 echo "Actualizando FACT CENTRAL: $previous_commit -> $current_commit"
-
-compose=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
-
-if "${compose[@]}" ps --status running db | grep -q db; then
-  timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-  "${compose[@]}" exec -T db sh -c \
-    'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' \
-    > "$BACKUP_DIR/fact_central_$timestamp.dump"
-  find "$BACKUP_DIR" -type f -name 'fact_central_*.dump' -mtime +14 -delete
-fi
 
 "${compose[@]}" build --pull
 "${compose[@]}" up -d --remove-orphans
