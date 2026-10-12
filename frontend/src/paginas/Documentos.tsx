@@ -196,7 +196,8 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
                 <th>Estado</th>
                 <th>Archivo</th>
                 <th>Tipo</th>
-                <th>Subido</th>
+                <th>Fecha documento</th>
+                 <th>Fecha de carga</th>
                 <th>Lectura</th>
                 <th>Emisor</th>
                 <th>Receptor</th>
@@ -291,7 +292,8 @@ function FilaDocumento({
           ? ETIQUETA_TIPO_DOCUMENTO[documento.tipo_documento as TipoDocumento]
           : "Sin clasificar"}
       </td>
-      <td>{formatearFecha(documento.created_at)}</td>
+      <td>{documento.fecha_emision ? formatearFecha(documento.fecha_emision) : "Pendiente de identificar"}</td>
+       <td>{formatearFecha(documento.created_at)}</td>
       <td>
         {lectura ? (
           <span title={lectura.detalle}>{lectura.texto}</span>
