@@ -361,7 +361,7 @@ def listar_documentos(
     if serie_correlativo:
         texto = serie_correlativo.strip().upper()
         consulta = consulta.where(
-            func.upper(Documento.serie + "-" + Documento.correlativo).contains(texto)
+            func.upper(func.concat(Documento.serie, "-", Documento.correlativo)).contains(texto)
         )
     if dia is not None:
         consulta = consulta.where(func.date(Documento.created_at) == dia)
@@ -440,7 +440,7 @@ def resumen_documentos(
     if serie_correlativo:
         texto = serie_correlativo.strip().upper()
         consulta = consulta.where(
-            func.upper(Documento.serie + "-" + Documento.correlativo).contains(texto)
+            func.upper(func.concat(Documento.serie, "-", Documento.correlativo)).contains(texto)
         )
     if dia is not None:
         consulta = consulta.where(func.date(Documento.created_at) == dia)
