@@ -7,11 +7,54 @@ echo "FACT CENTRAL | preflight Secretaría"
 echo "UTC: $(date -u +%FT%TZ)"
 echo "Commit VPS: $(git rev-parse HEAD)"
 echo "Rama VPS: $(git branch --show-current)"
-echo "Estado local:"
-git status --porcelain
-if [ -n "$(git status --porcelain)" ]; then
-  echo "::error::VPS tiene cambios locales: bloquear despliegue."
+echo "Estado local (resumen, sin revelar contenido privado):"
+git status --short
+# Los archivos no rastreados se conservan. Solo bloquear cambios versionados.
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "::error::Hay modificaciones versionadas en VPS; se bloquea el despliegue."
   exit 1
+fi
+# La comparación contra el árbol de destino permite detectar colisiones reales.
+if [ -n "${EXPECTED_COMMIT:-}" ]; then
+  case "$EXPECTED_COMMIT" in
+    *[!0-9a-fA-F]*|"") echo "::error::SHA destino inválido."; exit 1 ;;
+  esac
+  git fetch --quiet origin main
+  if ! git cat-file -e "${EXPECTED_COMMIT}^{commit}" 2>/dev/null; then
+    echo "::error::Commit destino no disponible."; exit 1
+  fi
+  if ! git merge-base --is-ancestor HEAD "$EXPECTED_COMMIT"; then
+    echo "::error::El commit VPS no es ancestro de destino; requiere revisión."; exit 1
+  fi
+  # Git advierte y protege frente a colisiones con ficheros sin seguimiento.
+  # Se anticipa la comprobación sin modificar el árbol de trabajo.
+  python3 - "$EXPECTED_COMMIT" <<'PY'
+import os
+import subprocess
+import sys
+
+target = sys.argv[1]
+changed = subprocess.check_output(
+    ["git", "diff", "--name-only", "-z", "--diff-filter=ACMR", "HEAD", target]
+).split(b"\\0")
+untracked = subprocess.check_output(
+    ["git", "ls-files", "--others", "--exclude-standard", "-z"]
+).split(b"\\0")
+incoming = {os.fsdecode(p) for p in changed if p}
+collisions = []
+for raw in untracked:
+    if not raw:
+        continue
+    name = os.fsdecode(raw)
+    if name in incoming or any(name.startswith(p + "/") for p in incoming):
+        collisions.append(name)
+if collisions:
+    print("::error::Conflicto con archivos locales no rastreados; no se sobrescribirá nada.")
+    for item in collisions:
+        print("::error::Conflicto: " + item)
+    sys.exit(1)
+print(f"Sin colisiones: {len([x for x in untracked if x])} archivos locales conservados.")
+PY
 fi
 echo "Uso de disco:"
 df -h "$DEPLOY_DIR"
