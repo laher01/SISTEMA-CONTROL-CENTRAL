@@ -69,6 +69,25 @@ export default function Pendientes() {
   const { datos: provisionales, recargar: recargarProvisionales } = useDatos<ProvisionalGRE[]>(
     "/api/v1/documentos/provisionales-gre?limit=2000",
   );
+  const [reindexando, setReindexando] = useState(false);
+  const [resultadoReindice, setResultadoReindice] = useState("");
+  const reindexarGuias = async () => {
+    setReindexando(true);
+    try {
+      const resultado = await enviarJson<{
+        considerados: number; provisionales_creados: number; guias_relacionadas: number
+      }>("/api/v1/documentos/reindexar-gre-pendientes?limit=2000", "POST");
+      setResultadoReindice(
+        `${resultado.considerados} GRE revisadas sin OCR · ${resultado.provisionales_creados} expedientes provisionales · ${resultado.guias_relacionadas} relacionadas`
+      );
+      recargar();
+      recargarProvisionales();
+    } catch (e) {
+      setResultadoReindice(e instanceof Error ? e.message : String(e));
+    } finally {
+      setReindexando(false);
+    }
+  };
   const [procesandoLote, setProcesandoLote] = useState(false);
   const [resultadoLote, setResultadoLote] = useState<ResultadoLote>();
   const [errorLote, setErrorLote] = useState("");
@@ -135,10 +154,14 @@ export default function Pendientes() {
             </option>
           ))}
         </select>
+        <button onClick={reindexarGuias} disabled={reindexando}>
+          {reindexando ? "Conciliando…" : "Conciliar hasta 2.000 GRE anteriores (sin OCR)"}
+        </button>
         <button onClick={procesarAutomaticamente} disabled={procesandoLote}>
           {procesandoLote ? "Procesando en orden…" : "Procesar pendientes automáticamente"}
         </button>
       </div>
+      {resultadoReindice && <p className="resumen-carga">{resultadoReindice}</p>}
       {resultadoLote && (
         <p className="resumen-carga">
           {resultadoLote.considerados} revisados · {resultadoLote.relacionados} relacionados ·{" "}
