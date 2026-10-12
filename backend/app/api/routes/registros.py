@@ -302,6 +302,7 @@ def listar(
                 gestor_codigo=gestor_codigo if mostrar_propiedad else None,
                 gestor_nombre=gestor_nombre if mostrar_propiedad else None,
                 fecha_emision=expediente.fecha_emision,
+                fecha_registro=expediente.created_at,
                 tipo_comprobante=expediente.tipo_comprobante,
                 serie=expediente.serie,
                 correlativo=expediente.correlativo,
