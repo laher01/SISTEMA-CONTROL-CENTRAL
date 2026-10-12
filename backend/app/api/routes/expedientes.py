@@ -239,6 +239,7 @@ def resumen_empresas_por_rol(
             Miembro.tenant_id == tenant_id,
             Miembro.responsable_id == auth.miembro_id,
             Miembro.rol == RolMiembro.USUARIO,
+            Miembro.deleted_at.is_(None),
         )
         condiciones.append(Expediente.usuario_id.in_(propios))
     elif auth.rol == RolMiembro.GERENTE:
