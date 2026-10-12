@@ -20,7 +20,7 @@ from app.services.referencias_gre import extraer_referencias_factura_gre
 from app.services import auditoria
 from app.services.expedientes import buscar_expediente, obtener_o_crear_empresa
 from app.services.extraccion_campos import razon_social_confiable
-from app.services.ingesta import crear_expediente, vincular_documento\nfrom app.services.referencias_gre import extraer_referencias_factura_gre
+from app.services.ingesta import crear_expediente, registrar_referencia_gre, vincular_documento\nfrom app.services.referencias_gre import extraer_referencias_factura_gre
 
 CAMPOS_FISCALES = (
     "serie",
@@ -116,12 +116,26 @@ def aplicar_automaticamente(
         )
         if vinculado is not None:
             return vinculado
+        # Solo GRE remitente: si primero llegó la guía, indexar la identidad de
+        # la factura y esperar su llegada. No inventar fecha, moneda ni importe.
+        if tipo == TipoDocumento.GRR:
+            texto = procesamiento.get("texto")
+            referencias = extraer_referencias_factura_gre(texto if isinstance(texto, str) else "")
+            if (
+                len(referencias) == 1
+                and referencias[0].emisor_ruc is not None
+                and referencias[0].receptor_ruc is not None
+            ):
+                referencia = registrar_referencia_gre(session, documento, referencias[0])
+                motivo = (
+                    f"Expediente provisional {referencia.serie}-{referencia.correlativo}: "
+                    "pendiente de recibir factura"
+                )
+                _guardar_estado(documento, "PENDIENTE_FACTURA", (motivo,))
+                return ResultadoAutomatizacion("PENDIENTE_FACTURA", motivos=(motivo,))
         return _revision(
             documento,
-            [
-                "No se encontró una factura única mediante documento relacionado; "
-                "verifique la referencia y vincule manualmente"
-            ],
+            ["Referencia fiscal insuficiente o ambigua; requiere validación de la GRE"],
         )
 
     if tipo not in (TipoDocumento.FACT, TipoDocumento.RHE):
