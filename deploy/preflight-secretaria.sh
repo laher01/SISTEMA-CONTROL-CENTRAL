@@ -36,10 +36,10 @@ import sys
 target = sys.argv[1]
 changed = subprocess.check_output(
     ["git", "diff", "--name-only", "-z", "--diff-filter=ACMR", "HEAD", target]
-).split(b"\\0")
+).split(bytes([0]))
 untracked = subprocess.check_output(
     ["git", "ls-files", "--others", "--exclude-standard", "-z"]
-).split(b"\\0")
+).split(bytes([0]))
 incoming = {os.fsdecode(p) for p in changed if p}
 collisions = []
 for raw in untracked:
