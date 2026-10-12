@@ -555,6 +555,63 @@ def _aplicar_ambito_documentos(consulta: Any, auth: OperativeAuthDep) -> Any:
     return consulta
 
 
+@router.post("/reindexar-gre-pendientes")
+def reindexar_gre_pendientes(
+    session: SessionDep,
+    settings: SettingsDep,
+    hoy: HoyDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    limit: Annotated[int, Query(ge=1, le=2000)] = 2000,
+) -> dict[str, int]:
+    """Reconcilia GRE históricas con la extracción guardada, sin llamar OCR."""
+    consulta = (
+        select(Documento)
+        .where(
+            Documento.tenant_id == tenant_id,
+            Documento.deleted_at.is_(None),
+            Documento.expediente_id.is_(None),
+            Documento.tipo_documento == TipoDocumento.GRR,
+        )
+        .order_by(Documento.created_at.desc())
+        .limit(limit)
+    )
+    consulta = _aplicar_ambito_documentos(consulta, auth)
+    candidatos = list(session.scalars(consulta))
+    indexados = relacionados = 0
+    for documento in candidatos:
+        existente = session.scalar(
+            select(ReferenciaGRE.id).where(
+                ReferenciaGRE.tenant_id == tenant_id,
+                ReferenciaGRE.documento_id == documento.id,
+            )
+        )
+        if existente is not None:
+            continue
+        datos = documento.datos_extraidos or {}
+        procesamiento = datos.get("procesamiento_documental")
+        if not isinstance(procesamiento, dict):
+            continue
+        resultado = aplicar_automaticamente(session, settings, hoy, documento, procesamiento)
+        if resultado.relacionado:
+            relacionados += 1
+        else:
+            ref = session.scalar(
+                select(ReferenciaGRE.id).where(
+                    ReferenciaGRE.tenant_id == tenant_id,
+                    ReferenciaGRE.documento_id == documento.id,
+                )
+            )
+            if ref is not None:
+                indexados += 1
+        session.commit()
+    return {
+        "considerados": len(candidatos),
+        "provisionales_creados": indexados,
+        "guias_relacionadas": relacionados,
+    }
+
+
 @router.get("/provisionales-gre")
 def provisionales_gre(
     session: SessionDep,
