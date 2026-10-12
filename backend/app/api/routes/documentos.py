@@ -378,9 +378,9 @@ def listar_documentos(
                     "fecha_emision"
                 ].as_string()
                 == fecha_texto,
-                Documento.datos_extraidos["procesamiento_documental"][
-                    "extraccion_estructurada"
-                ]["campos"]["fecha_emision"]["valor"].as_string()
+                Documento.datos_extraidos["procesamiento_documental"]["extraccion_estructurada"][
+                    "campos"
+                ]["fecha_emision"]["valor"].as_string()
                 == fecha_texto,
             )
         )
@@ -530,9 +530,9 @@ def resumen_documentos(
                     "fecha_emision"
                 ].as_string()
                 == fecha_texto,
-                Documento.datos_extraidos["procesamiento_documental"][
-                    "extraccion_estructurada"
-                ]["campos"]["fecha_emision"]["valor"].as_string()
+                Documento.datos_extraidos["procesamiento_documental"]["extraccion_estructurada"][
+                    "campos"
+                ]["fecha_emision"]["valor"].as_string()
                 == fecha_texto,
             )
         )
