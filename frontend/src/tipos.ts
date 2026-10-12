@@ -241,6 +241,7 @@ export interface AltaGestor {
 
 
 export interface RegistroFila {
+  fecha_registro: string;
   tipo_empresa: ClasificacionProveedor | null;
   expediente_id: string;
   estado: EstadoExpediente;
