@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, TipoComprobante, TipoDocumento
 from app.models import Documento, Empresa, Expediente
-from app.services.referencias_gre import extraer_referencias_factura_gre
 from app.services import auditoria
 from app.services.expedientes import buscar_expediente, obtener_o_crear_empresa
 from app.services.extraccion_campos import razon_social_confiable
@@ -25,6 +24,7 @@ from app.services.ingesta import (
     registrar_referencia_gre,
     vincular_documento,
 )
+from app.services.referencias_gre import extraer_referencias_factura_gre
 
 CAMPOS_FISCALES = (
     "serie",
