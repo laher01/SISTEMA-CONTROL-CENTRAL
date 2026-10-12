@@ -135,6 +135,7 @@ export default function App() {
     setBarraAbierta(false);
   };
   const { datos: sesion, error, cargando, recargar } = useDatos<SesionActual>("/api/v1/auth/me");
+  const { datos: activaciones } = useDatos<{ registros: boolean; control_documental: boolean; documentos: boolean; expedientes: boolean }>("/api/v1/configuracion/permisos/secretaria");
 
   if (cargando) return <main className="contenido"><p>Cargando sesión…</p></main>;
   if (!sesion || error) {
@@ -158,7 +159,11 @@ export default function App() {
 
   const menu = sesion.rol === "SUPERADMIN"
     ? [{ a: "/configuracion", texto: "Consola SaaS", icono: "⚙", roles: ["SUPERADMIN" as RolSesion] }]
-    : MENU.filter((item) => item.roles.includes(sesion.rol));
+    : MENU.filter((item) => item.roles.includes(sesion.rol) && (sesion.rol !== "SECRETARIA" || (
+      (item.a !== "/registros" || activaciones?.registros !== false) &&
+      (item.a !== "/secretaria" || activaciones?.control_documental !== false) &&
+      (item.a !== "/documentos" || activaciones?.documentos !== false)
+    )));
   const cadena = sesion.rol === "GESTOR"
     ? [{ rol: "GESTOR", codigo: sesion.codigo, nombre: sesion.nombre }, ...(sesion.jerarquia ?? [])]
     : sesion.rol === "USUARIO"
@@ -210,11 +215,11 @@ export default function App() {
           <Route path="/" element={sesion.es_administracion_demo && sesion.rol === "ADMINISTRADOR" ? <Navigate to="/organizacion" replace /> : <Dashboard />} />
           <Route path="/ingresar" element={<Navigate to="/" replace />} />
           <Route path="/subir" element={<Subir sesion={sesion} />} />
-          <Route path="/registros" element={<Registros sesion={sesion} />} />
+          <Route path="/registros" element={sesion.rol === "SECRETARIA" && activaciones?.registros === false ? <Navigate to="/expedientes" replace /> : <Registros sesion={sesion} />} />
           <Route path="/mi-recepcion" element={sesion.rol === "GESTOR" ? <RecepcionGestor /> : <Navigate to="/" replace />} />
           <Route path="/chat" element={<Chat />} />
-          <Route path="/secretaria" element={["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA"].includes(sesion.rol) ? <Secretaria sesion={sesion} /> : <Navigate to="/" replace />} />
-          <Route path="/documentos" element={<Documentos sesion={sesion} />} />
+          <Route path="/secretaria" element={["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA"].includes(sesion.rol) && !(sesion.rol === "SECRETARIA" && activaciones?.control_documental === false) ? <Secretaria sesion={sesion} /> : <Navigate to="/expedientes" replace />} />
+          <Route path="/documentos" element={sesion.rol === "SECRETARIA" && activaciones?.documentos === false ? <Navigate to="/expedientes" replace /> : <Documentos sesion={sesion} />} />
           <Route path="/expedientes" element={<Expedientes sesion={sesion} />} />
           <Route path="/expedientes/:id" element={<ExpedienteDetalle />} />
           <Route path="/pendientes" element={<Pendientes />} />

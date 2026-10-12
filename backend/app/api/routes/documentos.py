@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, selectinload
 
@@ -50,6 +50,7 @@ from app.services.ingesta import (
     vincular_documento,
 )
 from app.services.jerarquia_documental import nombres_jerarquia
+from app.services.metadatos_documento import metadatos_individuales
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 from app.services.relaciones_documentales import sugerir_relaciones
@@ -324,6 +325,8 @@ def listar_documentos(
     receptor_ruc: Annotated[str | None, Query(min_length=11, max_length=11)] = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
+    fecha_emision: date | None = None,
+    serie_correlativo: Annotated[str | None, Query(min_length=1, max_length=60)] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[DocumentoOut]:
@@ -354,6 +357,84 @@ def listar_documentos(
         consulta = consulta.where(Documento.usuario_id == usuario_id)
     if gestor_id is not None:
         consulta = consulta.where(Documento.gestor_id == gestor_id)
+    if (
+        fecha_emision is not None
+        or serie_correlativo
+        or emisor_ruc is not None
+        or receptor_ruc is not None
+        or tipo_empresa is not None
+    ):
+        consulta = consulta.outerjoin(Expediente, Documento.expediente_id == Expediente.id)
+    if fecha_emision is not None:
+        fecha_texto = fecha_emision.isoformat()
+        consulta = consulta.where(
+            or_(
+                and_(
+                    Documento.tipo_documento.in_([TipoDocumento.FACT, TipoDocumento.RHE]),
+                    Expediente.fecha_emision == fecha_emision,
+                ),
+                Documento.datos_extraidos["fecha_emision"].as_string() == fecha_texto,
+                Documento.datos_extraidos["extraccion_confirmada"]["campos"][
+                    "fecha_emision"
+                ].as_string()
+                == fecha_texto,
+                Documento.datos_extraidos["procesamiento_documental"]["extraccion_estructurada"][
+                    "campos"
+                ]["fecha_emision"]["valor"].as_string()
+                == fecha_texto,
+            )
+        )
+    if serie_correlativo:
+        texto = serie_correlativo.strip().upper()
+        if "-" in texto:
+            serie, correlativo = texto.split("-", 1)
+            numero = correlativo.lstrip("0") or "0"
+            candidatos = [
+                func.upper(Documento.nombre_original).contains(texto, autoescape=True),
+                and_(
+                    Documento.tipo_documento.in_([TipoDocumento.FACT, TipoDocumento.RHE]),
+                    func.upper(Expediente.serie) == serie,
+                    func.ltrim(Expediente.correlativo, "0") == numero,
+                ),
+            ]
+            for ruta_serie, ruta_numero in (
+                (
+                    Documento.datos_extraidos["serie"].as_string(),
+                    Documento.datos_extraidos["correlativo"].as_string(),
+                ),
+                (
+                    Documento.datos_extraidos["extraccion_confirmada"]["campos"][
+                        "serie"
+                    ].as_string(),
+                    Documento.datos_extraidos["extraccion_confirmada"]["campos"][
+                        "correlativo"
+                    ].as_string(),
+                ),
+                (
+                    Documento.datos_extraidos["procesamiento_documental"][
+                        "extraccion_estructurada"
+                    ]["campos"]["serie"]["valor"].as_string(),
+                    Documento.datos_extraidos["procesamiento_documental"][
+                        "extraccion_estructurada"
+                    ]["campos"]["correlativo"]["valor"].as_string(),
+                ),
+            ):
+                candidatos.append(
+                    and_(
+                        func.upper(ruta_serie) == serie,
+                        func.ltrim(ruta_numero, "0") == numero,
+                    )
+                )
+            consulta = consulta.where(or_(*candidatos))
+        else:
+            consulta = consulta.where(
+                or_(
+                    func.upper(Documento.nombre_original).contains(texto, autoescape=True),
+                    func.upper(Expediente.serie + "-" + Expediente.correlativo).contains(
+                        texto, autoescape=True
+                    ),
+                )
+            )
     if dia is not None:
         consulta = consulta.where(func.date(Documento.created_at) == dia)
     if fecha_desde is not None:
@@ -362,7 +443,6 @@ def listar_documentos(
         consulta = consulta.where(func.date(Documento.created_at) <= fecha_hasta)
 
     if emisor_ruc is not None or receptor_ruc is not None or tipo_empresa is not None:
-        consulta = consulta.join(Expediente, Documento.expediente_id == Expediente.id)
         if emisor_ruc is not None or tipo_empresa is not None:
             emisor = aliased(Empresa)
             consulta = consulta.join(emisor, Expediente.emisor_id == emisor.id)
@@ -380,7 +460,10 @@ def listar_documentos(
     filas = list(session.scalars(consulta))
     jerarquias = nombres_jerarquia(session, tenant_id, filas)
     return [
-        DocumentoOut.model_validate(fila).model_copy(update=jerarquias[fila.id]) for fila in filas
+        DocumentoOut.model_validate(fila).model_copy(
+            update={**jerarquias[fila.id], **metadatos_individuales(fila)}
+        )
+        for fila in filas
     ]
 
 
@@ -401,6 +484,8 @@ def resumen_documentos(
     receptor_ruc: Annotated[str | None, Query(min_length=11, max_length=11)] = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
+    fecha_emision: date | None = None,
+    serie_correlativo: Annotated[str | None, Query(min_length=1, max_length=60)] = None,
 ) -> dict[str, int | Decimal]:
     consulta = select(Documento.id, Documento.expediente_id).where(
         Documento.tenant_id == tenant_id, Documento.deleted_at.is_(None)
@@ -424,6 +509,84 @@ def resumen_documentos(
         consulta = consulta.where(Documento.usuario_id == usuario_id)
     if gestor_id is not None:
         consulta = consulta.where(Documento.gestor_id == gestor_id)
+    if (
+        fecha_emision is not None
+        or serie_correlativo
+        or emisor_ruc is not None
+        or receptor_ruc is not None
+        or tipo_empresa is not None
+    ):
+        consulta = consulta.outerjoin(Expediente, Documento.expediente_id == Expediente.id)
+    if fecha_emision is not None:
+        fecha_texto = fecha_emision.isoformat()
+        consulta = consulta.where(
+            or_(
+                and_(
+                    Documento.tipo_documento.in_([TipoDocumento.FACT, TipoDocumento.RHE]),
+                    Expediente.fecha_emision == fecha_emision,
+                ),
+                Documento.datos_extraidos["fecha_emision"].as_string() == fecha_texto,
+                Documento.datos_extraidos["extraccion_confirmada"]["campos"][
+                    "fecha_emision"
+                ].as_string()
+                == fecha_texto,
+                Documento.datos_extraidos["procesamiento_documental"]["extraccion_estructurada"][
+                    "campos"
+                ]["fecha_emision"]["valor"].as_string()
+                == fecha_texto,
+            )
+        )
+    if serie_correlativo:
+        texto = serie_correlativo.strip().upper()
+        if "-" in texto:
+            serie, correlativo = texto.split("-", 1)
+            numero = correlativo.lstrip("0") or "0"
+            candidatos = [
+                func.upper(Documento.nombre_original).contains(texto, autoescape=True),
+                and_(
+                    Documento.tipo_documento.in_([TipoDocumento.FACT, TipoDocumento.RHE]),
+                    func.upper(Expediente.serie) == serie,
+                    func.ltrim(Expediente.correlativo, "0") == numero,
+                ),
+            ]
+            for ruta_serie, ruta_numero in (
+                (
+                    Documento.datos_extraidos["serie"].as_string(),
+                    Documento.datos_extraidos["correlativo"].as_string(),
+                ),
+                (
+                    Documento.datos_extraidos["extraccion_confirmada"]["campos"][
+                        "serie"
+                    ].as_string(),
+                    Documento.datos_extraidos["extraccion_confirmada"]["campos"][
+                        "correlativo"
+                    ].as_string(),
+                ),
+                (
+                    Documento.datos_extraidos["procesamiento_documental"][
+                        "extraccion_estructurada"
+                    ]["campos"]["serie"]["valor"].as_string(),
+                    Documento.datos_extraidos["procesamiento_documental"][
+                        "extraccion_estructurada"
+                    ]["campos"]["correlativo"]["valor"].as_string(),
+                ),
+            ):
+                candidatos.append(
+                    and_(
+                        func.upper(ruta_serie) == serie,
+                        func.ltrim(ruta_numero, "0") == numero,
+                    )
+                )
+            consulta = consulta.where(or_(*candidatos))
+        else:
+            consulta = consulta.where(
+                or_(
+                    func.upper(Documento.nombre_original).contains(texto, autoescape=True),
+                    func.upper(Expediente.serie + "-" + Expediente.correlativo).contains(
+                        texto, autoescape=True
+                    ),
+                )
+            )
     if dia is not None:
         consulta = consulta.where(func.date(Documento.created_at) == dia)
     if fecha_desde is not None:
@@ -431,7 +594,6 @@ def resumen_documentos(
     if fecha_hasta is not None:
         consulta = consulta.where(func.date(Documento.created_at) <= fecha_hasta)
     if emisor_ruc is not None or receptor_ruc is not None or tipo_empresa is not None:
-        consulta = consulta.join(Expediente, Documento.expediente_id == Expediente.id)
         if emisor_ruc is not None or tipo_empresa is not None:
             emisor = aliased(Empresa)
             consulta = consulta.join(emisor, Expediente.emisor_id == emisor.id)

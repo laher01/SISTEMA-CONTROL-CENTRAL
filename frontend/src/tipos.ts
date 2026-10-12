@@ -93,6 +93,9 @@ export interface Documento {
   datos_extraidos: Record<string, unknown> | null;
   formato_origen: string | null;
   fecha_emision: string | null;
+  fecha_documento?: string | null;
+  serie_documento?: string | null;
+  correlativo_documento?: string | null;
   serie: string | null;
   correlativo: string | null;
   moneda: Moneda | null;
@@ -139,6 +142,7 @@ export interface Expediente {
   gestor_codigo?: string | null;
   estado: EstadoExpediente;
   pendiente_aprobacion: boolean;
+  fecha_carga?: string | null;
   created_at: string;
 }
 
@@ -241,6 +245,8 @@ export interface AltaGestor {
 
 
 export interface RegistroFila {
+  fecha_registro: string;
+  fecha_carga: string | null;
   tipo_empresa: ClasificacionProveedor | null;
   expediente_id: string;
   estado: EstadoExpediente;

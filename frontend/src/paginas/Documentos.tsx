@@ -35,6 +35,8 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
   const estado = parametros.get("estado") ?? "";
   const tipoEmpresa = parametros.get("tipo_empresa") ?? "";
   const dia = parametros.get("dia") ?? "";
+  const fechaEmision = parametros.get("fecha_emision") ?? "";
+  const correlativoBusqueda = parametros.get("serie_correlativo") ?? "";
   const tipo = parametros.get("tipo_documento") ?? "";
   const emisor = parametros.get("emisor_ruc") ?? "";
   const receptor = parametros.get("receptor_ruc") ?? "";
@@ -49,6 +51,8 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
     gestor_id: gestorId,
     tipo_empresa: tipoEmpresa,
     dia,
+    fecha_emision: fechaEmision,
+    serie_correlativo: correlativoBusqueda,
     tipo_documento: tipo,
     emisor_ruc: emisor.length === 11 ? emisor : undefined,
     receptor_ruc: receptor.length === 11 ? receptor : undefined,
@@ -70,6 +74,8 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
     gestor_id: gestorId,
     tipo_empresa: tipoEmpresa,
     dia,
+    fecha_emision: fechaEmision,
+    serie_correlativo: correlativoBusqueda,
     tipo_documento: tipo,
     emisor_ruc: emisor.length === 11 ? emisor : undefined,
     receptor_ruc: receptor.length === 11 ? receptor : undefined,
@@ -141,6 +147,8 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
           <option value="A">Tipo A</option>
           <option value="B">Tipo B</option>
         </select>
+        <input aria-label="Serie y correlativo" placeholder="Ej. EG07-2269" value={correlativoBusqueda} maxLength={60} onChange={(e) => cambiar("serie_correlativo", e.target.value.toUpperCase())} />
+        <label className="filtro-fecha">Fecha documento <input type="date" value={fechaEmision} onChange={(e) => cambiar("fecha_emision", e.target.value)} /></label>
         <label className="filtro-fecha">Día de carga <input type="date" value={dia} onChange={(e) => cambiar("dia", e.target.value)} /></label>
         <select value={estado} onChange={(e) => cambiar("estado", e.target.value)}>
           <option value="">Todos los estados</option>
@@ -196,7 +204,8 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
                 <th>Estado</th>
                 <th>Archivo</th>
                 <th>Tipo</th>
-                <th>Subido</th>
+                <th>Fecha documento</th>
+                 <th>Fecha de carga</th>
                 <th>Lectura</th>
                 <th>Emisor</th>
                 <th>Receptor</th>
@@ -284,6 +293,9 @@ function FilaDocumento({
         <a href={urlArchivo(documento.id)} target="_blank" rel="noreferrer">
           {documento.nombre_original}
         </a>
+        {documento.serie_documento && documento.correlativo_documento && (
+          <small className="bloque tenue">{documento.serie_documento}-{documento.correlativo_documento}</small>
+        )}
         {error && <small className="error bloque">{error}</small>}
       </td>
       <td>
@@ -291,7 +303,8 @@ function FilaDocumento({
           ? ETIQUETA_TIPO_DOCUMENTO[documento.tipo_documento as TipoDocumento]
           : "Sin clasificar"}
       </td>
-      <td>{formatearFecha(documento.created_at)}</td>
+      <td>{documento.fecha_documento ? formatearFecha(documento.fecha_documento) : "Pendiente de identificar"}</td>
+       <td>{formatearFecha(documento.created_at)}</td>
       <td>
         {lectura ? (
           <span title={lectura.detalle}>{lectura.texto}</span>

@@ -3,10 +3,12 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.db import get_session
+from app.models import PermisoConfigurado
 from app.security import ContextoAcceso, contexto_desde_token
 from app.storage import AlmacenLocal
 from app.tenant_host import validar_sesion_host
@@ -43,6 +45,7 @@ def get_contexto_actual(
 def get_contexto_operativo(
     request: Request,
     contexto: Annotated[ContextoAcceso, Depends(get_contexto_actual)],
+    session: SessionDep,
 ) -> ContextoAcceso:
     if contexto.cambio_clave_obligatorio:
         raise HTTPException(
@@ -57,6 +60,25 @@ def get_contexto_operativo(
             status.HTTP_403_FORBIDDEN,
             "SUPERADMIN solo puede acceder a las funciones globales de plataforma",
         )
+    if contexto.rol == "SECRETARIA":
+        ruta = request.url.path
+        modulo = None
+        if ruta == "/api/v1/registros":
+            modulo = "SECRETARIA_MENU_REGISTROS"
+        elif ruta == "/api/v1/dashboard/secretaria-expedientes":
+            modulo = "SECRETARIA_MENU_CONTROL_DOCUMENTAL"
+        elif ruta in {"/api/v1/documentos", "/api/v1/documentos/resumen"}:
+            modulo = "SECRETARIA_MENU_DOCUMENTOS"
+        if modulo is not None:
+            permiso = session.scalar(
+                select(PermisoConfigurado).where(
+                    PermisoConfigurado.tenant_id == contexto.tenant_id,
+                    PermisoConfigurado.rol == "SECRETARIA",
+                    PermisoConfigurado.permiso == modulo,
+                )
+            )
+            if permiso is not None and not permiso.habilitado:
+                raise HTTPException(status.HTTP_403_FORBIDDEN, "Módulo desactivado para Secretaría")
     permitido_responsable = (
         (
             request.method == "PATCH"

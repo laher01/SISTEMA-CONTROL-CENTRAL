@@ -9,6 +9,36 @@ from app.schemas import PermisoConfiguradoIn, PermisoConfiguradoOut
 router = APIRouter(prefix="/configuracion/permisos", tags=["configuracion"])
 
 
+# Visibilidad configurable de módulos de Secretaría; Expedientes siempre habilitado.
+MODULOS_SECRETARIA = {
+    "registros": "SECRETARIA_MENU_REGISTROS",
+    "control_documental": "SECRETARIA_MENU_CONTROL_DOCUMENTAL",
+    "documentos": "SECRETARIA_MENU_DOCUMENTOS",
+}
+
+
+@router.get("/secretaria")
+def modulos_secretaria(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, bool]:
+    valores = {
+        fila.permiso: fila.habilitado
+        for fila in session.scalars(
+            select(PermisoConfigurado).where(
+                PermisoConfigurado.tenant_id == tenant_id,
+                PermisoConfigurado.rol == RolMiembro.SECRETARIA,
+                PermisoConfigurado.permiso.in_(list(MODULOS_SECRETARIA.values())),
+            )
+        )
+    }
+    return {
+        **{clave: valores.get(permiso, True) for clave, permiso in MODULOS_SECRETARIA.items()},
+        "expedientes": True,
+    }
+
+
 @router.get("", response_model=list[PermisoConfiguradoOut])
 def listar(
     session: SessionDep,

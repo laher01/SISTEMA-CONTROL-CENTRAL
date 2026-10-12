@@ -75,6 +75,30 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
               <tr><td>USUARIO</td><td>Sus Gestores y operaciones</td><td>Implementado parcialmente</td></tr>
               <tr><td>GESTOR</td><td>Sus documentos y asignaciones</td><td>Acceso independiente implementado</td></tr>
             </tbody></table>
+            <h3>Activaciones · Menús de Secretaría</h3>
+            <p className="tenue">Administración define cuáles menús puede consultar Secretaría. Expedientes permanece activado por seguridad documental.</p>
+            <div className="panel-configuracion">
+              {([
+                ["registros", "Registros", "SECRETARIA_MENU_REGISTROS"],
+                ["control_documental", "Control documental", "SECRETARIA_MENU_CONTROL_DOCUMENTAL"],
+                ["documentos", "Documentos", "SECRETARIA_MENU_DOCUMENTOS"],
+              ] as const).map(([, etiqueta, permiso]) => (
+                <label key={permiso} className="bloque">
+                  <input type="checkbox"
+                    checked={datos?.find((fila) => fila.rol === "SECRETARIA" && fila.permiso === permiso)?.habilitado ?? true}
+                    onChange={async (e) => {
+                      await enviarJson<PermisoConfigurado>("/api/v1/configuracion/permisos", "PUT", {
+                        rol: "SECRETARIA", permiso, habilitado: e.target.checked,
+                      });
+                      recargar();
+                    }}
+                  /> {etiqueta}
+                </label>
+              ))}
+              <label className="bloque">
+                <input type="checkbox" checked disabled /> Expedientes · obligatorio
+              </label>
+            </div>
             <h3>Eliminar registros</h3>
             <table>
               <thead><tr><th>Rol</th><th>Permiso</th></tr></thead>

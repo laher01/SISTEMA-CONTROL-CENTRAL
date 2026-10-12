@@ -152,6 +152,9 @@ class DocumentoOut(Orm):
     datos_extraidos: dict[str, object] | None
     formato_origen: str | None
     fecha_emision: date | None = None
+    fecha_documento: date | None = None
+    serie_documento: str | None = None
+    correlativo_documento: str | None = None
     serie: str | None = None
     correlativo: str | None = None
     moneda: Moneda | None = None
@@ -250,6 +253,7 @@ class ExpedienteOut(Orm):
     gestor_codigo: str | None = None
     estado: EstadoExpediente
     pendiente_aprobacion: bool
+    fecha_carga: datetime | None = None
     created_at: datetime
 
 
@@ -378,6 +382,8 @@ class AltaGestorOut(BaseModel):
 
 
 class RegistroFila(BaseModel):
+    fecha_registro: datetime
+    fecha_carga: datetime | None = None
     tipo_empresa: str | None = None
     expediente_id: uuid.UUID
     estado: EstadoExpediente
