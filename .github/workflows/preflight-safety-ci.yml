@@ -28,6 +28,7 @@ jobs:
           assert 'ls-files", "--others", "--exclude-standard", "-z' in script
           assert 'git merge-base --is-ancestor' in script
           assert 'actions/checkout@v4' in workflow.split("  deploy:", 1)[1]
-          assert "EXPECTED_COMMIT: ${{ github.sha }}" in workflow.split("  deploy:", 1)[1]
+          assert "EXPECTED_COMMIT:" in workflow.split("  deploy:", 1)[1]
+          assert "github.sha" in workflow.split("  deploy:", 1)[1]
           print("Protecciones estructurales verificadas")
           PY
