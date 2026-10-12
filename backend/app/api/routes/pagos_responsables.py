@@ -306,9 +306,9 @@ def resumen(
                 .where(
                     Expediente.tenant_id == tenant_id,
                     Expediente.deleted_at.is_(None),
-                Expediente.receptor.has(
-                    Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
-                ),
+                    Expediente.receptor.has(
+                        Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
+                    ),
                     Expediente.gerente_id.is_(None),
                     Expediente.fecha_emision.between(desde, hasta),
                     Expediente.moneda == moneda,
@@ -824,9 +824,7 @@ async def abonar_responsable(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Comprobante vacío o muy grande")
     firma_valida = (
         (extension == ".pdf" and datos_archivo.startswith(b"%PDF-"))
-        or (extension == ".png" and datos_archivo.startswith(b"\x89PNG\r
-\x1a
-"))
+        or (extension == ".png" and datos_archivo.startswith(b"\x89PNG\r\n\x1a\n"))
         or (extension == ".jpg" and datos_archivo.startswith(b"\xff\xd8\xff"))
     )
     if not firma_valida:
