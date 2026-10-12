@@ -201,7 +201,7 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
                 {mostrarUsuario && <th>Usuario</th>}
                 {mostrarGestor && <th>Gestor</th>}
                 <th>Fecha documento</th>
-                 <th>Fecha de registro</th>
+                 <th>Fecha de carga</th>
                 <th>Tipo empresa</th>
                 <th>Correlativo</th>
                 <th>RUC emisor</th>
@@ -313,7 +313,7 @@ function FilaRegistro({
         </td>
       )}
       <td>{formatearFecha(fila.fecha_emision)}</td>
-       <td>{formatearFecha(fila.fecha_registro)}</td>
+       <td>{fila.fecha_carga ? formatearFecha(fila.fecha_carga) : "Sin carga"}</td>
       <td>{fila.tipo_empresa ? `Tipo ${fila.tipo_empresa}` : "Sin clasificar"}</td>
       <td>
         <Link to={"/expedientes/" + fila.expediente_id}>
