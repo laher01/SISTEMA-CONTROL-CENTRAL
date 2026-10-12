@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models import Empresa, Expediente, Miembro
+from app.models import Empresa, Expediente, Gestor, Miembro
 from tests.conftest import AuthPrueba
 
 
@@ -129,6 +129,12 @@ def test_responsable_resumen_incluye_solo_usuarios_propios(
     receptor = Empresa(tenant_id=tenant, ruc="20999999992", razon_social="Cliente")
     session.add_all([responsable, ajeno, emisor, receptor])
     session.flush()
+    gestor = Gestor(tenant_id=tenant, codigo="GES-RESUMEN", nombre="Gestor", usuario_id=usuario.id)
+    gestor_ajeno = Gestor(
+        tenant_id=tenant, codigo="GES-AJENO", nombre="Gestor ajeno", usuario_id=ajeno.id
+    )
+    session.add_all([gestor, gestor_ajeno])
+    session.flush()
     usuario.responsable_id = responsable.id
     for uid, correlativo, monto in [
         (usuario.id, "501", "120"),
@@ -138,6 +144,7 @@ def test_responsable_resumen_incluye_solo_usuarios_propios(
             Expediente(
                 tenant_id=tenant,
                 usuario_id=uid,
+                gestor_id=gestor.id if uid == usuario.id else gestor_ajeno.id,
                 emisor_id=emisor.id,
                 receptor_id=receptor.id,
                 tipo_comprobante="01",
@@ -157,3 +164,18 @@ def test_responsable_resumen_incluye_solo_usuarios_propios(
     data = response.json()
     assert sum(Decimal(x["total"]) for x in data["clientes"]) == Decimal("120")
     assert sum(x["expedientes"] for x in data["clientes"]) == 1
+    filtrado = client.get(
+        "/api/v1/expedientes/resumen-empresas",
+        params={"usuario_id": str(usuario.id), "gestor_id": str(gestor.id)},
+    )
+    assert filtrado.status_code == 200, filtrado.text
+    assert filtrado.json() == data
+    for params in (
+        {"usuario_id": str(ajeno.id)},
+        {"gestor_id": str(gestor_ajeno.id)},
+        {"usuario_id": str(usuario.id), "gestor_id": str(gestor_ajeno.id)},
+    ):
+        fuera = client.get("/api/v1/expedientes/resumen-empresas", params=params)
+        assert fuera.status_code == 200, fuera.text
+        assert fuera.json()["clientes"] == []
+
