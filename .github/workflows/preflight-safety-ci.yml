@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "deploy/preflight-secretaria.sh"
+      - "deploy/bootstrap-main.sh"
       - ".github/workflows/deploy-staging.yml"
       - ".github/workflows/preflight-safety-ci.yml"
 
@@ -16,13 +17,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Revisar sintaxis Bash
-        run: bash -n deploy/preflight-secretaria.sh
+        run: |
+          bash -n deploy/preflight-secretaria.sh
+          bash -n deploy/bootstrap-main.sh
       - name: Verificar reglas de protección
         run: |
           python3 - <<'PY'
           from pathlib import Path
           script = Path("deploy/preflight-secretaria.sh").read_text()
           workflow = Path(".github/workflows/deploy-staging.yml").read_text()
+          bootstrap = Path("deploy/bootstrap-main.sh").read_text()
           assert 'git diff --quiet' in script
           assert 'git diff --cached --quiet' in script
           assert 'ls-files", "--others", "--exclude-standard", "-z' in script
@@ -30,5 +34,8 @@ jobs:
           assert 'actions/checkout@v4' in workflow.split("  deploy:", 1)[1]
           assert "EXPECTED_COMMIT:" in workflow.split("  deploy:", 1)[1]
           assert "github.sha" in workflow.split("  deploy:", 1)[1]
+          assert "pg_dump" in bootstrap
+          assert bootstrap.index("pg_dump") < bootstrap.index("git merge --ff-only")
+          assert "deploy/bootstrap-main.sh" in workflow
           print("Protecciones estructurales verificadas")
           PY
