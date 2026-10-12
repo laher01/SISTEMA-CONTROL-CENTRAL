@@ -24,8 +24,10 @@ def test_secretaria_jerarquia_no_altera_resumen_y_filtra(
     datos = respuesta.json()
     assert datos["total_expedientes"] >= 1
     assert all(
-        "responsable" in fila and "responsable_codigo" in fila
-        and "usuario" in fila and "gestor" in fila
+        "responsable" in fila
+        and "responsable_codigo" in fila
+        and "usuario" in fila
+        and "gestor" in fila
         for fila in datos["filas"]
     )
     for filtro in ("responsable_id", "usuario_id", "gestor_id"):
