@@ -6,7 +6,6 @@ from datetime import date
 
 from app.models import Documento
 
-
 NUMERO_EN_ARCHIVO = re.compile(r"(?i)(?<![A-Z0-9])([A-Z]{1,4}[0-9]{2,3})-(\d{1,12})(?!\d)")
 
 
