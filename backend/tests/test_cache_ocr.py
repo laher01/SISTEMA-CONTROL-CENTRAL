@@ -37,6 +37,7 @@ def test_resultados_pendientes_ocr_no_quedan_congelados(tmp_path):
         procesar_con_cache(b"pdf", "tenant", tmp_path, 1000, 50, extractor)
     assert len(llamadas) == 2
 
+
 def test_reprocesamiento_forzado_omite_cache(tmp_path):
     llamadas = []
 
