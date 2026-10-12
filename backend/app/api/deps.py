@@ -77,7 +77,10 @@ def get_contexto_operativo(
             and (
                 request.url.path == "/api/v1/expedientes"
                 or request.url.path == "/api/v1/expedientes/ids"
-                or request.url.path.startswith("/api/v1/expedientes/")
+                or (
+                    request.url.path.startswith("/api/v1/expedientes/")
+                    and request.url.path.split("/")[-1] not in {"resumen", "recalcular"}
+                )
             )
         )
         or (request.method == "GET" and request.url.path == "/api/v1/gerencias/vinculos")
