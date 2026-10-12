@@ -38,6 +38,7 @@ from app.services.expedientes import (
     fecha_limite,
     recalcular_expedientes,
 )
+from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.ingesta import crear_expediente
 from app.services.pdf_consolidado import pdf_con_documentos
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
@@ -127,7 +128,7 @@ def listar(
     buscar: Annotated[str | None, Query(max_length=100)] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[Expediente]:
+) -> list[ExpedienteOut]:
     consulta = select(Expediente).where(
         Expediente.tenant_id == tenant_id, Expediente.deleted_at.is_(None)
     )
@@ -196,7 +197,12 @@ def listar(
         .limit(limit)
         .offset(offset)
     )
-    return list(session.scalars(consulta))
+    filas = list(session.scalars(consulta))
+    jerarquias = nombres_jerarquia(session, tenant_id, filas)
+    return [
+        ExpedienteOut.model_validate(fila).model_copy(update=jerarquias[fila.id])
+        for fila in filas
+    ]
 
 
 @router.get("/resumen-empresas")
