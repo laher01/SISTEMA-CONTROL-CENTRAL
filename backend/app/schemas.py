@@ -152,6 +152,9 @@ class DocumentoOut(Orm):
     datos_extraidos: dict[str, object] | None
     formato_origen: str | None
     fecha_emision: date | None = None
+    fecha_documento: date | None = None
+    serie_documento: str | None = None
+    correlativo_documento: str | None = None
     serie: str | None = None
     correlativo: str | None = None
     moneda: Moneda | None = None
