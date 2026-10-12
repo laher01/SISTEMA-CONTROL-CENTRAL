@@ -39,7 +39,6 @@ from app.services.automatizacion_documental import (
     registrar_fallo,
 )
 from app.services.expedientes import actualizar_expediente, buscar_expediente
-from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.ingesta import (
     ArchivoSubido,
     ComprobanteYaRegistrado,
@@ -49,6 +48,7 @@ from app.services.ingesta import (
     ingerir_documento,
     vincular_documento,
 )
+from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 from app.services.relaciones_documentales import sugerir_relaciones
