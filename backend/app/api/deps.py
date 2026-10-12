@@ -70,10 +70,7 @@ def get_contexto_operativo(
         or (request.method == "POST" and request.url.path == "/api/v1/comisiones/simular")
         or (request.method == "GET" and request.url.path == "/api/v1/comisiones/receptores")
         or (request.method == "GET" and request.url.path == "/api/v1/responsable/resumen")
-        or (
-            request.method == "GET"
-            and request.url.path == "/api/v1/expedientes/resumen-empresas"
-        )
+        or (request.method == "GET" and request.url.path == "/api/v1/expedientes/resumen-empresas")
         or (request.method == "GET" and request.url.path == "/api/v1/gestores")
         or (request.method == "GET" and request.url.path == "/api/v1/gerencias/vinculos")
         or (
