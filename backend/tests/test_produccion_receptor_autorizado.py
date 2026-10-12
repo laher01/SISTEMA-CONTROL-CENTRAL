@@ -1,0 +1,33 @@
+"""La autorización administrativa gobierna ingresos y liquidaciones, no archivos."""
+from fastapi.testclient import TestClient
+
+from tests.conftest import AuthPrueba
+from tests.test_api import autorizar_receptor, subir
+from tests.xml import factura
+
+
+def test_cliente_sin_validar_no_cuenta_y_se_muestra_no_valido(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    doc = subir(client, "factura.xml", factura())
+    assert doc["expediente_id"] is not None
+
+    resumen = client.get("/api/v1/produccion/resumen")
+    assert resumen.status_code == 200, resumen.text
+    assert resumen.json()["filas"] == []
+
+    compras = client.get("/api/v1/produccion/compras")
+    assert compras.status_code == 200, compras.text
+    assert len(compras.json()) == 1
+    assert compras.json()[0]["cliente_autorizado"] is False
+    assert compras.json()[0]["importe_total"] == "0"
+
+    autorizar_receptor(client, auth_prueba)
+    resumen_validado = client.get("/api/v1/produccion/resumen")
+    assert resumen_validado.status_code == 200, resumen_validado.text
+    assert len(resumen_validado.json()["filas"]) == 1
+    assert float(resumen_validado.json()["filas"][0]["importe_total"]) > 0
+
+    compras_validado = client.get("/api/v1/produccion/compras")
+    assert compras_validado.json()[0]["cliente_autorizado"] is True
+    assert float(compras_validado.json()[0]["importe_total"]) > 0
