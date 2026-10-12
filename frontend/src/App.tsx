@@ -229,7 +229,7 @@ export default function App() {
           <Route path="/organizacion" element={<Organizacion sesion={sesion} />} />
           <Route path="/crear-gestores" element={<Organizacion sesion={sesion} />} />
           <Route path="/crear-usuarios" element={<MiEquipoResponsable />} />
-          <Route path="/resumen-empresas" element={<ResumenEmpresas />} />
+          <Route path="/resumen-empresas" element={<ResumenEmpresas esResponsable={sesion.rol === "RESPONSABLE"} />} />
           <Route path="/responsables-operativos" element={<ResponsablesOperativos />} />
           <Route path="/mi-cartera" element={<CarteraGerencia />} />
           <Route path="/produccion" element={sesion.rol === "GERENTE" ? <Navigate to="/mi-cartera" replace /> : <Produccion />} />
