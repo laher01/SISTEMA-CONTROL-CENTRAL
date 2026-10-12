@@ -128,7 +128,7 @@ jobs:
           echo "Despliegue aislado autorizado, VPS antigua 132.145.233.172, commit documental fijo 2e68eb0834465839fadc7bff6a843c8eef2a5b4d"
 
       - name: Desplegar PR140 desde rama aislada, VPS antigua solamente
-        if: github.event_name == 'workflow_dispatch' && github.ref_name == 'integration/document-capture-main-20261011'
+        if: github.event_name == 'push' && github.ref_name == 'deploy/legacy-pr140-chat-trigger-20261011'
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
