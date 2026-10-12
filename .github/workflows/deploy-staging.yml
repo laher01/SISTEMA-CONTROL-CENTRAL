@@ -3,7 +3,7 @@ name: deploy-staging
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, deploy/legacy-pr140-chat-trigger-20261011]
 
 permissions:
   contents: read
@@ -117,8 +117,19 @@ jobs:
           ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
             "cd -- '$VPS_DEPLOY_PATH' && EXPECTED_COMMIT='$EXPECTED_COMMIT' DEPLOY_BRANCH='integration/document-capture-main-20261011' bash -s" < deploy/deploy-legacy-pr140.sh
 
+      - name: Desplegar PR140 desde rama aislada, VPS antigua solamente
+        if: github.event_name == 'push' && github.ref_name == 'deploy/legacy-pr140-chat-trigger-20261011'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          EXPECTED_COMMIT: 2e68eb0834465839fadc7bff6a843c8eef2a5b4d
+        run: |
+          ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
+            "cd -- '$VPS_DEPLOY_PATH' && EXPECTED_COMMIT='$EXPECTED_COMMIT' DEPLOY_BRANCH='integration/document-capture-main-20261011' bash -s" < deploy/deploy-legacy-pr140.sh
+
       - name: Desplegar main en VPS (flujo anterior)
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref_name == 'main'
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
