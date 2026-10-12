@@ -817,6 +817,7 @@ def _automatizacion_ya_evaluada(documento: Documento) -> bool:
     automatizacion = datos.get("automatizacion_documental")
     return isinstance(automatizacion, dict) and automatizacion.get("estado") in {
         "REVISION_REQUERIDA",
+        "PENDIENTE_FACTURA",
         "FALLIDO",
     }
 
