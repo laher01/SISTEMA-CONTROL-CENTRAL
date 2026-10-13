@@ -3,7 +3,6 @@
 import ast
 from pathlib import Path
 
-
 VERSIONES = Path(__file__).resolve().parents[1] / "alembic" / "versions"
 
 
@@ -12,9 +11,12 @@ def _revisiones(archivo: str) -> tuple[str, str | None]:
     arbol = ast.parse(fuente)
     asignaciones = {}
     for nodo in arbol.body:
-        if isinstance(nodo, ast.AnnAssign) and isinstance(nodo.target, ast.Name):
-            if nodo.target.id in {"revision", "down_revision"}:
-                asignaciones[nodo.target.id] = ast.literal_eval(nodo.value)
+        if (
+            isinstance(nodo, ast.AnnAssign)
+            and isinstance(nodo.target, ast.Name)
+            and nodo.target.id in {"revision", "down_revision"}
+        ):
+            asignaciones[nodo.target.id] = ast.literal_eval(nodo.value)
     return asignaciones["revision"], asignaciones["down_revision"]
 
 
