@@ -58,6 +58,8 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
     tipo_documento: tipo,
     emisor_ruc: emisor.length === 11 ? emisor : undefined,
     receptor_ruc: receptor.length === 11 ? receptor : undefined,
+    empresa_emisora: emisor.length === 11 ? undefined : emisor,
+    empresa_receptora: receptor.length === 11 ? undefined : receptor,
     fecha_desde: desde,
     fecha_hasta: hasta,
     limit: String(POR_PAGINA),
@@ -170,18 +172,18 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
         </select>
 
         <input
-          aria-label="RUC emisor"
-          placeholder="RUC emisor"
+          aria-label="Empresa emisora o proveedora"
+          placeholder="Proveedor: RUC o razón social"
           value={emisor}
-          maxLength={11}
-          onChange={(e) => cambiar("emisor_ruc", e.target.value.replace(/\D/g, ""))}
+          maxLength={100}
+          onChange={(e) => cambiar("emisor_ruc", e.target.value)}
         />
         <input
-          aria-label="RUC receptor"
-          placeholder="RUC receptor"
+          aria-label="Empresa receptora o cliente"
+          placeholder="Cliente: RUC o razón social"
           value={receptor}
-          maxLength={11}
-          onChange={(e) => cambiar("receptor_ruc", e.target.value.replace(/\D/g, ""))}
+          maxLength={100}
+          onChange={(e) => cambiar("receptor_ruc", e.target.value)}
         />
         <label className="filtro-fecha">
           Desde
