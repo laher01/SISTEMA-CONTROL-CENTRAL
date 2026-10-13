@@ -3,8 +3,6 @@
 from email.message import EmailMessage
 
 import pytest
-
-import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
