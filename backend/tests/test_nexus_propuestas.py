@@ -71,18 +71,24 @@ def test_aprobacion_solo_responsable_propietario() -> None:
         responsable_codigo="LUIS",
     )
     validar_aprobacion(
-        aprobador_rol="RESPONSABLE", aprobador_id="r1",
-        responsable_id="r1", propuesta=propuesta,
+        aprobador_rol="RESPONSABLE",
+        aprobador_id="r1",
+        responsable_id="r1",
+        propuesta=propuesta,
     )
     with pytest.raises(PermissionError):
         validar_aprobacion(
-            aprobador_rol="USUARIO", aprobador_id="r1",
-            responsable_id="r1", propuesta=propuesta,
+            aprobador_rol="USUARIO",
+            aprobador_id="r1",
+            responsable_id="r1",
+            propuesta=propuesta,
         )
     with pytest.raises(PermissionError):
         validar_aprobacion(
-            aprobador_rol="RESPONSABLE", aprobador_id="r2",
-            responsable_id="r1", propuesta=propuesta,
+            aprobador_rol="RESPONSABLE",
+            aprobador_id="r2",
+            responsable_id="r1",
+            propuesta=propuesta,
         )
 
 
