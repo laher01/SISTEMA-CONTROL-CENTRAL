@@ -76,7 +76,7 @@ def test_paquete_una_sola_factura_no_se_fragmenta() -> None:
 
 def test_paquete_cotizaciones_numeracion_comercial() -> None:
     pdf = _paquete([
-        "COTIZACION N 00275-2026\\nCLIENTE RUC 20538821374",
+        "COTIZACION Nº 00275-2026\\nCLIENTE RUC 20538821374",
         "Anexo con condiciones comerciales de la cotizacion previa",
         "COTIZACION Nº 074\\nRUC 20615898598\\nCLIENTE RUC 20538821374",
         "COTIZACION Nº 076\\nRUC 20615898598\\nCLIENTE RUC 20538821374",
