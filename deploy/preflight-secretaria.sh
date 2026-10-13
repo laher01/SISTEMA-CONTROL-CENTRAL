@@ -56,6 +56,13 @@ if ! command -v docker >/dev/null; then
   exit 1
 fi
 docker compose version
+# Validar antes de crear un respaldo que las herramientas de verificación estén disponibles.
+for herramienta in git flock pg_restore; do
+  if ! command -v "$herramienta" >/dev/null 2>&1; then
+    echo "::error::Falta herramienta necesaria para despliegue: $herramienta"
+    exit 1
+  fi
+done
 echo "Almacenamiento de respaldos:"
 if [ -d deploy/backups ]; then
   find deploy/backups -maxdepth 1 -type f -name 'fact_central_*.dump' -printf '%TY-%Tm-%Td %TH:%TM %s bytes\n' | tail -n 5
