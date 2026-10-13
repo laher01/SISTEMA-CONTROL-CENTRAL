@@ -108,6 +108,32 @@ class Miembro(ConId, ConTenant, ConCreacion, Base):
     gestores: Mapped[list["Gestor"]] = relationship(back_populates="usuario")
 
 
+class FormulaPagoNexus(ConId, ConTenant, ConCreacion, Base):
+    __tablename__ = "formulas_pago_nexus"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "responsable_id",
+            "usuario_id",
+            "version",
+            name="uq_nexus_formula_version",
+        ),
+    )
+
+    responsable_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    nombre: Mapped[str] = mapped_column(String(160))
+    descripcion: Mapped[str] = mapped_column(String(2000))
+    plantilla: Mapped[str] = mapped_column(String(60))
+    estado: Mapped[str] = mapped_column(String(20), default="BORRADOR")
+    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cuentas_acceso.id"))
+    aprobado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_acceso.id")
+    )
+    aprobado_at: Mapped[datetime | None]
+
+
 class CuentaAcceso(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "cuentas_acceso"
     __table_args__ = (

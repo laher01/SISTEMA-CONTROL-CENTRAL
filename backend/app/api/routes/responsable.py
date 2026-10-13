@@ -17,6 +17,7 @@ from app.models import (
     AsignacionPedidoGerencia,
     Empresa,
     Expediente,
+    FormulaPagoNexus,
     Miembro,
     PagoERP,
     PedidoGerencia,
@@ -370,6 +371,251 @@ def listar_adelantos_pendientes(
         }
         for a in adelantos
     ]
+
+
+class NuevaFormulaNexusIn(BaseModel):
+    usuario_id: uuid.UUID
+    nombre: str = Field(min_length=3, max_length=160)
+    descripcion: str = Field(min_length=8, max_length=2000)
+    plantilla: str = Field(pattern="^(PAGO_ESTANDAR_V1|DISTRIBUCION_JONA01_V1)$")
+
+
+@router.get("/pagos/formulas")
+def listar_formulas_nexus(
+    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
+) -> list[dict[str, str | int]]:
+    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
+    formulas = session.scalars(
+        select(FormulaPagoNexus)
+        .where(
+            FormulaPagoNexus.tenant_id == tenant_id,
+            FormulaPagoNexus.responsable_id == auth.miembro_id,
+        )
+        .order_by(FormulaPagoNexus.created_at.desc())
+    ).all()
+    return [
+        {
+            "id": str(f.id),
+            "usuario_id": str(f.usuario_id),
+            "version": f.version,
+            "nombre": f.nombre,
+            "estado": f.estado,
+        }
+        for f in formulas
+    ]
+
+
+@router.post("/pagos/formulas", status_code=status.HTTP_201_CREATED)
+def crear_formula_nexus(
+    datos: NuevaFormulaNexusIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str | int]:
+    from app.services.nexus_propuestas import EstadoFormula, PropuestaFormula
+
+    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
+    usuario = _usuario_del_responsable(session, tenant_id, auth.miembro_id, datos.usuario_id)
+    try:
+        PropuestaFormula(
+            plantilla=datos.plantilla,
+            version=1,
+            estado=EstadoFormula.BORRADOR,
+            usuario_codigo=usuario.codigo,
+            responsable_codigo=str(auth.miembro_id),
+        ).validar()
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    ultimo = session.scalar(
+        select(func.max(FormulaPagoNexus.version)).where(
+            FormulaPagoNexus.tenant_id == tenant_id,
+            FormulaPagoNexus.responsable_id == auth.miembro_id,
+            FormulaPagoNexus.usuario_id == usuario.id,
+        )
+    )
+    formula = FormulaPagoNexus(
+        tenant_id=tenant_id,
+        responsable_id=auth.miembro_id,
+        usuario_id=usuario.id,
+        version=int(ultimo or 0) + 1,
+        nombre=datos.nombre,
+        descripcion=datos.descripcion,
+        plantilla=datos.plantilla,
+        estado="BORRADOR",
+        creado_por_cuenta_id=auth.cuenta_id,
+    )
+    session.add(formula)
+    try:
+        session.flush()
+        auditoria.registrar(
+            session,
+            tenant_id,
+            "NEXUS_FORMULA_CREADA",
+            "FormulaPagoNexus",
+            formula.id,
+            {"usuario_id": str(usuario.id), "version": formula.version},
+        )
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Conflicto de versión") from exc
+    return {"id": str(formula.id), "version": formula.version, "estado": formula.estado}
+
+
+@router.post("/pagos/formulas/{formula_id}/aprobar")
+def aprobar_formula_nexus(
+    formula_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str | int]:
+    """Aprobación explícita, sin ejecutar ni modificar pagos existentes."""
+    from datetime import UTC, datetime
+
+    from app.services.nexus_propuestas import (
+        EstadoFormula,
+        PropuestaFormula,
+        validar_aprobacion,
+    )
+
+    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
+    formula = session.scalar(
+        select(FormulaPagoNexus)
+        .where(
+            FormulaPagoNexus.id == formula_id,
+            FormulaPagoNexus.tenant_id == tenant_id,
+            FormulaPagoNexus.responsable_id == auth.miembro_id,
+        )
+        .with_for_update()
+    )
+    if formula is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Fórmula no encontrada")
+    usuario = _usuario_del_responsable(session, tenant_id, auth.miembro_id, formula.usuario_id)
+    propuesta = PropuestaFormula(
+        plantilla=formula.plantilla,
+        version=formula.version,
+        estado=EstadoFormula(formula.estado),
+        usuario_codigo=usuario.codigo,
+        responsable_codigo=str(auth.miembro_id),
+    )
+    try:
+        validar_aprobacion(
+            aprobador_rol=auth.rol,
+            aprobador_id=str(auth.miembro_id),
+            responsable_id=str(formula.responsable_id),
+            propuesta=propuesta,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    aprobada = session.scalar(
+        select(FormulaPagoNexus.id).where(
+            FormulaPagoNexus.tenant_id == tenant_id,
+            FormulaPagoNexus.responsable_id == auth.miembro_id,
+            FormulaPagoNexus.usuario_id == formula.usuario_id,
+            FormulaPagoNexus.estado == EstadoFormula.APROBADA,
+        )
+    )
+    if aprobada is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Ya existe una fórmula aprobada para este usuario"
+        )
+    formula.estado = EstadoFormula.APROBADA
+    formula.aprobado_por_cuenta_id = auth.cuenta_id
+    formula.aprobado_at = datetime.now(UTC)
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "NEXUS_FORMULA_APROBADA",
+        "FormulaPagoNexus",
+        formula.id,
+        {"usuario_id": str(formula.usuario_id), "version": formula.version},
+    )
+    session.commit()
+    return {"id": str(formula.id), "version": formula.version, "estado": formula.estado}
+
+
+@router.post("/pagos/formulas/{formula_id}/revocar")
+def revocar_formula_nexus(
+    formula_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str | int]:
+    """Revocación auditable: no modifica pagos históricos."""
+    from app.services.nexus_propuestas import EstadoFormula, transicion_formula
+
+    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
+    formula = session.scalar(
+        select(FormulaPagoNexus)
+        .where(
+            FormulaPagoNexus.id == formula_id,
+            FormulaPagoNexus.tenant_id == tenant_id,
+            FormulaPagoNexus.responsable_id == auth.miembro_id,
+        )
+        .with_for_update()
+    )
+    if formula is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Fórmula no encontrada")
+    try:
+        formula.estado = transicion_formula(EstadoFormula(formula.estado), EstadoFormula.REVOCADA)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "NEXUS_FORMULA_REVOCADA",
+        "FormulaPagoNexus",
+        formula.id,
+        {"usuario_id": str(formula.usuario_id), "version": formula.version},
+    )
+    session.commit()
+    return {"id": str(formula.id), "version": formula.version, "estado": formula.estado}
+
+
+class SimularFormulaEspecialIn(BaseModel):
+    usuario_id: uuid.UUID
+    total_emitido: Decimal = Field(ge=0, max_digits=14, decimal_places=2)
+    base_autorizada: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=2)
+    usar_total_emitido: bool = False
+
+
+@router.post("/pagos/formulas/simular-jonatan")
+def simular_formula_jonatan_responsable(
+    datos: SimularFormulaEspecialIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str]:
+    """Simulación informativa: nunca programa ni confirma un pago."""
+    from app.services.distribucion_jonatan import calcular_distribucion_jonatan
+    from app.services.nexus_formulas import validar_destinatario_especial
+
+    usuario = _autorizar_pago(session, tenant_id, auth, datos.usuario_id)
+    try:
+        validar_destinatario_especial(codigo_usuario=usuario.codigo)
+        resultado = calcular_distribucion_jonatan(
+            total_emitido=datos.total_emitido,
+            base_autorizada=datos.base_autorizada,
+            usar_total_emitido=datos.usar_total_emitido,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    return {
+        "usuario_id": str(usuario.id),
+        "modo_base": resultado.modo_base,
+        "base": str(resultado.base),
+        "gente_lima": str(resultado.gente_lima),
+        "javier": str(resultado.javier),
+        "jonatan": str(resultado.jonatan),
+        "total_distribuido": str(resultado.neto),
+        "estado": "SIMULACION_NO_AUTORIZADA",
+    }
 
 
 @router.post("/pagos/cotizar")
