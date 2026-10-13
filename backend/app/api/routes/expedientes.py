@@ -118,6 +118,8 @@ def listar(
     estado: EstadoExpediente | None = None,
     receptor_ruc: str | None = None,
     emisor_ruc: str | None = None,
+    empresa_emisora: Annotated[str | None, Query(max_length=100)] = None,
+    empresa_receptora: Annotated[str | None, Query(max_length=100)] = None,
     tipo_empresa: Literal["A", "B"] | None = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
@@ -157,6 +159,26 @@ def listar(
         consulta = consulta.where(Expediente.usuario_id == usuario_id)
     if gestor_id is not None:
         consulta = consulta.where(Expediente.gestor_id == gestor_id)
+    if empresa_emisora and empresa_emisora.strip():
+        proveedor_filtro = aliased(Empresa)
+        termino = empresa_emisora.strip().lower()
+        consulta = consulta.join(
+            proveedor_filtro, Expediente.emisor_id == proveedor_filtro.id
+        ).where(
+            proveedor_filtro.tenant_id == tenant_id,
+            (func.lower(proveedor_filtro.razon_social).contains(termino, autoescape=True))
+            | (proveedor_filtro.ruc.contains(termino, autoescape=True)),
+        )
+    if empresa_receptora and empresa_receptora.strip():
+        cliente_filtro = aliased(Empresa)
+        termino = empresa_receptora.strip().lower()
+        consulta = consulta.join(
+            cliente_filtro, Expediente.receptor_id == cliente_filtro.id
+        ).where(
+            cliente_filtro.tenant_id == tenant_id,
+            (func.lower(cliente_filtro.razon_social).contains(termino, autoescape=True))
+            | (cliente_filtro.ruc.contains(termino, autoescape=True)),
+        )
     if tipo_empresa is not None or emisor_ruc is not None:
         empresa_emisora = aliased(Empresa)
         consulta = consulta.join(empresa_emisora, Expediente.emisor_id == empresa_emisora.id)
@@ -324,6 +346,8 @@ def resumen_filtrado(
     estado: EstadoExpediente | None = None,
     receptor_ruc: str | None = None,
     emisor_ruc: str | None = None,
+    empresa_emisora: Annotated[str | None, Query(max_length=100)] = None,
+    empresa_receptora: Annotated[str | None, Query(max_length=100)] = None,
     tipo_empresa: Literal["A", "B"] | None = None,
     responsable_id: uuid.UUID | None = None,
     usuario_id: uuid.UUID | None = None,
@@ -361,6 +385,26 @@ def resumen_filtrado(
         consulta = consulta.where(Expediente.usuario_id == usuario_id)
     if gestor_id is not None:
         consulta = consulta.where(Expediente.gestor_id == gestor_id)
+    if empresa_emisora and empresa_emisora.strip():
+        proveedor_filtro = aliased(Empresa)
+        termino = empresa_emisora.strip().lower()
+        consulta = consulta.join(
+            proveedor_filtro, Expediente.emisor_id == proveedor_filtro.id
+        ).where(
+            proveedor_filtro.tenant_id == tenant_id,
+            (func.lower(proveedor_filtro.razon_social).contains(termino, autoescape=True))
+            | (proveedor_filtro.ruc.contains(termino, autoescape=True)),
+        )
+    if empresa_receptora and empresa_receptora.strip():
+        cliente_filtro = aliased(Empresa)
+        termino = empresa_receptora.strip().lower()
+        consulta = consulta.join(
+            cliente_filtro, Expediente.receptor_id == cliente_filtro.id
+        ).where(
+            cliente_filtro.tenant_id == tenant_id,
+            (func.lower(cliente_filtro.razon_social).contains(termino, autoescape=True))
+            | (cliente_filtro.ruc.contains(termino, autoescape=True)),
+        )
     if tipo_empresa is not None or emisor_ruc is not None or buscar:
         emisor = aliased(Empresa)
         consulta = consulta.join(emisor, Expediente.emisor_id == emisor.id)
@@ -421,6 +465,8 @@ def listar_ids(
     estado: EstadoExpediente | None = None,
     receptor_ruc: str | None = None,
     emisor_ruc: str | None = None,
+    empresa_emisora: Annotated[str | None, Query(max_length=100)] = None,
+    empresa_receptora: Annotated[str | None, Query(max_length=100)] = None,
     tipo_empresa: Literal["A", "B"] | None = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
@@ -460,6 +506,26 @@ def listar_ids(
         consulta = consulta.where(Expediente.usuario_id == usuario_id)
     if gestor_id is not None:
         consulta = consulta.where(Expediente.gestor_id == gestor_id)
+    if empresa_emisora and empresa_emisora.strip():
+        proveedor_filtro = aliased(Empresa)
+        termino = empresa_emisora.strip().lower()
+        consulta = consulta.join(
+            proveedor_filtro, Expediente.emisor_id == proveedor_filtro.id
+        ).where(
+            proveedor_filtro.tenant_id == tenant_id,
+            (func.lower(proveedor_filtro.razon_social).contains(termino, autoescape=True))
+            | (proveedor_filtro.ruc.contains(termino, autoescape=True)),
+        )
+    if empresa_receptora and empresa_receptora.strip():
+        cliente_filtro = aliased(Empresa)
+        termino = empresa_receptora.strip().lower()
+        consulta = consulta.join(
+            cliente_filtro, Expediente.receptor_id == cliente_filtro.id
+        ).where(
+            cliente_filtro.tenant_id == tenant_id,
+            (func.lower(cliente_filtro.razon_social).contains(termino, autoescape=True))
+            | (cliente_filtro.ruc.contains(termino, autoescape=True)),
+        )
     if tipo_empresa is not None or emisor_ruc is not None:
         empresa_emisora = aliased(Empresa)
         consulta = consulta.join(empresa_emisora, Expediente.emisor_id == empresa_emisora.id)
