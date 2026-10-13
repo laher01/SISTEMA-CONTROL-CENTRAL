@@ -535,7 +535,14 @@ def aprobar_formula_nexus(
         formula.id,
         {"usuario_id": str(formula.usuario_id), "version": formula.version},
     )
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Ya existe una fórmula aprobada para este usuario",
+        ) from exc
     return {"id": str(formula.id), "version": formula.version, "estado": formula.estado}
 
 

@@ -118,6 +118,13 @@ class FormulaPagoNexus(ConId, ConTenant, ConCreacion, Base):
             "version",
             name="uq_nexus_formula_version",
         ),
+        Index(
+            "uq_nexus_formula_aprobada_usuario",
+            "tenant_id",
+            "usuario_id",
+            unique=True,
+            postgresql_where=text("estado = 'APROBADA'"),
+        ),
     )
 
     responsable_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
