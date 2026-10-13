@@ -1,7 +1,7 @@
 """La relación N:M solo puede migrarse después de las referencias GRE."""
 
-from pathlib import Path
 import ast
+from pathlib import Path
 
 
 VERSIONES = Path(__file__).resolve().parents[1] / "alembic" / "versions"
