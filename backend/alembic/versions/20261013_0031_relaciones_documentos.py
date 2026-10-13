@@ -7,6 +7,7 @@ Revises: 0030
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "0031"
@@ -20,7 +21,12 @@ def upgrade() -> None:
         "relaciones_documentos",
         sa.Column("id", sa.Uuid(), primary_key=True),
         sa.Column("tenant_id", sa.Uuid(), sa.ForeignKey("tenants.id"), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.Column("origen_id", sa.Uuid(), sa.ForeignKey("documentos.id"), nullable=False),
         sa.Column("destino_id", sa.Uuid(), sa.ForeignKey("documentos.id"), nullable=False),
         sa.Column("tipo", sa.String(40), nullable=False),
