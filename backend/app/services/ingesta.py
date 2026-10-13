@@ -121,8 +121,7 @@ def ingerir_documento(
 ) -> Documento:
     sha256 = hashlib.sha256(archivo.contenido).hexdigest()
     existente = session.scalar(
-        select(Documento.id)
-            .where(Documento.tenant_id == tenant_id, Documento.sha256 == sha256)
+        select(Documento.id).where(Documento.tenant_id == tenant_id, Documento.sha256 == sha256)
     )
     if existente is not None:
         raise DocumentoDuplicado(existente)
@@ -164,7 +163,8 @@ def ingerir_documento(
     # nombre o representación (PDF, imagen, XML) del comprobante.
     if expediente is not None and tipo_documento == TipoDocumento.FACT:
         existente_factura = session.scalar(
-            select(Documento.id).where(
+            select(Documento.id)
+            .where(
                 Documento.tenant_id == tenant_id,
                 Documento.expediente_id == expediente.id,
                 Documento.tipo_documento == TipoDocumento.FACT,
