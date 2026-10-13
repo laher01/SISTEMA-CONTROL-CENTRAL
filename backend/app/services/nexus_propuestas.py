@@ -57,7 +57,10 @@ def version_siguiente(versiones: list[int]) -> int:
 
 
 def validar_aprobacion(
-    *, aprobador_rol: str, aprobador_id: str, responsable_id: str,
+    *,
+    aprobador_rol: str,
+    aprobador_id: str,
+    responsable_id: str,
     propuesta: PropuestaFormula,
 ) -> None:
     """Exige que apruebe el Responsable propietario, no un Usuario o Gestor."""
