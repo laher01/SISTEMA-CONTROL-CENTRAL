@@ -1,4 +1,4 @@
-"""La relación N:M solo puede migrarse después de las referencias GRE."""
+"""La relación N:M depende de las referencias GRE y las fórmulas NEXUS."""
 
 import ast
 from pathlib import Path
@@ -20,6 +20,8 @@ def _revisiones(archivo: str) -> tuple[str, str | None]:
 
 def test_cadena_referencias_y_relaciones_documentales() -> None:
     referencias = _revisiones("20261012_0030_referencias_gre.py")
-    relaciones = _revisiones("20261013_0031_relaciones_documentos.py")
+    nexus = _revisiones("20261013_0031_nexus_formulas.py")
+    relaciones = _revisiones("20261013_0032_relaciones_documentos.py")
     assert referencias == ("0030", "0029")
-    assert relaciones == ("0031", "0030")
+    assert nexus == ("0031", "0030")
+    assert relaciones == ("0032", "0031")
