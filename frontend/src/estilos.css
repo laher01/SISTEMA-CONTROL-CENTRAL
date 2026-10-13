@@ -525,8 +525,7 @@ button.peligro {
   word-break: normal;
   vertical-align: top;
 }
-.tabla-registros th:nth-child(7),
-.tabla-registros th:nth-child(8) {
+.tabla-registros .columna-empresa {
   width: 18%;
 }
 .tabla-registros td strong {
