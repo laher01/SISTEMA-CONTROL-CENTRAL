@@ -40,6 +40,10 @@ if [ ! -s "$backup" ]; then
   echo "Respaldo bootstrap vacío; abortar" >&2
   exit 1
 fi
+if ! "${compose[@]}" exec -T db pg_restore --list < "$backup" >/dev/null; then
+  echo "Respaldo PostgreSQL inválido; abortar antes de actualizar" >&2
+  exit 1
+fi
 echo "Respaldo bootstrap completado."
 git checkout main
 git merge --ff-only "$EXPECTED_COMMIT"
