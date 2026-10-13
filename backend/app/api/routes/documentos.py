@@ -1258,7 +1258,11 @@ def crear_expediente_asistido(
             {"mensaje": "El documento ya pertenece a otro expediente"},
         )
     if documento.expediente_id != expediente.id or documento.tipo_documento != tipo_documento:
-        vincular_documento(session, settings, hoy, documento, expediente.id, tipo_documento)
+        try:
+            vincular_documento(session, settings, hoy, documento, expediente.id, tipo_documento)
+        except ComprobanteYaRegistrado as exc:
+            session.rollback()
+            raise _comprobante_duplicado(session, auth, exc.expediente_id) from exc
     session.commit()
     return ExpedienteAsistidoOut(
         expediente=ExpedienteOut.model_validate(expediente),
