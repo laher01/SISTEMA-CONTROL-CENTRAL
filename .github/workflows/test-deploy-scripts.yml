@@ -36,6 +36,9 @@ jobs:
           assert 'EXPECTED_COMMIT' in deploy
           assert 'pg_restore --list' in deploy
           assert '</dev/null > "$backup"' in deploy
+          assert 'build --pull </dev/null' in deploy
+          assert 'up -d --remove-orphans </dev/null' in deploy
+          assert 'ps --status running db </dev/null' in deploy
           assert 'git status --porcelain --untracked-files=all' in deploy
           assert 'git status --porcelain --untracked-files=all' in preflight
           assert 'docker compose' in preflight
