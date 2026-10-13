@@ -56,8 +56,12 @@ if ! command -v docker >/dev/null; then
   exit 1
 fi
 docker compose version
+if ! docker compose --env-file deploy/.env.production -f deploy/docker-compose.production.yml exec -T db pg_restore --version </dev/null; then
+  echo "::error::pg_restore no disponible en contenedor db"
+  exit 1
+fi
 # Validar antes de crear un respaldo que las herramientas de verificación estén disponibles.
-for herramienta in git flock pg_restore; do
+for herramienta in git flock; do
   if ! command -v "$herramienta" >/dev/null 2>&1; then
     echo "::error::Falta herramienta necesaria para despliegue: $herramienta"
     exit 1
