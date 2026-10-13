@@ -282,9 +282,7 @@ class RelacionDocumento(ConId, ConTenant, ConCreacion, Base):
     """N:M entre documentos del mismo tenant, con evidencia de la asociación."""
 
     __tablename__ = "relaciones_documentos"
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "origen_id", "destino_id", "tipo"),
-    )
+    __table_args__ = (UniqueConstraint("tenant_id", "origen_id", "destino_id", "tipo"),)
 
     origen_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documentos.id"), index=True)
     destino_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documentos.id"), index=True)
