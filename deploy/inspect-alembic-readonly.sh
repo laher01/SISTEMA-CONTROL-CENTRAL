@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Diagnóstico Alembic en VPS antigua: exclusivamente lectura; no migrar ni restaurar.
 set -Eeuo pipefail
-cd "$(dirname -- "${BASH_SOURCE[0]}")/.."
+cd "$(pwd -P)"
 test -s deploy/.env.production || { echo "::error::Configuración de producción ausente"; exit 1; }
 compose=(docker compose --env-file deploy/.env.production -f deploy/docker-compose.production.yml)
 echo "Commit instalado: $(git rev-parse HEAD)"
