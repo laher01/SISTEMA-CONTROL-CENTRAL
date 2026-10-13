@@ -1,0 +1,64 @@
+name: alembic-vps-diagnostic
+
+on:
+  pull_request:
+    paths:
+      - 'deploy/inspect-alembic-readonly.sh'
+      - '.github/workflows/alembic-vps-diagnostic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax and read-only safety
+        run: |
+          bash -n deploy/inspect-alembic-readonly.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          script = Path("deploy/inspect-alembic-readonly.sh").read_text()
+          assert "SELECT version_num FROM alembic_version" in script
+          assert "psql -X -v ON_ERROR_STOP=1" in script
+          assert "exec -T db" in script
+          assert "</dev/null" in script
+          for forbidden in ("alembic upgrade", "alembic downgrade", "git checkout", "docker compose up", "DROP TABLE", "pg_restore -d", "psql -c UPDATE"):
+              assert forbidden not in script, forbidden
+          PY
+
+  inspect-staging:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: validate-script
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate approved VPS secrets and configure existing SSH identity
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          test "$VPS_HOST" = "132.145.233.172"
+          test "$VPS_USER" = "ubuntu"
+          test -n "$VPS_DEPLOY_PATH"
+          test -n "$VPS_SSH_PRIVATE_KEY"
+          test -n "$VPS_SSH_KNOWN_HOSTS"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Read Alembic revision without changing database or server
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+        run: |
+          ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
+            "cd -- '$VPS_DEPLOY_PATH' && bash -s" < deploy/inspect-alembic-readonly.sh
