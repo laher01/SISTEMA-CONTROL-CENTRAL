@@ -159,6 +159,20 @@ def ingerir_documento(
             creado_por_cuenta_id,
         )
 
+    # El expediente admite una sola factura principal, independientemente del
+    # nombre o representación (PDF, imagen, XML) del comprobante.
+    if expediente is not None and tipo_documento == TipoDocumento.FACT:
+        existente_factura = session.scalar(
+            select(Documento.id).where(
+                Documento.tenant_id == tenant_id,
+                Documento.expediente_id == expediente.id,
+                Documento.tipo_documento == TipoDocumento.FACT,
+                Documento.deleted_at.is_(None),
+            ).limit(1)
+        )
+        if existente_factura is not None:
+            raise ComprobanteYaRegistrado(expediente.id)
+
     usuario_id = usuario_id or _usuario_de_gestor(session, tenant_id, gestor_id)
     if expediente is not None and usuario_id is None:
         usuario_id = expediente.usuario_id
@@ -221,6 +235,20 @@ def vincular_documento(
     tipo_documento: TipoDocumento,
 ) -> Documento:
     expediente = _expediente_del_tenant(session, documento.tenant_id, expediente_id)
+    if tipo_documento == TipoDocumento.FACT:
+        # La huella binaria no basta: representaciones distintas de la misma
+        # factura deben compartir una única factura principal en el expediente.
+        existente_factura = session.scalar(
+            select(Documento.id).where(
+                Documento.tenant_id == documento.tenant_id,
+                Documento.expediente_id == expediente.id,
+                Documento.tipo_documento == TipoDocumento.FACT,
+                Documento.deleted_at.is_(None),
+                Documento.id != documento.id,
+            ).limit(1)
+        )
+        if existente_factura is not None:
+            raise ComprobanteYaRegistrado(expediente.id)
     anterior = documento.expediente
     documento.expediente_id = expediente.id
     documento.tipo_documento = tipo_documento
