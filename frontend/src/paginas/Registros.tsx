@@ -201,13 +201,11 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
                 {mostrarUsuario && <th>Usuario</th>}
                 {mostrarGestor && <th>Gestor</th>}
                 <th>Fecha documento</th>
-                 <th>Fecha de carga</th>
+                <th>Fecha de carga</th>
                 <th>Tipo empresa</th>
                 <th>Correlativo</th>
-                <th>RUC emisor</th>
-                <th>Razón social emisor</th>
-                <th>RUC receptor</th>
-                <th>Razón social receptor</th>
+                <th>Emisor</th>
+                <th>Receptor</th>
                 <th className="num">Monto</th>
                 <th>Documentación / opciones</th>
               </tr>
@@ -300,30 +298,28 @@ function FilaRegistro({
       <td><Semaforo estado={fila.estado} /></td>
       {mostrarUsuario && (
         <td>
-          {fila.usuario_codigo
-            ? fila.usuario_codigo + " · " + (fila.usuario_nombre ?? "")
-            : "—"}
+          {fila.usuario_codigo ? (
+            <><strong>{fila.usuario_codigo}</strong><small className="bloque tenue">{fila.usuario_nombre ?? "Sin nombre"}</small></>
+          ) : "—"}
         </td>
       )}
       {mostrarGestor && (
         <td>
-          {fila.gestor_codigo
-            ? fila.gestor_codigo + " · " + (fila.gestor_nombre ?? "")
-            : "Sin gestor"}
+          {fila.gestor_codigo ? (
+            <><strong>{fila.gestor_codigo}</strong><small className="bloque tenue">{fila.gestor_nombre ?? "Sin nombre"}</small></>
+          ) : "Sin gestor"}
         </td>
       )}
       <td>{formatearFecha(fila.fecha_emision)}</td>
-       <td>{fila.fecha_carga ? formatearFecha(fila.fecha_carga) : "Sin carga"}</td>
+      <td>{fila.fecha_carga ? formatearFecha(fila.fecha_carga) : "Sin carga"}</td>
       <td>{fila.tipo_empresa ? `Tipo ${fila.tipo_empresa}` : "Sin clasificar"}</td>
       <td>
         <Link to={"/expedientes/" + fila.expediente_id}>
           {fila.tipo_comprobante + " " + fila.serie + "-" + fila.correlativo}
         </Link>
       </td>
-      <td>{fila.emisor_ruc}</td>
-      <td>{fila.emisor_razon_social}</td>
-      <td>{fila.receptor_ruc}</td>
-      <td>{fila.receptor_razon_social}</td>
+      <td><strong>{fila.emisor_razon_social || "Sin razón social"}</strong><small className="bloque tenue">RUC {fila.emisor_ruc}</small></td>
+      <td><strong>{fila.receptor_razon_social || "Sin razón social"}</strong><small className="bloque tenue">RUC {fila.receptor_ruc}</small></td>
       <td className="num">{formatearMonto(fila.moneda, fila.importe_total)}</td>
       <td>
         <div className="acciones-registro">
