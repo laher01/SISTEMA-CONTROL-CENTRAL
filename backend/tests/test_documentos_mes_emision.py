@@ -66,8 +66,7 @@ def test_empresa_proveedora_y_cliente_se_filtran_independientemente(
         resultados = respuesta.json()
         esperado = documento_id if ruta.endswith("/documentos") else expediente_id
         assert any(
-            (fila.get("id") if isinstance(fila, dict) else fila) == esperado
-            for fila in resultados
+            (fila.get("id") if isinstance(fila, dict) else fila) == esperado for fila in resultados
         )
 
     para_control = {"desde": "2026-01-01", "hasta": "2026-12-31", **parametros}
