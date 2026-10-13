@@ -39,7 +39,7 @@ curl -fsS --max-time 10 http://127.0.0.1:18080/health >/dev/null
 exec 9>deploy/.deploy.lock
 flock -n 9 || { echo "Otro despliegue en curso"; exit 1; }
 compose=(docker compose --env-file deploy/.env.production -f deploy/docker-compose.production.yml)
-"${compose[@]}" ps --status running db | grep -q db || { echo "PostgreSQL no disponible"; exit 1; }
+"${compose[@]}" ps --status running db </dev/null | grep -q db || { echo "PostgreSQL no disponible"; exit 1; }
 git fetch origin "+refs/heads/$DEPLOY_BRANCH:refs/remotes/origin/$DEPLOY_BRANCH"
 [[ "$(git rev-parse "origin/$DEPLOY_BRANCH")" == "$EXPECTED_COMMIT" ]] || { echo "SHA diferente al aprobado"; exit 1; }
 previous="$(git rev-parse HEAD)"
@@ -52,17 +52,17 @@ echo "BACKUP_VALIDADO: $backup"
 echo "BACKUP_PR140_READY=$backup"
 git checkout --detach "$EXPECTED_COMMIT"
 echo "DEPLOY_PREVIOUS=$previous DEPLOY_TARGET=$EXPECTED_COMMIT"
-"${compose[@]}" build --pull
-"${compose[@]}" up -d --remove-orphans
+"${compose[@]}" build --pull </dev/null
+"${compose[@]}" up -d --remove-orphans </dev/null
 for attempt in $(seq 1 30); do
   if curl -fsS --max-time 5 http://127.0.0.1:18080/health >/dev/null; then
     [[ "$(git rev-parse HEAD)" == "$EXPECTED_COMMIT" ]] || { echo "Commit final incorrecto" >&2; exit 1; }
     echo "DESPLIEGUE_VALIDADO=$EXPECTED_COMMIT"
-    "${compose[@]}" ps
+    "${compose[@]}" ps </dev/null
     exit 0
   fi
   sleep 2
 done
-"${compose[@]}" ps
+"${compose[@]}" ps </dev/null
 echo "Healthcheck falló; requiere recuperación supervisada y revisar migraciones; respaldo: $backup" >&2
 exit 1
