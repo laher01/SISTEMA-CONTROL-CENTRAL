@@ -70,3 +70,30 @@ def test_simulador_rechaza_otro_usuario(
         },
     )
     assert respuesta.status_code == 422
+
+
+def test_usuario_no_puede_administrar_formulas(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    usuario = Miembro(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="OTRO02",
+        nombre="Usuario sin permisos de Responsable",
+        rol="USUARIO",
+        activo=True,
+    )
+    session.add(usuario)
+    session.commit()
+    auth_prueba.como_usuario(usuario.id, codigo="OTRO02")
+    listado = client.get("/api/v1/responsable/pagos/formulas")
+    assert listado.status_code == 403
+    creacion = client.post(
+        "/api/v1/responsable/pagos/formulas",
+        json={
+            "usuario_id": str(usuario.id),
+            "nombre": "Formula no autorizada",
+            "descripcion": "Intento sin permiso de Responsable",
+            "plantilla": "PAGO_ESTANDAR_V1",
+        },
+    )
+    assert creacion.status_code == 403
