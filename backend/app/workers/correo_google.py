@@ -50,7 +50,9 @@ def revisar_ciclo_google(
         )
     )
     total = 0
-    logger.info("Gmail: inicio de ciclo; buzones=%s limite=%s", len(buzones), limite_por_buzon)
+    logger.info(
+        "Gmail: inicio de ciclo; buzones=%s limite=%s", len(buzones), limite_por_buzon
+    )
     for buzon, credencial in buzones:
         nuevos = 0
         repetidos = 0
@@ -86,7 +88,9 @@ def revisar_ciclo_google(
             session.commit()
             logger.info(
                 "Gmail: buzón procesado; nuevos=%s repetidos=%s consultados=%s",
-                nuevos, repetidos, len(ids),
+                nuevos,
+                repetidos,
+                len(ids),
             )
         except (GoogleOAuthError, OSError, ValueError) as exc:
             session.rollback()
