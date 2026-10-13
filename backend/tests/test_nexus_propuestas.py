@@ -99,3 +99,33 @@ def test_version_siguiente() -> None:
     assert version_siguiente([1, 2, 4]) == 5
     with pytest.raises(ValueError):
         version_siguiente([-1])
+
+
+def test_revocacion_es_terminal_y_no_se_puede_repetir() -> None:
+    """Un borrador o una fórmula aprobada se pueden revocar solo una vez."""
+    for estado in (EstadoFormula.BORRADOR, EstadoFormula.APROBADA):
+        assert transicion_formula(estado, EstadoFormula.REVOCADA) == EstadoFormula.REVOCADA
+    with pytest.raises(ValueError, match="Transición"):
+        transicion_formula(EstadoFormula.REVOCADA, EstadoFormula.REVOCADA)
+    with pytest.raises(ValueError, match="Transición"):
+        transicion_formula(EstadoFormula.REVOCADA, EstadoFormula.BORRADOR)
+
+
+def test_no_aprobar_dos_veces_una_formula() -> None:
+    """No se puede convertir una aprobación previa en una aprobación nueva."""
+    from app.services.nexus_propuestas import validar_aprobacion
+
+    propuesta = PropuestaFormula(
+        plantilla="PAGO_ESTANDAR_V1",
+        version=1,
+        estado=EstadoFormula.APROBADA,
+        usuario_codigo="JOSE01",
+        responsable_codigo="LUIS",
+    )
+    with pytest.raises(ValueError, match="borradores"):
+        validar_aprobacion(
+            aprobador_rol="RESPONSABLE",
+            aprobador_id="r1",
+            responsable_id="r1",
+            propuesta=propuesta,
+        )
