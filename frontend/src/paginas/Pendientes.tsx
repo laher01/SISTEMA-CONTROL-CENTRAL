@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { conParametros, enviarJson, obtener, urlArchivo, useDatos } from "../api";
+import { conParametros, eliminar, enviarJson, obtener, urlArchivo, useDatos } from "../api";
 import { Estado, Paginacion } from "../componentes";
 import {
   ETIQUETA_ESTADO_DOCUMENTO,
@@ -177,6 +177,7 @@ export default function Pendientes() {
               <th>Subido</th>
               <th>Lectura</th>
               <th>Vincular</th>
+              <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -201,6 +202,23 @@ function FilaPendiente({
   alVincular: () => void;
 }) {
   const [seleccion, setSeleccion] = useState<SeleccionSugerida>();
+  const [eliminando, setEliminando] = useState(false);
+  const [errorEliminar, setErrorEliminar] = useState("");
+  const retirar = async () => {
+    if (!window.confirm(
+      "¿Retirar este documento de FACT CENTRAL? Quedará auditado y se conservará el original."
+    )) return;
+    setEliminando(true);
+    setErrorEliminar("");
+    try {
+      await eliminar("/api/v1/documentos/" + documento.id);
+      alVincular();
+    } catch (error) {
+      setErrorEliminar(error instanceof Error ? error.message : String(error));
+    } finally {
+      setEliminando(false);
+    }
+  };
   return (
     <tr>
       <td>
@@ -219,6 +237,12 @@ function FilaPendiente({
           seleccion={seleccion}
           alVincular={alVincular}
         />
+      </td>
+      <td>
+        <button className="peligro" onClick={retirar} disabled={eliminando}>
+          {eliminando ? "Eliminando…" : "Eliminar"}
+        </button>
+        {errorEliminar && <small role="alert" className="error bloque">{errorEliminar}</small>}
       </td>
     </tr>
   );
