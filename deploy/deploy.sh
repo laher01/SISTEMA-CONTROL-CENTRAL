@@ -36,6 +36,10 @@ if [ ! -s "$backup" ]; then
   echo "No se produjo un respaldo PostgreSQL válido." >&2
   exit 1
 fi
+if ! "${compose[@]}" exec -T db pg_restore --list < "$backup" >/dev/null; then
+  echo "Respaldo PostgreSQL inválido; abortar antes de actualizar" >&2
+  exit 1
+fi
 echo "Respaldo PostgreSQL creado: $backup"
 
 previous_commit="$(git rev-parse HEAD)"
