@@ -15,7 +15,7 @@ def test_produccion_por_receptor_usa_documentos_del_usuario_y_periodo(
     usuario_id = auth_prueba.contexto.usuario_id
     assert usuario_id is not None
     emisor = Empresa(tenant_id=tenant_id, ruc="20111111111", razon_social="Proveedor")
-    receptor = Empresa(tenant_id=tenant_id, ruc="20222222222", razon_social="Cliente A")
+    receptor = Empresa(tenant_id=tenant_id, ruc="20222222222", razon_social="Cliente A", autorizada=True)
     session.add_all([emisor, receptor])
     session.flush()
     session.add(
