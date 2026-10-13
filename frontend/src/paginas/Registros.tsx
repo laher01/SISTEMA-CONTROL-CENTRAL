@@ -53,15 +53,6 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
   const mostrarUsuario = puedeVerJerarquia;
   const mostrarGestor = sesion.rol !== "GESTOR";
   const mostrarResponsable = puedeVerJerarquia;
-  const filtrarGestor = puedeVerJerarquia || sesion.rol === "USUARIO";
-
-  const gestoresDisponibles = useMemo(() => {
-    const gestores = opciones?.gestores ?? [];
-    if (sesion.rol === "USUARIO") return gestores;
-    if (!usuarioId) return gestores;
-    return gestores.filter((gestor) => gestor.usuario_id === usuarioId);
-  }, [opciones?.gestores, sesion.rol, usuarioId]);
-
   const etiquetaFiltro = useMemo(() => {
     const partes: string[] = [];
     if (responsableId) {
