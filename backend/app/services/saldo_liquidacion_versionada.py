@@ -5,7 +5,7 @@ El almacenamiento deberá imponer unicidad transaccional de referencia e idempot
 """
 
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 
 CENTIMO = Decimal("0.01")
 
