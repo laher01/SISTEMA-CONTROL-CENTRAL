@@ -33,6 +33,7 @@ def test_cliente_sin_validar_no_cuenta_y_se_muestra_no_valido(
     assert compras_validado.json()[0]["cliente_autorizado"] is True
     assert float(compras_validado.json()[0]["importe_total"]) > 0
 
+
 def test_cliente_eliminado_no_se_reactiva_con_otra_factura(
     client: TestClient, auth_prueba: AuthPrueba
 ) -> None:
