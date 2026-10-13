@@ -472,7 +472,7 @@ def aprobar_formula_nexus(
     auth: OperativeAuthDep,
 ) -> dict[str, str | int]:
     """Aprobación explícita, sin ejecutar ni modificar pagos existentes."""
-    from datetime import datetime, timezone
+    from datetime import UTC, datetime
 
     from app.services.nexus_propuestas import (
         EstadoFormula,
@@ -521,10 +521,12 @@ def aprobar_formula_nexus(
         )
     )
     if aprobada is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Ya existe una fórmula aprobada para este usuario")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Ya existe una fórmula aprobada para este usuario"
+        )
     formula.estado = EstadoFormula.APROBADA
     formula.aprobado_por_cuenta_id = auth.cuenta_id
-    formula.aprobado_at = datetime.now(timezone.utc)
+    formula.aprobado_at = datetime.now(UTC)
     auditoria.registrar(
         session,
         tenant_id,
