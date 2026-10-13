@@ -13,6 +13,7 @@ export default function FiltroJerarquia({
   const { datos } = useDatos<RegistroOpciones>("/api/v1/registros/opciones");
   const administra = ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA"].includes(sesion.rol);
   const permiteUsuario = administra || sesion.rol === "RESPONSABLE";
+  const requiereResponsable = administra;
   const usuarios = (datos?.usuarios ?? []).filter(
     (u) => !responsableId || u.responsable_id === responsableId,
   );
@@ -35,16 +36,18 @@ export default function FiltroJerarquia({
       )}
       {permiteUsuario && (
         <select aria-label="Filtrar por usuario" value={usuarioId}
+          disabled={requiereResponsable && !responsableId}
           onChange={(e) => cambiar("usuario_id", e.target.value)}>
-          <option value="">Todos los usuarios</option>
+          <option value="">{requiereResponsable && !responsableId ? "Seleccione Responsable primero" : "Todos los usuarios"}</option>
           {usuarios.map((u) => (
             <option key={u.id} value={u.id}>{u.codigo} · {u.nombre}</option>
           ))}
         </select>
       )}
       <select aria-label="Filtrar por gestor" value={gestorId}
+        disabled={(requiereResponsable && !responsableId) || (permiteUsuario && !usuarioId)}
         onChange={(e) => cambiar("gestor_id", e.target.value)}>
-        <option value="">Todos los gestores visibles</option>
+        <option value="">{(requiereResponsable && !responsableId) ? "Seleccione Responsable primero" : permiteUsuario && !usuarioId ? "Seleccione Usuario primero" : "Todos los gestores visibles"}</option>
         {gestores.map((g) => (
           <option key={g.id} value={g.id}>{g.codigo} · {g.nombre}</option>
         ))}
