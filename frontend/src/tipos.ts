@@ -245,6 +245,8 @@ export interface AltaGestor {
 
 
 export interface RegistroFila {
+  responsable_codigo?: string | null;
+  responsable_nombre?: string | null;
   fecha_registro: string;
   fecha_carga: string | null;
   tipo_empresa: ClasificacionProveedor | null;

@@ -151,6 +151,7 @@ def listar(
     settings: SettingsDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
+    responsable_id: uuid.UUID | None = None,
     usuario_id: uuid.UUID | None = None,
     gestor_id: uuid.UUID | None = None,
     tipo_empresa: Literal["A", "B"] | None = None,
@@ -166,6 +167,7 @@ def listar(
     _validar_filtros(auth.rol, usuario_id, gestor_id)
 
     usuario = aliased(Miembro)
+    responsable = aliased(Miembro)
     gestor = aliased(Gestor)
     emisor_empresa = aliased(Empresa)
     receptor_empresa = aliased(Empresa)
@@ -175,6 +177,8 @@ def listar(
             Expediente,
             usuario.codigo,
             usuario.nombre,
+            responsable.codigo,
+            responsable.nombre,
             gestor.codigo,
             gestor.nombre,
             emisor_empresa.ruc,
@@ -184,6 +188,7 @@ def listar(
             receptor_empresa.razon_social,
         )
         .outerjoin(usuario, Expediente.usuario_id == usuario.id)
+        .outerjoin(responsable, usuario.responsable_id == responsable.id)
         .outerjoin(gestor, Expediente.gestor_id == gestor.id)
         .join(emisor_empresa, Expediente.emisor_id == emisor_empresa.id)
         .join(receptor_empresa, Expediente.receptor_id == receptor_empresa.id)
@@ -194,6 +199,12 @@ def listar(
     )
 
     consulta = _aplicar_ambito(consulta, auth)
+    if responsable_id is not None:
+        consulta = consulta.where(
+            usuario.responsable_id == responsable_id,
+            responsable.tenant_id == tenant_id,
+            responsable.deleted_at.is_(None),
+        )
     if tipo_empresa is not None:
         consulta = consulta.where(emisor_empresa.clasificacion_proveedor == tipo_empresa)
     if usuario_id is not None and auth.rol in (
@@ -271,6 +282,8 @@ def listar(
         expediente,
         usuario_codigo,
         usuario_nombre,
+        responsable_codigo,
+        responsable_nombre,
         gestor_codigo,
         gestor_nombre,
         emisor_ruc_fila,
@@ -301,6 +314,8 @@ def listar(
                 gestor_id=expediente.gestor_id if mostrar_propiedad else None,
                 gestor_codigo=gestor_codigo if mostrar_propiedad else None,
                 gestor_nombre=gestor_nombre if mostrar_propiedad else None,
+                responsable_codigo=responsable_codigo if mostrar_propiedad else None,
+                responsable_nombre=responsable_nombre if mostrar_propiedad else None,
                 fecha_emision=expediente.fecha_emision,
                 fecha_registro=expediente.created_at,
                 fecha_carga=session.scalar(
