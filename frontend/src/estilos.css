@@ -513,9 +513,39 @@ button.peligro {
   grid-template-columns: repeat(3, minmax(180px, 260px));
 }
 
+/* Registros: ajustar el contenido dentro de su columna sin ocultar nombres ni RUC. */
+.tabla-registros {
+  width: 100%;
+  table-layout: fixed;
+}
 .tabla-registros th,
 .tabla-registros td {
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  vertical-align: top;
+}
+.tabla-registros th:nth-child(7),
+.tabla-registros th:nth-child(8) {
+  width: 18%;
+}
+.tabla-registros td strong {
+  display: block;
+  line-height: 1.4;
+}
+.tabla-registros td .tenue {
+  overflow-wrap: anywhere;
+}
+.tabla-registros .acciones-registro {
+  min-width: 0;
+  width: 100%;
+}
+.tabla-registros .adjuntar-registro {
+  flex-wrap: wrap;
+}
+.tabla-registros .adjuntar-registro select {
+  max-width: 100%;
+  min-width: 0;
 }
 
 .acciones-registro {
