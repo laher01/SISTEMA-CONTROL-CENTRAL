@@ -278,7 +278,6 @@ class Documento(ConId, ConTenant, ConCreacion, Base):
         return self.expediente.receptor if self.expediente is not None else None
 
 
-
 class ReferenciaGRE(ConId, ConTenant, ConCreacion, Base):
     """Expediente provisional identificado por GRE, pendiente de factura.
 
