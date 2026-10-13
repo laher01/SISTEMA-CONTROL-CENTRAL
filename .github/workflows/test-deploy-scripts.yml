@@ -3,6 +3,7 @@ name: test-deploy-scripts
 on:
   pull_request:
     paths:
+      - 'deploy/deploy.sh'
       - 'deploy/deploy-legacy-pr140.sh'
       - 'deploy/preflight-secretaria.sh'
       - '.github/workflows/deploy-staging.yml'
@@ -19,6 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Syntax check without executing deployment
         run: |
+          bash -n deploy/deploy.sh
           bash -n deploy/deploy-legacy-pr140.sh
           bash -n deploy/preflight-secretaria.sh
       - name: Verify non-destructive deployment invariants
@@ -27,6 +29,7 @@ jobs:
           from pathlib import Path
           workflow = Path('.github/workflows/deploy-staging.yml').read_text()
           deploy = Path('deploy/deploy-legacy-pr140.sh').read_text()
+          main_deploy = Path('deploy/deploy.sh').read_text()
           preflight = Path('deploy/preflight-secretaria.sh').read_text()
           assert 'branches: [main]' in workflow
           assert 'actions/checkout@v4' in workflow
@@ -46,6 +49,15 @@ jobs:
           assert 'pg_restore' in preflight
           assert 'flock' in preflight
           assert 'git reset --hard' not in deploy
+          assert 'pg_restore --list "$backup"' in main_deploy
+          assert 'exec -T db' in main_deploy
+          assert '</dev/null > "$backup"' in main_deploy
+          assert 'build --pull </dev/null' in main_deploy
+          assert 'up -d --remove-orphans </dev/null' in main_deploy
+          assert 'git merge --ff-only "$current_commit"' in main_deploy
+          assert 'current_commit="$(git rev-parse origin/main)"' in main_deploy
+          assert main_deploy.index('Commit remoto inesperado') < main_deploy.index('git checkout main')
+          assert 'git reset --hard' not in main_deploy
           assert "if: github.event_name == 'push' && github.ref_name == 'main'" in workflow
           assert "if: github.event_name == 'workflow_dispatch'" in workflow
           assert 'needs: [verify-backend, verify-frontend]' in workflow
