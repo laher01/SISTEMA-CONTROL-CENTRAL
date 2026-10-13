@@ -162,6 +162,12 @@ def ingerir_documento(
     # El expediente admite una sola factura principal, independientemente del
     # nombre o representación (PDF, imagen, XML) del comprobante.
     if expediente is not None and tipo_documento == TipoDocumento.FACT:
+        # Serializar las cargas concurrentes de la misma factura entre workers.
+        session.scalar(
+            select(Expediente.id)
+            .where(Expediente.id == expediente.id)
+            .with_for_update()
+        )
         existente_factura = session.scalar(
             select(Documento.id)
             .where(
@@ -238,6 +244,11 @@ def vincular_documento(
 ) -> Documento:
     expediente = _expediente_del_tenant(session, documento.tenant_id, expediente_id)
     if tipo_documento == TipoDocumento.FACT:
+        session.scalar(
+            select(Expediente.id)
+            .where(Expediente.id == expediente.id)
+            .with_for_update()
+        )
         # La huella binaria no basta: representaciones distintas de la misma
         # factura deben compartir una única factura principal en el expediente.
         existente_factura = session.scalar(
