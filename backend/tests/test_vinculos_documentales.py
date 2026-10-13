@@ -33,16 +33,28 @@ def test_cotizacion_orden_idempotente_y_varias_relaciones(session: Session) -> N
     oc1 = _doc(session, tenant.id, "OC", 11)
     oc2 = _doc(session, tenant.id, "OC", 12)
     primera = vincular(
-        session, tenant.id, cotizacion.id, oc1.id,
-        tipo="COTIZACION_OC", evidencia="OC cita cotización COT-001",
+        session,
+        tenant.id,
+        cotizacion.id,
+        oc1.id,
+        tipo="COTIZACION_OC",
+        evidencia="OC cita cotización COT-001",
     )
     repetida = vincular(
-        session, tenant.id, cotizacion.id, oc1.id,
-        tipo="COTIZACION_OC", evidencia="OC cita cotización COT-001",
+        session,
+        tenant.id,
+        cotizacion.id,
+        oc1.id,
+        tipo="COTIZACION_OC",
+        evidencia="OC cita cotización COT-001",
     )
     segunda = vincular(
-        session, tenant.id, cotizacion.id, oc2.id,
-        tipo="COTIZACION_OC", evidencia="OC cita cotización COT-001",
+        session,
+        tenant.id,
+        cotizacion.id,
+        oc2.id,
+        tipo="COTIZACION_OC",
+        evidencia="OC cita cotización COT-001",
     )
     assert primera.id == repetida.id
     assert primera.id != segunda.id
@@ -56,9 +68,21 @@ def test_no_cruzar_tenant_ni_aceptar_sin_evidencia(session: Session) -> None:
     factura = _doc(session, a.id, "FACT", 20)
     voucher = _doc(session, b.id, "VCHR", 21)
     with pytest.raises(RelacionInvalida):
-        vincular(session, a.id, voucher.id, factura.id,
-                tipo="VOUCHER_FACTURA", evidencia="Referencia de transferencia")
+        vincular(
+            session,
+            a.id,
+            voucher.id,
+            factura.id,
+            tipo="VOUCHER_FACTURA",
+            evidencia="Referencia de transferencia",
+        )
     voucher_mismo_tenant = _doc(session, a.id, "VCHR", 22)
     with pytest.raises(RelacionInvalida):
-        vincular(session, a.id, voucher_mismo_tenant.id, factura.id,
-                tipo="VOUCHER_FACTURA", evidencia=" ")
+        vincular(
+            session,
+            a.id,
+            voucher_mismo_tenant.id,
+            factura.id,
+            tipo="VOUCHER_FACTURA",
+            evidencia=" ",
+        )
