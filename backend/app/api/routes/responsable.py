@@ -539,6 +539,45 @@ def aprobar_formula_nexus(
     return {"id": str(formula.id), "version": formula.version, "estado": formula.estado}
 
 
+@router.post("/pagos/formulas/{formula_id}/revocar")
+def revocar_formula_nexus(
+    formula_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str | int]:
+    """Revocación auditable: no modifica pagos históricos."""
+    from app.services.nexus_propuestas import EstadoFormula, transicion_formula
+
+    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
+    formula = session.scalar(
+        select(FormulaPagoNexus)
+        .where(
+            FormulaPagoNexus.id == formula_id,
+            FormulaPagoNexus.tenant_id == tenant_id,
+            FormulaPagoNexus.responsable_id == auth.miembro_id,
+        )
+        .with_for_update()
+    )
+    if formula is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Fórmula no encontrada")
+    try:
+        formula.estado = transicion_formula(EstadoFormula(formula.estado), EstadoFormula.REVOCADA)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "NEXUS_FORMULA_REVOCADA",
+        "FormulaPagoNexus",
+        formula.id,
+        {"usuario_id": str(formula.usuario_id), "version": formula.version},
+    )
+    session.commit()
+    return {"id": str(formula.id), "version": formula.version, "estado": formula.estado}
+
+
 class SimularFormulaEspecialIn(BaseModel):
     usuario_id: uuid.UUID
     total_emitido: Decimal = Field(ge=0, max_digits=14, decimal_places=2)
