@@ -1,0 +1,25 @@
+"""La relación N:M solo puede migrarse después de las referencias GRE."""
+
+from pathlib import Path
+import ast
+
+
+VERSIONES = Path(__file__).resolve().parents[1] / "alembic" / "versions"
+
+
+def _revisiones(archivo: str) -> tuple[str, str | None]:
+    fuente = (VERSIONES / archivo).read_text(encoding="utf-8")
+    arbol = ast.parse(fuente)
+    asignaciones = {}
+    for nodo in arbol.body:
+        if isinstance(nodo, ast.AnnAssign) and isinstance(nodo.target, ast.Name):
+            if nodo.target.id in {"revision", "down_revision"}:
+                asignaciones[nodo.target.id] = ast.literal_eval(nodo.value)
+    return asignaciones["revision"], asignaciones["down_revision"]
+
+
+def test_cadena_referencias_y_relaciones_documentales() -> None:
+    referencias = _revisiones("20261012_0030_referencias_gre.py")
+    relaciones = _revisiones("20261013_0031_relaciones_documentos.py")
+    assert referencias == ("0030", "0029")
+    assert relaciones == ("0031", "0030")
