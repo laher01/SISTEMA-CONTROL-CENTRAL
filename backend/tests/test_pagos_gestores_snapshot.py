@@ -78,3 +78,8 @@ def test_liquidacion_gestor_conserva_snapshot_de_porcentaje_y_saldo(
     # Aunque el rango no sea idéntico, los periodos solapados deben rechazarse.
     solapado = {**datos, "desde": "2026-10-15", "hasta": "2026-11-14"}
     assert client.post("/api/v1/pagos-gestores/programar", json=solapado).status_code == 409
+    # Proteger liquidaciones con abonos existentes aunque su estado quede PROGRAMADO.
+    pago_historico.saldo = Decimal("10.00")
+    session.commit()
+    assert client.delete(f"/api/v1/pagos-gestores/{pago_id}").status_code == 409
+    assert session.get(PagoGestor, uuid.UUID(pago_id)) is not None
