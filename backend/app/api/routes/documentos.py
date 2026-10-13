@@ -391,7 +391,8 @@ def listar_documentos(
             or_(
                 and_(
                     Documento.tipo_documento.in_([TipoDocumento.FACT, TipoDocumento.RHE]),
-                    func.to_char(Expediente.fecha_emision, "YYYY-MM") == mes,
+                    func.extract("year", Expediente.fecha_emision) == int(mes[:4]),
+                    func.extract("month", Expediente.fecha_emision) == int(mes[5:7]),
                 ),
                 Documento.datos_extraidos["fecha_emision"].as_string().startswith(mes),
                 Documento.datos_extraidos["extraccion_confirmada"]["campos"][
@@ -561,7 +562,8 @@ def resumen_documentos(
             or_(
                 and_(
                     Documento.tipo_documento.in_([TipoDocumento.FACT, TipoDocumento.RHE]),
-                    func.to_char(Expediente.fecha_emision, "YYYY-MM") == mes,
+                    func.extract("year", Expediente.fecha_emision) == int(mes[:4]),
+                    func.extract("month", Expediente.fecha_emision) == int(mes[5:7]),
                 ),
                 Documento.datos_extraidos["fecha_emision"].as_string().startswith(mes),
                 Documento.datos_extraidos["extraccion_confirmada"]["campos"][
