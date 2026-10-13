@@ -172,9 +172,7 @@ def listar(
     if empresa_receptora and empresa_receptora.strip():
         cliente_filtro = aliased(Empresa)
         termino = empresa_receptora.strip().lower()
-        consulta = consulta.join(
-            cliente_filtro, Expediente.receptor_id == cliente_filtro.id
-        ).where(
+        consulta = consulta.join(cliente_filtro, Expediente.receptor_id == cliente_filtro.id).where(
             cliente_filtro.tenant_id == tenant_id,
             (func.lower(cliente_filtro.razon_social).contains(termino, autoescape=True))
             | (cliente_filtro.ruc.contains(termino, autoescape=True)),
@@ -398,9 +396,7 @@ def resumen_filtrado(
     if empresa_receptora and empresa_receptora.strip():
         cliente_filtro = aliased(Empresa)
         termino = empresa_receptora.strip().lower()
-        consulta = consulta.join(
-            cliente_filtro, Expediente.receptor_id == cliente_filtro.id
-        ).where(
+        consulta = consulta.join(cliente_filtro, Expediente.receptor_id == cliente_filtro.id).where(
             cliente_filtro.tenant_id == tenant_id,
             (func.lower(cliente_filtro.razon_social).contains(termino, autoescape=True))
             | (cliente_filtro.ruc.contains(termino, autoescape=True)),
@@ -519,9 +515,7 @@ def listar_ids(
     if empresa_receptora and empresa_receptora.strip():
         cliente_filtro = aliased(Empresa)
         termino = empresa_receptora.strip().lower()
-        consulta = consulta.join(
-            cliente_filtro, Expediente.receptor_id == cliente_filtro.id
-        ).where(
+        consulta = consulta.join(cliente_filtro, Expediente.receptor_id == cliente_filtro.id).where(
             cliente_filtro.tenant_id == tenant_id,
             (func.lower(cliente_filtro.razon_social).contains(termino, autoescape=True))
             | (cliente_filtro.ruc.contains(termino, autoescape=True)),
