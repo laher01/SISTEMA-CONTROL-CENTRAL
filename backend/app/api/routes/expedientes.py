@@ -915,7 +915,8 @@ def detalle(
         RolMiembro.GERENTE,
         RolMiembro.RESPONSABLE,
     ):
-        base = base.model_copy(update=nombres_jerarquia(session, tenant_id, [expediente])[expediente.id])
+        ruta = nombres_jerarquia(session, tenant_id, [expediente])[expediente.id]
+        base = base.model_copy(update=ruta)
     return ExpedienteDetalle(
         **base.model_dump(),
         documentos=[d for d in expediente.documentos if d.deleted_at is None],
