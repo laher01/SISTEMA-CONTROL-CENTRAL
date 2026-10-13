@@ -27,7 +27,7 @@ def test_responsable_solo_consulta_su_equipo(
     session.add_all([responsable, propio, ajeno])
     session.flush()
     propio.responsable_id = responsable.id
-    cliente = Empresa(tenant_id=tid, ruc="20123456789", razon_social="Cliente A")
+    cliente = Empresa(tenant_id=tid, ruc="20123456789", razon_social="Cliente A", autorizada=True)
     proveedor = Empresa(tenant_id=tid, ruc="20987654321", razon_social="Proveedor")
     session.add_all([cliente, proveedor])
     session.flush()
