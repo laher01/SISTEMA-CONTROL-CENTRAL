@@ -39,6 +39,9 @@ jobs:
           assert 'git status --porcelain --untracked-files=all' in deploy
           assert 'git status --porcelain --untracked-files=all' in preflight
           assert 'docker compose' in preflight
+          assert 'command -v "$herramienta"' in preflight
+          assert 'pg_restore' in preflight
+          assert 'flock' in preflight
           assert 'git reset --hard' not in deploy
           print('Sintaxis y salvaguardas básicas verificadas')
           PY
