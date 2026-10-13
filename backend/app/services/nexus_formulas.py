@@ -28,8 +28,11 @@ class PagoEstandar:
 
 
 def calcular_pago_estandar(
-    *, produccion_sin_retencion: Decimal, porcentaje_sin_retencion: Decimal,
-    produccion_con_retencion: Decimal, porcentaje_con_retencion: Decimal,
+    *,
+    produccion_sin_retencion: Decimal,
+    porcentaje_sin_retencion: Decimal,
+    produccion_con_retencion: Decimal,
+    porcentaje_con_retencion: Decimal,
 ) -> PagoEstandar:
     """Calcula la comisión normal usando las tasas registradas del usuario."""
     sin = TramoProduccion(produccion_sin_retencion, porcentaje_sin_retencion)
@@ -46,7 +49,9 @@ def calcular_pago_estandar(
 
 
 def validar_destinatario_especial(
-    *, codigo_usuario: str, codigo_esperado: Literal["JONA01"] = "JONA01",
+    *,
+    codigo_usuario: str,
+    codigo_esperado: Literal["JONA01"] = "JONA01",
 ) -> None:
     """Segunda barrera; la autorización de tenant y usuario_id va en la API."""
     if codigo_usuario.strip().upper() != codigo_esperado:
@@ -54,7 +59,10 @@ def validar_destinatario_especial(
 
 
 def validar_propuesta_nexus(
-    *, expresion: str, variables: set[str], variables_permitidas: set[str],
+    *,
+    expresion: str,
+    variables: set[str],
+    variables_permitidas: set[str],
 ) -> None:
     """No admite expresiones de programación; únicamente plantillas registradas."""
     if expresion not in {"PAGO_ESTANDAR_V1", "DISTRIBUCION_JONA01_V1"}:
