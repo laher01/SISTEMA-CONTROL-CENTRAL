@@ -97,3 +97,28 @@ def test_usuario_no_puede_administrar_formulas(
         },
     )
     assert creacion.status_code == 403
+
+
+def test_admin_no_puede_crear_formula_reservada_a_responsable(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    usuario = Miembro(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="OTRO03",
+        nombre="Usuario del administrador",
+        rol="USUARIO",
+        activo=True,
+    )
+    session.add(usuario)
+    session.commit()
+    auth_prueba.como_admin()
+    respuesta = client.post(
+        "/api/v1/responsable/pagos/formulas",
+        json={
+            "usuario_id": str(usuario.id),
+            "nombre": "Formula reservada",
+            "descripcion": "Solo un responsable puede crearla",
+            "plantilla": "PAGO_ESTANDAR_V1",
+        },
+    )
+    assert respuesta.status_code == 403
