@@ -853,6 +853,9 @@ def test_empresas_solo_se_eliminan_manual_y_se_reactivan_por_ruc(
 
     auth_prueba.como_usuario(usuario_id)
     subir(client, "empresa-reaparece.xml", factura(numero="F001-00000902"))
+    # El usuario solo ve empresas vinculadas a sus propios expedientes.
+    # Verificar la reactivación global desde el ámbito administrador.
+    auth_prueba.como_admin()
     reactivadas = client.get("/api/v1/empresas")
     assert reactivadas.status_code == 200, reactivadas.text
     assert {empresa["id"] for empresa in reactivadas.json()} == set(ids)
