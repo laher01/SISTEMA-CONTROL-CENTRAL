@@ -119,6 +119,14 @@ export interface Alerta {
   resuelta: boolean;
   created_at: string;
   resuelta_at: string | null;
+  cliente_nombre?: string | null;
+  tipo_empresa?: string | null;
+  fecha_emision?: string | null;
+  moneda?: Moneda | null;
+  importe_total?: string | null;
+  responsable_nombre?: string | null;
+  usuario_nombre?: string | null;
+  gestor_nombre?: string | null;
 }
 
 export interface Expediente {
