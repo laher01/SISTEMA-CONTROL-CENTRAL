@@ -821,7 +821,7 @@ Total Neto Recibido : 1,500.00 SOLES""",
     assert total_pen == Decimal("4500.00")
 
 
-def test_empresas_solo_se_eliminan_manual_y_se_reactivan_por_ruc(
+def test_empresas_eliminadas_no_se_reactivan_por_ingesta_automatica(
     client: TestClient,
     auth_prueba: AuthPrueba,
 ) -> None:
@@ -855,7 +855,8 @@ def test_empresas_solo_se_eliminan_manual_y_se_reactivan_por_ruc(
     subir(client, "empresa-reaparece.xml", factura(numero="F001-00000902"))
     reactivadas = client.get("/api/v1/empresas")
     assert reactivadas.status_code == 200, reactivadas.text
-    assert {empresa["id"] for empresa in reactivadas.json()} == set(ids)
+    # La ingesta no revierte la baja manual ni vuelve a autorizar receptores.
+    assert reactivadas.json() == []
 
 
 def test_reprocesar_rhe_repara_razon_social_contaminada(
