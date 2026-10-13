@@ -112,7 +112,10 @@ class FormulaPagoNexus(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "formulas_pago_nexus"
     __table_args__ = (
         UniqueConstraint(
-            "tenant_id", "responsable_id", "usuario_id", "version",
+            "tenant_id",
+            "responsable_id",
+            "usuario_id",
+            "version",
             name="uq_nexus_formula_version",
         ),
     )
