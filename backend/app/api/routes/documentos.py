@@ -323,6 +323,8 @@ def listar_documentos(
     gestor_id: uuid.UUID | None = None,
     emisor_ruc: Annotated[str | None, Query(min_length=11, max_length=11)] = None,
     receptor_ruc: Annotated[str | None, Query(min_length=11, max_length=11)] = None,
+    empresa_emisora: Annotated[str | None, Query(max_length=100)] = None,
+    empresa_receptora: Annotated[str | None, Query(max_length=100)] = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
     fecha_emision: date | None = None,
@@ -365,6 +367,8 @@ def listar_documentos(
         or emisor_ruc is not None
         or receptor_ruc is not None
         or tipo_empresa is not None
+        or empresa_emisora
+        or empresa_receptora
     ):
         consulta = consulta.outerjoin(Expediente, Documento.expediente_id == Expediente.id)
     if fecha_emision is not None:
@@ -463,19 +467,31 @@ def listar_documentos(
     if fecha_hasta is not None:
         consulta = consulta.where(func.date(Documento.created_at) <= fecha_hasta)
 
-    if emisor_ruc is not None or receptor_ruc is not None or tipo_empresa is not None:
-        if emisor_ruc is not None or tipo_empresa is not None:
+    if emisor_ruc is not None or receptor_ruc is not None or tipo_empresa is not None or empresa_emisora or empresa_receptora:
+        if emisor_ruc is not None or tipo_empresa is not None or empresa_emisora:
             emisor = aliased(Empresa)
             consulta = consulta.join(emisor, Expediente.emisor_id == emisor.id)
             if emisor_ruc is not None:
                 consulta = consulta.where(emisor.ruc == emisor_ruc)
             if tipo_empresa is not None:
                 consulta = consulta.where(emisor.clasificacion_proveedor == tipo_empresa)
-        if receptor_ruc is not None:
+            if empresa_emisora and empresa_emisora.strip():
+                termino = empresa_emisora.strip().lower()
+                consulta = consulta.where(
+                    (func.lower(emisor.razon_social).contains(termino, autoescape=True))
+                    | (emisor.ruc.contains(termino, autoescape=True))
+                )
+        if receptor_ruc is not None or empresa_receptora:
             receptor = aliased(Empresa)
-            consulta = consulta.join(receptor, Expediente.receptor_id == receptor.id).where(
-                receptor.ruc == receptor_ruc
-            )
+            consulta = consulta.join(receptor, Expediente.receptor_id == receptor.id)
+            if receptor_ruc is not None:
+                consulta = consulta.where(receptor.ruc == receptor_ruc)
+            if empresa_receptora and empresa_receptora.strip():
+                termino = empresa_receptora.strip().lower()
+                consulta = consulta.where(
+                    (func.lower(receptor.razon_social).contains(termino, autoescape=True))
+                    | (receptor.ruc.contains(termino, autoescape=True))
+                )
 
     consulta = consulta.order_by(Documento.created_at.desc()).limit(limit).offset(offset)
     filas = list(session.scalars(consulta))
@@ -503,6 +519,8 @@ def resumen_documentos(
     gestor_id: uuid.UUID | None = None,
     emisor_ruc: Annotated[str | None, Query(min_length=11, max_length=11)] = None,
     receptor_ruc: Annotated[str | None, Query(min_length=11, max_length=11)] = None,
+    empresa_emisora: Annotated[str | None, Query(max_length=100)] = None,
+    empresa_receptora: Annotated[str | None, Query(max_length=100)] = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
     fecha_emision: date | None = None,
@@ -538,6 +556,8 @@ def resumen_documentos(
         or emisor_ruc is not None
         or receptor_ruc is not None
         or tipo_empresa is not None
+        or empresa_emisora
+        or empresa_receptora
     ):
         consulta = consulta.outerjoin(Expediente, Documento.expediente_id == Expediente.id)
     if fecha_emision is not None:
@@ -635,18 +655,31 @@ def resumen_documentos(
         consulta = consulta.where(func.date(Documento.created_at) >= fecha_desde)
     if fecha_hasta is not None:
         consulta = consulta.where(func.date(Documento.created_at) <= fecha_hasta)
-    if emisor_ruc is not None or receptor_ruc is not None or tipo_empresa is not None:
-        if emisor_ruc is not None or tipo_empresa is not None:
+    if emisor_ruc is not None or receptor_ruc is not None or tipo_empresa is not None or empresa_emisora or empresa_receptora:
+        if emisor_ruc is not None or tipo_empresa is not None or empresa_emisora:
             emisor = aliased(Empresa)
             consulta = consulta.join(emisor, Expediente.emisor_id == emisor.id)
             if emisor_ruc is not None:
                 consulta = consulta.where(emisor.ruc == emisor_ruc)
             if tipo_empresa is not None:
                 consulta = consulta.where(emisor.clasificacion_proveedor == tipo_empresa)
-        if receptor_ruc is not None:
+            if empresa_emisora and empresa_emisora.strip():
+                termino = empresa_emisora.strip().lower()
+                consulta = consulta.where(
+                    (func.lower(emisor.razon_social).contains(termino, autoescape=True))
+                    | (emisor.ruc.contains(termino, autoescape=True))
+                )
+        if receptor_ruc is not None or empresa_receptora:
             receptor = aliased(Empresa)
             consulta = consulta.join(receptor, Expediente.receptor_id == receptor.id)
-            consulta = consulta.where(receptor.ruc == receptor_ruc)
+            if receptor_ruc is not None:
+                consulta = consulta.where(receptor.ruc == receptor_ruc)
+            if empresa_receptora and empresa_receptora.strip():
+                termino = empresa_receptora.strip().lower()
+                consulta = consulta.where(
+                    (func.lower(receptor.razon_social).contains(termino, autoescape=True))
+                    | (receptor.ruc.contains(termino, autoescape=True))
+                )
     filtrados = consulta.subquery()
     cantidad = session.scalar(select(func.count()).select_from(filtrados)) or 0
     expedientes_unicos = (
