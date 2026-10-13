@@ -852,6 +852,13 @@ async def abonar_responsable(
             {"monto": str(valor), "saldo": str(saldo - valor), "actor": auth.codigo},
         )
         session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        ruta.unlink(missing_ok=True)
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Conflicto al registrar el movimiento; verifique la referencia y reconsulte el saldo",
+        ) from exc
     except Exception:
         session.rollback()
         ruta.unlink(missing_ok=True)
