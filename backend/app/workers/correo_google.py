@@ -1,5 +1,6 @@
 """Worker Gmail separado de HTTP: solo buzones Google autorizados de cada tenant."""
 
+import logging
 import time
 
 from sqlalchemy import select
@@ -17,8 +18,15 @@ from app.services.google_oauth_correo import (
 )
 from app.services.recepcion_correo_imap import MAX_MENSAJE_BYTES, procesar_mensaje
 
+logger = logging.getLogger(__name__)
 
-def revisar_ciclo_google(session: Session, settings: Settings) -> int:
+
+def revisar_ciclo_google(
+    session: Session, settings: Settings, *, limite_por_buzon: int = 50
+) -> int:
+    """Revisa buzones una vez; limite_por_buzon permite pruebas acotadas."""
+    if not 1 <= limite_por_buzon <= 100:
+        raise ValueError("limite_por_buzon debe estar entre 1 y 100")
     if not (
         settings.correo_google_worker_enabled
         and settings.google_oauth_client_id
@@ -42,7 +50,14 @@ def revisar_ciclo_google(session: Session, settings: Settings) -> int:
         )
     )
     total = 0
+    logger.info(
+        "Gmail: inicio de ciclo; buzones=%s limite=%s",
+        len(buzones),
+        limite_por_buzon,
+    )
     for buzon, credencial in buzones:
+        nuevos = 0
+        repetidos = 0
         try:
             refresh = descifrar_refresh_token(
                 credencial.token_cifrado,
@@ -53,7 +68,12 @@ def revisar_ciclo_google(session: Session, settings: Settings) -> int:
                 client_id=settings.google_oauth_client_id,
                 client_secret=settings.google_oauth_client_secret,
             )
-            for id_mensaje in listar_ids_gmail(acceso):
+            ids = (
+                listar_ids_gmail(acceso)
+                if limite_por_buzon == 50
+                else listar_ids_gmail(acceso, limite=limite_por_buzon)
+            )
+            for id_mensaje in ids:
                 previo = session.scalar(
                     select(CorreoMensaje.id).where(
                         CorreoMensaje.tenant_id == buzon.tenant_id,
@@ -62,26 +82,38 @@ def revisar_ciclo_google(session: Session, settings: Settings) -> int:
                     )
                 )
                 if previo is not None:
+                    repetidos += 1
                     continue
                 contenido = obtener_correo_gmail(acceso, id_mensaje)
                 if len(contenido) > MAX_MENSAJE_BYTES:
                     continue
                 procesar_mensaje(session, settings, buzon, id_mensaje, contenido)
                 total += 1
+                nuevos += 1
             buzon.ultimo_error = None
             session.commit()
+            logger.info(
+                "Gmail: buzón procesado; nuevos=%s repetidos=%s consultados=%s",
+                nuevos,
+                repetidos,
+                len(ids),
+            )
         except (GoogleOAuthError, OSError, ValueError) as exc:
             session.rollback()
             buzon.ultimo_error = type(exc).__name__ + ": recepción no disponible"
             session.commit()
+            logger.warning("Gmail: recepción fallida; tipo=%s", type(exc).__name__)
         except Exception:
             session.rollback()
             buzon.ultimo_error = "ERROR_PROCESAMIENTO"
             session.commit()
+            logger.error("Gmail: fallo inesperado; revisar ultimo_error")
+    logger.info("Gmail: fin de ciclo; mensajes nuevos=%s", total)
     return total
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO)
     settings = get_settings()
     intervalo = max(60, settings.correo_google_interval_seconds)
     while True:
