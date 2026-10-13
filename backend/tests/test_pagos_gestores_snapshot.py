@@ -75,3 +75,6 @@ def test_liquidacion_gestor_conserva_snapshot_de_porcentaje_y_saldo(
     assert Decimal(original["saldo"]) == Decimal("20.00")
     assert original["estado"] == "PROGRAMADO"
     assert client.post("/api/v1/pagos-gestores/programar", json=datos).status_code == 409
+    # Aunque el rango no sea idéntico, los periodos solapados deben rechazarse.
+    solapado = {**datos, "desde": "2026-10-15", "hasta": "2026-11-14"}
+    assert client.post("/api/v1/pagos-gestores/programar", json=solapado).status_code == 409
