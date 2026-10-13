@@ -79,8 +79,7 @@ def test_registros_filtra_por_responsable_y_expone_columna(
     assert respuesta.status_code == 200, respuesta.text
     assert respuesta.json()["total_registros"] >= 1
     fila = next(
-        f for f in respuesta.json()["filas"]
-        if f["expediente_id"] == subida.json()["expediente_id"]
+        f for f in respuesta.json()["filas"] if f["expediente_id"] == subida.json()["expediente_id"]
     )
     assert "responsable_codigo" in fila
     assert "responsable_nombre" in fila
