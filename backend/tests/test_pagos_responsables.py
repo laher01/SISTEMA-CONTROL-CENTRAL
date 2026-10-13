@@ -30,6 +30,7 @@ def _preparar(session: Session, auth_prueba: AuthPrueba) -> tuple[str, str]:
         tenant_id=tenant_id,
         ruc="20538821374",
         razon_social="CLIENTE PRUEBA",
+        autorizada=True,
         tipo_relacion="CLIENTE",
         agente_retencion=False,
     )
