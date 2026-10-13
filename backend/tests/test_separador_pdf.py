@@ -72,3 +72,27 @@ def test_paquete_una_sola_factura_no_se_fragmenta() -> None:
     pdf = _paquete(["FACTURA ELECTRONICA\nRUC: 20612873446\nE001-9050", "Segunda pagina"])
     with pytest.raises(DocumentoNoProcesable):
         analizar_paquete(pdf)
+
+
+def test_paquete_cotizaciones_numeracion_comercial() -> None:
+    pdf = _paquete([
+        "COTIZACION N 00275-2026\\nCLIENTE RUC 20538821374",
+        "Anexo con condiciones comerciales de la cotizacion previa",
+        "COTIZACION Nº 074\\nRUC 20615898598\\nCLIENTE RUC 20538821374",
+        "COTIZACION Nº 076\\nRUC 20615898598\\nCLIENTE RUC 20538821374",
+    ])
+    partes = analizar_paquete(pdf)
+    assert [(p.inicio, p.fin, p.tipo, p.serie, p.correlativo) for p in partes] == [
+        (0, 2, "COT", "COT", "00275-2026"),
+        (2, 3, "COT", "COT", "074"),
+        (3, 4, "COT", "COT", "076"),
+    ]
+
+
+def test_cotizacion_sin_numero_no_se_inventa() -> None:
+    pdf = _paquete([
+        "COTIZACION\\nCLIENTE RUC 20538821374",
+        "COTIZACION Nº 074\\nRUC 20615898598",
+    ])
+    with pytest.raises(DocumentoNoProcesable):
+        analizar_paquete(pdf)
