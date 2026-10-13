@@ -58,3 +58,38 @@ def test_no_aprobar_plantillas_desconocidas() -> None:
     )
     with pytest.raises(ValueError):
         propuesta.habilitada_para_liquidar()
+
+
+def test_aprobacion_solo_responsable_propietario() -> None:
+    from app.services.nexus_propuestas import validar_aprobacion
+
+    propuesta = PropuestaFormula(
+        plantilla="PAGO_ESTANDAR_V1",
+        version=1,
+        estado=EstadoFormula.BORRADOR,
+        usuario_codigo="JOSE01",
+        responsable_codigo="LUIS",
+    )
+    validar_aprobacion(
+        aprobador_rol="RESPONSABLE", aprobador_id="r1",
+        responsable_id="r1", propuesta=propuesta,
+    )
+    with pytest.raises(PermissionError):
+        validar_aprobacion(
+            aprobador_rol="USUARIO", aprobador_id="r1",
+            responsable_id="r1", propuesta=propuesta,
+        )
+    with pytest.raises(PermissionError):
+        validar_aprobacion(
+            aprobador_rol="RESPONSABLE", aprobador_id="r2",
+            responsable_id="r1", propuesta=propuesta,
+        )
+
+
+def test_version_siguiente() -> None:
+    from app.services.nexus_propuestas import version_siguiente
+
+    assert version_siguiente([]) == 1
+    assert version_siguiente([1, 2, 4]) == 5
+    with pytest.raises(ValueError):
+        version_siguiente([-1])
