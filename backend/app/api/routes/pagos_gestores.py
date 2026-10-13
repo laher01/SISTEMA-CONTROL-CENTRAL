@@ -12,6 +12,7 @@ from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
 from app.models import Expediente, Gestor, PagoGestor
 from app.services import auditoria
+from app.services.reparto_liquidaciones import calcular_partidas
 
 router = APIRouter(prefix="/pagos-gestores", tags=["pagos-gestores"])
 
@@ -179,3 +180,74 @@ def anular(
     )
     session.delete(pago)
     session.commit()
+
+
+class PartidaRepartoIn(BaseModel):
+    tipo: str = Field(pattern="^(GESTOR|EXTERNO)$")
+    gestor_id: uuid.UUID | None = None
+    beneficiario: str = Field(min_length=3, max_length=200)
+    porcentaje: Decimal = Field(ge=0, le=100, max_digits=7, decimal_places=4)
+    base: Decimal = Field(ge=0, max_digits=14, decimal_places=2)
+
+
+class RepartoMultipleIn(BaseModel):
+    desde: date
+    hasta: date
+    moneda: str = Field(pattern="^(PEN|USD)$")
+    partidas: list[PartidaRepartoIn] = Field(min_length=1, max_length=100)
+
+
+@router.post("/cotizar-multiple")
+def cotizar_reparto_multiple(
+    datos: RepartoMultipleIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, object]:
+    """Vista previa privada de distribución; NO crea compromisos ni transferencias.
+
+    Para Gestores, la base procede exclusivamente de expedientes atribuidos
+    al Gestor. Las partidas externas requieren una base explícita y se
+    identifican como simulación, pendiente de sustento documental.
+    """
+    if auth.rol != RolMiembro.USUARIO or auth.usuario_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Usuario")
+    if datos.hasta < datos.desde or (datos.hasta - datos.desde).days > 366:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Periodo inválido")
+    filas: list[dict[str, str]] = []
+    for partida in datos.partidas:
+        if partida.tipo == "GESTOR":
+            if partida.gestor_id is None:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Falta Gestor")
+            gestor = _gestor_propio(session, tenant_id, auth.usuario_id, partida.gestor_id)
+            base_real = Decimal(session.scalar(
+                select(func.coalesce(func.sum(Expediente.importe_total), 0)).where(
+                    Expediente.tenant_id == tenant_id,
+                    Expediente.usuario_id == auth.usuario_id,
+                    Expediente.gestor_id == gestor.id,
+                    Expediente.deleted_at.is_(None),
+                    Expediente.moneda == datos.moneda,
+                    Expediente.fecha_emision >= datos.desde,
+                    Expediente.fecha_emision <= datos.hasta,
+                )
+            ) or 0)
+            if partida.base != base_real:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    "La base de Gestor debe coincidir con su producción documentada",
+                )
+        elif partida.gestor_id is not None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "Un beneficiario externo no puede presentar un Gestor",
+            )
+        filas.append({
+            "tipo": partida.tipo,
+            "beneficiario": partida.beneficiario,
+            "base": str(partida.base),
+            "porcentaje": str(partida.porcentaje),
+        })
+    resultado = calcular_partidas(filas)
+    resultado["estado"] = "SIMULACION_NO_PROGRAMADA"
+    resultado["moneda"] = datos.moneda
+    return resultado
