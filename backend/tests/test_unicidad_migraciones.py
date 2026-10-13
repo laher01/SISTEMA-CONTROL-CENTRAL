@@ -10,9 +10,12 @@ def _identidad(path: Path) -> tuple[str, str | tuple[str, ...] | None]:
     arbol = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     datos = {}
     for nodo in arbol.body:
-        if isinstance(nodo, ast.AnnAssign) and isinstance(nodo.target, ast.Name):
-            if nodo.target.id in {"revision", "down_revision"}:
-                datos[nodo.target.id] = ast.literal_eval(nodo.value)
+        if (
+            isinstance(nodo, ast.AnnAssign)
+            and isinstance(nodo.target, ast.Name)
+            and nodo.target.id in {"revision", "down_revision"}
+        ):
+            datos[nodo.target.id] = ast.literal_eval(nodo.value)
     return datos["revision"], datos.get("down_revision")
 
 
