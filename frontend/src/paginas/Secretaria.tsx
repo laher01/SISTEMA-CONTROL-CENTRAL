@@ -72,8 +72,8 @@ export default function Secretaria({ sesion }: { sesion: SesionActual }) {
     gestor_id: gestorId,
     desde: inicioMes || dia || desde || "1900-01-01",
     hasta: finMes || dia || hasta || "9999-12-31",
-    emisor_ruc: emisor.length === 11 ? emisor : undefined,
-    receptor_ruc: receptor.length === 11 ? receptor : undefined,
+    empresa_emisora: emisor.trim() || undefined,
+    empresa_receptora: receptor.trim() || undefined,
     estado,
     correlativo: tipoBusqueda === "correlativo" ? busqueda.trim() || undefined : undefined,
     monto_desde: tipoBusqueda === "monto" ? busqueda.trim() || undefined : undefined,
@@ -136,8 +136,8 @@ export default function Secretaria({ sesion }: { sesion: SesionActual }) {
         <label>Desde <input type="date" value={desde} onChange={(e) => cambiarFiltro(() => { setDesde(e.target.value); if (e.target.value) { setMes(""); setDia(""); } })} /></label>
         <label>Hasta <input type="date" value={hasta} onChange={(e) => cambiarFiltro(() => { setHasta(e.target.value); if (e.target.value) { setMes(""); setDia(""); } })} /></label>
         <label>Mes de emisión <input type="month" aria-label="Mes de emisión" value={mes} onChange={(e) => cambiarFiltro(() => { setMes(e.target.value); if (e.target.value) { setDia(""); setDesde(""); setHasta(""); } })} /></label>
-        <input aria-label="RUC proveedor emisor" placeholder="RUC proveedor (11 dígitos)" maxLength={11} value={emisor} onChange={(e) => cambiarFiltro(() => setEmisor(e.target.value.replace(/\D/g, "")))} />
-        <input aria-label="RUC cliente receptor" placeholder="RUC receptor (11 dígitos)" maxLength={11} value={receptor} onChange={(e) => cambiarFiltro(() => setReceptor(e.target.value.replace(/\D/g, "")))} />
+        <input aria-label="Empresa emisora o proveedora" placeholder="Proveedor: RUC o razón social" maxLength={100} value={emisor} onChange={(e) => cambiarFiltro(() => setEmisor(e.target.value))} />
+        <input aria-label="Empresa receptora o cliente" placeholder="Cliente: RUC o razón social" maxLength={100} value={receptor} onChange={(e) => cambiarFiltro(() => setReceptor(e.target.value))} />
         <select aria-label="Estado expediente" value={estado} onChange={(e) => cambiarFiltro(() => setEstado(e.target.value))}>
           <option value="">Todos los estados</option>
           <option value="VERDE">Verde / completo</option>
