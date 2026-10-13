@@ -135,7 +135,10 @@ def aplicar_automaticamente(
                     if not mismo:
                         return _revision(
                             documento,
-                            ["Identidad fiscal extraída diferente a la del expediente vinculado; revisión obligatoria"],
+                            [
+                                "Identidad fiscal extraída diferente a la del expediente "
+                                "vinculado; revisión obligatoria"
+                            ],
                         )
         _reparar_partes_vinculadas(session, settings, documento, procesamiento)
         resultado = ResultadoAutomatizacion(
