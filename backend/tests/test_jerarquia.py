@@ -84,6 +84,27 @@ def test_gestor_pertenece_a_usuario_y_propaga_propiedad(
     assert filas[0]["gestor_codigo"] == "GES01"
     assert filas[0]["expedientes"] == 1
 
+    # La revocación administrativa debe retirar inmediatamente el expediente
+    # de la producción reconocida, sin eliminar el documento original.
+    auth_prueba.como_admin()
+    revocacion = client.patch(
+        f"/api/v1/empresas/{receptor[0]['id']}",
+        json={"autorizada": False},
+    )
+    assert revocacion.status_code == 200, revocacion.text
+
+    auth_prueba.como_gestor(
+        uuid.UUID(str(gestor["id"])),
+        uuid.UUID(str(usuario["id"])),
+        str(gestor["codigo"]),
+    )
+    produccion_revocada = client.get("/api/v1/produccion/resumen")
+    assert produccion_revocada.status_code == 200, produccion_revocada.text
+    assert produccion_revocada.json()["filas"] == []
+
+    expediente_conservado = client.get(f"/api/v1/expedientes/{documento['expediente_id']}")
+    assert expediente_conservado.status_code == 200, expediente_conservado.text
+
 
 def test_gestor_solo_puede_pertenecer_a_rol_usuario(
     client: TestClient, auth_prueba: AuthPrueba
