@@ -1,9 +1,8 @@
 name: deploy-staging
 
 on:
+  # El despliegue nunca se ejecuta por un push o merge a main.
   workflow_dispatch:
-  push:
-    branches: [main]
 
 permissions:
   contents: read
@@ -107,28 +106,21 @@ jobs:
           ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
             "cd -- '$VPS_DEPLOY_PATH' && EXPECTED_COMMIT='$EXPECTED_COMMIT' bash -s" < deploy/preflight-secretaria.sh
 
-      - name: Desplegar rama documental en VPS antigua (manual, sin main)
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
-          EXPECTED_COMMIT: ${{ github.sha }}
+      - name: Exigir despliegue manual desde main
         run: |
-          test "${{ github.ref_name }}" = "integration/document-capture-main-20261011" || { echo "::error::Rama no autorizada"; exit 1; }
-          ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
-            "cd -- '$VPS_DEPLOY_PATH' && EXPECTED_COMMIT='$EXPECTED_COMMIT' DEPLOY_BRANCH='integration/document-capture-main-20261011' bash -s" < deploy/deploy-legacy-pr140.sh
+          test "${{ github.event_name }}" = "workflow_dispatch" || exit 1
+          test "${{ github.ref_name }}" = "main" || {
+            echo "::error::Solo se permite desplegar un commit integrado en main"
+            exit 1
+          }
 
-      - name: Desplegar main en VPS (flujo anterior)
-        if: github.event_name == 'push'
+      - name: Desplegar main en VPS autorizada (manual)
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
           EXPECTED_COMMIT: ${{ github.sha }}
         run: |
-          # Transferir el script a un archivo temporal para impedir que git/docker
-          # consuman accidentalmente el resto de stdin de bash -s.
-          ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
-            "set -eu; script=\$(mktemp); trap 'rm -f \"\$script\"' EXIT; cat > \"\$script\"; cd -- '$VPS_DEPLOY_PATH'; EXPECTED_COMMIT='$EXPECTED_COMMIT' bash \"\$script\"; test \"\$(git rev-parse HEAD)\" = '$EXPECTED_COMMIT'; echo 'Commit VPS verificado: $EXPECTED_COMMIT'" \
+          ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \\
+            "set -eu; script=\\$(mktemp); trap 'rm -f \"\\$script\"' EXIT; cat > \"\\$script\"; cd -- '$VPS_DEPLOY_PATH'; EXPECTED_COMMIT='$EXPECTED_COMMIT' bash \"\\$script\"; test \"\\$(git rev-parse HEAD)\" = '$EXPECTED_COMMIT'; echo 'Commit VPS verificado: $EXPECTED_COMMIT'" \\
             < deploy/bootstrap-main.sh
