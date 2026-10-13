@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - "backend/**"
+      - "deploy/deploy.sh"
       - ".github/workflows/recepcion-documental-ci.yml"
   workflow_dispatch:
 permissions:
@@ -33,6 +34,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
+      - name: Validar sintaxis del despliegue VPS
+        working-directory: .
+        run: bash -n deploy/deploy.sh
       - run: uv sync --locked
       - run: uv run ruff check .
       - run: uv run ruff format --check .
