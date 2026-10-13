@@ -37,7 +37,7 @@ jobs:
           assert 'cancel-in-progress: false' in workflow
           assert 'DESPLIEGUE_VALIDADO' in deploy
           assert 'EXPECTED_COMMIT' in deploy
-          assert 'pg_restore --list' in deploy
+          assert 'exec -T db pg_restore --list < "$backup"' in deploy
           assert '</dev/null > "$backup"' in deploy
           assert 'build --pull </dev/null' in deploy
           assert 'up -d --remove-orphans </dev/null' in deploy
@@ -46,10 +46,10 @@ jobs:
           assert 'git status --porcelain --untracked-files=all' in preflight
           assert 'docker compose' in preflight
           assert 'command -v "$herramienta"' in preflight
-          assert 'pg_restore' in preflight
+          assert 'pg_restore --version' in preflight
           assert 'flock' in preflight
           assert 'git reset --hard' not in deploy
-          assert 'pg_restore --list "$backup"' in main_deploy
+          assert 'exec -T db pg_restore --list < "$backup"' in main_deploy
           assert 'exec -T db' in main_deploy
           assert '</dev/null > "$backup"' in main_deploy
           assert 'build --pull </dev/null' in main_deploy
