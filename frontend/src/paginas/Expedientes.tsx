@@ -28,6 +28,10 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
   const dia = parametros.get("dia") ?? "";
   const desde = parametros.get("fecha_desde") ?? "";
   const hasta = parametros.get("fecha_hasta") ?? "";
+  const mes = parametros.get("mes") ?? "";
+  const ultimoDiaMes = mes ? new Date(Date.UTC(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0)).getUTCDate() : 0;
+  const inicioMes = mes ? `${mes}-01` : "";
+  const finMes = mes ? `${mes}-${String(ultimoDiaMes).padStart(2, "0")}` : "";
   const buscar = parametros.get("buscar") ?? "";
   const pagina = Number(parametros.get("pagina") ?? "0");
 
@@ -40,9 +44,9 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
     receptor_ruc: receptor.length === 11 ? receptor : undefined,
     emisor_ruc: emisor.length === 11 ? emisor : undefined,
     tipo_empresa: tipoEmpresa,
-    dia,
-    fecha_desde: desde,
-    fecha_hasta: hasta,
+    dia: mes ? "" : dia,
+    fecha_desde: inicioMes || desde,
+    fecha_hasta: finMes || hasta,
     buscar: buscar.trim(),
   };
 
@@ -64,6 +68,8 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
     const siguiente = new URLSearchParams(parametros);
     if (valor) siguiente.set(clave, valor);
     else siguiente.delete(clave);
+    if (clave === "mes" && valor) { siguiente.delete("dia"); siguiente.delete("fecha_desde"); siguiente.delete("fecha_hasta"); }
+    if (["dia", "fecha_desde", "fecha_hasta"].includes(clave) && valor) siguiente.delete("mes");
     if (clave === "usuario_id") siguiente.delete("gestor_id");
     if (clave === "responsable_id") { siguiente.delete("usuario_id"); siguiente.delete("gestor_id"); }
     if (clave !== "pagina") siguiente.delete("pagina");
@@ -158,6 +164,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
         <label>Día <input type="date" value={dia} onChange={(e) => cambiar("dia", e.target.value)} /></label>
         <label>Desde <input type="date" value={desde} onChange={(e) => cambiar("fecha_desde", e.target.value)} /></label>
         <label>Hasta <input type="date" value={hasta} onChange={(e) => cambiar("fecha_hasta", e.target.value)} /></label>
+        <label>Mes de emisión <input type="month" aria-label="Mes de emisión" value={mes} onChange={(e) => cambiar("mes", e.target.value)} /></label>
         <input placeholder="RUC emisor (11 dígitos)" value={emisor} maxLength={11} onChange={(e) => cambiar("emisor_ruc", e.target.value.replace(/\D/g, ""))} />
         <input
           placeholder="Buscar F001-123, RHE-E001-15, RUC o proveedor"
