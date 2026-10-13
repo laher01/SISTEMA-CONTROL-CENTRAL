@@ -19,7 +19,7 @@ def test_liquidacion_gestor_conserva_snapshot_de_porcentaje_y_saldo(
     assert usuario_id is not None
 
     emisor = Empresa(tenant_id=tid, ruc="20911111111", razon_social="Emisor")
-    receptor = Empresa(tenant_id=tid, ruc="20922222222", razon_social="Receptor")
+    receptor = Empresa(tenant_id=tid, ruc="20922222222", razon_social="Receptor", autorizada=True)
     gestor = Gestor(
         tenant_id=tid,
         codigo="GES-SNAPSHOT",
