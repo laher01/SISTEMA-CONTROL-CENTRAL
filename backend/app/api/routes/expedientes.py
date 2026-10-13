@@ -178,12 +178,12 @@ def listar(
             | (cliente_filtro.ruc.contains(termino, autoescape=True)),
         )
     if tipo_empresa is not None or emisor_ruc is not None:
-        empresa_emisora = aliased(Empresa)
-        consulta = consulta.join(empresa_emisora, Expediente.emisor_id == empresa_emisora.id)
+        emisor_aliased = aliased(Empresa)
+        consulta = consulta.join(emisor_aliased, Expediente.emisor_id == emisor_aliased.id)
         if tipo_empresa is not None:
-            consulta = consulta.where(empresa_emisora.clasificacion_proveedor == tipo_empresa)
+            consulta = consulta.where(emisor_aliased.clasificacion_proveedor == tipo_empresa)
         if emisor_ruc is not None:
-            consulta = consulta.where(empresa_emisora.ruc == emisor_ruc)
+            consulta = consulta.where(emisor_aliased.ruc == emisor_ruc)
     if dia is not None:
         consulta = consulta.where(Expediente.fecha_emision == dia)
     if fecha_desde is not None:
@@ -521,12 +521,12 @@ def listar_ids(
             | (cliente_filtro.ruc.contains(termino, autoescape=True)),
         )
     if tipo_empresa is not None or emisor_ruc is not None:
-        empresa_emisora = aliased(Empresa)
-        consulta = consulta.join(empresa_emisora, Expediente.emisor_id == empresa_emisora.id)
+        emisor_aliased = aliased(Empresa)
+        consulta = consulta.join(emisor_aliased, Expediente.emisor_id == emisor_aliased.id)
         if tipo_empresa is not None:
-            consulta = consulta.where(empresa_emisora.clasificacion_proveedor == tipo_empresa)
+            consulta = consulta.where(emisor_aliased.clasificacion_proveedor == tipo_empresa)
         if emisor_ruc is not None:
-            consulta = consulta.where(empresa_emisora.ruc == emisor_ruc)
+            consulta = consulta.where(emisor_aliased.ruc == emisor_ruc)
     if dia is not None:
         consulta = consulta.where(Expediente.fecha_emision == dia)
     if fecha_desde is not None:
