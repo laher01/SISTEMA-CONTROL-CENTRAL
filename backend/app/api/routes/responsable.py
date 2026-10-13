@@ -387,22 +387,31 @@ def listar_formulas_nexus(
     if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
     formulas = session.scalars(
-        select(FormulaPagoNexus).where(
+        select(FormulaPagoNexus)
+        .where(
             FormulaPagoNexus.tenant_id == tenant_id,
             FormulaPagoNexus.responsable_id == auth.miembro_id,
-        ).order_by(FormulaPagoNexus.created_at.desc())
+        )
+        .order_by(FormulaPagoNexus.created_at.desc())
     ).all()
     return [
-        {"id": str(f.id), "usuario_id": str(f.usuario_id),
-         "version": f.version, "nombre": f.nombre, "estado": f.estado}
+        {
+            "id": str(f.id),
+            "usuario_id": str(f.usuario_id),
+            "version": f.version,
+            "nombre": f.nombre,
+            "estado": f.estado,
+        }
         for f in formulas
     ]
 
 
 @router.post("/pagos/formulas", status_code=status.HTTP_201_CREATED)
 def crear_formula_nexus(
-    datos: NuevaFormulaNexusIn, session: SessionDep,
-    tenant_id: TenantDep, auth: OperativeAuthDep,
+    datos: NuevaFormulaNexusIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
 ) -> dict[str, str | int]:
     from app.services.nexus_propuestas import EstadoFormula, PropuestaFormula
 
@@ -411,8 +420,11 @@ def crear_formula_nexus(
     usuario = _usuario_del_responsable(session, tenant_id, auth.miembro_id, datos.usuario_id)
     try:
         PropuestaFormula(
-            plantilla=datos.plantilla, version=1, estado=EstadoFormula.BORRADOR,
-            usuario_codigo=usuario.codigo, responsable_codigo=str(auth.miembro_id),
+            plantilla=datos.plantilla,
+            version=1,
+            estado=EstadoFormula.BORRADOR,
+            usuario_codigo=usuario.codigo,
+            responsable_codigo=str(auth.miembro_id),
         ).validar()
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
@@ -424,16 +436,25 @@ def crear_formula_nexus(
         )
     )
     formula = FormulaPagoNexus(
-        tenant_id=tenant_id, responsable_id=auth.miembro_id, usuario_id=usuario.id,
-        version=int(ultimo or 0) + 1, nombre=datos.nombre,
-        descripcion=datos.descripcion, plantilla=datos.plantilla,
-        estado="BORRADOR", creado_por_cuenta_id=auth.cuenta_id,
+        tenant_id=tenant_id,
+        responsable_id=auth.miembro_id,
+        usuario_id=usuario.id,
+        version=int(ultimo or 0) + 1,
+        nombre=datos.nombre,
+        descripcion=datos.descripcion,
+        plantilla=datos.plantilla,
+        estado="BORRADOR",
+        creado_por_cuenta_id=auth.cuenta_id,
     )
     session.add(formula)
     try:
         session.flush()
         auditoria.registrar(
-            session, tenant_id, "NEXUS_FORMULA_CREADA", "FormulaPagoNexus", formula.id,
+            session,
+            tenant_id,
+            "NEXUS_FORMULA_CREADA",
+            "FormulaPagoNexus",
+            formula.id,
             {"usuario_id": str(usuario.id), "version": formula.version},
         )
         session.commit()
