@@ -113,6 +113,7 @@ class ReferenciaGRE(ConId, ConTenant, ConCreacion, Base):
 
     __tablename__ = "referencias_gre"
     __table_args__ = (
+        UniqueConstraint("tenant_id", "documento_id"),
         Index(
             "ix_referencias_gre_busqueda_factura",
             "tenant_id",
