@@ -326,6 +326,7 @@ def listar_documentos(
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
     fecha_emision: date | None = None,
+    mes: Annotated[str | None, Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")] = None,
     serie_correlativo: Annotated[str | None, Query(min_length=1, max_length=60)] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -359,6 +360,7 @@ def listar_documentos(
         consulta = consulta.where(Documento.gestor_id == gestor_id)
     if (
         fecha_emision is not None
+        or mes is not None
         or serie_correlativo
         or emisor_ruc is not None
         or receptor_ruc is not None
@@ -382,6 +384,22 @@ def listar_documentos(
                     "campos"
                 ]["fecha_emision"]["valor"].as_string()
                 == fecha_texto,
+            )
+        )
+    if mes is not None:
+        consulta = consulta.where(
+            or_(
+                and_(
+                    Documento.tipo_documento.in_([TipoDocumento.FACT, TipoDocumento.RHE]),
+                    func.to_char(Expediente.fecha_emision, "YYYY-MM") == mes,
+                ),
+                Documento.datos_extraidos["fecha_emision"].as_string().startswith(mes),
+                Documento.datos_extraidos["extraccion_confirmada"]["campos"][
+                    "fecha_emision"
+                ].as_string().startswith(mes),
+                Documento.datos_extraidos["procesamiento_documental"]["extraccion_estructurada"][
+                    "campos"
+                ]["fecha_emision"]["valor"].as_string().startswith(mes),
             )
         )
     if serie_correlativo:
@@ -485,6 +503,7 @@ def resumen_documentos(
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
     fecha_emision: date | None = None,
+    mes: Annotated[str | None, Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")] = None,
     serie_correlativo: Annotated[str | None, Query(min_length=1, max_length=60)] = None,
 ) -> dict[str, int | Decimal]:
     consulta = select(Documento.id, Documento.expediente_id).where(
@@ -511,6 +530,7 @@ def resumen_documentos(
         consulta = consulta.where(Documento.gestor_id == gestor_id)
     if (
         fecha_emision is not None
+        or mes is not None
         or serie_correlativo
         or emisor_ruc is not None
         or receptor_ruc is not None
@@ -534,6 +554,22 @@ def resumen_documentos(
                     "campos"
                 ]["fecha_emision"]["valor"].as_string()
                 == fecha_texto,
+            )
+        )
+    if mes is not None:
+        consulta = consulta.where(
+            or_(
+                and_(
+                    Documento.tipo_documento.in_([TipoDocumento.FACT, TipoDocumento.RHE]),
+                    func.to_char(Expediente.fecha_emision, "YYYY-MM") == mes,
+                ),
+                Documento.datos_extraidos["fecha_emision"].as_string().startswith(mes),
+                Documento.datos_extraidos["extraccion_confirmada"]["campos"][
+                    "fecha_emision"
+                ].as_string().startswith(mes),
+                Documento.datos_extraidos["procesamiento_documental"]["extraccion_estructurada"][
+                    "campos"
+                ]["fecha_emision"]["valor"].as_string().startswith(mes),
             )
         )
     if serie_correlativo:
