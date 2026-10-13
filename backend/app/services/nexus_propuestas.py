@@ -47,3 +47,22 @@ def transicion_formula(actual: EstadoFormula, siguiente: EstadoFormula) -> Estad
     }:
         raise ValueError("Transición de fórmula no permitida")
     return siguiente
+
+
+def version_siguiente(versiones: list[int]) -> int:
+    """Siguiente versión propuesta; la base de datos debe imponer unicidad."""
+    if any(v < 1 for v in versiones):
+        raise ValueError("Versiones históricas inválidas")
+    return max(versiones, default=0) + 1
+
+
+def validar_aprobacion(
+    *, aprobador_rol: str, aprobador_id: str, responsable_id: str,
+    propuesta: PropuestaFormula,
+) -> None:
+    """Exige que apruebe el Responsable propietario, no un Usuario o Gestor."""
+    propuesta.validar()
+    if aprobador_rol != "RESPONSABLE" or aprobador_id != responsable_id:
+        raise PermissionError("Solo el Responsable propietario puede aprobar")
+    if propuesta.estado != EstadoFormula.BORRADOR:
+        raise ValueError("Solo pueden aprobarse borradores")
