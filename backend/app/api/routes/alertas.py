@@ -61,9 +61,7 @@ def listar(
     expedientes = {
         expediente.id: expediente
         for expediente in session.scalars(
-            select(Expediente).where(
-                Expediente.tenant_id == tenant_id, Expediente.id.in_(ids)
-            )
+            select(Expediente).where(Expediente.tenant_id == tenant_id, Expediente.id.in_(ids))
         )
     }
     ver_ruta = auth.rol in (
