@@ -395,12 +395,14 @@ def listar_documentos(
                     func.extract("month", Expediente.fecha_emision) == int(mes[5:7]),
                 ),
                 Documento.datos_extraidos["fecha_emision"].as_string().startswith(mes),
-                Documento.datos_extraidos["extraccion_confirmada"]["campos"][
-                    "fecha_emision"
-                ].as_string().startswith(mes),
+                Documento.datos_extraidos["extraccion_confirmada"]["campos"]["fecha_emision"]
+                .as_string()
+                .startswith(mes),
                 Documento.datos_extraidos["procesamiento_documental"]["extraccion_estructurada"][
                     "campos"
-                ]["fecha_emision"]["valor"].as_string().startswith(mes),
+                ]["fecha_emision"]["valor"]
+                .as_string()
+                .startswith(mes),
             )
         )
     if serie_correlativo:
@@ -566,12 +568,14 @@ def resumen_documentos(
                     func.extract("month", Expediente.fecha_emision) == int(mes[5:7]),
                 ),
                 Documento.datos_extraidos["fecha_emision"].as_string().startswith(mes),
-                Documento.datos_extraidos["extraccion_confirmada"]["campos"][
-                    "fecha_emision"
-                ].as_string().startswith(mes),
+                Documento.datos_extraidos["extraccion_confirmada"]["campos"]["fecha_emision"]
+                .as_string()
+                .startswith(mes),
                 Documento.datos_extraidos["procesamiento_documental"]["extraccion_estructurada"][
                     "campos"
-                ]["fecha_emision"]["valor"].as_string().startswith(mes),
+                ]["fecha_emision"]["valor"]
+                .as_string()
+                .startswith(mes),
             )
         )
     if serie_correlativo:
