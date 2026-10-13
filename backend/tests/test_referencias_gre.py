@@ -25,8 +25,7 @@ def test_no_usar_numero_propio_gre() -> None:
 
 def test_no_inventar_ruc_de_factura() -> None:
     refs = extraer_referencias_factura_gre(
-        "Datos del Destinatario RUC 20538821374\n"
-        "Documentos Relacionados: Factura N° E001-175"
+        "Datos del Destinatario RUC 20538821374\nDocumentos Relacionados: Factura N° E001-175"
     )
     assert len(refs) == 1
     assert refs[0].emisor_ruc is None
