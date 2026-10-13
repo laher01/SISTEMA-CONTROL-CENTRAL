@@ -26,6 +26,7 @@ def test_gerente_incorpora_historicos_con_auditoria_y_aislamiento(
         ruc="20990001111",
         razon_social="CLIENTE PRUEBA",
         tipo_relacion="CLIENTE",
+        autorizada=True,
     )
     session.add_all([global_g, other_g, responsable, usuario, empresa])
     session.flush()
