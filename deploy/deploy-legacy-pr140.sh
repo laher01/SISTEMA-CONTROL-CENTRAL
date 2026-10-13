@@ -47,7 +47,7 @@ mkdir -p deploy/backups
 backup="deploy/backups/fact_central_$(date -u +%Y%m%dT%H%M%SZ)_pr140.dump"
 "${compose[@]}" exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' </dev/null > "$backup"
 [[ -s "$backup" ]] || { echo "Backup vacío"; exit 1; }
-pg_restore --list "$backup" >/dev/null || { echo "Backup ilegible"; exit 1; }
+"${compose[@]}" exec -T db pg_restore --list < "$backup" >/dev/null || { echo "Backup ilegible"; exit 1; }
 echo "BACKUP_VALIDADO: $backup"
 echo "BACKUP_PR140_READY=$backup"
 git checkout --detach "$EXPECTED_COMMIT"
