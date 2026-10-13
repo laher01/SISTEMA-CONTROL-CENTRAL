@@ -24,19 +24,20 @@ bash "$DEPLOY_DIR/deploy/preflight-secretaria.sh"
 
 # Respaldo obligatorio antes de cualquier actualización.
 compose=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
-if ! "${compose[@]}" ps --status running db | grep -q db; then
+if ! "${compose[@]}" ps --status running db </dev/null | grep -q db; then
   echo "Base PostgreSQL detenida: se bloquea la actualización." >&2
   exit 1
 fi
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 backup="$BACKUP_DIR/fact_central_$timestamp.dump"
 "${compose[@]}" exec -T db sh -c \
-  'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' > "$backup"
+  'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' </dev/null > "$backup"
 if [ ! -s "$backup" ]; then
   echo "No se produjo un respaldo PostgreSQL válido." >&2
   exit 1
 fi
-echo "Respaldo PostgreSQL creado: $backup"
+pg_restore --list "$backup" >/dev/null || { echo "Respaldo PostgreSQL ilegible" >&2; exit 1; }
+echo "Respaldo PostgreSQL verificado: $backup"
 
 previous_commit="$(git rev-parse HEAD)"
 git fetch origin main
@@ -51,12 +52,12 @@ fi
 
 echo "Actualizando FACT CENTRAL: $previous_commit -> $current_commit"
 
-"${compose[@]}" build --pull
-"${compose[@]}" up -d --remove-orphans
+"${compose[@]}" build --pull </dev/null
+"${compose[@]}" up -d --remove-orphans </dev/null
 
 for _ in $(seq 1 30); do
-  if curl --fail --silent --show-error http://127.0.0.1:18080/health >/dev/null; then
-    "${compose[@]}" ps
+  if curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18080/health >/dev/null; then
+    "${compose[@]}" ps </dev/null
     echo "FACT CENTRAL desplegado correctamente en $current_commit"
     exit 0
   fi
@@ -64,6 +65,6 @@ for _ in $(seq 1 30); do
 done
 
 "${compose[@]}" ps
-"${compose[@]}" logs --tail=100 backend frontend tunnel
+"${compose[@]}" logs --tail=100 backend frontend tunnel </dev/null
 echo "El despliegue no superó la comprobación de salud" >&2
 exit 1
