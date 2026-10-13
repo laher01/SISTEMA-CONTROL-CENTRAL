@@ -56,7 +56,7 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
   const etiquetaFiltro = useMemo(() => {
     const partes: string[] = [];
     if (responsableId) {
-      const responsable = opciones?.responsables.find((item) => item.id === responsableId);
+      const responsable = opciones?.responsables?.find((item) => item.id === responsableId);
       if (responsable) partes.push(`Responsable: ${responsable.codigo} · ${responsable.nombre}`);
     }
     if (usuarioId) {
