@@ -108,6 +108,34 @@ class Miembro(ConId, ConTenant, ConCreacion, Base):
     gestores: Mapped[list["Gestor"]] = relationship(back_populates="usuario")
 
 
+class ReferenciaGRE(ConId, ConTenant, ConCreacion, Base):
+    """Referencia de guía de remisión pendiente de vinculación documental."""
+
+    __tablename__ = "referencias_gre"
+    __table_args__ = (
+        Index(
+            "ix_referencias_gre_busqueda_factura",
+            "tenant_id",
+            "serie",
+            "correlativo",
+            "emisor_ruc",
+            "receptor_ruc",
+        ),
+    )
+
+    documento_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documentos.id"), index=True)
+    serie: Mapped[str] = mapped_column(String(4))
+    correlativo: Mapped[str] = mapped_column(String(8))
+    emisor_ruc: Mapped[str] = mapped_column(String(11))
+    receptor_ruc: Mapped[str] = mapped_column(String(11))
+    usuario_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"))
+    gestor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"))
+    expediente_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("expedientes.id"), index=True
+    )
+    resuelta_at: Mapped[datetime | None]
+
+
 class FormulaPagoNexus(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "formulas_pago_nexus"
     __table_args__ = (
