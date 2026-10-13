@@ -121,7 +121,8 @@ def ingerir_documento(
 ) -> Documento:
     sha256 = hashlib.sha256(archivo.contenido).hexdigest()
     existente = session.scalar(
-        select(Documento.id).where(Documento.tenant_id == tenant_id, Documento.sha256 == sha256)
+        select(Documento.id)
+            .where(Documento.tenant_id == tenant_id, Documento.sha256 == sha256)
     )
     if existente is not None:
         raise DocumentoDuplicado(existente)
@@ -168,7 +169,8 @@ def ingerir_documento(
                 Documento.expediente_id == expediente.id,
                 Documento.tipo_documento == TipoDocumento.FACT,
                 Documento.deleted_at.is_(None),
-            ).limit(1)
+            )
+            .limit(1)
         )
         if existente_factura is not None:
             raise ComprobanteYaRegistrado(expediente.id)
@@ -239,13 +241,15 @@ def vincular_documento(
         # La huella binaria no basta: representaciones distintas de la misma
         # factura deben compartir una única factura principal en el expediente.
         existente_factura = session.scalar(
-            select(Documento.id).where(
+            select(Documento.id)
+            .where(
                 Documento.tenant_id == documento.tenant_id,
                 Documento.expediente_id == expediente.id,
                 Documento.tipo_documento == TipoDocumento.FACT,
                 Documento.deleted_at.is_(None),
                 Documento.id != documento.id,
-            ).limit(1)
+            )
+            .limit(1)
         )
         if existente_factura is not None:
             raise ComprobanteYaRegistrado(expediente.id)
