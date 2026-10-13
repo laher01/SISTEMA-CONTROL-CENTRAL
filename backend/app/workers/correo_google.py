@@ -51,7 +51,9 @@ def revisar_ciclo_google(
     )
     total = 0
     logger.info(
-        "Gmail: inicio de ciclo; buzones=%s limite=%s", len(buzones), limite_por_buzon
+        "Gmail: inicio de ciclo; buzones=%s limite=%s",
+        len(buzones),
+        limite_por_buzon,
     )
     for buzon, credencial in buzones:
         nuevos = 0
@@ -101,7 +103,7 @@ def revisar_ciclo_google(
             session.rollback()
             buzon.ultimo_error = "ERROR_PROCESAMIENTO"
             session.commit()
-            logger.error("Gmail: fallo inesperado durante procesamiento; revisar último_error")
+            logger.error("Gmail: fallo inesperado; revisar ultimo_error")
     logger.info("Gmail: fin de ciclo; mensajes nuevos=%s", total)
     return total
 
