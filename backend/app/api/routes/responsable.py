@@ -372,6 +372,48 @@ def listar_adelantos_pendientes(
     ]
 
 
+class SimularFormulaEspecialIn(BaseModel):
+    usuario_id: uuid.UUID
+    total_emitido: Decimal = Field(ge=0, max_digits=14, decimal_places=2)
+    base_autorizada: Decimal | None = Field(
+        default=None, gt=0, max_digits=14, decimal_places=2
+    )
+    usar_total_emitido: bool = False
+
+
+@router.post("/pagos/formulas/simular-jonatan")
+def simular_formula_jonatan_responsable(
+    datos: SimularFormulaEspecialIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str]:
+    """Simulación informativa: nunca programa ni confirma un pago."""
+    from app.services.distribucion_jonatan import calcular_distribucion_jonatan
+    from app.services.nexus_formulas import validar_destinatario_especial
+
+    usuario = _autorizar_pago(session, tenant_id, auth, datos.usuario_id)
+    try:
+        validar_destinatario_especial(codigo_usuario=usuario.codigo)
+        resultado = calcular_distribucion_jonatan(
+            total_emitido=datos.total_emitido,
+            base_autorizada=datos.base_autorizada,
+            usar_total_emitido=datos.usar_total_emitido,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    return {
+        "usuario_id": str(usuario.id),
+        "modo_base": resultado.modo_base,
+        "base": str(resultado.base),
+        "gente_lima": str(resultado.gente_lima),
+        "javier": str(resultado.javier),
+        "jonatan": str(resultado.jonatan),
+        "total_distribuido": str(resultado.neto),
+        "estado": "SIMULACION_NO_AUTORIZADA",
+    }
+
+
 @router.post("/pagos/cotizar")
 def cotizar_pago_usuario(
     datos: ProgramarUsuarioIn,
