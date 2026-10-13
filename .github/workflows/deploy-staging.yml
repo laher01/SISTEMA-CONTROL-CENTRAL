@@ -121,6 +121,6 @@ jobs:
           VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
           EXPECTED_COMMIT: ${{ github.sha }}
         run: |
-          ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \\
-            "set -eu; script=\\$(mktemp); trap 'rm -f \"\\$script\"' EXIT; cat > \"\\$script\"; cd -- '$VPS_DEPLOY_PATH'; EXPECTED_COMMIT='$EXPECTED_COMMIT' bash \"\\$script\"; test \"\\$(git rev-parse HEAD)\" = '$EXPECTED_COMMIT'; echo 'Commit VPS verificado: $EXPECTED_COMMIT'" \\
+          ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
+            "set -eu; script=\\$(mktemp); trap 'rm -f \"\\$script\"' EXIT; cat > \"\\$script\"; cd -- '$VPS_DEPLOY_PATH'; EXPECTED_COMMIT='$EXPECTED_COMMIT' bash \"\\$script\"; test \"\\$(git rev-parse HEAD)\" = '$EXPECTED_COMMIT'; echo 'Commit VPS verificado: $EXPECTED_COMMIT'" \
             < deploy/bootstrap-main.sh
