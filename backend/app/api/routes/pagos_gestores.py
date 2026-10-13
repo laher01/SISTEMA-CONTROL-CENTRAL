@@ -7,6 +7,7 @@ from decimal import Decimal
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
@@ -157,7 +158,14 @@ def programar(
         pago.id,
         {"gestor_id": str(gestor.id), "porcentaje": str(tasa), "saldo": str(bruto)},
     )
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "No se pudo programar: periodo duplicado o conflicto concurrente",
+        ) from exc
     return {"id": str(pago.id), "saldo": str(bruto)}
 
 
