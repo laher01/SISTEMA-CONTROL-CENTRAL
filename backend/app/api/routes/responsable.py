@@ -467,9 +467,7 @@ def crear_formula_nexus(
 class SimularFormulaEspecialIn(BaseModel):
     usuario_id: uuid.UUID
     total_emitido: Decimal = Field(ge=0, max_digits=14, decimal_places=2)
-    base_autorizada: Decimal | None = Field(
-        default=None, gt=0, max_digits=14, decimal_places=2
-    )
+    base_autorizada: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=2)
     usar_total_emitido: bool = False
 
 
