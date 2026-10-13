@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { conParametros, eliminar, enviarFormulario, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
 import { Estado, Paginacion, Semaforo } from "../componentes";
+import FiltroJerarquia from "../componentes/FiltroJerarquia";
 import { ETIQUETA_TIPO_DOCUMENTO, formatearFecha, formatearMonto } from "../formato";
 import type {
   Documento,
@@ -18,6 +19,7 @@ const POR_PAGINA = 100;
 export default function Registros({ sesion }: { sesion: SesionActual }) {
   const [parametros, setParametros] = useSearchParams();
   const tipoEmpresa = parametros.get("tipo_empresa") ?? "";
+  const responsableId = parametros.get("responsable_id") ?? "";
   const usuarioId = parametros.get("usuario_id") ?? "";
   const gestorId = parametros.get("gestor_id") ?? "";
   const emisor = parametros.get("emisor") ?? "";
@@ -29,6 +31,7 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
   const pagina = Number(parametros.get("pagina") ?? "0");
 
   const ruta = conParametros("/api/v1/registros", {
+    responsable_id: responsableId,
     usuario_id: usuarioId,
     gestor_id: gestorId,
     tipo_empresa: tipoEmpresa,
@@ -49,7 +52,7 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
   );
   const mostrarUsuario = puedeVerJerarquia;
   const mostrarGestor = sesion.rol !== "GESTOR";
-  const filtrarUsuario = puedeVerJerarquia;
+  const mostrarResponsable = puedeVerJerarquia;
   const filtrarGestor = puedeVerJerarquia || sesion.rol === "USUARIO";
 
   const gestoresDisponibles = useMemo(() => {
@@ -61,6 +64,10 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
 
   const etiquetaFiltro = useMemo(() => {
     const partes: string[] = [];
+    if (responsableId) {
+      const responsable = opciones?.responsables.find((item) => item.id === responsableId);
+      if (responsable) partes.push(`Responsable: ${responsable.codigo} · ${responsable.nombre}`);
+    }
     if (usuarioId) {
       const usuario = opciones?.usuarios.find((item) => item.id === usuarioId);
       if (usuario) partes.push(`Usuario: ${usuario.codigo} · ${usuario.nombre}`);
@@ -76,13 +83,17 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
     else if (mes) partes.push(`Mes: ${mes}`);
     else if (desde || hasta) partes.push(`Periodo: ${desde || "inicio"} → ${hasta || "hoy"}`);
     return partes.length > 0 ? partes.join(" · ") : "Todos los registros visibles para este rol";
-  }, [desde, dia, emisor, gestorId, hasta, mes, opciones, receptor, tipoEmpresa, usuarioId]);
+  }, [desde, dia, emisor, gestorId, hasta, mes, opciones, receptor, responsableId, tipoEmpresa, usuarioId]);
 
   const cambiar = (clave: string, valor: string) => {
     const siguiente = new URLSearchParams(parametros);
     if (valor) siguiente.set(clave, valor);
     else siguiente.delete(clave);
 
+    if (clave === "responsable_id") {
+      siguiente.delete("usuario_id");
+      siguiente.delete("gestor_id");
+    }
     if (clave === "usuario_id") {
       const gestorActual = opciones?.gestores.find((item) => item.id === gestorId);
       if (!valor || (gestorActual && gestorActual.usuario_id !== valor)) {
@@ -147,22 +158,7 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
           <option value="A">Tipo A</option>
           <option value="B">Tipo B</option>
         </select>
-        {filtrarUsuario && (
-          <select value={usuarioId} onChange={(e) => cambiar("usuario_id", e.target.value)}>
-            <option value="">Todos los usuarios</option>
-            {opciones?.usuarios.map((u) => (
-              <option key={u.id} value={u.id}>{u.codigo} · {u.nombre}</option>
-            ))}
-          </select>
-        )}
-        {filtrarGestor && (
-          <select value={gestorId} onChange={(e) => cambiar("gestor_id", e.target.value)}>
-            <option value="">Todos los gestores</option>
-            {gestoresDisponibles.map((g) => (
-              <option key={g.id} value={g.id}>{g.codigo} · {g.nombre}</option>
-            ))}
-          </select>
-        )}
+        <FiltroJerarquia sesion={sesion} responsableId={responsableId} usuarioId={usuarioId} gestorId={gestorId} cambiar={cambiar} />
         <input
           placeholder="Emisor: RUC o razón social"
           value={emisor}
@@ -198,6 +194,7 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
             <thead>
               <tr>
                 <th>Estado</th>
+                {mostrarResponsable && <th>Responsable</th>}
                 {mostrarUsuario && <th>Usuario</th>}
                 {mostrarGestor && <th>Gestor</th>}
                 <th>Fecha documento</th>
@@ -216,6 +213,7 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
                   key={fila.expediente_id}
                   fila={fila}
                   sesion={sesion}
+                  mostrarResponsable={mostrarResponsable}
                   mostrarUsuario={mostrarUsuario}
                   mostrarGestor={mostrarGestor}
                   alCambiar={recargar}
@@ -238,12 +236,14 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
 function FilaRegistro({
   fila,
   sesion,
+  mostrarResponsable,
   mostrarUsuario,
   mostrarGestor,
   alCambiar,
 }: {
   fila: RegistroFila;
   sesion: SesionActual;
+  mostrarResponsable: boolean;
   mostrarUsuario: boolean;
   mostrarGestor: boolean;
   alCambiar: () => void;
@@ -296,6 +296,11 @@ function FilaRegistro({
   return (
     <tr>
       <td><Semaforo estado={fila.estado} /></td>
+      {mostrarResponsable && (
+        <td>{fila.responsable_codigo ? (
+          <><strong>{fila.responsable_codigo}</strong><small className="bloque tenue">{fila.responsable_nombre ?? "Sin nombre"}</small></>
+        ) : "Sin asignar"}</td>
+      )}
       {mostrarUsuario && (
         <td>
           {fila.usuario_codigo ? (
