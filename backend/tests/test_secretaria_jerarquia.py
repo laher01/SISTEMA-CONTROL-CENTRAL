@@ -64,3 +64,27 @@ def test_documentos_y_expedientes_exponen_propietario_sin_inventarlo(
         expediente = next(e for e in expedientes.json() if e["id"] == fila["expediente_id"])
         assert expediente["usuario_nombre"] == fila["usuario_nombre"]
         assert expediente["usuario_codigo"] == fila["usuario_codigo"]
+
+
+def test_registros_filtra_por_responsable_y_expone_columna(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    subida = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("factura_responsable.xml", factura(numero="F001-00000979"))},
+    )
+    assert subida.status_code == 201, subida.text
+    auth_prueba.como_admin()
+    respuesta = client.get("/api/v1/registros")
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["total_registros"] >= 1
+    fila = next(
+        f for f in respuesta.json()["filas"]
+        if f["expediente_id"] == subida.json()["expediente_id"]
+    )
+    assert "responsable_codigo" in fila
+    assert "responsable_nombre" in fila
+    filtrada = client.get("/api/v1/registros", params={"responsable_id": str(uuid4())})
+    assert filtrada.status_code == 200, filtrada.text
+    assert filtrada.json()["total_registros"] == 0
+    assert filtrada.json()["filas"] == []
