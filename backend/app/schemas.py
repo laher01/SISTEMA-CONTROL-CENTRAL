@@ -387,6 +387,8 @@ class RegistroFila(BaseModel):
     tipo_empresa: str | None = None
     expediente_id: uuid.UUID
     estado: EstadoExpediente
+    responsable_codigo: str | None = None
+    responsable_nombre: str | None = None
     usuario_id: uuid.UUID | None
     usuario_codigo: str | None
     usuario_nombre: str | None
