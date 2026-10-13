@@ -1,4 +1,5 @@
 """La autorización administrativa gobierna ingresos y liquidaciones, no archivos."""
+
 from fastapi.testclient import TestClient
 
 from tests.conftest import AuthPrueba
@@ -37,9 +38,7 @@ def test_cliente_eliminado_no_se_reactiva_con_otra_factura(
 ) -> None:
     subir(client, "factura1.xml", factura())
     autorizar_receptor(client, auth_prueba)
-    receptor = next(
-        e for e in client.get("/api/v1/empresas").json() if e["autorizada"]
-    )
+    receptor = next(e for e in client.get("/api/v1/empresas").json() if e["autorizada"])
     auth_anterior = auth_prueba.contexto
     auth_prueba.como_admin()
     try:
@@ -56,6 +55,4 @@ def test_cliente_eliminado_no_se_reactiva_con_otra_factura(
     resumen = client.get("/api/v1/produccion/resumen")
     assert resumen.status_code == 200, resumen.text
     assert resumen.json()["filas"] == []
-    assert receptor["id"] not in {
-        e["id"] for e in client.get("/api/v1/empresas").json()
-    }
+    assert receptor["id"] not in {e["id"] for e in client.get("/api/v1/empresas").json()}
