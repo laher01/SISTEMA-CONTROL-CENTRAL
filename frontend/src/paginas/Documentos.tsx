@@ -89,6 +89,48 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
   const [reprocesando, setReprocesando] = useState(false);
   const [resultadoLote, setResultadoLote] = useState<ResultadoLote>();
   const [errorLote, setErrorLote] = useState("");
+  const [seleccionados, setSeleccionados] = useState<string[]>([]);
+  const [eliminandoLote, setEliminandoLote] = useState(false);
+  const [resultadoEliminacion, setResultadoEliminacion] = useState("");
+  const [errorEliminacion, setErrorEliminacion] = useState("");
+  const visibles = datos ?? [];
+  const seleccionVisible = visibles.filter((documento) => seleccionados.includes(documento.id));
+  const todosSeleccionados = visibles.length > 0 && seleccionVisible.length === visibles.length;
+
+  const alternarDocumento = (id: string, marcado: boolean) => {
+    setSeleccionados((actual) =>
+      marcado ? [...new Set([...actual, id])] : actual.filter((x) => x !== id),
+    );
+  };
+
+  const eliminarSeleccionados = async () => {
+    const elegidos = seleccionVisible;
+    if (!elegidos.length || eliminandoLote) return;
+    const confirmado = window.confirm(
+      `¿Retirar ${elegidos.length} documento(s) de esta página? ` +
+      "Se registrará una auditoría por cada archivo. Los originales no se borran físicamente.",
+    );
+    if (!confirmado) return;
+    setEliminandoLote(true);
+    setErrorEliminacion("");
+    setResultadoEliminacion("");
+    const retirados: string[] = [];
+    const fallos: string[] = [];
+    for (const documento of elegidos) {
+      try {
+        await eliminar(`/api/v1/documentos/${documento.id}`);
+        retirados.push(documento.id);
+      } catch (error) {
+        const detalle = error instanceof Error ? error.message : String(error);
+        fallos.push(`${documento.nombre_original}: ${detalle}`);
+      }
+    }
+    setSeleccionados((actual) => actual.filter((id) => !retirados.includes(id)));
+    setResultadoEliminacion(`${retirados.length} documento(s) retirado(s) de ${elegidos.length}.`);
+    if (fallos.length) setErrorEliminacion(fallos.join(" | "));
+    setEliminandoLote(false);
+    recargar();
+  };
 
   const reprocesarYCompletar = async () => {
     setReprocesando(true);
@@ -108,6 +150,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
   };
 
   const cambiar = (clave: string, valor: string) => {
+    setSeleccionados([]);
     const siguiente = new URLSearchParams(parametros);
     if (valor) siguiente.set(clave, valor);
     else siguiente.delete(clave);
@@ -119,7 +162,10 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
     setParametros(siguiente);
   };
 
-  const limpiar = () => setParametros({});
+  const limpiar = () => {
+    setSeleccionados([]);
+    setParametros({});
+  };
 
   return (
     <>
@@ -145,6 +191,23 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
         </p>
       )}
       {errorLote && <p className="error">{errorLote}</p>}
+      <div className="acciones-documento">
+        <strong>{seleccionVisible.length} seleccionados en esta página</strong>
+        <button
+          className="peligro"
+          disabled={!seleccionVisible.length || eliminandoLote}
+          onClick={eliminarSeleccionados}
+        >
+          {eliminandoLote ? "Retirando documentos…" : "Eliminar seleccionados"}
+        </button>
+        <button
+          className="secundario"
+          disabled={!seleccionados.length || eliminandoLote}
+          onClick={() => setSeleccionados([])}
+        >Limpiar selección</button>
+      </div>
+      {resultadoEliminacion && <p role="status">{resultadoEliminacion}</p>}
+      {errorEliminacion && <p role="alert" className="error">{errorEliminacion}</p>}
 
       <div className="filtros filtros-documentos">
         <FiltroJerarquia sesion={sesion} responsableId={responsableId} usuarioId={usuarioId} gestorId={gestorId} cambiar={cambiar} />
@@ -205,6 +268,17 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
           <table>
             <thead>
               <tr>
+                <th>
+                  <input
+                    type="checkbox"
+                    aria-label="Seleccionar todos los documentos de esta página"
+                    checked={todosSeleccionados}
+                    disabled={eliminandoLote || !visibles.length}
+                    onChange={(e) => setSeleccionados(
+                      e.target.checked ? visibles.map((doc) => doc.id) : [],
+                    )}
+                  />
+                </th>
                 {!responsableId && <th>Responsable</th>}
                 {!usuarioId && <th>Usuario</th>}
                 {!gestorId && <th>Gestor</th>}
@@ -222,7 +296,11 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
             </thead>
             <tbody>
               {datos?.map((documento) => (
-                <FilaDocumento key={documento.id} documento={documento} alCambiar={recargar} mostrarResponsable={!responsableId} mostrarUsuario={!usuarioId} mostrarGestor={!gestorId} />
+                <FilaDocumento key={documento.id} documento={documento}
+                  seleccionado={seleccionados.includes(documento.id)}
+                  alSeleccionar={(marcado) => alternarDocumento(documento.id, marcado)}
+                  seleccionBloqueada={eliminandoLote}
+                  alCambiar={recargar} mostrarResponsable={!responsableId} mostrarUsuario={!usuarioId} mostrarGestor={!gestorId} />
               ))}
             </tbody>
           </table>
@@ -241,12 +319,18 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
 function FilaDocumento({
   documento,
   alCambiar,
+  seleccionado,
+  alSeleccionar,
+  seleccionBloqueada,
   mostrarResponsable,
   mostrarUsuario,
   mostrarGestor,
 }: {
   documento: Documento;
   alCambiar: () => void;
+  seleccionado: boolean;
+  alSeleccionar: (marcado: boolean) => void;
+  seleccionBloqueada: boolean;
   mostrarResponsable: boolean;
   mostrarUsuario: boolean;
   mostrarGestor: boolean;
@@ -288,6 +372,11 @@ function FilaDocumento({
 
   return (
     <tr>
+      <td>
+        <input type="checkbox" aria-label={`Seleccionar ${documento.nombre_original}`}
+          checked={seleccionado} disabled={seleccionBloqueada}
+          onChange={(e) => alSeleccionar(e.target.checked)} />
+      </td>
       {mostrarResponsable && <td>{documento.responsable_nombre ?? "Sin asignar"}<small className="bloque tenue">{documento.responsable_codigo}</small></td>}
       {mostrarUsuario && <td>{documento.usuario_nombre ?? "Sin asignar"}<small className="bloque tenue">{documento.usuario_codigo}</small></td>}
       {mostrarGestor && <td>{documento.gestor_nombre ?? "Sin asignar"}<small className="bloque tenue">{documento.gestor_codigo}</small></td>}
