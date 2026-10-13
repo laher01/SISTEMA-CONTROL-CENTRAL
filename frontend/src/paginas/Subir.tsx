@@ -12,7 +12,7 @@ const CONCURRENCIA = 1;
 type Resultado =
   | { estado: "en_cola" | "subiendo" }
   | { estado: "ok"; documento: Documento }
-  | { estado: "duplicado"; mensaje: string }
+  | { estado: "duplicado"; mensaje: string; expedienteId?: string }
   | { estado: "error"; mensaje: string };
 
 interface Fila {
@@ -82,7 +82,17 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
     } catch (error) {
       const mensaje = error instanceof Error ? error.message : String(error);
       const duplicado = error instanceof ErrorApi && esDuplicado(error);
-      actualizar(fila.clave, { estado: duplicado ? "duplicado" : "error", mensaje });
+      if (duplicado) {
+        const detalle = (error as ErrorApi).detalle;
+        const expedienteId =
+          detalle && typeof detalle === "object" && "expediente_id" in detalle &&
+          typeof detalle.expediente_id === "string"
+            ? detalle.expediente_id
+            : undefined;
+        actualizar(fila.clave, { estado: "duplicado", mensaje, expedienteId });
+      } else {
+        actualizar(fila.clave, { estado: "error", mensaje });
+      }
     }
   };
 
@@ -444,7 +454,9 @@ function FilaCarga({ fila }: { fila: Fila }) {
           : ""}
       </td>
       <td>
-        {documento?.expediente_id ? (
+        {resultado.estado === "duplicado" && resultado.expedienteId ? (
+          <Link to={`/expedientes/${resultado.expedienteId}`}>Ver factura registrada</Link>
+        ) : documento?.expediente_id ? (
           <Link to={`/expedientes/${documento.expediente_id}`}>Ver expediente</Link>
         ) : documento ? (
           <Link to="/pendientes">Revisar</Link>
