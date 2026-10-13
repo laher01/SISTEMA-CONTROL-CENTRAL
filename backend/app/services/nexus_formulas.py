@@ -61,3 +61,4 @@ def validar_propuesta_nexus(
         raise ValueError("Plantilla de fórmula no permitida")
     if not variables.issubset(variables_permitidas):
         raise ValueError("Variables no autorizadas")
+
