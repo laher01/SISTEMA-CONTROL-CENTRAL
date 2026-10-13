@@ -48,7 +48,10 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.UniqueConstraint(
-            "tenant_id", "responsable_id", "usuario_id", "version",
+            "tenant_id",
+            "responsable_id",
+            "usuario_id",
+            "version",
             name="uq_nexus_formula_version",
         ),
         sa.CheckConstraint("version >= 1", name="ck_nexus_version_positiva"),
