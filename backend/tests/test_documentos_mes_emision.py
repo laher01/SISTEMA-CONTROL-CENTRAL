@@ -40,3 +40,46 @@ def test_documentos_filtra_mes_emision_y_no_mes_de_carga(
 
     invalido = client.get("/api/v1/documentos", params={"mes": "2026-13"})
     assert invalido.status_code == 422
+
+
+def test_empresa_proveedora_y_cliente_se_filtran_independientemente(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    subida = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("factura_empresas.xml", factura(numero="F001-00001992"))},
+    )
+    assert subida.status_code == 201, subida.text
+    documento_id = subida.json()["id"]
+    expediente_id = subida.json()["expediente_id"]
+    auth_prueba.como_admin()
+
+    parametros = {"empresa_emisora": "proveedor", "empresa_receptora": "cliente"}
+    rutas = (
+        "/api/v1/documentos",
+        "/api/v1/expedientes",
+        "/api/v1/expedientes/ids",
+    )
+    for ruta in rutas:
+        respuesta = client.get(ruta, params=parametros)
+        assert respuesta.status_code == 200, (ruta, respuesta.text)
+        resultados = respuesta.json()
+        esperado = documento_id if ruta.endswith("/documentos") else expediente_id
+        assert any(
+            (fila.get("id") if isinstance(fila, dict) else fila) == esperado
+            for fila in resultados
+        )
+
+    para_control = {"desde": "2026-01-01", "hasta": "2026-12-31", **parametros}
+    control = client.get("/api/v1/dashboard/secretaria-expedientes", params=para_control)
+    assert control.status_code == 200, control.text
+    assert any(fila["id"] == expediente_id for fila in control.json()["filas"])
+
+    for campo in ("empresa_emisora", "empresa_receptora"):
+        incorrecto = {**parametros, campo: "EMPRESA INEXISTENTE ZZ123"}
+        documentos = client.get("/api/v1/documentos/resumen", params=incorrecto)
+        assert documentos.status_code == 200, documentos.text
+        assert documentos.json()["total_documentos"] == 0
+        expedientes = client.get("/api/v1/expedientes/resumen", params=incorrecto)
+        assert expedientes.status_code == 200, expedientes.text
+        assert expedientes.json()["total_expedientes"] == 0
