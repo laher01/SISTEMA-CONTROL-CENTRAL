@@ -60,13 +60,15 @@ def upgrade() -> None:
             name="ck_nexus_estado_valido",
         ),
     )
-    op.create_index(
-        "ix_nexus_formula_scope",
-        "formulas_pago_nexus",
-        ["tenant_id", "responsable_id", "usuario_id"],
-    )
+    for columna in ("tenant_id", "responsable_id", "usuario_id"):
+        op.create_index(
+            f"ix_formulas_pago_nexus_{columna}",
+            "formulas_pago_nexus",
+            [columna],
+        )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_nexus_formula_scope", table_name="formulas_pago_nexus")
+    for columna in ("usuario_id", "responsable_id", "tenant_id"):
+        op.drop_index(f"ix_formulas_pago_nexus_{columna}", table_name="formulas_pago_nexus")
     op.drop_table("formulas_pago_nexus")
