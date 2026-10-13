@@ -314,8 +314,8 @@ def listar(
                 gestor_id=expediente.gestor_id if mostrar_propiedad else None,
                 gestor_codigo=gestor_codigo if mostrar_propiedad else None,
                 gestor_nombre=gestor_nombre if mostrar_propiedad else None,
-                responsable_codigo=responsable_codigo,
-                responsable_nombre=responsable_nombre,
+                responsable_codigo=responsable_codigo if mostrar_propiedad else None,
+                responsable_nombre=responsable_nombre if mostrar_propiedad else None,
                 fecha_emision=expediente.fecha_emision,
                 fecha_registro=expediente.created_at,
                 fecha_carga=session.scalar(
