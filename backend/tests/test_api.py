@@ -477,11 +477,11 @@ def test_creacion_asistida_es_idempotente_por_identidad_fiscal(client: TestClien
     asociado = client.post(
         f"/api/v1/documentos/{segunda_recepcion['id']}/crear-expediente", json=solicitud
     )
-    assert asociado.status_code == 200
-    assert asociado.json()["creado"] is False
-    assert asociado.json()["expediente"]["id"] == expediente_id
+    assert asociado.status_code == 409
+    assert asociado.json()["detail"]["duplicado"] is True
+    assert asociado.json()["detail"]["expediente_id"] == expediente_id
     detalle = expediente(client, expediente_id)
-    assert len(detalle["documentos"]) == 2
+    assert len(detalle["documentos"]) == 1
 
 
 def test_sugiere_relacion_por_evidencia_sin_vincular(
