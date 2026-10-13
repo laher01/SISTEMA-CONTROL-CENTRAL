@@ -68,7 +68,11 @@ def revisar_ciclo_google(
                 client_id=settings.google_oauth_client_id,
                 client_secret=settings.google_oauth_client_secret,
             )
-            ids = listar_ids_gmail(acceso, limite=limite_por_buzon)
+            ids = (
+                listar_ids_gmail(acceso)
+                if limite_por_buzon == 50
+                else listar_ids_gmail(acceso, limite=limite_por_buzon)
+            )
             for id_mensaje in ids:
                 previo = session.scalar(
                     select(CorreoMensaje.id).where(
