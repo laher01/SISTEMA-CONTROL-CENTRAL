@@ -467,7 +467,13 @@ def listar_documentos(
     if fecha_hasta is not None:
         consulta = consulta.where(func.date(Documento.created_at) <= fecha_hasta)
 
-    if emisor_ruc is not None or receptor_ruc is not None or tipo_empresa is not None or empresa_emisora or empresa_receptora:
+    if (
+        emisor_ruc is not None
+        or receptor_ruc is not None
+        or tipo_empresa is not None
+        or empresa_emisora
+        or empresa_receptora
+    ):
         if emisor_ruc is not None or tipo_empresa is not None or empresa_emisora:
             emisor = aliased(Empresa)
             consulta = consulta.join(emisor, Expediente.emisor_id == emisor.id)
@@ -655,7 +661,13 @@ def resumen_documentos(
         consulta = consulta.where(func.date(Documento.created_at) >= fecha_desde)
     if fecha_hasta is not None:
         consulta = consulta.where(func.date(Documento.created_at) <= fecha_hasta)
-    if emisor_ruc is not None or receptor_ruc is not None or tipo_empresa is not None or empresa_emisora or empresa_receptora:
+    if (
+        emisor_ruc is not None
+        or receptor_ruc is not None
+        or tipo_empresa is not None
+        or empresa_emisora
+        or empresa_receptora
+    ):
         if emisor_ruc is not None or tipo_empresa is not None or empresa_emisora:
             emisor = aliased(Empresa)
             consulta = consulta.join(emisor, Expediente.emisor_id == emisor.id)
