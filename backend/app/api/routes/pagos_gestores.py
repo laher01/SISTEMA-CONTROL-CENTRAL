@@ -190,7 +190,7 @@ def anular(
     pago = session.get(PagoGestor, pago_id)
     if pago is None or pago.tenant_id != tenant_id or pago.usuario_id != auth.usuario_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pago no encontrado")
-    if pago.estado != "PROGRAMADO":
+    if pago.estado != "PROGRAMADO" or Decimal(pago.saldo) != Decimal(pago.bruto):
         raise HTTPException(status.HTTP_409_CONFLICT, "No puede anularse un pago aplicado")
     auditoria.registrar(
         session,
