@@ -1,0 +1,44 @@
+name: test-deploy-scripts
+
+on:
+  pull_request:
+    paths:
+      - 'deploy/deploy-legacy-pr140.sh'
+      - 'deploy/preflight-secretaria.sh'
+      - '.github/workflows/deploy-staging.yml'
+      - '.github/workflows/test-deploy-scripts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bash-and-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax check without executing deployment
+        run: |
+          bash -n deploy/deploy-legacy-pr140.sh
+          bash -n deploy/preflight-secretaria.sh
+      - name: Verify non-destructive deployment invariants
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          workflow = Path('.github/workflows/deploy-staging.yml').read_text()
+          deploy = Path('deploy/deploy-legacy-pr140.sh').read_text()
+          preflight = Path('deploy/preflight-secretaria.sh').read_text()
+          assert 'branches: [main]' in workflow
+          assert 'actions/checkout@v4' in workflow
+          assert '132.145.233.172' in workflow
+          assert 'cancel-in-progress: false' in workflow
+          assert 'DESPLIEGUE_VALIDADO' in deploy
+          assert 'EXPECTED_COMMIT' in deploy
+          assert 'pg_restore --list' in deploy
+          assert '</dev/null > "$backup"' in deploy
+          assert 'git status --porcelain --untracked-files=all' in deploy
+          assert 'git status --porcelain --untracked-files=all' in preflight
+          assert 'docker compose' in preflight
+          assert 'git reset --hard' not in deploy
+          print('Sintaxis y salvaguardas básicas verificadas')
+          PY
