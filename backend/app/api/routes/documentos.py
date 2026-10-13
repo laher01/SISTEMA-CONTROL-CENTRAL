@@ -1331,5 +1331,8 @@ def vincular(
         )
     except ExpedienteNoEncontrado as exc:
         raise no_encontrado("Expediente") from exc
+    except ComprobanteYaRegistrado as exc:
+        session.rollback()
+        raise _comprobante_duplicado(session, auth, exc.expediente_id) from exc
     session.commit()
     return documento
