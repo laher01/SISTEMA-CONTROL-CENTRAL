@@ -42,6 +42,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
   const receptor = parametros.get("receptor_ruc") ?? "";
   const desde = parametros.get("fecha_desde") ?? "";
   const hasta = parametros.get("fecha_hasta") ?? "";
+  const mes = parametros.get("mes") ?? "";
   const pagina = Number(parametros.get("pagina") ?? "0");
 
   const ruta = conParametros("/api/v1/documentos", {
@@ -52,6 +53,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
     tipo_empresa: tipoEmpresa,
     dia,
     fecha_emision: fechaEmision,
+    mes,
     serie_correlativo: correlativoBusqueda,
     tipo_documento: tipo,
     emisor_ruc: emisor.length === 11 ? emisor : undefined,
@@ -107,6 +109,8 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
     const siguiente = new URLSearchParams(parametros);
     if (valor) siguiente.set(clave, valor);
     else siguiente.delete(clave);
+    if (clave === "mes" && valor) siguiente.delete("fecha_emision");
+    if (clave === "fecha_emision" && valor) siguiente.delete("mes");
     if (clave === "usuario_id") siguiente.delete("gestor_id");
     if (clave === "responsable_id") { siguiente.delete("usuario_id"); siguiente.delete("gestor_id"); }
     if (clave !== "pagina") siguiente.delete("pagina");
@@ -149,6 +153,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
         </select>
         <input aria-label="Serie y correlativo" placeholder="Ej. EG07-2269" value={correlativoBusqueda} maxLength={60} onChange={(e) => cambiar("serie_correlativo", e.target.value.toUpperCase())} />
         <label className="filtro-fecha">Fecha documento <input type="date" value={fechaEmision} onChange={(e) => cambiar("fecha_emision", e.target.value)} /></label>
+        <label className="filtro-fecha">Mes de emisión <input aria-label="Mes de emisión" type="month" value={mes} onChange={(e) => cambiar("mes", e.target.value)} /></label>
         <label className="filtro-fecha">Día de carga <input type="date" value={dia} onChange={(e) => cambiar("dia", e.target.value)} /></label>
         <select value={estado} onChange={(e) => cambiar("estado", e.target.value)}>
           <option value="">Todos los estados</option>
