@@ -70,6 +70,8 @@ def test_adelanto_y_pago_total_con_comprobante(
     assert parcial.json()["estado"] == "PARCIAL"
     assert abonar("ADELANTO", "REF-0001", "1.00").status_code == 409
     assert abonar("ADELANTO", "REF-0002", "99.00").status_code == 422
+    assert abonar("ADELANTO", "REF-NAN", "NaN").status_code == 422
+    assert abonar("ADELANTO", "REF-INF", "Infinity").status_code == 422
 
     reprogramado = client.post(
         f"{url}/{pago_id}/reprogramar",
