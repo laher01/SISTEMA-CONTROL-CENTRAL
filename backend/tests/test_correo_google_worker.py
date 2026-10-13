@@ -2,6 +2,7 @@
 
 from email.message import EmailMessage
 
+import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -122,3 +123,11 @@ def test_worker_google_lee_una_vez_y_atribuye_a_jenny(
     assert registros[0].estado == "INGRESADO"
     assert revisar_ciclo_google(session, config) == 0
     assert len(list(session.scalars(select(CorreoMensaje)))) == 1
+
+
+@pytest.mark.parametrize("limite", [0, -1, 101])
+def test_worker_google_rechaza_limites_invalidos(
+    session: Session, settings: Settings, limite: int
+) -> None:
+    with pytest.raises(ValueError, match="limite_por_buzon"):
+        revisar_ciclo_google(session, settings, limite_por_buzon=limite)
