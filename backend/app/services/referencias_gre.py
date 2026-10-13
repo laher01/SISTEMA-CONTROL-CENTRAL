@@ -4,6 +4,7 @@ Solo se consideran facturas indicadas como documentos relacionados; el RUC
 junto a la referencia pertenece al EMISOR DE ESA FACTURA, que puede ser
 distinto del emisor de la GRE.
 """
+
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -34,7 +35,7 @@ def extraer_referencias_factura_gre(texto: str) -> tuple[ReferenciaFacturaGRE, .
     )
     if seccion is None:
         return ()
-    texto_refs = normal[seccion.end(): seccion.end() + 1600]
+    texto_refs = normal[seccion.end() : seccion.end() + 1600]
     patron = re.compile(
         r"FACTURA(?:\s+ELECTRONICA)?\s*(?:N[RO°º.]*|NUMERO|NO\.?|#)?\s*[:\-]?\s*"
         r"([FE][0-9]{3})\s*[-–—\s]\s*0*([0-9]{1,8})\b"
