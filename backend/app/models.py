@@ -127,9 +127,7 @@ class FormulaPagoNexus(ConId, ConTenant, ConCreacion, Base):
     descripcion: Mapped[str] = mapped_column(String(2000))
     plantilla: Mapped[str] = mapped_column(String(60))
     estado: Mapped[str] = mapped_column(String(20), default="BORRADOR")
-    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("cuentas_acceso.id")
-    )
+    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cuentas_acceso.id"))
     aprobado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("cuentas_acceso.id")
     )
