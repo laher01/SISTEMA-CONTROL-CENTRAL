@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
@@ -123,6 +123,15 @@ def programar(
     if auth.rol != RolMiembro.USUARIO or auth.usuario_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Usuario")
     gestor = _gestor_propio(session, tenant_id, auth.usuario_id, datos.gestor_id)
+    # Serializar la comprobación de periodos de un mismo Gestor y moneda en PostgreSQL.
+    # La restricción UNIQUE protege periodos iguales, pero no solapamientos distintos.
+    # El bloqueo de transacción se libera automáticamente al hacer commit/rollback.
+    if session.get_bind().dialect.name == "postgresql":
+        clave = f"pago-gestor:{tenant_id}:{gestor.id}:{datos.moneda}"
+        session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:clave, 0))"),
+            {"clave": clave},
+        )
     if session.scalar(
         select(PagoGestor.id).where(
             PagoGestor.tenant_id == tenant_id,
