@@ -204,8 +204,8 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
                 <th>Fecha de carga</th>
                 <th>Tipo empresa</th>
                 <th>Correlativo</th>
-                <th>Emisor</th>
-                <th>Receptor</th>
+                <th className="columna-empresa">Emisor</th>
+                <th className="columna-empresa">Receptor</th>
                 <th className="num">Monto</th>
                 <th>Documentación / opciones</th>
               </tr>
@@ -318,8 +318,8 @@ function FilaRegistro({
           {fila.tipo_comprobante + " " + fila.serie + "-" + fila.correlativo}
         </Link>
       </td>
-      <td><strong>{fila.emisor_razon_social || "Sin razón social"}</strong><small className="bloque tenue">RUC {fila.emisor_ruc}</small></td>
-      <td><strong>{fila.receptor_razon_social || "Sin razón social"}</strong><small className="bloque tenue">RUC {fila.receptor_ruc}</small></td>
+      <td className="columna-empresa"><strong>{fila.emisor_razon_social || "Sin razón social"}</strong><small className="bloque tenue">RUC {fila.emisor_ruc}</small></td>
+      <td className="columna-empresa"><strong>{fila.receptor_razon_social || "Sin razón social"}</strong><small className="bloque tenue">RUC {fila.receptor_ruc}</small></td>
       <td className="num">{formatearMonto(fila.moneda, fila.importe_total)}</td>
       <td>
         <div className="acciones-registro">
