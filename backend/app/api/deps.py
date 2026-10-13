@@ -127,6 +127,11 @@ def get_contexto_operativo(
             request.method == "POST"
             and request.url.path == "/api/v1/responsable/pagos/formulas/simular-jonatan"
         )
+        or (
+            request.method == "POST"
+            and request.url.path.startswith("/api/v1/responsable/pagos/formulas/")
+            and request.url.path.endswith("/aprobar")
+        )
         or (request.method == "GET" and request.url.path == "/api/v1/gerencias/vinculos")
         or (
             request.method == "POST"
