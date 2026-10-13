@@ -297,6 +297,7 @@ async def subir_documento(
     except DocumentoDuplicado as exc:
         raise _duplicado(session, auth, exc.documento_id) from exc
     except ComprobanteYaRegistrado as exc:
+        session.rollback()
         raise _comprobante_duplicado(session, auth, exc.expediente_id) from exc
     except ExpedienteNoEncontrado as exc:
         raise no_encontrado("Expediente") from exc
@@ -997,6 +998,9 @@ def procesar_documento(
         registrar_fallo(session, documento, str(exc))
         session.commit()
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    except ComprobanteYaRegistrado as exc:
+        session.rollback()
+        raise _comprobante_duplicado(session, auth, exc.expediente_id) from exc
     session.commit()
     return documento
 
@@ -1064,6 +1068,16 @@ def procesar_pendientes(
             )
         except DocumentoNoProcesable as exc:
             resultado = registrar_fallo(session, documento, str(exc))
+        except ComprobanteYaRegistrado as exc:
+            session.rollback()
+            documento = session.get(Documento, documento.id)
+            if documento is None:
+                raise
+            resultado = registrar_fallo(
+                session,
+                documento,
+                f"Factura duplicada; expediente existente: {exc.expediente_id}",
+            )
         if resultado.relacionado:
             relacionados += 1
         elif resultado.estado == "FALLIDO":
@@ -1244,7 +1258,11 @@ def crear_expediente_asistido(
             {"mensaje": "El documento ya pertenece a otro expediente"},
         )
     if documento.expediente_id != expediente.id or documento.tipo_documento != tipo_documento:
-        vincular_documento(session, settings, hoy, documento, expediente.id, tipo_documento)
+        try:
+            vincular_documento(session, settings, hoy, documento, expediente.id, tipo_documento)
+        except ComprobanteYaRegistrado as exc:
+            session.rollback()
+            raise _comprobante_duplicado(session, auth, exc.expediente_id) from exc
     session.commit()
     return ExpedienteAsistidoOut(
         expediente=ExpedienteOut.model_validate(expediente),
@@ -1313,5 +1331,8 @@ def vincular(
         )
     except ExpedienteNoEncontrado as exc:
         raise no_encontrado("Expediente") from exc
+    except ComprobanteYaRegistrado as exc:
+        session.rollback()
+        raise _comprobante_duplicado(session, auth, exc.expediente_id) from exc
     session.commit()
     return documento

@@ -309,9 +309,23 @@ def test_pdf_completo_crea_expediente_automaticamente(
     assert detalle["correlativo"] == "123"
     assert detalle["receptor"]["ruc"] == RECEPTOR
 
-    segunda = subir(client, "misma-factura-otra-representacion.pdf", pdf_vacio() + b"segunda")
-    assert segunda["expediente_id"] == documento["expediente_id"]
-    assert len(expediente(client, documento["expediente_id"])["documentos"]) == 2
+    assert "sha256" in datos["huella_fiscal"]
+    segunda = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("misma-factura-otra-representacion.pdf", pdf_vacio() + b"segunda")},
+    )
+    assert segunda.status_code == 409, segunda.text
+    assert segunda.json()["detail"]["duplicado"] is True
+    assert segunda.json()["detail"]["expediente_id"] == documento["expediente_id"]
+    assert len(expediente(client, documento["expediente_id"])["documentos"]) == 1
+
+    # Ni el nombre ni el peso del archivo sirven para identificar la factura.
+    otra_copia = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("RENOMBRADA.pdf", pdf_vacio() + b"tercera")},
+    )
+    assert otra_copia.status_code == 409
+    assert len(expediente(client, documento["expediente_id"])["documentos"]) == 1
 
 
 def test_pdf_incompleto_queda_en_revision_con_motivo(
@@ -463,11 +477,11 @@ def test_creacion_asistida_es_idempotente_por_identidad_fiscal(client: TestClien
     asociado = client.post(
         f"/api/v1/documentos/{segunda_recepcion['id']}/crear-expediente", json=solicitud
     )
-    assert asociado.status_code == 200
-    assert asociado.json()["creado"] is False
-    assert asociado.json()["expediente"]["id"] == expediente_id
+    assert asociado.status_code == 409
+    assert asociado.json()["detail"]["duplicado"] is True
+    assert asociado.json()["detail"]["expediente_id"] == expediente_id
     detalle = expediente(client, expediente_id)
-    assert len(detalle["documentos"]) == 2
+    assert len(detalle["documentos"]) == 1
 
 
 def test_sugiere_relacion_por_evidencia_sin_vincular(

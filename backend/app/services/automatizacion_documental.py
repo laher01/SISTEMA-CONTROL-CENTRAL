@@ -5,6 +5,7 @@ los campos de identidad fiscal superan los umbrales configurados. Los casos
 ambiguos permanecen en la bandeja de revisión con motivos explícitos.
 """
 
+import hashlib
 import uuid
 from dataclasses import dataclass
 from datetime import date
@@ -20,6 +21,7 @@ from app.services import auditoria
 from app.services.expedientes import buscar_expediente, obtener_o_crear_empresa
 from app.services.extraccion_campos import razon_social_confiable
 from app.services.ingesta import (
+    ComprobanteYaRegistrado,
     crear_expediente,
     registrar_referencia_gre,
     vincular_documento,
@@ -92,6 +94,20 @@ def aplicar_automaticamente(
     procesamiento: dict[str, object],
 ) -> ResultadoAutomatizacion:
     if documento.expediente_id is not None:
+        if documento.tipo_documento == TipoDocumento.FACT:
+            previo = session.scalar(
+                select(Documento.id)
+                .where(
+                    Documento.tenant_id == documento.tenant_id,
+                    Documento.expediente_id == documento.expediente_id,
+                    Documento.tipo_documento == TipoDocumento.FACT,
+                    Documento.deleted_at.is_(None),
+                    Documento.id != documento.id,
+                )
+                .limit(1)
+            )
+            if previo is not None:
+                raise ComprobanteYaRegistrado(documento.expediente_id)
         _reparar_partes_vinculadas(session, settings, documento, procesamiento)
         resultado = ResultadoAutomatizacion(
             "COMPLETADO", relacionado=True, expediente_id=documento.expediente_id
@@ -268,6 +284,17 @@ def aplicar_automaticamente(
             usuario_id=documento.usuario_id,
             creado_por_cuenta_id=documento.creado_por_cuenta_id,
         )
+    # Huella semántica: misma factura fiscal aunque cambien nombre y bytes del PDF.
+    # El SHA-256 binario se conserva aparte; no identificar por importe solamente.
+    identidad = "|".join(
+        (str(documento.tenant_id), tipo.value, emisor_ruc, receptor_ruc, serie, correlativo)
+    )
+    datos["huella_fiscal"] = {
+        "version": 1,
+        "algoritmo": "SHA-256",
+        "sha256": hashlib.sha256(identidad.encode("utf-8")).hexdigest(),
+    }
+    documento.datos_extraidos = datos
     vincular_documento(session, settings, hoy, documento, expediente.id, tipo)
     _guardar_estado(documento, "COMPLETADO", expediente_id=expediente.id, creado=creado)
     auditoria.registrar(
