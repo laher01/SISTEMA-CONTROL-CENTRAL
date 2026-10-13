@@ -28,6 +28,8 @@ def detalle_secretaria(
     hasta: date,
     emisor_ruc: str | None = None,
     receptor_ruc: str | None = None,
+    empresa_emisora: str | None = None,
+    empresa_receptora: str | None = None,
     estado: EstadoExpediente | None = None,
     correlativo: str | None = None,
     monto_desde: Decimal | None = None,
@@ -85,6 +87,22 @@ def detalle_secretaria(
         consulta = consulta.join(
             receptor_empresa, Expediente.receptor_id == receptor_empresa.id
         ).where(receptor_empresa.ruc == receptor_ruc)
+    if empresa_emisora and empresa_emisora.strip():
+        proveedor = aliased(Empresa)
+        termino = empresa_emisora.strip().lower()
+        consulta = consulta.join(proveedor, Expediente.emisor_id == proveedor.id).where(
+            proveedor.tenant_id == tenant_id,
+            (func.lower(proveedor.razon_social).contains(termino, autoescape=True))
+            | (proveedor.ruc.contains(termino, autoescape=True)),
+        )
+    if empresa_receptora and empresa_receptora.strip():
+        cliente = aliased(Empresa)
+        termino = empresa_receptora.strip().lower()
+        consulta = consulta.join(cliente, Expediente.receptor_id == cliente.id).where(
+            cliente.tenant_id == tenant_id,
+            (func.lower(cliente.razon_social).contains(termino, autoescape=True))
+            | (cliente.ruc.contains(termino, autoescape=True)),
+        )
     if estado is not None:
         consulta = consulta.where(Expediente.estado == estado)
     if correlativo:
