@@ -464,6 +464,79 @@ def crear_formula_nexus(
     return {"id": str(formula.id), "version": formula.version, "estado": formula.estado}
 
 
+@router.post("/pagos/formulas/{formula_id}/aprobar")
+def aprobar_formula_nexus(
+    formula_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str | int]:
+    """Aprobación explícita, sin ejecutar ni modificar pagos existentes."""
+    from datetime import datetime, timezone
+
+    from app.services.nexus_propuestas import (
+        EstadoFormula,
+        PropuestaFormula,
+        validar_aprobacion,
+    )
+
+    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
+    formula = session.scalar(
+        select(FormulaPagoNexus)
+        .where(
+            FormulaPagoNexus.id == formula_id,
+            FormulaPagoNexus.tenant_id == tenant_id,
+            FormulaPagoNexus.responsable_id == auth.miembro_id,
+        )
+        .with_for_update()
+    )
+    if formula is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Fórmula no encontrada")
+    usuario = _usuario_del_responsable(session, tenant_id, auth.miembro_id, formula.usuario_id)
+    propuesta = PropuestaFormula(
+        plantilla=formula.plantilla,
+        version=formula.version,
+        estado=EstadoFormula(formula.estado),
+        usuario_codigo=usuario.codigo,
+        responsable_codigo=str(auth.miembro_id),
+    )
+    try:
+        validar_aprobacion(
+            aprobador_rol=auth.rol,
+            aprobador_id=str(auth.miembro_id),
+            responsable_id=str(formula.responsable_id),
+            propuesta=propuesta,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    aprobada = session.scalar(
+        select(FormulaPagoNexus.id).where(
+            FormulaPagoNexus.tenant_id == tenant_id,
+            FormulaPagoNexus.responsable_id == auth.miembro_id,
+            FormulaPagoNexus.usuario_id == formula.usuario_id,
+            FormulaPagoNexus.estado == EstadoFormula.APROBADA,
+        )
+    )
+    if aprobada is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ya existe una fórmula aprobada para este usuario")
+    formula.estado = EstadoFormula.APROBADA
+    formula.aprobado_por_cuenta_id = auth.cuenta_id
+    formula.aprobado_at = datetime.now(timezone.utc)
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "NEXUS_FORMULA_APROBADA",
+        "FormulaPagoNexus",
+        formula.id,
+        {"usuario_id": str(formula.usuario_id), "version": formula.version},
+    )
+    session.commit()
+    return {"id": str(formula.id), "version": formula.version, "estado": formula.estado}
+
+
 class SimularFormulaEspecialIn(BaseModel):
     usuario_id: uuid.UUID
     total_emitido: Decimal = Field(ge=0, max_digits=14, decimal_places=2)
