@@ -96,13 +96,15 @@ def aplicar_automaticamente(
     if documento.expediente_id is not None:
         if documento.tipo_documento == TipoDocumento.FACT:
             previo = session.scalar(
-                select(Documento.id).where(
+                select(Documento.id)
+                .where(
                     Documento.tenant_id == documento.tenant_id,
                     Documento.expediente_id == documento.expediente_id,
                     Documento.tipo_documento == TipoDocumento.FACT,
                     Documento.deleted_at.is_(None),
                     Documento.id != documento.id,
-                ).limit(1)
+                )
+                .limit(1)
             )
             if previo is not None:
                 raise ComprobanteYaRegistrado(documento.expediente_id)
