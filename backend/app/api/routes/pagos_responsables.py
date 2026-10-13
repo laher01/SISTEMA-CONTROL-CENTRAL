@@ -788,7 +788,7 @@ async def abonar_responsable(
     )
     saldo = pago.comision_total - abonado
     valor = saldo if accion == "TOTAL" else monto
-    if valor is None or valor <= 0 or valor > saldo:
+    if valor is None or not valor.is_finite() or valor <= 0 or valor > saldo:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Importe fuera del saldo")
     if valor != valor.quantize(CENTIMO):
         raise HTTPException(
