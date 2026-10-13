@@ -58,7 +58,7 @@ export default function Produccion() {
               <td>{fila.usuario_codigo}</td>
               <td>{fila.gestor_codigo}</td>
               <td>{fila.emisor_razon_social} ({fila.emisor_ruc})</td>
-              <td>{fila.receptor_razon_social} ({fila.receptor_ruc})</td>
+              <td>{fila.receptor_razon_social} ({fila.receptor_ruc}) {!fila.cliente_autorizado && <strong style={{ color: "#b91c1c" }}>NO VÁLIDO — CLIENTE NO AUTORIZADO</strong>}</td>
               <td>{fila.moneda}</td>
               <td className="num">{fila.expedientes}</td>
               <td className="num">{formatearMonto(fila.moneda, fila.importe_total)}</td>

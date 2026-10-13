@@ -19,7 +19,11 @@ def test_adelanto_y_pago_total_con_comprobante(
     responsable = Miembro(tenant_id=tenant, codigo="RESP01", nombre="Resp", rol="RESPONSABLE")
     usuario = Miembro(tenant_id=tenant, codigo="USU01", nombre="Usuario", rol="USUARIO")
     cliente = Empresa(
-        tenant_id=tenant, ruc="20538821374", razon_social="CLIENTE TEST", tipo_relacion="CLIENTE"
+        tenant_id=tenant,
+        ruc="20538821374",
+        razon_social="CLIENTE TEST",
+        tipo_relacion="CLIENTE",
+        autorizada=True,
     )
     session.add_all([responsable, usuario, cliente])
     session.flush()

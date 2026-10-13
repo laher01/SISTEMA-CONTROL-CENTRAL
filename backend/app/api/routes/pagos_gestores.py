@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
-from app.models import Expediente, Gestor, PagoGestor
+from app.models import Empresa, Expediente, Gestor, PagoGestor
 from app.services import auditoria
 
 router = APIRouter(prefix="/pagos-gestores", tags=["pagos-gestores"])
@@ -58,6 +58,9 @@ def _calcular(
                 Expediente.usuario_id == usuario_id,
                 Expediente.gestor_id == gestor.id,
                 Expediente.deleted_at.is_(None),
+                Expediente.receptor.has(
+                    Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
+                ),
                 Expediente.moneda == datos.moneda,
                 Expediente.fecha_emision >= datos.desde,
                 Expediente.fecha_emision <= datos.hasta,

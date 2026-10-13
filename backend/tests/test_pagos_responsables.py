@@ -31,6 +31,7 @@ def _preparar(session: Session, auth_prueba: AuthPrueba) -> tuple[str, str]:
         ruc="20538821374",
         razon_social="CLIENTE PRUEBA",
         tipo_relacion="CLIENTE",
+        autorizada=True,
         agente_retencion=False,
     )
     session.add_all([responsable, usuario, cliente])

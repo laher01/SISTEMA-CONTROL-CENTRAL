@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -33,6 +33,7 @@ def resumen(session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep) -
         .where(
             Expediente.tenant_id == tenant_id,
             Expediente.deleted_at.is_(None),
+            Expediente.receptor.has(Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)),
         )
         .where(*_scope(auth))
         .group_by(
@@ -88,9 +89,18 @@ def compras(
             emisor.razon_social,
             receptor.ruc,
             receptor.razon_social,
+            receptor.autorizada,
             Expediente.moneda,
             func.count(Expediente.id),
-            func.coalesce(func.sum(Expediente.importe_total), 0),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (receptor.autorizada.is_(True), Expediente.importe_total),
+                        else_=0,
+                    )
+                ),
+                0,
+            ),
         )
         .outerjoin(Miembro, Expediente.usuario_id == Miembro.id)
         .outerjoin(Gestor, Expediente.gestor_id == Gestor.id)
@@ -108,6 +118,7 @@ def compras(
             emisor.razon_social,
             receptor.ruc,
             receptor.razon_social,
+            receptor.autorizada,
             Expediente.moneda,
         )
         .order_by(Miembro.codigo, Gestor.codigo, emisor.razon_social, receptor.razon_social)
@@ -120,6 +131,7 @@ def compras(
             emisor_razon_social=emisor_nombre,
             receptor_ruc=receptor_ruc,
             receptor_razon_social=receptor_nombre,
+            cliente_autorizado=cliente_autorizado,
             moneda=moneda,
             expedientes=expedientes,
             importe_total=Decimal(importe_total),
@@ -131,6 +143,7 @@ def compras(
             emisor_nombre,
             receptor_ruc,
             receptor_nombre,
+            cliente_autorizado,
             moneda,
             expedientes,
             importe_total,

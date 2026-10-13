@@ -36,6 +36,7 @@ def test_pagos_consolidados_historicos_y_privacidad(
         ruc="20998887711",
         razon_social="CLIENTE HISTORICO",
         tipo_relacion="CLIENTE",
+        autorizada=True,
     )
     session.add_all([gerente_global, gerente_dos, responsable, usuario, cliente])
     session.flush()

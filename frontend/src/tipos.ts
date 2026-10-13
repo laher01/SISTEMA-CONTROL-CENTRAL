@@ -204,6 +204,7 @@ export interface ProduccionResumen {
 
 
 export interface ComprasProveedorFila {
+  cliente_autorizado: boolean;
   usuario_codigo: string;
   gestor_codigo: string;
   emisor_ruc: string;

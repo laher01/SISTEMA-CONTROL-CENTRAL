@@ -311,6 +311,8 @@ def eliminar_seleccion(
     session: SessionDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
+    settings: SettingsDep,
+    hoy: HoyDep,
     datos: EmpresasEliminarIn,
 ) -> EmpresasEliminarOut:
     if auth.rol != RolMiembro.ADMINISTRADOR:
@@ -330,6 +332,7 @@ def eliminar_seleccion(
     )
     momento = ahora()
     for empresa in empresas:
+        empresa.autorizada = False
         empresa.deleted_at = momento
         auditoria.registrar(
             session,
@@ -343,5 +346,7 @@ def eliminar_seleccion(
                 "actor": auth.codigo,
             },
         )
+    for empresa in empresas:
+        recalcular_expedientes(session, tenant_id, hoy, settings, receptor_id=empresa.id)
     session.commit()
     return EmpresasEliminarOut(eliminadas=len(empresas))

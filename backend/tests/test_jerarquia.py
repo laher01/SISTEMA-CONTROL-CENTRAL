@@ -56,6 +56,27 @@ def test_gestor_pertenece_a_usuario_y_propaga_propiedad(
 
     produccion = client.get("/api/v1/produccion/resumen")
     assert produccion.status_code == 200, produccion.text
+    # La carga de documentos no autoriza al cliente ni genera producción reconocida.
+    assert produccion.json()["filas"] == []
+
+    auth_prueba.como_admin()
+    empresas = client.get("/api/v1/empresas", params={"ruc": RECEPTOR})
+    assert empresas.status_code == 200, empresas.text
+    receptor = empresas.json()
+    assert len(receptor) == 1
+    aprobacion = client.patch(
+        f"/api/v1/empresas/{receptor[0]['id']}",
+        json={"autorizada": True, "tipo_relacion": "CLIENTE"},
+    )
+    assert aprobacion.status_code == 200, aprobacion.text
+
+    auth_prueba.como_gestor(
+        uuid.UUID(str(gestor["id"])),
+        uuid.UUID(str(usuario["id"])),
+        str(gestor["codigo"]),
+    )
+    produccion = client.get("/api/v1/produccion/resumen")
+    assert produccion.status_code == 200, produccion.text
     filas = produccion.json()["filas"]
     assert len(filas) == 1
     assert filas[0]["usuario_codigo"] == "WILL01"
