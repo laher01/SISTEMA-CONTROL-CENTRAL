@@ -217,6 +217,14 @@ class AlertaOut(Orm):
     resuelta: bool
     created_at: datetime
     resuelta_at: datetime | None
+    cliente_nombre: str | None = None
+    tipo_empresa: str | None = None
+    fecha_emision: date | None = None
+    moneda: Moneda | None = None
+    importe_total: Decimal | None = None
+    responsable_nombre: str | None = None
+    usuario_nombre: str | None = None
+    gestor_nombre: str | None = None
 
 
 class ExpedienteIn(BaseModel):

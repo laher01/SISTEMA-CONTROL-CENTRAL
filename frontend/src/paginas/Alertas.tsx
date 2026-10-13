@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { conParametros, enviarJson, useDatos } from "../api";
 import { Estado, Paginacion } from "../componentes";
-import { ETIQUETA_ALERTA, formatearFecha } from "../formato";
+import { ETIQUETA_ALERTA, formatearFecha, formatearMonto } from "../formato";
 import {
   TIPOS_ALERTA,
   type Alerta,
@@ -44,6 +44,7 @@ export default function Alertas({ sesion }: { sesion: SesionActual }) {
   };
 
   const puedeEnviar = sesion.rol === "SECRETARIA" || sesion.rol === "ADMINISTRADOR";
+  const mostrarRuta = ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE"].includes(sesion.rol);
 
   return (
     <>
@@ -125,6 +126,13 @@ export default function Alertas({ sesion }: { sesion: SesionActual }) {
             <tr>
               <th>Tipo</th>
               <th>Detalle</th>
+              <th>Cliente</th>
+              <th>Tipo A/B</th>
+              <th>Emisión</th>
+              <th>Monto</th>
+              {mostrarRuta && <th>Responsable</th>}
+              {mostrarRuta && <th>Usuario</th>}
+              {mostrarRuta && <th>Gestor</th>}
               <th>Desde</th>
               <th />
             </tr>
@@ -134,6 +142,13 @@ export default function Alertas({ sesion }: { sesion: SesionActual }) {
               <tr key={a.id}>
                 <td>{ETIQUETA_ALERTA[a.tipo]}</td>
                 <td>{a.mensaje}</td>
+                <td>{a.cliente_nombre ?? "Sin identificar"}</td>
+                <td>{a.tipo_empresa ?? "Sin clasificar"}</td>
+                <td>{a.fecha_emision ? formatearFecha(a.fecha_emision) : "—"}</td>
+                <td>{a.moneda && a.importe_total != null ? formatearMonto(a.moneda, a.importe_total) : "—"}</td>
+                {mostrarRuta && <td>{a.responsable_nombre ?? "Sin asignar"}</td>}
+                {mostrarRuta && <td>{a.usuario_nombre ?? "Sin asignar"}</td>}
+                {mostrarRuta && <td>{a.gestor_nombre ?? "Sin asignar"}</td>}
                 <td>{formatearFecha(a.created_at)}</td>
                 <td><Link to={"/expedientes/" + a.expediente_id}>Ver expediente</Link></td>
               </tr>

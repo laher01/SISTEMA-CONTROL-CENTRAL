@@ -54,6 +54,19 @@ export default function ExpedienteDetalle() {
             </dd>
           </dl>
 
+          {(datos.responsable_nombre || datos.usuario_nombre || datos.gestor_nombre) && (
+            <section aria-label="Ruta de responsabilidad">
+              <h3>Ruta de responsabilidad</h3>
+              <dl className="ficha">
+                <dt>Responsable</dt><dd>{datos.responsable_nombre ?? "Sin asignar"}</dd>
+                <dt>Usuario</dt><dd>{datos.usuario_nombre ?? "Sin asignar"}</dd>
+                <dt>Gestor</dt><dd>{datos.gestor_nombre ?? "Sin asignar"}</dd>
+                <dt>Cliente</dt><dd>{datos.receptor.razon_social}</dd>
+                <dt>Tipo proveedor</dt><dd>{datos.emisor.clasificacion_proveedor ?? "Sin clasificar"}</dd>
+              </dl>
+            </section>
+          )}
+
           <h3>Alertas</h3>
           {datos.alertas.filter((a) => !a.resuelta).length === 0 ? (
             <p className="tenue">Sin alertas abiertas.</p>
