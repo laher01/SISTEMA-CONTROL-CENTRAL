@@ -40,6 +40,7 @@ def test_produccion_aislada_por_gerente(
         ruc="20990000001",
         razon_social="CLIENTE COMPARTIDO",
         tipo_relacion="CLIENTE",
+        autorizada=True,
     )
     session.add_all([gerente_a, gerente_b, responsable, usuario, cliente])
     session.flush()
@@ -138,6 +139,7 @@ def test_atribucion_automatica_requiere_unico_pedido(
         ruc="20995550001",
         razon_social="CLIENTE COMPARTIDO",
         tipo_relacion="CLIENTE",
+        autorizada=True,
     )
     session.add_all([g1, g2, responsable, usuario, cliente])
     session.flush()
