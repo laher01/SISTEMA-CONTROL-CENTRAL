@@ -304,6 +304,21 @@ class Documento(ConId, ConTenant, ConCreacion, Base):
         return self.expediente.receptor if self.expediente is not None else None
 
 
+class RelacionDocumento(ConId, ConTenant, ConCreacion, Base):
+    """N:M entre documentos del mismo tenant, con evidencia de la asociación."""
+
+    __tablename__ = "relaciones_documentos"
+    __table_args__ = (UniqueConstraint("tenant_id", "origen_id", "destino_id", "tipo"),)
+
+    origen_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documentos.id"), index=True)
+    destino_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documentos.id"), index=True)
+    tipo: Mapped[str] = mapped_column(String(40))
+    evidencia: Mapped[str] = mapped_column(String(500))
+    confirmado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_acceso.id")
+    )
+
+
 class ReferenciaGRE(ConId, ConTenant, ConCreacion, Base):
     """Expediente provisional identificado por GRE, pendiente de factura.
 
