@@ -54,6 +54,10 @@ export default function Secretaria({ sesion }: { sesion: SesionActual }) {
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [dia, setDia] = useState("");
+  const [mes, setMes] = useState("");
+  const ultimoDiaMes = mes ? new Date(Date.UTC(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0)).getUTCDate() : 0;
+  const inicioMes = mes ? `${mes}-01` : "";
+  const finMes = mes ? `${mes}-${String(ultimoDiaMes).padStart(2, "0")}` : "";
   const [emisor, setEmisor] = useState("");
   const [receptor, setReceptor] = useState("");
   const [estado, setEstado] = useState("");
@@ -66,8 +70,8 @@ export default function Secretaria({ sesion }: { sesion: SesionActual }) {
     responsable_id: responsableId,
     usuario_id: usuarioId,
     gestor_id: gestorId,
-    desde: dia || desde || "1900-01-01",
-    hasta: dia || hasta || "9999-12-31",
+    desde: inicioMes || dia || desde || "1900-01-01",
+    hasta: finMes || dia || hasta || "9999-12-31",
     emisor_ruc: emisor.length === 11 ? emisor : undefined,
     receptor_ruc: receptor.length === 11 ? receptor : undefined,
     estado,
@@ -128,9 +132,10 @@ export default function Secretaria({ sesion }: { sesion: SesionActual }) {
       </p>
       <div className="filtros">
         <FiltroJerarquia sesion={sesion} responsableId={responsableId} usuarioId={usuarioId} gestorId={gestorId} cambiar={cambiarJerarquia} />
-        <label>Día <input type="date" value={dia} onChange={(e) => cambiarFiltro(() => setDia(e.target.value))} /></label>
-        <label>Desde <input type="date" value={desde} onChange={(e) => cambiarFiltro(() => setDesde(e.target.value))} /></label>
-        <label>Hasta <input type="date" value={hasta} onChange={(e) => cambiarFiltro(() => setHasta(e.target.value))} /></label>
+        <label>Día <input type="date" value={dia} onChange={(e) => cambiarFiltro(() => { setDia(e.target.value); if (e.target.value) { setMes(""); setDesde(""); setHasta(""); } })} /></label>
+        <label>Desde <input type="date" value={desde} onChange={(e) => cambiarFiltro(() => { setDesde(e.target.value); if (e.target.value) { setMes(""); setDia(""); } })} /></label>
+        <label>Hasta <input type="date" value={hasta} onChange={(e) => cambiarFiltro(() => { setHasta(e.target.value); if (e.target.value) { setMes(""); setDia(""); } })} /></label>
+        <label>Mes de emisión <input type="month" aria-label="Mes de emisión" value={mes} onChange={(e) => cambiarFiltro(() => { setMes(e.target.value); if (e.target.value) { setDia(""); setDesde(""); setHasta(""); } })} /></label>
         <input aria-label="RUC proveedor emisor" placeholder="RUC proveedor (11 dígitos)" maxLength={11} value={emisor} onChange={(e) => cambiarFiltro(() => setEmisor(e.target.value.replace(/\D/g, "")))} />
         <input aria-label="RUC cliente receptor" placeholder="RUC receptor (11 dígitos)" maxLength={11} value={receptor} onChange={(e) => cambiarFiltro(() => setReceptor(e.target.value.replace(/\D/g, "")))} />
         <select aria-label="Estado expediente" value={estado} onChange={(e) => cambiarFiltro(() => setEstado(e.target.value))}>
