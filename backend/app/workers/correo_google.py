@@ -3,8 +3,6 @@
 import logging
 import time
 
-logger = logging.getLogger(__name__)
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -19,6 +17,8 @@ from app.services.google_oauth_correo import (
     renovar_google_token,
 )
 from app.services.recepcion_correo_imap import MAX_MENSAJE_BYTES, procesar_mensaje
+
+logger = logging.getLogger(__name__)
 
 
 def revisar_ciclo_google(
@@ -97,7 +97,7 @@ def revisar_ciclo_google(
             session.rollback()
             buzon.ultimo_error = "ERROR_PROCESAMIENTO"
             session.commit()
-            logger.exception("Gmail: fallo inesperado durante procesamiento")
+            logger.error("Gmail: fallo inesperado durante procesamiento; revisar último_error")
     logger.info("Gmail: fin de ciclo; mensajes nuevos=%s", total)
     return total
 
