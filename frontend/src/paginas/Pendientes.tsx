@@ -27,6 +27,13 @@ type ResultadoLote = {
   fallidos: number;
 };
 type SeleccionSugerida = { expediente: Expediente; tipo?: TipoDocumento };
+type ProvisionalGRE = {
+  documento_id: string;
+  factura: string;
+  emisor_ruc: string;
+  receptor_ruc: string;
+  cliente_autorizado: boolean;
+};
 type CampoExtraido = {
   nombre: string;
   valor: string;
@@ -59,6 +66,28 @@ export default function Pendientes() {
       offset: String(pagina * POR_PAGINA),
     }),
   );
+  const { datos: provisionales, recargar: recargarProvisionales } = useDatos<ProvisionalGRE[]>(
+    "/api/v1/documentos/provisionales-gre?limit=2000",
+  );
+  const [reindexando, setReindexando] = useState(false);
+  const [resultadoReindice, setResultadoReindice] = useState("");
+  const reindexarGuias = async () => {
+    setReindexando(true);
+    try {
+      const resultado = await enviarJson<{
+        considerados: number; provisionales_creados: number; guias_relacionadas: number
+      }>("/api/v1/documentos/reindexar-gre-pendientes?limit=2000", "POST");
+      setResultadoReindice(
+        `${resultado.considerados} GRE revisadas sin OCR · ${resultado.provisionales_creados} expedientes provisionales · ${resultado.guias_relacionadas} relacionadas`
+      );
+      recargar();
+      recargarProvisionales();
+    } catch (e) {
+      setResultadoReindice(e instanceof Error ? e.message : String(e));
+    } finally {
+      setReindexando(false);
+    }
+  };
   const [procesandoLote, setProcesandoLote] = useState(false);
   const [resultadoLote, setResultadoLote] = useState<ResultadoLote>();
   const [errorLote, setErrorLote] = useState("");
@@ -73,6 +102,7 @@ export default function Pendientes() {
       );
       setResultadoLote(resultado);
       recargar();
+      recargarProvisionales();
     } catch (e) {
       setErrorLote(e instanceof Error ? e.message : String(e));
     } finally {
@@ -86,6 +116,32 @@ export default function Pendientes() {
   return (
     <>
       <h2>Documentos pendientes</h2>
+      {provisionales && provisionales.length > 0 && (
+        <section>
+          <h3>Expedientes provisionales — esperando factura ({provisionales.length})</h3>
+          <p className="tenue">Ya identificados por la GRE remitente. Sin monto ni producción hasta recibir la factura y validar al cliente.</p>
+          <table>
+            <thead>
+              <tr><th>Factura referenciada</th><th>RUC emisor</th><th>RUC receptor</th><th>Validación del cliente</th><th>Guía</th></tr>
+            </thead>
+            <tbody>
+              {provisionales.map((p) => (
+                <tr key={p.documento_id}>
+                  <td>{p.factura}</td>
+                  <td>{p.emisor_ruc}</td>
+                  <td>{p.receptor_ruc}</td>
+                  <td>
+                    {p.cliente_autorizado
+                      ? <span>Autorizado · pendiente de factura</span>
+                      : <strong style={{ color: "#b91c1c" }}>NO VÁLIDO — CLIENTE NO AUTORIZADO</strong>}
+                  </td>
+                  <td><a href={urlArchivo(p.documento_id)} target="_blank" rel="noreferrer">Ver GRE</a></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
       <p className="tenue">
         Aquí aparecen únicamente los archivos que necesitan revisión porque faltan datos o la
         confianza automática no fue suficiente.
@@ -98,10 +154,14 @@ export default function Pendientes() {
             </option>
           ))}
         </select>
+        <button onClick={reindexarGuias} disabled={reindexando}>
+          {reindexando ? "Conciliando…" : "Conciliar hasta 2.000 GRE anteriores (sin OCR)"}
+        </button>
         <button onClick={procesarAutomaticamente} disabled={procesandoLote}>
           {procesandoLote ? "Procesando en orden…" : "Procesar pendientes automáticamente"}
         </button>
       </div>
+      {resultadoReindice && <p className="resumen-carga">{resultadoReindice}</p>}
       {resultadoLote && (
         <p className="resumen-carga">
           {resultadoLote.considerados} revisados · {resultadoLote.relacionados} relacionados ·{" "}

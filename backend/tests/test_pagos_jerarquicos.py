@@ -41,6 +41,7 @@ def test_pagos_por_jerarquia(client: TestClient, auth_prueba: AuthPrueba, sessio
         tenant_id=tid,
         ruc="20900000002",
         razon_social="Cliente",
+        autorizada=True,
     )
     session.add_all([responsable, usuario, ajeno, proveedor, receptor])
     session.flush()

@@ -14,7 +14,7 @@ from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, Setti
 from app.api.errores import no_encontrado
 from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, RolMiembro, TipoDocumento
-from app.models import Documento, Empresa, Expediente, Gestor, Miembro, ahora
+from app.models import Documento, Empresa, Expediente, Gestor, Miembro, ReferenciaGRE, ahora
 from app.schemas import (
     DocumentoOut,
     DocumentoVincular,
@@ -804,6 +804,103 @@ def _aplicar_ambito_documentos(consulta: Any, auth: OperativeAuthDep) -> Any:
     return consulta
 
 
+@router.post("/reindexar-gre-pendientes")
+def reindexar_gre_pendientes(
+    session: SessionDep,
+    settings: SettingsDep,
+    hoy: HoyDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    limit: Annotated[int, Query(ge=1, le=2000)] = 2000,
+) -> dict[str, int]:
+    """Reconcilia GRE históricas con la extracción guardada, sin llamar OCR."""
+    consulta = (
+        select(Documento)
+        .where(
+            Documento.tenant_id == tenant_id,
+            Documento.deleted_at.is_(None),
+            Documento.expediente_id.is_(None),
+            Documento.tipo_documento == TipoDocumento.GRR,
+        )
+        .order_by(Documento.created_at.desc())
+        .limit(limit)
+    )
+    consulta = _aplicar_ambito_documentos(consulta, auth)
+    candidatos = list(session.scalars(consulta))
+    indexados = relacionados = 0
+    for documento in candidatos:
+        existente = session.scalar(
+            select(ReferenciaGRE.id).where(
+                ReferenciaGRE.tenant_id == tenant_id,
+                ReferenciaGRE.documento_id == documento.id,
+            )
+        )
+        if existente is not None:
+            continue
+        datos = documento.datos_extraidos or {}
+        procesamiento = datos.get("procesamiento_documental")
+        if not isinstance(procesamiento, dict):
+            continue
+        resultado = aplicar_automaticamente(session, settings, hoy, documento, procesamiento)
+        if resultado.relacionado:
+            relacionados += 1
+        else:
+            ref = session.scalar(
+                select(ReferenciaGRE.id).where(
+                    ReferenciaGRE.tenant_id == tenant_id,
+                    ReferenciaGRE.documento_id == documento.id,
+                )
+            )
+            if ref is not None:
+                indexados += 1
+        session.commit()
+    return {
+        "considerados": len(candidatos),
+        "provisionales_creados": indexados,
+        "guias_relacionadas": relacionados,
+    }
+
+
+@router.get("/provisionales-gre")
+def provisionales_gre(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    limit: Annotated[int, Query(ge=1, le=2000)] = 100,
+) -> list[dict[str, str | bool]]:
+    """Expedientes provisionales identificados por una guía, sin factura ni importe."""
+    consulta = (
+        select(ReferenciaGRE, Empresa)
+        .join(Documento, Documento.id == ReferenciaGRE.documento_id)
+        .outerjoin(
+            Empresa,
+            (Empresa.tenant_id == ReferenciaGRE.tenant_id)
+            & (Empresa.ruc == ReferenciaGRE.receptor_ruc),
+        )
+        .where(
+            ReferenciaGRE.tenant_id == tenant_id,
+            ReferenciaGRE.expediente_id.is_(None),
+            Documento.deleted_at.is_(None),
+            Documento.expediente_id.is_(None),
+        )
+        .order_by(ReferenciaGRE.created_at.desc())
+        .limit(limit)
+    )
+    consulta = _aplicar_ambito_documentos(consulta, auth)
+    return [
+        {
+            "documento_id": str(ref.documento_id),
+            "factura": f"{ref.serie}-{ref.correlativo}",
+            "emisor_ruc": ref.emisor_ruc,
+            "receptor_ruc": ref.receptor_ruc,
+            "cliente_autorizado": bool(
+                empresa and empresa.autorizada and empresa.deleted_at is None
+            ),
+        }
+        for ref, empresa in session.execute(consulta)
+    ]
+
+
 @router.get("/{documento_id}", response_model=DocumentoOut)
 def obtener_documento(
     session: SessionDep,
@@ -1026,6 +1123,7 @@ def _automatizacion_ya_evaluada(documento: Documento) -> bool:
     automatizacion = datos.get("automatizacion_documental")
     return isinstance(automatizacion, dict) and automatizacion.get("estado") in {
         "REVISION_REQUERIDA",
+        "PENDIENTE_FACTURA",
         "FALLIDO",
     }
 

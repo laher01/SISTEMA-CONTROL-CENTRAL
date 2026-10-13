@@ -127,6 +127,7 @@ def _calculo(
             usuario.responsable_id.is_not(None),
             Empresa.tenant_id == tenant_id,
             Empresa.deleted_at.is_(None),
+            Empresa.autorizada.is_(True),
         )
     )
     if responsable_id is not None:
@@ -259,6 +260,9 @@ def resumen(
             .where(
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
+                Expediente.receptor.has(
+                    Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
+                ),
                 Expediente.gerente_id.is_(None),
                 Expediente.fecha_emision.between(desde, hasta),
                 Expediente.moneda == moneda,
@@ -302,6 +306,9 @@ def resumen(
                 .where(
                     Expediente.tenant_id == tenant_id,
                     Expediente.deleted_at.is_(None),
+                    Expediente.receptor.has(
+                        Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
+                    ),
                     Expediente.gerente_id.is_(None),
                     Expediente.fecha_emision.between(desde, hasta),
                     Expediente.moneda == moneda,
@@ -398,6 +405,9 @@ def incorporar_historicos(
             .where(
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
+                Expediente.receptor.has(
+                    Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
+                ),
                 Expediente.gerente_id.is_(None),
                 Expediente.fecha_emision.between(datos.desde, datos.hasta),
                 Expediente.moneda == datos.moneda,

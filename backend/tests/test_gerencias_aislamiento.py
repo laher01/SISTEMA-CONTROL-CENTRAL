@@ -39,6 +39,7 @@ def test_produccion_aislada_por_gerente(
         tenant_id=tenant_id,
         ruc="20990000001",
         razon_social="CLIENTE COMPARTIDO",
+        autorizada=True,
         tipo_relacion="CLIENTE",
     )
     session.add_all([gerente_a, gerente_b, responsable, usuario, cliente])

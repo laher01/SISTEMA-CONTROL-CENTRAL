@@ -5,7 +5,6 @@ los campos de identidad fiscal superan los umbrales configurados. Los casos
 ambiguos permanecen en la bandeja de revisión con motivos explícitos.
 """
 
-import re
 import uuid
 from dataclasses import dataclass
 from datetime import date
@@ -16,11 +15,16 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, TipoComprobante, TipoDocumento
-from app.models import Documento, Expediente
+from app.models import Documento, Empresa, Expediente
 from app.services import auditoria
 from app.services.expedientes import buscar_expediente, obtener_o_crear_empresa
 from app.services.extraccion_campos import razon_social_confiable
-from app.services.ingesta import crear_expediente, vincular_documento
+from app.services.ingesta import (
+    crear_expediente,
+    registrar_referencia_gre,
+    vincular_documento,
+)
+from app.services.referencias_gre import extraer_referencias_factura_gre
 
 CAMPOS_FISCALES = (
     "serie",
@@ -116,12 +120,26 @@ def aplicar_automaticamente(
         )
         if vinculado is not None:
             return vinculado
+        # Solo GRE remitente: si primero llegó la guía, indexar la identidad de
+        # la factura y esperar su llegada. No inventar fecha, moneda ni importe.
+        if tipo == TipoDocumento.GRR:
+            texto = procesamiento.get("texto")
+            referencias = extraer_referencias_factura_gre(texto if isinstance(texto, str) else "")
+            if (
+                len(referencias) == 1
+                and referencias[0].emisor_ruc is not None
+                and referencias[0].receptor_ruc is not None
+            ):
+                referencia = registrar_referencia_gre(session, documento, referencias[0])
+                motivo = (
+                    f"Expediente provisional {referencia.serie}-{referencia.correlativo}: "
+                    "pendiente de recibir factura"
+                )
+                _guardar_estado(documento, "PENDIENTE_FACTURA", (motivo,))
+                return ResultadoAutomatizacion("PENDIENTE_FACTURA", motivos=(motivo,))
         return _revision(
             documento,
-            [
-                "No se encontró una factura única mediante documento relacionado; "
-                "verifique la referencia y vincule manualmente"
-            ],
+            ["Referencia fiscal insuficiente o ambigua; requiere validación de la GRE"],
         )
 
     if tipo not in (TipoDocumento.FACT, TipoDocumento.RHE):
@@ -275,35 +293,30 @@ def _vincular_guia_por_factura_referenciada(
     texto = procesamiento.get("texto")
     if not isinstance(texto, str):
         return None
-    # Una serie propia de GRE no constituye referencia a la factura.
-    # Se exige una etiqueta explícita de documento vinculado/referenciado.
-    patron = re.compile(
-        r"(?:DOCUMENTO(?:S)?\s+(?:RELACIONADO(?:S)?|REFERENCIADO(?:S)?)|"
-        r"FACTURA\s+(?:RELACIONADA|REFERENCIADA))"
-        r"\s*[:#-]?\s*(?:FACTURA(?:\s+ELECTRONICA)?\s*[:#-]?\s*)?"
-        r"([FE][0-9]{3})\s*[-–—]\s*0*([0-9]{1,8})\b",
-        re.IGNORECASE,
-    )
-    referencias = {
-        (m.group(1).upper(), str(int(m.group(2))))
-        for m in patron.finditer(texto)
-        if m.group(1).upper().startswith("F")
-    }
+    # La propia serie de la GRE no identifica ninguna factura.
+    # Solo vincular si hay UNA referencia explícita y coincide el RUC del emisor
+    # de esa factura. El RUC de la GRE puede ser diferente.
+    referencias = extraer_referencias_factura_gre(texto)
     if len(referencias) != 1:
         return None
-    serie, numero = next(iter(referencias))
+    referencia = referencias[0]
+    if referencia.emisor_ruc is None or referencia.receptor_ruc is None:
+        return None
     consulta = select(Expediente).where(
         Expediente.tenant_id == documento.tenant_id,
         Expediente.deleted_at.is_(None),
         Expediente.tipo_comprobante == TipoComprobante.FACT,
-        Expediente.serie == serie,
-        Expediente.correlativo == numero,
+        Expediente.serie == referencia.serie,
+        Expediente.correlativo == referencia.correlativo,
+        Expediente.emisor.has(Empresa.ruc == referencia.emisor_ruc),
+        Expediente.receptor.has(Empresa.ruc == referencia.receptor_ruc),
     )
     if documento.usuario_id is not None:
         consulta = consulta.where(Expediente.usuario_id == documento.usuario_id)
     candidatos = list(session.scalars(consulta.limit(2)))
     if len(candidatos) != 1:
         return None
+    serie, numero = referencia.serie, referencia.correlativo
     expediente = candidatos[0]
     vincular_documento(session, settings, hoy, documento, expediente.id, tipo)
     auditoria.registrar(
