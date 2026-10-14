@@ -1086,6 +1086,9 @@ def provisionales_gre(
         {
             "documento_id": str(ref.documento_id),
             "factura": f"{ref.serie}-{ref.correlativo}",
+            "estado": "PENDIENTE_FACTURA",
+            "moneda": "PEN",
+            "monto_contabilizable": "0.00",
             "emisor_ruc": ref.emisor_ruc,
             "receptor_ruc": ref.receptor_ruc,
             "cliente_autorizado": bool(
