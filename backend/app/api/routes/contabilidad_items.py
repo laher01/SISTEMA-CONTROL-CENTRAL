@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, select
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.api.deps import OperativeAuthDep, SessionDep
 from app.item_models import AuditoriaFacturaItem, LineaComprobanteItem, ProductoItem
@@ -15,7 +16,7 @@ from app.services.ambito_gerencia import alcance_expedientes_gerente
 router = APIRouter(prefix="/contabilidad-items", tags=["contabilidad-items"])
 
 
-def _alcance(auth: OperativeAuthDep):
+def _alcance(auth: OperativeAuthDep) -> ColumnElement[bool] | bool:
     if auth.rol in ("ADMINISTRADOR", "SECRETARIA"):
         return True
     if auth.rol == "GERENTE":
