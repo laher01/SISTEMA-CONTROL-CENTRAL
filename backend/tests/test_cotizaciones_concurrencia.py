@@ -61,8 +61,9 @@ def test_api_importacion_semantica_simultanea_postgresql(engine, client) -> None
     if engine.dialect.name != "postgresql":
         pytest.skip("La concurrencia HTTP exige PostgreSQL real")
 
-    from app.models import RelacionDocumento
     from test_separador_pdf import _paquete
+
+    from app.models import RelacionDocumento
 
     archivos = [
         _paquete(
