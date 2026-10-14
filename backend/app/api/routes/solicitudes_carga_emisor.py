@@ -31,10 +31,7 @@ class SolicitudOut(BaseModel):
 def _puede_revisar(auth: ContextoAcceso, solicitud: SolicitudCargaEmisor) -> bool:
     return bool(
         auth.rol == "ADMINISTRADOR"
-        or (
-            auth.rol == "RESPONSABLE"
-            and auth.miembro_id == solicitud.responsable_propietario_id
-        )
+        or (auth.rol == "RESPONSABLE" and auth.miembro_id == solicitud.responsable_propietario_id)
     )
 
 
