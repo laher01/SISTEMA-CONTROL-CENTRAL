@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from app.api.deps import AlmacenDep, OperativeAuthDep, SessionDep, TenantDep
 from app.models import SolicitudCargaEmisor
+from app.security import ContextoAcceso
 from app.services import auditoria
 
 router = APIRouter(prefix="/solicitudes-carga-emisor", tags=["solicitudes-carga-emisor"])
@@ -27,9 +28,13 @@ class SolicitudOut(BaseModel):
     responsable_propietario_id: uuid.UUID | None
 
 
-def _puede_revisar(auth, solicitud: SolicitudCargaEmisor) -> bool:
-    return auth.rol == "ADMINISTRADOR" or (
-        auth.rol == "RESPONSABLE" and auth.miembro_id == solicitud.responsable_propietario_id
+def _puede_revisar(auth: ContextoAcceso, solicitud: SolicitudCargaEmisor) -> bool:
+    return bool(
+        auth.rol == "ADMINISTRADOR"
+        or (
+            auth.rol == "RESPONSABLE"
+            and auth.miembro_id == solicitud.responsable_propietario_id
+        )
     )
 
 
@@ -39,7 +44,7 @@ def listar(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
     estado: Literal["PENDIENTE", "APROBADA", "RECHAZADA"] = "PENDIENTE",
-):
+) -> list[SolicitudCargaEmisor]:
     consulta = select(SolicitudCargaEmisor).where(
         SolicitudCargaEmisor.tenant_id == tenant_id,
         SolicitudCargaEmisor.estado == estado,
@@ -61,7 +66,7 @@ def rechazar(
     auth: OperativeAuthDep,
     solicitud_id: uuid.UUID,
     datos: Decision,
-):
+) -> SolicitudCargaEmisor:
     solicitud = session.scalar(
         select(SolicitudCargaEmisor)
         .where(
