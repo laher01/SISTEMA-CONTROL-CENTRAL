@@ -8,7 +8,9 @@ from app.services.contabilidad_items_rules import (
     DecisionAuditoria,
     EstadoAuditoria,
     LineaFactura,
+    ProductoReconocido,
     acumulados_validos,
+    posible_mismo_producto,
     sugerir_categoria,
     validar_decision,
 )
@@ -43,6 +45,15 @@ class ContabilidadItemsTests(unittest.TestCase):
         self.assertEqual(acumulados_validos(items, pendiente, "t"), {})
         self.assertEqual(acumulados_validos(items, confirmada, "t"), {})
         self.assertEqual(len(acumulados_validos(items, vigente, "t")), 2)
+
+    def test_productos_ambiguos_no_se_fusionan(self):
+        incompleto = ProductoReconocido("Gloria", "leche", None, "400 g")
+        clasica = ProductoReconocido("Gloria", "leche", "clasica", "400 g")
+        roja = ProductoReconocido("Gloria", "leche", "roja", "400 g")
+        clasica_duplicada = ProductoReconocido("GLORIA", "LECHE", "CLÁSICA", "400 G")
+        self.assertFalse(posible_mismo_producto(incompleto, clasica))
+        self.assertFalse(posible_mismo_producto(roja, clasica))
+        self.assertTrue(posible_mismo_producto(clasica, clasica_duplicada))
 
     def test_secretaria_no_concilia(self):
         decision = DecisionAuditoria(
