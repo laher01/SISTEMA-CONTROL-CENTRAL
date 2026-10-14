@@ -21,6 +21,7 @@ from app.models import (
     ahora,
 )
 from app.services import auditoria
+from app.services.contabilidad_items_ubl import registrar_items_ubl
 from app.services.expedientes import (
     actualizar_expediente,
     buscar_expediente,
@@ -28,7 +29,6 @@ from app.services.expedientes import (
     requiere_bancarizacion,
 )
 from app.services.referencias_gre import ReferenciaFacturaGRE
-from app.services.contabilidad_items_ubl import registrar_items_ubl
 from app.services.ubl import ComprobanteUbl, parece_xml, parse_ubl
 from app.storage import AlmacenLocal
 
