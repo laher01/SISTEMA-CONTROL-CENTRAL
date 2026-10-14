@@ -172,8 +172,10 @@ def exportar_csv(
         hasta=hasta,
         emisor_id=emisor_id,
         receptor_id=receptor_id,
-        limite=500,
+        limite=501,
     )
+    if len(filas) > 500:
+        raise HTTPException(413, "La exportación supera 500 grupos; reduzca el período")
     archivo = io.StringIO()
     escritor = csv.writer(archivo)
     escritor.writerow(["categoria", "producto", "unidad", "moneda", "cantidad", "importe"])
