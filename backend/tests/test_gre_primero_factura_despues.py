@@ -40,6 +40,8 @@ def test_guia_pdf_primero_factura_xml_despues_sin_ocr_repetido(
     assert listado.status_code == 200, listado.text
     assert len(listado.json()) == 1
     assert listado.json()[0]["factura"] == "F001-175"
+    assert listado.json()[0]["estado"] == "PENDIENTE_FACTURA"
+    assert listado.json()[0]["monto_contabilizable"] == "0.00"
     assert listado.json()[0]["cliente_autorizado"] is False
 
     factura_doc = subir(client, "factura-despues.xml", factura(numero="F001-00000175"))
