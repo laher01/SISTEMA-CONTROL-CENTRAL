@@ -253,7 +253,11 @@ async def importar_paquete_pdf(
                     session, tenant_id, "COTIZACION_SEPARADA", "documento", documento.id,
                     {"documento_padre_id": str(paquete_original.id)},
                 )
-            if (segmento.tipo != "COT" and settings.procesamiento_automatico and _es_procesable(documento)):
+            if (
+                segmento.tipo != "COT"
+                and settings.procesamiento_automatico
+                and _es_procesable(documento)
+            ):
                 try:
                     _procesar_y_aplicar(session, settings, almacen, hoy, documento)
                 except DocumentoNoProcesable as exc:
