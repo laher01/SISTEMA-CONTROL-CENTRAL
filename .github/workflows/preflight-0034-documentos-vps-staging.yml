@@ -1,0 +1,103 @@
+name: preflight-0034-documentos-vps-staging
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factcentral-staging-audit
+  cancel-in-progress: false
+jobs:
+  preflight:
+    if: github.ref_name == 'feature/separacion-cotizaciones-documentales-20261013'
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar destino y secretos
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          test "$VPS_HOST" = "132.145.233.172"
+          test "$VPS_USER" = "ubuntu"
+          for name in VPS_DEPLOY_PATH VPS_SSH_PRIVATE_KEY VPS_SSH_KNOWN_HOSTS; do
+            test -n "${!name:-}" || { echo "::error::Falta $name"; exit 1; }
+          done
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+      - name: Restaurar, migrar y cotejar sin tocar base original
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+        run: |
+          # Este contenido proviene del commit del workflow, no de la VPS instalada.
+          migration_b64="$(base64 -w0 backend/alembic/versions/20261013_0034_huella_comercial.py)"
+          ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
+            "cd -- '$VPS_DEPLOY_PATH' && MIGRATION_B64='$migration_b64' bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          test -f deploy/.env.production
+          compose=(docker compose --env-file deploy/.env.production -f deploy/docker-compose.production.yml)
+          dump="deploy/backups/audit/factcentral_20261014T042911Z.dump"
+          archive="deploy/backups/documentos/documentos_20261014T060549Z.tar.gz"
+          test -s "$dump" && test -s "$archive"
+          sha256sum -c "$dump.sha256"
+          sha256sum -c "$archive.sha256"
+          tmp="$(mktemp -d)"
+          db="factcentral_preflight_$(date +%s)_$$"
+          cleanup() {
+            "${compose[@]}" exec -T db sh -c 'dropdb -U "$POSTGRES_USER" --if-exists "$1"' sh "$db" </dev/null || true
+            rm -rf -- "$tmp"
+          }
+          trap cleanup EXIT
+          printf '%s' "$MIGRATION_B64" | base64 -d > "$tmp/20261013_0034_huella_comercial.py"
+          unset MIGRATION_B64
+          "${compose[@]}" exec -T db sh -c 'createdb -U "$POSTGRES_USER" "$1"' sh "$db" </dev/null
+          "${compose[@]}" exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" --no-owner --no-acl --exit-on-error -d "$1"' sh "$db" < "$dump"
+          before="$("${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1" -Atc "SELECT count(*) FROM documentos"' sh "$db" </dev/null)"
+          previous="$("${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1" -Atc "SELECT version_num FROM alembic_version"' sh "$db" </dev/null)"
+          test "$previous" = "0033" || { echo "::error::Versión restaurada inesperada: $previous"; exit 1; }
+          # Crear contenedor efímero: usa imagen backend instalada más solo la nueva migración montada RO.
+          # El DSN se deriva dentro del contenedor; nunca se imprime ni se conecta al DB original.
+          "${compose[@]}" run --no-deps --rm -T \
+            -v "$tmp/20261013_0034_huella_comercial.py:/app/alembic/versions/20261013_0034_huella_comercial.py:ro" \
+            backend sh -c '
+              set -eu
+              export FC_DATABASE_URL="$(uv run python -c "import os,sys; from sqlalchemy.engine import make_url; u=make_url(os.environ[\"FC_DATABASE_URL\"]); print(u.set(database=sys.argv[1]).render_as_string(hide_password=False))" "$1")"
+              uv run alembic upgrade head
+            ' sh "$db" </dev/null
+          after="$("${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1" -Atc "SELECT count(*) FROM documentos"' sh "$db" </dev/null)"
+          version="$("${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1" -Atc "SELECT version_num FROM alembic_version"' sh "$db" </dev/null)"
+          test "$before" = "$after"
+          test "$version" = "0034"
+          "${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1" -Atc "COPY (SELECT ruta_storage FROM documentos WHERE ruta_storage IS NOT NULL AND ruta_storage <> '\'' '\'' AND ruta_storage <> '\'''\'' ORDER BY ruta_storage) TO STDOUT"' sh "$db" </dev/null > "$tmp/routes"
+          tar -tzf "$archive" > "$tmp/archive"
+          python3 - "$tmp/routes" "$tmp/archive" <<'PY'
+          import sys
+          from pathlib import Path
+          routes = Path(sys.argv[1]).read_text().splitlines()
+          members = set(Path(sys.argv[2]).read_text().splitlines())
+          members = {s[2:] if s.startswith("./") else s for s in members}
+          def normalize(value):
+              p = value.strip()
+              if p.startswith("/data/documentos/"):
+                  p = p[len("/data/documentos/"):]
+              return p.removeprefix("./").lstrip("/")
+          missing = [p for p in routes if normalize(p) not in members]
+          print(f"RUTAS_DB_REVISADAS: {len(routes)}")
+          print(f"RUTAS_SIN_ARCHIVO: {len(missing)}")
+          if missing:
+              raise SystemExit("Faltan archivos referenciados; no se muestran rutas privadas")
+          PY
+          echo "DOCUMENTOS_PRE_MIGRACION: $before"
+          echo "DOCUMENTOS_POST_MIGRACION: $after"
+          echo "ALEMBIC_VERSION: $version"
+          echo "PREFLIGHT_0034_DOCUMENTOS_OK"
+          REMOTE
