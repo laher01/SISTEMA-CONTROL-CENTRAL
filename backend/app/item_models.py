@@ -1,4 +1,5 @@
 """Entidades persistentes de Contabilidad de Ítems, aisladas de Expediente."""
+
 import uuid
 from decimal import Decimal
 
