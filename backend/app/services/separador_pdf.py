@@ -25,12 +25,12 @@ SERIE = re.compile(r"\b([A-Z][A-Z0-9]{3})\s*[-–—]\s*(\d{1,10})\b", re.I)
 RUC = re.compile(r"\b(?:20|10)\d{9}\b")
 # Las cotizaciones tienen numeración comercial, no necesariamente serie SUNAT.
 COT_NUMERO = re.compile(
-    r"(?:COTIZACI[OÓ]N\\s*(?:N[°ºo.]*)?|N[°º]\\s*[:.]?)"
-    r"\\s*[:.°º-]*\\s*(\\d{2,8}(?:\\s*[-–]\\s*\\d{4})?)",
+    r"(?:COTIZACI[OÓ]N\s*(?:N(?:[°ºo]|o\.)\s*[:.]?)?|\bN(?:[°º]|o\.)\s*[:.]?)"
+    r"\s*[:.°º-]*\s*(\d{2,8}(?:\s*[-–]\s*\d{4})?)",
     re.I,
 )
 COT_NUMERO_SIN_CABECERA = re.compile(
-    r"\\bN[°º]\\s*[:.]?\\s*(\\d{2,8}(?:\\s*[-–]\\s*\\d{4})?)",
+    r"\bN(?:[°º]|o\.)\s*[:.]?\s*(\d{2,8}(?:\s*[-–]\s*\d{4})?)",
     re.I,
 )
 OTRO_DOCUMENTO = re.compile(
