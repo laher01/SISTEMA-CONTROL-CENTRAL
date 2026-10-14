@@ -77,7 +77,7 @@ jobs:
           version="$("${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1" -Atc "SELECT version_num FROM alembic_version"' sh "$db" </dev/null)"
           test "$before" = "$after"
           test "$version" = "0034"
-          "${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1" -Atc "COPY (SELECT ruta_storage FROM documentos WHERE ruta_storage IS NOT NULL AND ruta_storage <> '\'' '\'' AND ruta_storage <> '\'''\'' ORDER BY ruta_storage) TO STDOUT"' sh "$db" </dev/null > "$tmp/routes"
+          "${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1" -Atc "COPY (SELECT ruta_storage FROM documentos WHERE ruta_storage IS NOT NULL ORDER BY ruta_storage) TO STDOUT"' sh "$db" </dev/null > "$tmp/routes"
           tar -tzf "$archive" > "$tmp/archive"
           python3 - "$tmp/routes" "$tmp/archive" <<'PY'
           import sys
