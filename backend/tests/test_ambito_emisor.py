@@ -5,7 +5,13 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.models import (
-    AsignacionEmpresaGestor, AsignacionPedidoGerencia, Empresa, Gestor, Miembro, PedidoGerencia, Tenant,
+    AsignacionEmpresaGestor,
+    AsignacionPedidoGerencia,
+    Empresa,
+    Gestor,
+    Miembro,
+    PedidoGerencia,
+    Tenant,
 )
 from app.services.ambito_emisor import EstadoAmbitoEmisor, revisar_asignaciones_emisor
 
@@ -87,6 +93,7 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
     client, session: Session, auth_prueba, settings,
 ):
     from sqlalchemy import func, select
+
     from app.models import Documento, Expediente, SolicitudCargaEmisor
     from tests.xml import factura
 
