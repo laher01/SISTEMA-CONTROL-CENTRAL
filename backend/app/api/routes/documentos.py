@@ -434,10 +434,10 @@ async def subir_documento(
                 session.flush()
                 # Usar namespace reservado que no colisione con originales.
                 solicitud.ruta_temporal = almacen.guardar(
-                    tenant_id, f"cuarentena-{solicitud.id}-{huella}",
-                    subido.contenido
+                    tenant_id, f"cuarentena-{solicitud.id}-{huella}", subido.contenido
                 )
-                session.add(AlertaManual(
+                session.add(
+                    AlertaManual(
                     tenant_id=tenant_id,
                     creado_por_codigo=auth.codigo,
                     creado_por_rol=auth.rol,
@@ -451,10 +451,14 @@ async def subir_documento(
                         f"{revision.gestor_propietario_id}; responsable "
                         f"{revision.responsable_propietario_id}."
                     ),
-                ))
+                    )
+                )
                 auditoria.registrar(
-                    session, tenant_id, "CARGA_EMISOR_PENDIENTE",
-                    "solicitud_carga_emisor", solicitud.id,
+                    session,
+                    tenant_id,
+                    "CARGA_EMISOR_PENDIENTE",
+                    "solicitud_carga_emisor",
+                    solicitud.id,
                     {"ruc_emisor": ubl.emisor.ruc, "sha256": huella},
                 )
                 session.commit()
