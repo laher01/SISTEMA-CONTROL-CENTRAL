@@ -4,6 +4,7 @@ Una asignación de pedido no implica titularidad permanente: los resultados
 son evidencia provisional para el futuro flujo de autorización, NO permiso
 para contabilizar automáticamente un documento.
 """
+
 import uuid
 from dataclasses import dataclass
 from enum import StrEnum
@@ -60,13 +61,13 @@ def revisar_asignaciones_emisor(
         )
     )
     if titular is not None:
-        autorizado = (
-            (gestor_id is not None and gestor_id == titular.gestor_id)
-            or (usuario_id is not None and usuario_id == titular.usuario_id)
+        autorizado = (gestor_id is not None and gestor_id == titular.gestor_id) or (
+            usuario_id is not None and usuario_id == titular.usuario_id
         )
         return RevisionEmisor(
             EstadoAmbitoEmisor.ASIGNADO_AL_GRUPO
-            if autorizado else EstadoAmbitoEmisor.ASIGNADO_A_OTRO_GRUPO,
+            if autorizado
+            else EstadoAmbitoEmisor.ASIGNADO_A_OTRO_GRUPO,
             empresa.id,
             titular.gestor_id,
             titular.responsable_id,
@@ -94,11 +95,14 @@ def revisar_asignaciones_emisor(
 
     propietario_usuario, propietario_gestor, propietario_responsable = next(iter(grupos))
     coincide = (
-        gestor_id is not None and gestor_id == propietario_gestor
-        or usuario_id is not None and usuario_id == propietario_usuario
+        gestor_id is not None
+        and gestor_id == propietario_gestor
+        or usuario_id is not None
+        and usuario_id == propietario_usuario
     )
     return RevisionEmisor(
-        EstadoAmbitoEmisor.ASIGNADO_AL_GRUPO if coincide
+        EstadoAmbitoEmisor.ASIGNADO_AL_GRUPO
+        if coincide
         else EstadoAmbitoEmisor.ASIGNADO_A_OTRO_GRUPO,
         empresa.id,
         propietario_gestor,
