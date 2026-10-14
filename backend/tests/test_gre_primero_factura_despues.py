@@ -99,14 +99,14 @@ def test_gre_sunat_con_referencia_impresa_ambigua_no_inventa_factura(
     monkeypatch.setattr(
         documentos_routes,
         "procesar",
-            lambda *_: ResultadoProcesamiento(
+        lambda *_: ResultadoProcesamiento(
             texto=texto,
             metodo="TEXTO_PDF",
             motor="prueba",
             paginas=1,
             confianza=1.0,
             sugerencia=sugerir_tipo(texto),
-            ),
+        ),
     )
     guia = subir(client, "gre-sunat.pdf", pdf_vacio())
     assert guia["tipo_documento"] == "GRR"
