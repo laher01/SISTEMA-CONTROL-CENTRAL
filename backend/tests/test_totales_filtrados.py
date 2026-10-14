@@ -2,6 +2,8 @@ from decimal import Decimal
 
 from fastapi.testclient import TestClient
 
+from tests.conftest import AuthPrueba
+
 from tests.xml import factura
 
 
@@ -33,6 +35,7 @@ def test_totales_globales_sin_duplicar_por_documentos(client: TestClient) -> Non
 
 def test_eliminar_documento_actualiza_resumen_sin_eliminar_otras_facturas(
     client: TestClient,
+    auth_prueba: AuthPrueba,
 ) -> None:
     ids = []
     for numero in ("F001-00000701", "F001-00000702"):
@@ -47,6 +50,7 @@ def test_eliminar_documento_actualiza_resumen_sin_eliminar_otras_facturas(
     assert anterior.status_code == 200, anterior.text
     assert anterior.json()["total_documentos"] == 2
 
+    auth_prueba.como_admin()
     eliminacion = client.delete(f"/api/v1/documentos/{ids[0]}")
     assert eliminacion.status_code == 204, eliminacion.text
     assert client.get(f"/api/v1/documentos/{ids[0]}").status_code == 404
