@@ -28,6 +28,7 @@ from app.services.expedientes import (
     requiere_bancarizacion,
 )
 from app.services.referencias_gre import ReferenciaFacturaGRE
+from app.services.contabilidad_items_ubl import registrar_items_ubl
 from app.services.ubl import ComprobanteUbl, parece_xml, parse_ubl
 from app.storage import AlmacenLocal
 
@@ -201,6 +202,8 @@ def ingerir_documento(
     )
     session.add(documento)
     session.flush()
+    if comprobante is not None and comprobante.tipo_documento == TipoDocumento.FACT:
+        registrar_items_ubl(session, tenant_id, documento.id, archivo.contenido)
     auditoria.registrar(
         session,
         tenant_id,
