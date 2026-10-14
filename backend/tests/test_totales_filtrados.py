@@ -29,3 +29,29 @@ def test_totales_globales_sin_duplicar_por_documentos(client: TestClient) -> Non
     filtrado = client.get("/api/v1/expedientes/resumen", params={"emisor_ruc": "00000000000"})
     assert filtrado.status_code == 200, filtrado.text
     assert filtrado.json()["total_expedientes"] == 0
+
+
+def test_eliminar_documento_actualiza_resumen_sin_eliminar_otras_facturas(
+    client: TestClient,
+) -> None:
+    ids = []
+    for numero in ("F001-00000701", "F001-00000702"):
+        respuesta = client.post(
+            "/api/v1/documentos",
+            files={"archivo": (numero + ".xml", factura(numero=numero, importe="100.00"))},
+        )
+        assert respuesta.status_code == 201, respuesta.text
+        ids.append(respuesta.json()["id"])
+
+    anterior = client.get("/api/v1/documentos/resumen")
+    assert anterior.status_code == 200, anterior.text
+    assert anterior.json()["total_documentos"] == 2
+
+    eliminacion = client.delete(f"/api/v1/documentos/{ids[0]}")
+    assert eliminacion.status_code == 204, eliminacion.text
+    assert client.get(f"/api/v1/documentos/{ids[0]}").status_code == 404
+    assert client.get(f"/api/v1/documentos/{ids[1]}").status_code == 200
+
+    posterior = client.get("/api/v1/documentos/resumen")
+    assert posterior.status_code == 200, posterior.text
+    assert posterior.json()["total_documentos"] == 1
