@@ -47,11 +47,11 @@ def upgrade() -> None:
         sa.UniqueConstraint("tenant_id", "documento_id", "numero_linea"),
     )
     op.create_index(
-        "ix_lineas_comprobantes_items_tenant_id", "lineas_comprobantes_items", ["tenant_id"])
+        "ix_lineas_comprobantes_items_tenant_id", "lineas_comprobantes_items", ["tenant_id"]
     op.create_index(
-        "ix_lineas_comprobantes_items_documento_id", "lineas_comprobantes_items", ["documento_id"])
+        "ix_lineas_comprobantes_items_documento_id", "lineas_comprobantes_items", ["documento_id"]
     op.create_index(
-        "ix_lineas_comprobantes_items_producto_id", "lineas_comprobantes_items", ["producto_id"])
+        "ix_lineas_comprobantes_items_producto_id", "lineas_comprobantes_items", ["producto_id"]
     op.create_table(
         "auditorias_facturas_items",
         sa.Column("id", sa.Uuid(), primary_key=True),
@@ -71,7 +71,7 @@ def upgrade() -> None:
         sa.Column("aprobado_por_cuenta_id", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id")),
     )
     op.create_index(
-        "ix_auditorias_facturas_items_tenant_id", "auditorias_facturas_items", ["tenant_id"])
+        "ix_auditorias_facturas_items_tenant_id", "auditorias_facturas_items", ["tenant_id"]
     op.create_index(
         "ix_auditorias_facturas_items_expediente_id",
         "auditorias_facturas_items",
