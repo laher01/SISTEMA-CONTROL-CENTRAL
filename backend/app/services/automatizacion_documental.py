@@ -153,6 +153,24 @@ def aplicar_automaticamente(
                 )
                 _guardar_estado(documento, "PENDIENTE_FACTURA", (motivo,))
                 return ResultadoAutomatizacion("PENDIENTE_FACTURA", motivos=(motivo,))
+        # Las representaciones SUNAT pueden mostrar una referencia de
+        # factura ilegible o sin serie. Mantenerla visible para revisión,
+        # nunca inferir una serie desde el número propio de la GRE.
+        texto_gre = procesamiento.get("texto")
+        if isinstance(texto_gre, str) and "FACTURA" in texto_gre.upper():
+            datos = dict(documento.datos_extraidos or {})
+            datos["gre_factura_pendiente"] = {
+                "estado": "REFERENCIA_INCOMPLETA",
+                "requiere_validacion_identidad_fiscal": True,
+                "importe_contabilizable": "0.00",
+                "motivo": "Verificar serie y correlativo de la factura relacionada",
+            }
+            documento.datos_extraidos = datos
+            return _revision(
+                documento,
+                ["GRE reconocida; factura relacionada sin identidad fiscal suficiente. "
+                 "Pendiente de validación, importe contabilizable S/ 0.00"],
+            )
         return _revision(
             documento,
             ["Referencia fiscal insuficiente o ambigua; requiere validación de la GRE"],
