@@ -1,6 +1,5 @@
 """Administración de titularidad de emisores por gestor, aislada por tenant."""
 import uuid
-from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
@@ -59,11 +58,15 @@ def asignar(
         or responsable is None or responsable.tenant_id != tenant_id
         or responsable.deleted_at or not responsable.activo
         or responsable.rol != "RESPONSABLE"):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Empresa, gestor o responsable inválido")
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Empresa, gestor o responsable inválido"
+        )
     usuario = session.get(Miembro, gestor.usuario_id) if gestor.usuario_id else None
     if (usuario is None or usuario.tenant_id != tenant_id or usuario.deleted_at
         or not usuario.activo or usuario.responsable_id != responsable.id):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Gestor no pertenece al responsable indicado")
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Gestor no pertenece al responsable indicado"
+        )
 
     asignacion = session.scalar(select(AsignacionEmpresaGestor).where(
         AsignacionEmpresaGestor.tenant_id == tenant_id,
