@@ -7,9 +7,7 @@ from app.models import Documento
 
 
 def test_esquema_huella_comercial_nullable_y_unica(engine, auth_prueba) -> None:
-    columnas = {
-        columna["name"]: columna for columna in inspect(engine).get_columns("documentos")
-    }
+    columnas = {columna["name"]: columna for columna in inspect(engine).get_columns("documentos")}
     assert "huella_comercial" in columnas
     assert columnas["huella_comercial"]["nullable"] is True
 
@@ -36,8 +34,6 @@ def test_esquema_huella_comercial_nullable_y_unica(engine, auth_prueba) -> None:
             )
         )
         session.commit()
-        documento = session.scalar(
-            select(Documento).where(Documento.sha256 == "c" * 64)
-        )
+        documento = session.scalar(select(Documento).where(Documento.sha256 == "c" * 64))
         assert documento is not None
         assert documento.huella_comercial is None
