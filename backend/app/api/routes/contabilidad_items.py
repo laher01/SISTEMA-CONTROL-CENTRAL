@@ -1,11 +1,14 @@
 """Consultas de solo lectura: Contabilidad de Ítems, aislada por tenant."""
 
+import csv
+import io
 import uuid
 from datetime import date
 from decimal import Decimal
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select, true
 from sqlalchemy.sql.elements import ColumnElement
@@ -138,3 +141,48 @@ def resolver_auditoria(
     decision = resolver_propuesta(session, auth, decision_id, aprobar)
     session.commit()
     return {"decision_id": str(decision.id), "estado": decision.estado}
+
+
+def _celda_csv(valor: str) -> str:
+    """Evita que un nombre de producto se ejecute como fórmula al abrir CSV en Excel."""
+    if valor.lstrip().startswith(("=", "+", "-", "@", "\t", "\r", "\n")):
+        return "'" + valor
+    return valor
+
+
+@router.get("/exportar-csv")
+def exportar_csv(
+    session: SessionDep,
+    auth: OperativeAuthDep,
+    desde: date | None = None,
+    hasta: date | None = None,
+    emisor_id: uuid.UUID | None = None,
+    receptor_id: uuid.UUID | None = None,
+) -> Response:
+    """Exportación de acumulados autorizados; no expone comprobantes ajenos al tenant."""
+    filas = resumen(
+        session=session,
+        auth=auth,
+        desde=desde,
+        hasta=hasta,
+        emisor_id=emisor_id,
+        receptor_id=receptor_id,
+        limite=500,
+    )
+    archivo = io.StringIO()
+    escritor = csv.writer(archivo)
+    escritor.writerow(["categoria", "producto", "unidad", "cantidad"])
+    for fila in filas:
+        escritor.writerow(
+            [
+                _celda_csv(fila["categoria"]),
+                _celda_csv(fila["descripcion"]),
+                _celda_csv(fila["unidad"]),
+                fila["cantidad"],
+            ]
+        )
+    return Response(
+        content="\ufeff" + archivo.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="contabilidad-items.csv"'},
+    )
