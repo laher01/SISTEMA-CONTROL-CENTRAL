@@ -73,7 +73,12 @@ def resumen(
             Expediente.deleted_at.is_(None),
             ProductoItem.activo.is_(True),
             alcance,
-            or_(ultimo_estado.is_(None), ultimo_estado.not_in(["INVALIDADA_CONFIRMADA", "INVALIDADA_PENDIENTE", "REACTIVACION_PENDIENTE"])), 
+            or_(
+                ultimo_estado.is_(None),
+                ultimo_estado.not_in(
+                    ["INVALIDADA_CONFIRMADA", "INVALIDADA_PENDIENTE", "REACTIVACION_PENDIENTE"]
+                ),
+            ),
         )
     )
     if desde:
