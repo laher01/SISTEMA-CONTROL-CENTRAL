@@ -40,6 +40,7 @@ def texto_normalizado(texto: str) -> str:
 def sugerir_categoria(descripcion: str) -> str:
     """Sugerencia no vinculante: sin coincidencias => POR_CATEGORIZAR."""
     s = f" {texto_normalizado(descripcion)} "
+    # Exigir palabras completas: evita confundir 'aguaje' con 'agua'.
     if " leche " in s:
         return "LACTEOS"
     if " agua " in s:
@@ -109,3 +110,44 @@ def acumulados_validos(
         llave_producto = (linea.producto_id, linea.unidad)
         acumulados[llave_producto] = acumulados.get(llave_producto, Decimal("0")) + linea.cantidad
     return acumulados
+
+
+@dataclass(frozen=True)
+class ProductoReconocido:
+    """Identidad verificable: no adivina presentaciones o variedades omitidas."""
+
+    marca: str | None
+    familia: str
+    variante: str | None
+    presentacion: str | None
+
+
+def posible_mismo_producto(a: ProductoReconocido, b: ProductoReconocido) -> bool:
+    """Solo fusionar cuando todos los discriminadores estén completos e iguales."""
+    if not all(
+        (
+            a.marca,
+            b.marca,
+            a.familia,
+            b.familia,
+            a.variante,
+            b.variante,
+            a.presentacion,
+            b.presentacion,
+        )
+    ):
+        return False
+    return all(
+        texto_normalizado(x) == texto_normalizado(y)
+        for x, y in (
+            (a.marca, b.marca),
+            (a.familia, b.familia),
+            (a.variante, b.variante),
+            (a.presentacion, b.presentacion),
+        )
+    )
+
+
+def factura_incluida_en_acumulados(estado: EstadoAuditoria) -> bool:
+    """No contabilizar documentos invalidos; pendiente requiere total provisional separado."""
+    return estado == EstadoAuditoria.VIGENTE
