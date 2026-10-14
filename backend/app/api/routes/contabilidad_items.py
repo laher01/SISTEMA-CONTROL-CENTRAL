@@ -1,4 +1,5 @@
 """Consultas de solo lectura: Contabilidad de Ítems, aislada por tenant."""
+
 import uuid
 from datetime import date
 from decimal import Decimal
@@ -61,12 +62,9 @@ def resumen(
             ~select(1)
             .select_from(AuditoriaFacturaItem)
             .where(
-                AuditoriaFacturaItem.expediente_id
-                == Expediente.id,
-                AuditoriaFacturaItem.tenant_id
-                == auth.tenant_id,
-                AuditoriaFacturaItem.estado
-                == "INVALIDADA_CONFIRMADA",
+                AuditoriaFacturaItem.expediente_id == Expediente.id,
+                AuditoriaFacturaItem.tenant_id == auth.tenant_id,
+                AuditoriaFacturaItem.estado == "INVALIDADA_CONFIRMADA",
             )
             .exists(),
         )
@@ -79,12 +77,16 @@ def resumen(
         stmt = stmt.where(Expediente.emisor_id == emisor_id)
     if receptor_id:
         stmt = stmt.where(Expediente.receptor_id == receptor_id)
-    stmt = stmt.group_by(
-        ProductoItem.id,
-        ProductoItem.categoria,
-        ProductoItem.descripcion,
-        LineaComprobanteItem.unidad,
-    ).order_by(ProductoItem.descripcion).limit(limite)
+    stmt = (
+        stmt.group_by(
+            ProductoItem.id,
+            ProductoItem.categoria,
+            ProductoItem.descripcion,
+            LineaComprobanteItem.unidad,
+        )
+        .order_by(ProductoItem.descripcion)
+        .limit(limite)
+    )
     return [
         {
             "producto_id": str(r.id),
