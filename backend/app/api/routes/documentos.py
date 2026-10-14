@@ -18,6 +18,7 @@ from app.api.errores import no_encontrado
 from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, RolMiembro, TipoDocumento
 from app.models import (
+    AlertaManual,
     Documento,
     Empresa,
     Expediente,
@@ -26,7 +27,6 @@ from app.models import (
     ReferenciaGRE,
     RelacionDocumento,
     SolicitudCargaEmisor,
-    AlertaManual,
     ahora,
 )
 from app.schemas import (
@@ -41,8 +41,8 @@ from app.schemas import (
 )
 from app.security import cuenta_administradora_responsable
 from app.services import auditoria
-from app.services.ambito_gerencia import alcance_expedientes_gerente, expediente_visible_gerente
 from app.services.ambito_emisor import EstadoAmbitoEmisor, revisar_asignaciones_emisor
+from app.services.ambito_gerencia import alcance_expedientes_gerente, expediente_visible_gerente
 from app.services.aprendizaje_documental import (
     aplicar_perfiles_aprendidos,
     registrar_correccion_y_aprender,
