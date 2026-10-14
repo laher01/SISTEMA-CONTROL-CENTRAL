@@ -3,8 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
     administraciones,
-    asignaciones_emisores,
     alertas,
+    asignaciones_emisores,
     auth,
     chat,
     comisiones,
