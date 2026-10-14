@@ -62,13 +62,13 @@ def test_api_importacion_semantica_simultanea_postgresql(engine, client) -> None
         pytest.skip("La concurrencia HTTP exige PostgreSQL real")
 
     from app.models import RelacionDocumento
-    from tests.test_separador_pdf import _paquete
+    from test_separador_pdf import _paquete
 
     archivos = [
         _paquete(
             [
-                "COTIZACION No. 00450\\nPROVEEDOR RUC 20615898598",
-                f"COTIZACION No. 0045{indice + 1}\\nPROVEEDOR RUC 20615898598",
+                "COTIZACION No. 00450\nPROVEEDOR RUC 20615898598",
+                f"COTIZACION No. 0045{indice + 1}\nPROVEEDOR RUC 20615898598",
             ]
         )
         for indice in range(2)
