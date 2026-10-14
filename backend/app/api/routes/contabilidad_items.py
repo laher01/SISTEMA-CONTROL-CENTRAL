@@ -119,6 +119,75 @@ def resumen(
     ]
 
 
+
+@router.get("/expedientes/{expediente_id}/detalle")
+def detalle_expediente(
+    expediente_id: uuid.UUID,
+    session: SessionDep,
+    auth: OperativeAuthDep,
+) -> dict[str, object]:
+    """Detalle de líneas por expediente con alcance jerárquico y aislamiento de tenant."""
+    expediente = session.scalar(
+        select(Expediente).where(
+            Expediente.id == expediente_id,
+            Expediente.tenant_id == auth.tenant_id,
+            Expediente.deleted_at.is_(None),
+            _alcance(auth),
+        )
+    )
+    if expediente is None:
+        raise HTTPException(404, "Expediente no encontrado o fuera de alcance")
+    estado = session.scalar(
+        select(AuditoriaFacturaItem.estado)
+        .where(
+            AuditoriaFacturaItem.tenant_id == auth.tenant_id,
+            AuditoriaFacturaItem.expediente_id == expediente_id,
+        )
+        .order_by(AuditoriaFacturaItem.created_at.desc(), AuditoriaFacturaItem.id.desc())
+        .limit(1)
+    ) or "VIGENTE"
+    consulta = (
+        select(LineaComprobanteItem, Documento, ProductoItem)
+        .join(
+            Documento,
+            (Documento.id == LineaComprobanteItem.documento_id)
+            & (Documento.tenant_id == auth.tenant_id)
+            & (Documento.deleted_at.is_(None)),
+        )
+        .join(
+            ProductoItem,
+            (ProductoItem.id == LineaComprobanteItem.producto_id)
+            & (ProductoItem.tenant_id == auth.tenant_id),
+        )
+        .where(
+            LineaComprobanteItem.tenant_id == auth.tenant_id,
+            Documento.expediente_id == expediente_id,
+        )
+        .order_by(Documento.created_at, Documento.id, LineaComprobanteItem.numero_linea)
+    )
+    lineas = []
+    for linea, documento, producto in session.execute(consulta):
+        lineas.append(
+            {
+                "documento_id": str(documento.id),
+                "formato_origen": documento.formato_origen or "",
+                "numero_linea": linea.numero_linea,
+                "producto_id": str(producto.id),
+                "categoria": producto.categoria,
+                "descripcion": linea.descripcion_original,
+                "unidad": linea.unidad,
+                "cantidad": str(linea.cantidad),
+                "importe": str(linea.importe_linea) if linea.importe_linea is not None else "",
+            }
+        )
+    return {
+        "expediente_id": str(expediente.id),
+        "moneda": expediente.moneda,
+        "estado_auditoria": estado,
+        "lineas": lineas,
+    }
+
+
 class DecisionItemsIn(BaseModel):
     accion: Literal["OBSERVAR", "DESACTIVAR", "REACTIVAR"]
     motivo: str = Field(min_length=3, max_length=1000)
