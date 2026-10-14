@@ -7,6 +7,8 @@ type FilaItem = {
   descripcion: string;
   unidad: string;
   cantidad: string;
+  moneda: string;
+  importe: string;
 };
 
 export default function ContabilidadItems() {
@@ -51,15 +53,19 @@ export default function ContabilidadItems() {
                 <th scope="col">Producto</th>
                 <th scope="col">Unidad</th>
                 <th scope="col">Cantidad acumulada</th>
+                <th scope="col">Moneda</th>
+                <th scope="col">Importe de líneas</th>
               </tr>
             </thead>
             <tbody>
               {datos.map((fila) => (
-                <tr key={fila.producto_id + ":" + fila.unidad}>
+                <tr key={fila.producto_id + ":" + fila.unidad + ":" + fila.moneda}>
                   <td>{fila.categoria}</td>
                   <td>{fila.descripcion}</td>
                   <td>{fila.unidad}</td>
                   <td>{fila.cantidad}</td>
+                  <td>{fila.moneda}</td>
+                  <td>{fila.importe || "Sin importe"}</td>
                 </tr>
               ))}
             </tbody>
