@@ -104,3 +104,31 @@ def resumen(
         }
         for r in session.execute(stmt)
     ]
+
+class DecisionItemsIn(BaseModel):
+    accion: Literal["OBSERVAR", "DESACTIVAR", "REACTIVAR"]
+    motivo: str = Field(min_length=3, max_length=1000)
+
+
+@router.post("/expedientes/{expediente_id}/auditar")
+def auditar_factura(
+    expediente_id: uuid.UUID,
+    datos: DecisionItemsIn,
+    session: SessionDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str]:
+    decision = registrar_decision(session, auth, expediente_id, datos.accion, datos.motivo)
+    session.commit()
+    return {"decision_id": str(decision.id), "estado": decision.estado}
+
+
+@router.post("/auditorias/{decision_id}/resolver")
+def resolver_auditoria(
+    decision_id: uuid.UUID,
+    session: SessionDep,
+    auth: OperativeAuthDep,
+    aprobar: bool = True,
+) -> dict[str, str]:
+    decision = resolver_propuesta(session, auth, decision_id, aprobar)
+    session.commit()
+    return {"decision_id": str(decision.id), "estado": decision.estado}
