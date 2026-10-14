@@ -549,7 +549,7 @@ def test_eliminar_expediente_oculta_documentos_en_todos_los_modulos(
     assert all(item["id"] != archivo["id"] for item in documentos.json())
     listado = client.get("/api/v1/registros")
     assert listado.status_code == 200, listado.text
-    assert all(item["expediente_id"] != expediente_id for item in listado.json())
+    assert all(item["expediente_id"] != expediente_id for item in listado.json()["filas"])
 
 
 def test_eliminar_documento_es_logico_y_deja_de_listarlo(
