@@ -108,3 +108,49 @@ def test_normalizacion_numero_con_espacios() -> None:
     cabecera = _cabecera("COTIZACION No. 00275 - 2026")
     assert cabecera is not None
     assert cabecera[2] == "00275-2026"
+
+
+def test_importacion_selectiva_y_reimportacion_con_padre(client, session) -> None:
+    from sqlalchemy import select
+
+    from app.models import Documento, RelacionDocumento
+
+    pdf = _paquete(
+        [
+            "COTIZACION No. 00198\\nPROVEEDOR A",
+            "COTIZACION No. 00199\\nPROVEEDOR A",
+        ]
+    )
+
+    def enviar(confirmar: bool, indices: str | None = None):
+        datos = {"confirmar": str(confirmar).lower()}
+        if indices is not None:
+            datos["indices_documentos"] = indices
+        return client.post(
+            "/api/v1/documentos/paquete",
+            data=datos,
+            files={"archivo": ("cotizaciones.pdf", pdf, "application/pdf")},
+        )
+
+    vista = enviar(False)
+    assert vista.status_code == 200
+    assert vista.json()["total"] == 2
+    primero = enviar(True, "0")
+    assert primero.status_code == 200, primero.text
+    assert primero.json()["total"] == 1
+    segundo = enviar(True, "1")
+    assert segundo.status_code == 200, segundo.text
+    assert segundo.json()["total"] == 1
+    repetido = enviar(True, "0")
+    assert repetido.status_code == 200
+    assert repetido.json()["duplicados"] == 1
+
+    documentos = list(session.scalars(select(Documento)))
+    padres = [d for d in documentos if d.tipo_documento == "OTRO"]
+    hijos = [d for d in documentos if d.tipo_documento == "COT"]
+    assert len(padres) == 1
+    assert len(hijos) == 2
+    relaciones = list(session.scalars(select(RelacionDocumento)))
+    assert len(relaciones) == 2
+    assert {r.destino_id for r in relaciones} == {d.id for d in hijos}
+    assert {r.origen_id for r in relaciones} == {padres[0].id}
