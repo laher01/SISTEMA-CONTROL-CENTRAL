@@ -71,7 +71,7 @@ from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 from app.services.relaciones_documentales import sugerir_relaciones
 from app.services.separador_pdf import analizar_paquete, extraer_fragmento
-from app.services.ubl import UblInvalido, parse_ubl, parece_xml
+from app.services.ubl import UblInvalido, parece_xml, parse_ubl
 from app.storage import AlmacenLocal
 
 router = APIRouter(prefix="/documentos", tags=["documentos"])
