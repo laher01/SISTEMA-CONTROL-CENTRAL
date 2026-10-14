@@ -28,7 +28,5 @@ def test_numeracion_repetida_proveedores_diferentes() -> None:
 
 
 def test_no_confundir_mismo_ruc_como_emisor_y_cliente() -> None:
-    resultado = identidad_cotizacion(
-        "PROVEEDOR RUC 20615898598 CLIENTE RUC 20615898598", "074"
-    )
+    resultado = identidad_cotizacion("PROVEEDOR RUC 20615898598 CLIENTE RUC 20615898598", "074")
     assert resultado["estado"] == "REVISION"
