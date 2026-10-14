@@ -15,7 +15,7 @@ from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, Setti
 from app.api.errores import no_encontrado
 from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, RolMiembro, TipoDocumento
-from app.models import Documento, Empresa, Expediente, Gestor, Miembro, ReferenciaGRE, ahora
+from app.models import Documento, Empresa, Expediente, Gestor, Miembro, ReferenciaGRE, RelacionDocumento, ahora
 from app.schemas import (
     DocumentoOut,
     DocumentoVincular,
@@ -249,6 +249,18 @@ async def importar_paquete_pdf(
                         "estado_identidad": "PENDIENTE_VALIDACION",
                     },
                 }
+                session.add(
+                    RelacionDocumento(
+                        tenant_id=tenant_id,
+                        origen_id=paquete_original.id,
+                        destino_id=documento.id,
+                        tipo="ORIGEN_PAQUETE",
+                        evidencia=(
+                            f"Paginas {segmento.inicio + 1}-{segmento.fin}"
+                        ),
+                        confirmado_por_cuenta_id=cuenta_administradora_responsable(session, auth),
+                    )
+                )
                 auditoria.registrar(
                     session,
                     tenant_id,
