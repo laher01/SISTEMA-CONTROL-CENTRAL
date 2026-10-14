@@ -117,8 +117,8 @@ def test_importacion_selectiva_y_reimportacion_con_padre(client, session) -> Non
 
     pdf = _paquete(
         [
-            "COTIZACION No. 00198\\nPROVEEDOR A",
-            "COTIZACION No. 00199\\nPROVEEDOR A",
+            "COTIZACION No. 00198\nPROVEEDOR A",
+            "COTIZACION No. 00199\nPROVEEDOR A",
         ]
     )
 
@@ -163,14 +163,14 @@ def test_reimportacion_semantica_pdf_distinto(client, session) -> None:
 
     original = _paquete(
         [
-            "COTIZACION No. 0074\\nPROVEEDOR RUC 20615898598\\nCLIENTE RUC 20538821374",
-            "COTIZACION No. 0075\\nPROVEEDOR RUC 20615898598\\nCLIENTE RUC 20538821374",
+            "COTIZACION No. 0074\nPROVEEDOR RUC 20615898598\nCLIENTE RUC 20538821374",
+            "COTIZACION No. 0075\nPROVEEDOR RUC 20615898598\nCLIENTE RUC 20538821374",
         ]
     )
     equivalente = _paquete(
         [
-            "COTIZACION No. 0074\\nPROVEEDOR RUC 20615898598\\nCLIENTE RUC 20538821374\\nCOPIA",
-            "COTIZACION No. 0076\\nPROVEEDOR RUC 20615898598\\nCLIENTE RUC 20538821374",
+            "COTIZACION No. 0074\nPROVEEDOR RUC 20615898598\nCLIENTE RUC 20538821374\nCOPIA",
+            "COTIZACION No. 0076\nPROVEEDOR RUC 20615898598\nCLIENTE RUC 20538821374",
         ]
     )
 
