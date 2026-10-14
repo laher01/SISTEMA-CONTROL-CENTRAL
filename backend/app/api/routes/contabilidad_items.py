@@ -62,7 +62,9 @@ def resumen(
             ProductoItem.categoria,
             ProductoItem.descripcion,
             LineaComprobanteItem.unidad,
+            Expediente.moneda,
             func.sum(LineaComprobanteItem.cantidad).label("cantidad"),
+            func.sum(LineaComprobanteItem.importe_linea).label("importe"),
         )
         .join(LineaComprobanteItem, LineaComprobanteItem.producto_id == ProductoItem.id)
         .join(Documento, Documento.id == LineaComprobanteItem.documento_id)
@@ -98,6 +100,7 @@ def resumen(
             ProductoItem.categoria,
             ProductoItem.descripcion,
             LineaComprobanteItem.unidad,
+            Expediente.moneda,
         )
         .order_by(ProductoItem.descripcion)
         .limit(limite)
@@ -108,7 +111,9 @@ def resumen(
             "categoria": r.categoria,
             "descripcion": r.descripcion,
             "unidad": r.unidad,
+            "moneda": r.moneda,
             "cantidad": str(Decimal(r.cantidad)),
+            "importe": str(Decimal(r.importe)) if r.importe is not None else "",
         }
         for r in session.execute(stmt)
     ]
@@ -171,14 +176,16 @@ def exportar_csv(
     )
     archivo = io.StringIO()
     escritor = csv.writer(archivo)
-    escritor.writerow(["categoria", "producto", "unidad", "cantidad"])
+    escritor.writerow(["categoria", "producto", "unidad", "moneda", "cantidad", "importe"])
     for fila in filas:
         escritor.writerow(
             [
                 _celda_csv(fila["categoria"]),
                 _celda_csv(fila["descripcion"]),
                 _celda_csv(fila["unidad"]),
+                _celda_csv(fila["moneda"]),
                 fila["cantidad"],
+                fila["importe"],
             ]
         )
     return Response(
