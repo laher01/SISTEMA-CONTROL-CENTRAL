@@ -71,7 +71,7 @@ def _cabecera(texto: str) -> tuple[str, str, str, str] | None:
         numero = COT_NUMERO.search(cabecera) or COT_NUMERO_SIN_CABECERA.search(cabecera)
         if not numero:
             return None
-        correlativo = re.sub(r"\\s+", "", numero.group(1)).replace("–", "-")
+        correlativo = re.sub(r"\s+", "", numero.group(1)).replace("–", "-")
         # El proveedor puede no indicar RUC; no sustituirlo por el RUC del cliente.
         return tipo, "COT", correlativo, ""
     serie = SERIE.search(cabecera)
