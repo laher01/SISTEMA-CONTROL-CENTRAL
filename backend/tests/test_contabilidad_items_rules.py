@@ -52,9 +52,7 @@ class ContabilidadItemsTests(unittest.TestCase):
             validar_decision(decision)
 
     def test_gerencia_no_autoaprueba(self):
-        decision = DecisionAuditoria(
-            Accion.APROBAR, "actor-1", "GERENCIA", "actor-1", "SECRETARIA"
-        )
+        decision = DecisionAuditoria(Accion.APROBAR, "actor-1", "GERENCIA", "actor-1", "SECRETARIA")
         with self.assertRaises(PermissionError):
             validar_decision(decision)
 
