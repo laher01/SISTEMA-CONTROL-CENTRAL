@@ -46,6 +46,7 @@ type FilaPaquete = {
   archivo: File;
   estado: EstadoPaquete;
   vistaPrevia?: InformePaquete;
+  indicesSeleccionados?: number[];
   resultado?: InformePaquete;
   error?: string;
 };
@@ -140,10 +141,11 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
     setProgresoPaquetes("");
   };
 
-  const solicitarPaquete = async (archivo: File, confirmar: boolean): Promise<InformePaquete> => {
+  const solicitarPaquete = async (archivo: File, confirmar: boolean, indices?: number[]): Promise<InformePaquete> => {
     const form = new FormData();
     form.append("archivo", archivo);
     form.append("confirmar", String(confirmar));
+    if (confirmar && indices) form.append("indices_documentos", indices.join(","));
     return enviarFormulario<InformePaquete>("/api/v1/documentos/paquete", form);
   };
 
@@ -160,7 +162,7 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
     else setAnalizandoPaquete(true);
     setErrorPaquete("");
     const candidatos = actuales.filter((p) =>
-      confirmar ? p.estado === "listo" : p.estado === "pendiente" || p.estado === "error",
+      confirmar ? p.estado === "listo" && Boolean(p.indicesSeleccionados?.length) : p.estado === "pendiente" || p.estado === "error",
     );
     for (let i = 0; i < candidatos.length; i += 1) {
       const fila = candidatos[i];
@@ -172,13 +174,13 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
         ),
       );
       try {
-        const informe = await solicitarPaquete(fila.archivo, confirmar);
+        const informe = await solicitarPaquete(fila.archivo, confirmar, fila.indicesSeleccionados);
         actualizarPaquetes(
           paquetesRef.current.map((p) =>
             p.id === fila.id
               ? confirmar
                 ? { ...p, estado: "importado", resultado: informe }
-                : { ...p, estado: "listo", vistaPrevia: informe, resultado: undefined }
+                : { ...p, estado: "listo", vistaPrevia: informe, indicesSeleccionados: informe.documentos.map((_, i) => i), resultado: undefined }
               : p,
           ),
         );
@@ -261,7 +263,7 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
             disabled={!listos.length || analizandoPaquete || confirmandoPaquete}
             onClick={() => void ejecutarPaquetes(true)}
           >
-            {confirmandoPaquete ? "Importando paquetes…" : `Confirmar importación de ${listos.length} paquete(s)`}
+            {confirmandoPaquete ? "Importando paquetes…" : `Importar selección de ${listos.length} paquete(s)`}
           </button>
         </div>
         {progresoPaquetes && <p role="status">{progresoPaquetes}</p>}
@@ -291,7 +293,33 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
                         p.resultado
                           ? `Relacionados ${p.resultado.relacionados ?? 0}, revisión ${p.resultado.revision ?? 0}, duplicados ${p.resultado.duplicados ?? 0}, errores ${p.resultado.errores ?? 0}`
                           : p.vistaPrevia
-                            ? `Detectados: ${p.vistaPrevia.documentos.map((d) => `${d.tipo} ${d.serie}-${d.correlativo}`).join(", ")}`
+                            ? (
+                              <div>
+                                <strong>{p.indicesSeleccionados?.length ?? 0} seleccionados</strong>
+                                {p.vistaPrevia.documentos.map((d, indice) => (
+                                  <label key={indice} style={{ display: "block" }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={p.indicesSeleccionados?.includes(indice) ?? false}
+                                      disabled={analizandoPaquete || confirmandoPaquete}
+                                      onChange={(evento) =>
+                                        actualizarPaquetes(paquetesRef.current.map((fila) =>
+                                          fila.id === p.id
+                                            ? {
+                                                ...fila,
+                                                indicesSeleccionados: evento.target.checked
+                                                  ? [...(fila.indicesSeleccionados ?? []), indice]
+                                                  : (fila.indicesSeleccionados ?? []).filter((i) => i !== indice),
+                                              }
+                                            : fila,
+                                        ))
+                                      }
+                                    />
+                                    {d.tipo} {d.serie}-{d.correlativo} (páginas {d.pagina_inicio}–{d.pagina_fin})
+                                  </label>
+                                ))}
+                              </div>
+                            )
                             : "Pendiente"
                       )}
                     </td>
