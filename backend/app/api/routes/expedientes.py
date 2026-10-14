@@ -951,7 +951,21 @@ def eliminar(
             "No tiene permiso para eliminar registros",
         )
 
-    expediente.deleted_at = ahora()
+    marca_eliminacion = ahora()
+    expediente.deleted_at = marca_eliminacion
+    # Una eliminación integral debe ocultar también las evidencias de los
+    # demás menús, sin perder la trazabilidad ni borrar archivos físicos.
+    for documento in expediente.documentos:
+        if documento.deleted_at is None:
+            documento.deleted_at = marca_eliminacion
+            auditoria.registrar(
+                session,
+                tenant_id,
+                "DOCUMENTO_ELIMINADO_CON_EXPEDIENTE",
+                "documento",
+                documento.id,
+                {"expediente_id": str(expediente.id), "sha256": documento.sha256},
+            )
     auditoria.registrar(
         session,
         tenant_id,
