@@ -248,6 +248,7 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
     assert rechazo.json()["estado"] == "RECHAZADA"
     assert not ruta_temporal.exists()
 
+
 def test_admin_asigna_empresa_y_bloquea_ajenos(
     client,
     session: Session,
