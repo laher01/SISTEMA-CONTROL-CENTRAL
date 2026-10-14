@@ -93,3 +93,10 @@ Análisis local mediante `pdftotext -layout`, sin subir archivos privados a GitH
 **Cambios de rama (no desplegados):** pruebas de formato para 5 GRE en `backend/tests/test_referencias_gre.py` (commit `a01d1de8`); API `GET /api/v1/documentos/provisionales-gre` ahora expone `estado=PENDIENTE_FACTURA` y `monto_contabilizable=0.00` (commit `3dcb87b6`); regresión en `backend/tests/test_gre_primero_factura_despues.py` (commit `11c3c176`).
 
 **Pendiente:** comprobar pipeline real `procesar -> aplicar_automaticamente` en FastAPI con PDF binario original; exponer GRE provisionales en pantalla principal de expedientes o vista unificada, no solo Pendientes; creación de expediente provisional formal requiere diseñar datos faltantes sin inventar fecha/moneda/valor de factura. Aislar PDF por titularidad del emisor antes de contabilizar (PR #185). CI aún no verificado. VPS sin cambios.
+
+## Visualización inicial de GRE en Expedientes (14/10/2026)
+
+- Commit `1a793b6a`: `frontend/src/paginas/Expedientes.tsx` presenta sección independiente de GRE provisionales obtenidas de `/api/v1/documentos/provisionales-gre`, con referencia factura, RUC emisor/receptor, `PENDIENTE_FACTURA` y monto 0.00 sin mezclarlas con expedientes completos ni la selección de impresiones.
+- La API ya devuelve `monto_contabilizable=0.00` (commit `3dcb87b6`). Los filtros de receptor, emisor y búsqueda se aplican en frontend a la sección provisional, pero falta homogeneizar todos los filtros de fechas/jerarquía con los de expedientes activos y paginar más de 2000 registros.
+- Se verificó que GitHub Actions inició `backend`, `frontend`, `recepcion-documental-ci` y roles; al revisar estaban **en progreso**. No afirmar aprobación hasta consultar resultados.
+- Persisten pendientes: correr y arreglar suite, prueba E2E UI, autovinculación a factura, expediente provisional formal con identidad parcial, autorización de cargas PDF ajenas, operación segura de cuarentena y seguridad por tenant.
