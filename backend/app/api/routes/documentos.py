@@ -1,4 +1,5 @@
 import hashlib
+import io
 import uuid
 from datetime import date
 from decimal import Decimal
@@ -7,6 +8,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
+from pypdf import PdfReader
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, selectinload
@@ -50,6 +52,7 @@ from app.services.automatizacion_documental import (
 )
 from app.services.cache_ocr import procesar_con_cache
 from app.services.expedientes import actualizar_expediente, buscar_expediente
+from app.services.identidad_cotizaciones import identidad_cotizacion
 from app.services.ingesta import (
     ArchivoSubido,
     ComprobanteYaRegistrado,
@@ -246,6 +249,11 @@ async def importar_paquete_pdf(
                 cuenta_administradora_responsable(session, auth),
             )
             if segmento.tipo == "COT" and paquete_original is not None:
+                lector_individual = PdfReader(io.BytesIO(subido.contenido))
+                texto_cotizacion = "\n".join(
+                    pagina.extract_text() or "" for pagina in lector_individual.pages
+                )
+                identidad = identidad_cotizacion(texto_cotizacion, segmento.correlativo)
                 documento.datos_extraidos = {
                     "origen_paquete": {
                         "documento_padre_id": str(paquete_original.id),
@@ -255,7 +263,8 @@ async def importar_paquete_pdf(
                     },
                     "cotizacion": {
                         "numero": segmento.correlativo,
-                        "estado_identidad": "PENDIENTE_VALIDACION",
+                        "identidad": identidad,
+                        "estado_identidad": identidad["estado"],
                     },
                 }
                 session.add(
