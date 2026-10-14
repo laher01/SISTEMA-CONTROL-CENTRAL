@@ -40,3 +40,8 @@ VPS autorizada `132.145.233.172`, `/home/ubuntu/fact-central`, Docker Compose `d
 ## Plan completo de 18 módulos
 
 Consultar el prompt maestro compartido el 14-10-2026; ejecución por prioridad: (1) integridad/eliminación y reseteo, (2) titularidad y RBAC, (3) ingesta/duplicados/OCR/expedientes, (4) notificaciones/dashboard/ERP, (5) SaaS/frontend/pruebas/despliegue.
+
+## Avance posterior (14-10-2026)
+
+- Commit `3247fe9f`: prueba HTTP en `backend/tests/test_ambito_emisor.py` para rechazo 409 XML de grupo ajeno, sin crear registros ni archivos. **No ejecutada**; verificar en CI/entorno local.
+- Pendiente inmediato: ejecutar la prueba y completar el esquema formal de titularidad, cola de cuarentena y decisión segura.
