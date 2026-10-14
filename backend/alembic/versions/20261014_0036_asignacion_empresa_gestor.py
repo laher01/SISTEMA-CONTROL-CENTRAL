@@ -3,6 +3,7 @@
 Revision ID: 0036
 Revises: 0035
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -32,19 +33,31 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
         sa.UniqueConstraint("tenant_id", "empresa_id", name="uq_asignacion_empresa_tenant"),
     )
-    op.create_index("ix_asignaciones_empresas_gestores_empresa_id",
-        "asignaciones_empresas_gestores", ["empresa_id"])
-    op.create_index("ix_asignaciones_empresas_gestores_gestor_id",
-        "asignaciones_empresas_gestores", ["gestor_id"])
-    op.create_index("ix_asignaciones_empresas_gestores_tenant_id",
-        "asignaciones_empresas_gestores", ["tenant_id"])
+    op.create_index(
+        "ix_asignaciones_empresas_gestores_empresa_id",
+        "asignaciones_empresas_gestores",
+        ["empresa_id"],
+    )
+    op.create_index(
+        "ix_asignaciones_empresas_gestores_gestor_id",
+        "asignaciones_empresas_gestores",
+        ["gestor_id"],
+    )
+    op.create_index(
+        "ix_asignaciones_empresas_gestores_tenant_id",
+        "asignaciones_empresas_gestores",
+        ["tenant_id"],
+    )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_asignaciones_empresas_gestores_tenant_id",
-        table_name="asignaciones_empresas_gestores")
-    op.drop_index("ix_asignaciones_empresas_gestores_gestor_id",
-        table_name="asignaciones_empresas_gestores")
-    op.drop_index("ix_asignaciones_empresas_gestores_empresa_id",
-        table_name="asignaciones_empresas_gestores")
+    op.drop_index(
+        "ix_asignaciones_empresas_gestores_tenant_id", table_name="asignaciones_empresas_gestores"
+    )
+    op.drop_index(
+        "ix_asignaciones_empresas_gestores_gestor_id", table_name="asignaciones_empresas_gestores"
+    )
+    op.drop_index(
+        "ix_asignaciones_empresas_gestores_empresa_id", table_name="asignaciones_empresas_gestores"
+    )
     op.drop_table("asignaciones_empresas_gestores")
