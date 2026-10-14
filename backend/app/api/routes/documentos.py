@@ -122,6 +122,7 @@ async def importar_paquete_pdf(
     auth: OperativeAuthDep,
     archivo: Annotated[UploadFile, File()],
     confirmar: Annotated[bool, Form()] = False,
+    indices_documentos: Annotated[str | None, Form()] = None,
 ) -> dict[str, object]:
     """Primero previsualiza; únicamente con confirmar=true ingiere documentos.
 
@@ -150,6 +151,21 @@ async def importar_paquete_pdf(
             "total": len(segmentos),
             "documentos": [segmento.descripcion() for segmento in segmentos],
         }
+
+    # Los índices provienen de la vista previa; nunca confiar en el cliente
+    # para introducir páginas o documentos que no detectó el separador.
+    if indices_documentos is not None:
+        try:
+            seleccion = {int(valor.strip()) for valor in indices_documentos.split(",")}
+        except ValueError as exc:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "Selección de documentos inválida"
+            ) from exc
+        if not seleccion or any(indice < 0 or indice >= len(segmentos) for indice in seleccion):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "Selección fuera del paquete analizado"
+            )
+        segmentos = [segmento for indice, segmento in enumerate(segmentos) if indice in seleccion]
 
     resultados: list[dict[str, object]] = []
     for segmento in segmentos:
