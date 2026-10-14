@@ -100,8 +100,14 @@ def test_gre_sunat_con_referencia_impresa_ambigua_no_inventa_factura(
         documentos_routes,
         "procesar",
         lambda *_: ResultadoProcesamiento(
-            texto=texto, metodo="TEXTO_PDF", motor="prueba",
-            paginas=1, confianza=1.0, sugerencia=sugerir_tipo(texto),
+        lambda *_: ResultadoProcesamiento(
+            texto=texto,
+            metodo="TEXTO_PDF",
+            motor="prueba",
+            paginas=1,
+            confianza=1.0,
+            sugerencia=sugerir_tipo(texto),
+        ),
         ),
     )
     guia = subir(client, "gre-sunat.pdf", pdf_vacio())
@@ -110,9 +116,12 @@ def test_gre_sunat_con_referencia_impresa_ambigua_no_inventa_factura(
     assert guia["estado"] != "RELACIONADO"
     respuesta = client.get(f"/api/v1/documentos/{guia['id']}")
     assert respuesta.status_code == 200, respuesta.text
-    assert respuesta.json()["datos_extraidos"]["gre_factura_pendiente"][
-        "importe_contabilizable"
-    ] == "0.00"
+    assert respuesta.status_code == 200, respuesta.text
+    assert (
+        respuesta.json()["datos_extraidos"]["gre_factura_pendiente"]["importe_contabilizable"]
+        == "0.00"
+    )
+    resumen = client.get("/api/v1/expedientes/resumen")
     resumen = client.get("/api/v1/expedientes/resumen")
     assert resumen.status_code == 200
     assert resumen.json()["total_expedientes"] == 0
