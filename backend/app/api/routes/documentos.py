@@ -254,6 +254,7 @@ async def importar_paquete_pdf(
                     pagina.extract_text() or "" for pagina in lector_individual.pages
                 )
                 identidad = identidad_cotizacion(texto_cotizacion, segmento.correlativo)
+                documento.huella_comercial = identidad["huella"]
                 documento.datos_extraidos = {
                     "origen_paquete": {
                         "documento_padre_id": str(paquete_original.id),
