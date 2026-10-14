@@ -87,7 +87,7 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
     client, session: Session, auth_prueba, settings,
 ):
     from sqlalchemy import func, select
-    from app.models import Documento, Expediente
+    from app.models import Documento, Expediente, SolicitudCargaEmisor
     from tests.xml import factura
 
     tenant_id = auth_prueba.contexto.tenant_id
@@ -146,7 +146,28 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
     assert session.scalar(
         select(func.count()).select_from(Expediente).where(Expediente.tenant_id == tenant_id)
     ) == anterior_expedientes
-    assert not list(settings.storage_dir.rglob("*"))
+    solicitud = session.scalar(
+        select(SolicitudCargaEmisor).where(
+            SolicitudCargaEmisor.tenant_id == tenant_id,
+            SolicitudCargaEmisor.ruc_emisor == empresa.ruc,
+        )
+    )
+    assert solicitud is not None
+    assert solicitud.estado == "PENDIENTE"
+    assert respuesta.json()["detail"]["solicitud_id"] == str(solicitud.id)
+    assert solicitud.ruta_temporal is not None
+    ruta_temporal = settings.storage_dir / solicitud.ruta_temporal
+    assert ruta_temporal.is_file()
+
+    auth_prueba.como_admin()
+    rechazo = client.post(
+        f"/api/v1/solicitudes-carga-emisor/{solicitud.id}/rechazar",
+        json={"observacion": "No autorizado"},
+    )
+    assert rechazo.status_code == 200, rechazo.text
+    assert rechazo.json()["estado"] == "RECHAZADA"
+    assert not ruta_temporal.exists()
+
 
 
 def test_admin_asigna_empresa_y_bloquea_ajenos(
