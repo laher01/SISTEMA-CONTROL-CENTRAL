@@ -46,3 +46,18 @@ Evaluar explícitamente permisos para ADMINISTRADOR, GERENTE, SECRETARIA, RESPON
 - `frontend/src/paginas/Configuracion.tsx`: panel mantenimiento limitado a Administrador del tenant.
 
 Este documento define criterios de aceptación; no indica que estén implementados.
+
+
+## Nueva regla: empresa emisora asignada a gestor (14/10/2026)
+
+Al cargar FACT, GRE, voucher u otro documento con emisor identificable, validar RUC emisor y titularidad de grupo **antes de su contabilización y publicación**. La propiedad se determina por la asociación empresarial vigente, no por el mero conocimiento del RUC ni por nombre de archivo. Revisar los modelos de asignación actuales antes de migrar.
+
+- Si el emisor pertenece al ámbito permitido del usuario autenticado, continuar con validaciones documentales usuales.
+- Si pertenece a otro gestor/responsable del mismo tenant, aislar en cuarentena temporal (sin expediente, importes ni contadores), notificar a Administración, al responsable propietario y a los usuarios habilitados del gestor correspondiente, con información del solicitante, RUC, gestor y responsable propietarios y referencia de la solicitud.
+- El responsable habilitado o Administrador del tenant podrán aprobar o rechazar **una solicitud concreta** según RBAC, ámbito y conflicto de intereses. No equivale a transferir empresa ni a autorización general.
+- Si se rechaza, borrar carga temporal y derivados; conservar metadatos mínimos de solicitud, decisión y auditoría sin exponer contenido del documento.
+- Si el emisor no está registrado, si hay múltiples titulares, OCR poco confiable o discrepancias, pasar a revisión sin asignación automática ni contabilización.
+- Proteger contra cargas simultáneas y sustitución del archivo aprobado (huella SHA-256), acceso entre tenants, acceso por rutas de descarga, duplicación semántica de facturas y notificaciones duplicadas.
+- Si el documento es un voucher sin RUC emisor verificable, aplicar su propia regla documental sin atribuir titularidad a partir del importe.
+
+Pruebas: emisor propio/ajeno, empresa sin asignación, usuario de otro tenant, aprobado/rechazado, recarga simultánea, OCR incompleto, mensajes por destinatario, y Dashboard sin montos de solicitudes pendientes/rechazadas.
