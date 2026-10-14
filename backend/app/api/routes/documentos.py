@@ -40,6 +40,7 @@ from app.schemas import (
 from app.security import cuenta_administradora_responsable
 from app.services import auditoria
 from app.services.ambito_gerencia import alcance_expedientes_gerente, expediente_visible_gerente
+from app.services.ambito_emisor import EstadoAmbitoEmisor, revisar_asignaciones_emisor
 from app.services.aprendizaje_documental import (
     aplicar_perfiles_aprendidos,
     registrar_correccion_y_aprender,
@@ -68,7 +69,7 @@ from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 from app.services.relaciones_documentales import sugerir_relaciones
 from app.services.separador_pdf import analizar_paquete, extraer_fragmento
-from app.services.ubl import UblInvalido
+from app.services.ubl import UblInvalido, parse_ubl, parece_xml
 from app.storage import AlmacenLocal
 
 router = APIRouter(prefix="/documentos", tags=["documentos"])
@@ -396,6 +397,30 @@ async def subir_documento(
         mime_type=archivo.content_type or "application/octet-stream",
         contenido=contenido,
     )
+    # Control previo al registro: una factura/guía UBL asignada a otro
+    # grupo no puede crear expediente ni incrementar montos.
+    if parece_xml(subido.nombre, subido.contenido):
+        try:
+            ubl = parse_ubl(subido.contenido)
+        except UblInvalido as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+        if ubl is not None:
+            revision = revisar_asignaciones_emisor(
+                session, tenant_id, ubl.emisor.ruc, usuario_id, gestor_id
+            )
+            if revision.estado in (
+                EstadoAmbitoEmisor.ASIGNADO_A_OTRO_GRUPO,
+                EstadoAmbitoEmisor.AMBIGUO,
+            ):
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    {
+                        "codigo": "EMISOR_REQUIERE_AUTORIZACION",
+                        "mensaje": "El emisor pertenece a otro grupo o su asignación requiere revisión",
+                        "ruc_emisor": ubl.emisor.ruc,
+                        "estado": revision.estado.value,
+                    },
+                )
     try:
         documento = ingerir_documento(
             session,
