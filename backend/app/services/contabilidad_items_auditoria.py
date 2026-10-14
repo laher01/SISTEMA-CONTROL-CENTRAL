@@ -66,11 +66,7 @@ def registrar_decision(
     elif accion == "DESACTIVAR":
         if estado_anterior in {"INVALIDADA_PENDIENTE", "INVALIDADA_CONFIRMADA"}:
             raise HTTPException(409, "El comprobante ya está desactivado o en revisión")
-        estado = (
-            "INVALIDADA_PENDIENTE"
-            if auth.rol == "SECRETARIA"
-            else "INVALIDADA_CONFIRMADA"
-        )
+        estado = "INVALIDADA_PENDIENTE" if auth.rol == "SECRETARIA" else "INVALIDADA_CONFIRMADA"
     else:
         if estado_anterior not in {"INVALIDADA_CONFIRMADA", "INVALIDADA_PENDIENTE"}:
             raise HTTPException(409, "El comprobante no está desactivado")
