@@ -56,3 +56,12 @@ Consultar el prompt maestro compartido el 14-10-2026; ejecución por prioridad: 
 - Commits: `48e19173`, `07a1c6f5`, `87ad9fb4`, `adce126d`, `87a6bccc`, `046c1279`.
 - CI: **sin ejecuciones asociadas al último commit al consultar**; validación pendiente.
 - **Próximo trabajo inmediato**: crear almacenamiento seguro de cuarentena por tenant, solicitudes automáticas y estados; implementar aprobación/rechazo y notificaciones; proteger rutas de paquetes, OCR e ingesta de correo; posteriormente frontend. Mantener PR borrador y no desplegar.
+
+## Avance 14/10/2026: solicitudes y rechazo (solo XML UBL)
+
+- `documentos.py`: si emisor UBL está asignado a otro grupo o es ambiguo, crea `SolicitudCargaEmisor` PENDIENTE, escribe temporal separado de documentos registrados y emite `AlertaManual` para Administración/gestor/responsable (en la alerta el responsable se representa mediante destinatario_usuario_id).
+- `solicitudes_carga_emisor.py`: GET solicitudes y POST rechazo por Administrador o Responsable propietario, valida tenant y autoaprobación, elimina archivo temporal y registra auditoría. Ruta registrada en `main.py`.
+- Prueba HTTP ampliada para comprobar documento y expediente sin alteración, solicitud pendiente y rechazo con eliminación de temporal.
+- Commits `2dbcf7bf`, `56682b1f`, `49763564`, `7d51b6e5`.
+- **PENDIENTE CRÍTICO**: aprobación efectiva, revalidación del archivo, estados de autorización de la operación, sincronización DB/disco ante falla, aislamiento del almacenamiento temporal, clasificación sin RUC, OCR/PDF, paquetes y correo; frontend, permisos Responsable, notificaciones exactas y reintentos de archivo.
+- Pruebas **no ejecutadas** y VPS **no modificada**. No fusionar ni desplegar.
