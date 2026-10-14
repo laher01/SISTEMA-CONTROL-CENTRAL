@@ -438,19 +438,19 @@ async def subir_documento(
                 )
                 session.add(
                     AlertaManual(
-                    tenant_id=tenant_id,
-                    creado_por_codigo=auth.codigo,
-                    creado_por_rol=auth.rol,
-                    destinatario_usuario_id=revision.responsable_propietario_id,
-                    destinatario_gestor_id=revision.gestor_propietario_id,
-                    para_administracion=True,
-                    asunto="Autorización de documento de empresa ajena",
-                    mensaje=(
-                        f"Solicitud {solicitud.id}; emisor {ubl.emisor.ruc}; "
-                        f"solicitante {auth.codigo}; gestor propietario "
-                        f"{revision.gestor_propietario_id}; responsable "
-                        f"{revision.responsable_propietario_id}."
-                    ),
+                        tenant_id=tenant_id,
+                        creado_por_codigo=auth.codigo,
+                        creado_por_rol=auth.rol,
+                        destinatario_usuario_id=revision.responsable_propietario_id,
+                        destinatario_gestor_id=revision.gestor_propietario_id,
+                        para_administracion=True,
+                        asunto="Autorización de documento de empresa ajena",
+                        mensaje=(
+                            f"Solicitud {solicitud.id}; emisor {ubl.emisor.ruc}; "
+                            f"solicitante {auth.codigo}; gestor propietario "
+                            f"{revision.gestor_propietario_id}; responsable "
+                            f"{revision.responsable_propietario_id}."
+                        ),
                     )
                 )
                 auditoria.registrar(
