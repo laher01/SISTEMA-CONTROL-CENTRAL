@@ -259,7 +259,10 @@ class Expediente(ConId, ConTenant, ConCreacion, Base):
 
 class Documento(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "documentos"
-    __table_args__ = (UniqueConstraint("tenant_id", "sha256"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "sha256"),
+        UniqueConstraint("tenant_id", "huella_comercial"),
+    )
 
     expediente_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("expedientes.id"), index=True
@@ -267,6 +270,7 @@ class Documento(ConId, ConTenant, ConCreacion, Base):
     tipo_documento: Mapped[str | None] = mapped_column(String(6))
     estado: Mapped[str] = mapped_column(String(30), index=True)
     sha256: Mapped[str] = mapped_column(String(64))
+    huella_comercial: Mapped[str | None] = mapped_column(String(64))
     nombre_original: Mapped[str] = mapped_column(String(500))
     mime_type: Mapped[str] = mapped_column(String(100))
     tamano_bytes: Mapped[int] = mapped_column(BigInteger)

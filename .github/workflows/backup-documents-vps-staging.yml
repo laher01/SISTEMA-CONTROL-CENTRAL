@@ -63,10 +63,16 @@ jobs:
           chmod 600 "$file"
           sha256sum "$file" > "$file.sha256"
           sha256sum -c "$file.sha256"
+          extraction="$(mktemp -d)"
+          trap 'rm -rf -- "$extraction"' EXIT
+          tar -xzf "$file" -C "$extraction" --no-same-owner --no-same-permissions
+          test -d "$extraction"
+          extracted="$(find "$extraction" -type f | wc -l)"
+          echo "ARCHIVOS_EXTRAIDOS_PRUEBA: $extracted"
           count="$(tar -tzf "$file" | wc -l)"
           bytes="$(stat -c %s "$file")"
           echo "ARCHIVO_DOCUMENTOS_VERIFICADO: $file"
           echo "ENTRADAS_TAR: $count"
           echo "TAMANIO_BYTES: $bytes"
-          echo "NOTA: respaldo legible; extracción de prueba y consistencia entre DB/documentos aún pendientes"
+          echo "NOTA: extracción aislada probada; consistencia DB/documentos aún pendiente"
           REMOTE

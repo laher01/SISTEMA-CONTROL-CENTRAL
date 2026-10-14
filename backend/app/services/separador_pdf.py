@@ -15,6 +15,7 @@ from pypdf.errors import PdfReadError
 from app.services.procesamiento_documental import DocumentoNoProcesable
 
 TIPOS = (
+    ("COT", re.compile(r"COTIZACI[OÓ]N", re.I)),
     ("FACT", re.compile(r"FACTURA\s+ELECTR[OÓ]NICA", re.I)),
     ("RHE", re.compile(r"RECIBO\s+POR\s+HONORARIOS\s+ELECTR[OÓ]NICO", re.I)),
     ("GRE", re.compile(r"GU[IÍ]A\s+DE\s+REMISI[OÓ]N", re.I)),
@@ -22,6 +23,16 @@ TIPOS = (
 )
 SERIE = re.compile(r"\b([A-Z][A-Z0-9]{3})\s*[-–—]\s*(\d{1,10})\b", re.I)
 RUC = re.compile(r"\b(?:20|10)\d{9}\b")
+# Las cotizaciones tienen numeración comercial, no necesariamente serie SUNAT.
+COT_NUMERO = re.compile(
+    r"(?:COTIZACI[OÓ]N\s*(?:N(?:[°ºo]|o\.)\s*[:.]?)?|\bN(?:[°º]|o\.)\s*[:.]?)"
+    r"\s*[:.°º-]*\s*(\d{2,8}(?:\s*[-–]\s*\d{4})?)",
+    re.I,
+)
+COT_NUMERO_SIN_CABECERA = re.compile(
+    r"\bN(?:[°º]|o\.)\s*[:.]?\s*(\d{2,8}(?:\s*[-–]\s*\d{4})?)",
+    re.I,
+)
 OTRO_DOCUMENTO = re.compile(
     r"\b(?:COTIZACI[OÓ]N|COMPROBANTE\s+DE\s+PAGO|VOUCHER|TRANSFERENCIA\s+BANCARIA|"
     r"GU[IÍ]A\s+DE\s+REMISI[OÓ]N|FACTURA\s+ELECTR[OÓ]NICA|"
@@ -54,9 +65,18 @@ def _cabecera(texto: str) -> tuple[str, str, str, str] | None:
     # La cabecera se busca en la parte superior, no en descripciones y notas.
     cabecera = texto[:2000]
     tipo = next((clave for clave, patron in reversed(TIPOS) if patron.search(cabecera)), None)
+    if not tipo:
+        return None
+    if tipo == "COT":
+        numero = COT_NUMERO.search(cabecera) or COT_NUMERO_SIN_CABECERA.search(cabecera)
+        if not numero:
+            return None
+        correlativo = re.sub(r"\s+", "", numero.group(1)).replace("–", "-")
+        # El proveedor puede no indicar RUC; no sustituirlo por el RUC del cliente.
+        return tipo, "COT", correlativo, ""
     serie = SERIE.search(cabecera)
     ruc = RUC.search(cabecera)
-    if not tipo or not serie or not ruc:
+    if not serie or not ruc:
         return None
     return tipo, serie.group(1).upper(), str(int(serie.group(2))), ruc.group(0)
 

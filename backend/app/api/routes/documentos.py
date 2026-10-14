@@ -1,3 +1,5 @@
+import hashlib
+import io
 import uuid
 from datetime import date
 from decimal import Decimal
@@ -6,6 +8,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
+from pypdf import PdfReader
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, selectinload
@@ -14,7 +17,16 @@ from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, Setti
 from app.api.errores import no_encontrado
 from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, RolMiembro, TipoDocumento
-from app.models import Documento, Empresa, Expediente, Gestor, Miembro, ReferenciaGRE, ahora
+from app.models import (
+    Documento,
+    Empresa,
+    Expediente,
+    Gestor,
+    Miembro,
+    ReferenciaGRE,
+    RelacionDocumento,
+    ahora,
+)
 from app.schemas import (
     DocumentoOut,
     DocumentoVincular,
@@ -40,6 +52,7 @@ from app.services.automatizacion_documental import (
 )
 from app.services.cache_ocr import procesar_con_cache
 from app.services.expedientes import actualizar_expediente, buscar_expediente
+from app.services.identidad_cotizaciones import identidad_cotizacion
 from app.services.ingesta import (
     ArchivoSubido,
     ComprobanteYaRegistrado,
@@ -122,6 +135,7 @@ async def importar_paquete_pdf(
     auth: OperativeAuthDep,
     archivo: Annotated[UploadFile, File()],
     confirmar: Annotated[bool, Form()] = False,
+    indices_documentos: Annotated[str | None, Form()] = None,
 ) -> dict[str, object]:
     """Primero previsualiza; únicamente con confirmar=true ingiere documentos.
 
@@ -151,6 +165,64 @@ async def importar_paquete_pdf(
             "documentos": [segmento.descripcion() for segmento in segmentos],
         }
 
+    # Los índices provienen de la vista previa; nunca confiar en el cliente
+    # para introducir páginas o documentos que no detectó el separador.
+    if indices_documentos is not None:
+        try:
+            seleccion = {int(valor.strip()) for valor in indices_documentos.split(",")}
+        except ValueError as exc:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "Selección de documentos inválida"
+            ) from exc
+        if not seleccion or any(indice < 0 or indice >= len(segmentos) for indice in seleccion):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "Selección fuera del paquete analizado"
+            )
+        segmentos = [segmento for indice, segmento in enumerate(segmentos) if indice in seleccion]
+
+    # Un paquete comercial conserva su original en la misma área documental.
+    # La huella binaria permite reutilizarlo si se repite la importación.
+    paquete_original: Documento | None = None
+    if any(segmento.tipo == "COT" for segmento in segmentos):
+        sha_paquete = hashlib.sha256(contenido).hexdigest()
+        paquete_original = session.scalar(
+            select(Documento).where(
+                Documento.tenant_id == tenant_id,
+                Documento.sha256 == sha_paquete,
+                Documento.deleted_at.is_(None),
+            )
+        )
+        if paquete_original is not None and (
+            paquete_original.usuario_id != auth.usuario_id
+            or (auth.rol == "GESTOR" and paquete_original.gestor_id != auth.gestor_id)
+        ):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Paquete original fuera de su ámbito")
+        if paquete_original is None:
+            try:
+                paquete_original = ingerir_documento(
+                    session,
+                    almacen,
+                    settings,
+                    hoy,
+                    tenant_id,
+                    ArchivoSubido(
+                        nombre=archivo.filename or "paquete_cotizaciones.pdf",
+                        mime_type="application/pdf",
+                        contenido=contenido,
+                    ),
+                    TipoDocumento.OTRO,
+                    None,
+                    auth.gestor_id if auth.rol == "GESTOR" else None,
+                    auth.usuario_id,
+                    cuenta_administradora_responsable(session, auth),
+                )
+                session.commit()
+            except DocumentoDuplicado:
+                session.rollback()
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT, "Paquete original duplicado; vuelva a analizar"
+                ) from None
+
     resultados: list[dict[str, object]] = []
     for segmento in segmentos:
         clave = segmento.descripcion()
@@ -170,13 +242,55 @@ async def importar_paquete_pdf(
                 hoy,
                 tenant_id,
                 subido,
-                None,
+                TipoDocumento.COT if segmento.tipo == "COT" else None,
                 None,
                 auth.gestor_id if auth.rol == "GESTOR" else None,
                 auth.usuario_id,
                 cuenta_administradora_responsable(session, auth),
             )
-            if settings.procesamiento_automatico and _es_procesable(documento):
+            if segmento.tipo == "COT" and paquete_original is not None:
+                lector_individual = PdfReader(io.BytesIO(subido.contenido))
+                texto_cotizacion = "\n".join(
+                    pagina.extract_text() or "" for pagina in lector_individual.pages
+                )
+                identidad = identidad_cotizacion(texto_cotizacion, segmento.correlativo)
+                documento.huella_comercial = identidad["huella"]
+                documento.datos_extraidos = {
+                    "origen_paquete": {
+                        "documento_padre_id": str(paquete_original.id),
+                        "sha256_original": paquete_original.sha256,
+                        "pagina_inicio": segmento.inicio + 1,
+                        "pagina_fin": segmento.fin,
+                    },
+                    "cotizacion": {
+                        "numero": segmento.correlativo,
+                        "identidad": identidad,
+                        "estado_identidad": identidad["estado"],
+                    },
+                }
+                session.add(
+                    RelacionDocumento(
+                        tenant_id=tenant_id,
+                        origen_id=paquete_original.id,
+                        destino_id=documento.id,
+                        tipo="ORIGEN_PAQUETE",
+                        evidencia=(f"Paginas {segmento.inicio + 1}-{segmento.fin}"),
+                        confirmado_por_cuenta_id=cuenta_administradora_responsable(session, auth),
+                    )
+                )
+                auditoria.registrar(
+                    session,
+                    tenant_id,
+                    "COTIZACION_SEPARADA",
+                    "documento",
+                    documento.id,
+                    {"documento_padre_id": str(paquete_original.id)},
+                )
+            if (
+                segmento.tipo != "COT"
+                and settings.procesamiento_automatico
+                and _es_procesable(documento)
+            ):
                 try:
                     _procesar_y_aplicar(session, settings, almacen, hoy, documento)
                 except DocumentoNoProcesable as exc:
@@ -195,7 +309,15 @@ async def importar_paquete_pdf(
         except (DocumentoDuplicado, ComprobanteYaRegistrado):
             session.rollback()
             resultados.append({**clave, "estado": "duplicado"})
-        except (IntegrityError, UblInvalido, DocumentoNoProcesable) as exc:
+        except IntegrityError as exc:
+            session.rollback()
+            if "huella_comercial" in str(exc.orig).lower():
+                resultados.append({**clave, "estado": "duplicado"})
+            else:
+                resultados.append(
+                    {**clave, "estado": "error", "detalle": "Conflicto de integridad"}
+                )
+        except (UblInvalido, DocumentoNoProcesable) as exc:
             session.rollback()
             resultados.append({**clave, "estado": "error", "detalle": str(exc)})
     return {
