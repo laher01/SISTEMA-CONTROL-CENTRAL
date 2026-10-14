@@ -250,7 +250,11 @@ async def importar_paquete_pdf(
                     },
                 }
                 auditoria.registrar(
-                    session, tenant_id, "COTIZACION_SEPARADA", "documento", documento.id,
+                    session,
+                    tenant_id,
+                    "COTIZACION_SEPARADA",
+                    "documento",
+                    documento.id,
                     {"documento_padre_id": str(paquete_original.id)},
                 )
             if (
