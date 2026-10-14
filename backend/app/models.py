@@ -403,6 +403,29 @@ class CorreccionIA(ConId, ConTenant, ConCreacion, Base):
     motivo: Mapped[str | None] = mapped_column(String(500))
 
 
+class SolicitudCargaEmisor(ConId, ConTenant, ConCreacion, Base):
+    """Autorización puntual previa a incorporación fiscal y contable."""
+
+    __tablename__ = "solicitudes_carga_emisor"
+    __table_args__ = (
+        Index("ix_solicitudes_emisor_pendientes", "tenant_id", "estado"),
+    )
+
+    ruc_emisor: Mapped[str] = mapped_column(String(11), index=True)
+    empresa_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("empresas.id"))
+    solicitante_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
+    usuario_solicitante_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"))
+    gestor_solicitante_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"))
+    gestor_propietario_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"))
+    responsable_propietario_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"))
+    sha256_archivo: Mapped[str] = mapped_column(String(64))
+    ruta_temporal: Mapped[str | None] = mapped_column(String(500))
+    estado: Mapped[str] = mapped_column(String(20), default="PENDIENTE", server_default="PENDIENTE")
+    decidido_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cuentas_acceso.id"))
+    decidido_at: Mapped[datetime | None]
+    observacion: Mapped[str | None] = mapped_column(String(500))
+
+
 class AlertaManual(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "alertas_manuales"
 
