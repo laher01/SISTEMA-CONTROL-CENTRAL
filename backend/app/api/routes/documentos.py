@@ -25,6 +25,8 @@ from app.models import (
     Miembro,
     ReferenciaGRE,
     RelacionDocumento,
+    SolicitudCargaEmisor,
+    AlertaManual,
     ahora,
 )
 from app.schemas import (
@@ -412,11 +414,56 @@ async def subir_documento(
                 EstadoAmbitoEmisor.ASIGNADO_A_OTRO_GRUPO,
                 EstadoAmbitoEmisor.AMBIGUO,
             ):
+                # El registro de solicitud NO crea un Documento/Expediente.
+                # El archivo permanece en área de cuarentena, fuera de los
+                # listados, y solo la API de revisión puede liberarlo.
+                huella = hashlib.sha256(subido.contenido).hexdigest()
+                solicitud = SolicitudCargaEmisor(
+                    tenant_id=tenant_id,
+                    ruc_emisor=ubl.emisor.ruc,
+                    empresa_id=revision.empresa_id,
+                    solicitante_cuenta_id=auth.cuenta_id,
+                    usuario_solicitante_id=usuario_id,
+                    gestor_solicitante_id=gestor_id,
+                    gestor_propietario_id=revision.gestor_propietario_id,
+                    responsable_propietario_id=revision.responsable_propietario_id,
+                    sha256_archivo=huella,
+                    estado="PENDIENTE",
+                )
+                session.add(solicitud)
+                session.flush()
+                # Usar namespace reservado que no colisione con originales.
+                solicitud.ruta_temporal = almacen.guardar(
+                    tenant_id, f"cuarentena-{solicitud.id}-{huella}",
+                    subido.contenido
+                )
+                session.add(AlertaManual(
+                    tenant_id=tenant_id,
+                    creado_por_codigo=auth.codigo,
+                    creado_por_rol=auth.rol,
+                    destinatario_usuario_id=revision.responsable_propietario_id,
+                    destinatario_gestor_id=revision.gestor_propietario_id,
+                    para_administracion=True,
+                    asunto="Autorización de documento de empresa ajena",
+                    mensaje=(
+                        f"Solicitud {solicitud.id}; emisor {ubl.emisor.ruc}; "
+                        f"solicitante {auth.codigo}; gestor propietario "
+                        f"{revision.gestor_propietario_id}; responsable "
+                        f"{revision.responsable_propietario_id}."
+                    ),
+                ))
+                auditoria.registrar(
+                    session, tenant_id, "CARGA_EMISOR_PENDIENTE",
+                    "solicitud_carga_emisor", solicitud.id,
+                    {"ruc_emisor": ubl.emisor.ruc, "sha256": huella},
+                )
+                session.commit()
                 raise HTTPException(
                     status.HTTP_409_CONFLICT,
                     {
                         "codigo": "EMISOR_REQUIERE_AUTORIZACION",
-                        "mensaje": "El emisor pertenece a otro grupo o su asignación requiere revisión",
+                        "solicitud_id": str(solicitud.id),
+                        "mensaje": "Solicitud creada, pendiente de autorización",
                         "ruc_emisor": ubl.emisor.ruc,
                         "estado": revision.estado.value,
                     },
