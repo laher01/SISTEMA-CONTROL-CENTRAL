@@ -264,9 +264,7 @@ async def importar_paquete_pdf(
                         origen_id=paquete_original.id,
                         destino_id=documento.id,
                         tipo="ORIGEN_PAQUETE",
-                        evidencia=(
-                            f"Paginas {segmento.inicio + 1}-{segmento.fin}"
-                        ),
+                        evidencia=(f"Paginas {segmento.inicio + 1}-{segmento.fin}"),
                         confirmado_por_cuenta_id=cuenta_administradora_responsable(session, auth),
                     )
                 )
