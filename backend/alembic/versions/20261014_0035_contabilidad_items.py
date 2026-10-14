@@ -22,7 +22,8 @@ def upgrade() -> None:
         sa.Column("id", sa.Uuid(), primary_key=True),
         sa.Column("tenant_id", sa.Uuid(), sa.ForeignKey("tenants.id"), nullable=False),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.Column("clave_catalogo", sa.String(300), nullable=False),
         sa.Column("descripcion", sa.String(500), nullable=False),
         sa.Column("categoria", sa.String(80), nullable=False),
@@ -36,7 +37,8 @@ def upgrade() -> None:
         sa.Column("id", sa.Uuid(), primary_key=True),
         sa.Column("tenant_id", sa.Uuid(), sa.ForeignKey("tenants.id"), nullable=False),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.Column("documento_id", sa.Uuid(), sa.ForeignKey("documentos.id"), nullable=False),
         sa.Column("producto_id", sa.Uuid(), sa.ForeignKey("productos_items.id"), nullable=False),
         sa.Column("numero_linea", sa.Integer(), nullable=False),
@@ -48,16 +50,20 @@ def upgrade() -> None:
     )
     op.create_index(
         "ix_lineas_comprobantes_items_tenant_id", "lineas_comprobantes_items", ["tenant_id"]
+    )
     op.create_index(
         "ix_lineas_comprobantes_items_documento_id", "lineas_comprobantes_items", ["documento_id"]
+    )
     op.create_index(
         "ix_lineas_comprobantes_items_producto_id", "lineas_comprobantes_items", ["producto_id"]
+    )
     op.create_table(
         "auditorias_facturas_items",
         sa.Column("id", sa.Uuid(), primary_key=True),
         sa.Column("tenant_id", sa.Uuid(), sa.ForeignKey("tenants.id"), nullable=False),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.Column("expediente_id", sa.Uuid(), sa.ForeignKey("expedientes.id"), nullable=False),
         sa.Column("producto_id", sa.Uuid(), sa.ForeignKey("productos_items.id")),
         sa.Column("estado", sa.String(40), nullable=False),
@@ -72,6 +78,7 @@ def upgrade() -> None:
     )
     op.create_index(
         "ix_auditorias_facturas_items_tenant_id", "auditorias_facturas_items", ["tenant_id"]
+    )
     op.create_index(
         "ix_auditorias_facturas_items_expediente_id",
         "auditorias_facturas_items",
