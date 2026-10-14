@@ -65,3 +65,13 @@ Consultar el prompt maestro compartido el 14-10-2026; ejecución por prioridad: 
 - Commits `2dbcf7bf`, `56682b1f`, `49763564`, `7d51b6e5`.
 - **PENDIENTE CRÍTICO**: aprobación efectiva, revalidación del archivo, estados de autorización de la operación, sincronización DB/disco ante falla, aislamiento del almacenamiento temporal, clasificación sin RUC, OCR/PDF, paquetes y correo; frontend, permisos Responsable, notificaciones exactas y reintentos de archivo.
 - Pruebas **no ejecutadas** y VPS **no modificada**. No fusionar ni desplegar.
+
+## Caso GRE SUNAT MARY GREIS / MAREUF (14/10/2026)
+
+Observación de las capturas (NO archivo PDF binario): GRE remitente E001-00000910, emisor MARY GREIS E.I.R.L. RUC 20550466385, destinatario MAREUF RUC 20538821374, referencia impresa "Factura N° 0002 8 - RUC N° 20550466385". La referencia fiscal está incompleta/ambigua: falta serie válida E###/F###. No asumir que la guía es la factura ni deducir serie de E001-00000910.
+
+Causa verificada: `extraer_referencias_factura_gre` solo acepta serie F###/E###; `automatizacion_documental.py` deriva a revisión cuando faltan referencia/RUC. Cuando sí existe referencia inequívoca, guarda `ReferenciaGRE` y se ve en `GET /documentos/provisionales-gre`, NO necesariamente en expedientes regulares; conciliación al llegar factura ya existe.
+
+Cambios: `automatizacion_documental.py` conserva `gre_factura_pendiente` para referencia ambigua y "importe_contabilizable": "0.00"; prueba añadida en `test_gre_primero_factura_despues.py` con impresión SUNAT de referencia incompleta. Commits `03598436`, `5378dabd`. **Pruebas no ejecutadas**.
+
+Siguiente trabajo: revisar contrato UI de expedientes para mostrar GRE provisionales (incluidas las ambiguas), con estado PENDIENTE_FACTURA y monto contable 0 sin falsificar fecha/serie; añadir extracción OCR robusta con PDF real aportado, validación de emisor/receptor/propiedad por gestor para PDF y conciliación sin contaminación entre grupos. Verificar seguridad y pruebas antes de deploy.
