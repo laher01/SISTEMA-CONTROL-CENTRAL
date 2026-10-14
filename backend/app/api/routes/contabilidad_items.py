@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, select
 
 from app.api.deps import OperativeAuthDep, SessionDep
-from app.item_models import LineaComprobanteItem, ProductoItem
+from app.item_models import AuditoriaFacturaItem, LineaComprobanteItem, ProductoItem
 from app.models import Documento, Expediente
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 
@@ -59,13 +59,13 @@ def resumen(
             ProductoItem.activo.is_(True),
             alcance,
             ~select(1)
-            .select_from(__import__("app.item_models", fromlist=["AuditoriaFacturaItem"]).AuditoriaFacturaItem)
+            .select_from(AuditoriaFacturaItem)
             .where(
-                __import__("app.item_models", fromlist=["AuditoriaFacturaItem"]).AuditoriaFacturaItem.expediente_id
+                AuditoriaFacturaItem.expediente_id
                 == Expediente.id,
-                __import__("app.item_models", fromlist=["AuditoriaFacturaItem"]).AuditoriaFacturaItem.tenant_id
+                AuditoriaFacturaItem.tenant_id
                 == auth.tenant_id,
-                __import__("app.item_models", fromlist=["AuditoriaFacturaItem"]).AuditoriaFacturaItem.estado
+                AuditoriaFacturaItem.estado
                 == "INVALIDADA_CONFIRMADA",
             )
             .exists(),
