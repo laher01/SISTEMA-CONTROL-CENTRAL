@@ -19,14 +19,24 @@ from app.services.ambito_emisor import EstadoAmbitoEmisor, revisar_asignaciones_
 def test_emisor_sin_asignacion_no_se_autoriza_automaticamente(session: Session, auth_prueba):
     tenant_id = auth_prueba.contexto.tenant_id
     empresa = Empresa(
-        tenant_id=tenant_id, ruc="20111111111",
-        razon_social="Emisor de prueba", tipo_relacion="PROVEEDOR",
+    empresa = Empresa(
+        tenant_id=tenant_id,
+        ruc="20111111111",
+        razon_social="Emisor de prueba",
+        tipo_relacion="PROVEEDOR",
+    )
     )
     session.add(empresa)
     session.commit()
 
     resultado = revisar_asignaciones_emisor(
-        session, tenant_id, empresa.ruc, None, None,
+    resultado = revisar_asignaciones_emisor(
+        session,
+        tenant_id,
+        empresa.ruc,
+        None,
+        None,
+    )
     )
     assert resultado.estado == EstadoAmbitoEmisor.SIN_ASIGNACION
 
@@ -69,14 +79,26 @@ def test_emisor_asignado_a_otro_gestor_se_identifica_sin_mutaciones(
     session.commit()
 
     ajeno = revisar_asignaciones_emisor(
-        session, tenant_id, empresa.ruc, None, None,
+    ajeno = revisar_asignaciones_emisor(
+        session,
+        tenant_id,
+        empresa.ruc,
+        None,
+        None,
+    )
     )
     assert ajeno.estado == EstadoAmbitoEmisor.ASIGNADO_A_OTRO_GRUPO
     assert ajeno.gestor_propietario_id == gestor.id
     assert ajeno.responsable_propietario_id == responsable.id
 
     propio = revisar_asignaciones_emisor(
-        session, tenant_id, empresa.ruc, usuario.id, gestor.id,
+    propio = revisar_asignaciones_emisor(
+        session,
+        tenant_id,
+        empresa.ruc,
+        usuario.id,
+        gestor.id,
+    )
     )
     assert propio.estado == EstadoAmbitoEmisor.ASIGNADO_AL_GRUPO
 
@@ -84,13 +106,24 @@ def test_emisor_asignado_a_otro_gestor_se_identifica_sin_mutaciones(
     session.add(externo)
     session.commit()
     aislado = revisar_asignaciones_emisor(
-        session, externo.id, empresa.ruc, usuario.id, gestor.id,
+    aislado = revisar_asignaciones_emisor(
+        session,
+        externo.id,
+        empresa.ruc,
+        usuario.id,
+        gestor.id,
+    )
     )
     assert aislado.estado == EstadoAmbitoEmisor.SIN_ASIGNACION
 
 
 def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
-    client, session: Session, auth_prueba, settings,
+def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
+    client,
+    session: Session,
+    auth_prueba,
+    settings,
+):
 ):
     from sqlalchemy import func, select
 
@@ -139,20 +172,37 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
 
     respuesta = client.post(
         "/api/v1/documentos",
-        files={"archivo": ("factura_ajena.xml", factura(
-            numero="F001-00000851", emisor=empresa.ruc,
-        ), "application/xml")},
+        "/api/v1/documentos",
+        files={
+            "archivo": (
+                "factura_ajena.xml",
+                factura(
+                    numero="F001-00000851",
+                    emisor=empresa.ruc,
+                ),
+                "application/xml",
+            )
+        },
+    )
     )
     assert respuesta.status_code == 409, respuesta.text
     assert respuesta.json()["detail"]["codigo"] == "EMISOR_REQUIERE_AUTORIZACION"
 
     session.expire_all()
-    assert session.scalar(
-        select(func.count()).select_from(Documento).where(Documento.tenant_id == tenant_id)
-    ) == anterior_documentos
-    assert session.scalar(
-        select(func.count()).select_from(Expediente).where(Expediente.tenant_id == tenant_id)
-    ) == anterior_expedientes
+    session.expire_all()
+    assert (
+        session.scalar(
+            select(func.count()).select_from(Documento).where(Documento.tenant_id == tenant_id)
+        )
+        == anterior_documentos
+    )
+    assert (
+        session.scalar(
+            select(func.count()).select_from(Expediente).where(Expediente.tenant_id == tenant_id)
+        )
+        == anterior_expedientes
+    )
+    solicitud = session.scalar(
     solicitud = session.scalar(
         select(SolicitudCargaEmisor).where(
             SolicitudCargaEmisor.tenant_id == tenant_id,
@@ -199,8 +249,12 @@ def test_admin_asigna_empresa_y_bloquea_ajenos(
     session.add(usuario)
     session.flush()
     gestor = Gestor(
-        tenant_id=tenant_id, codigo="GESTOR-FORMAL",
-        nombre="Gestor formal", usuario_id=usuario.id,
+    gestor = Gestor(
+        tenant_id=tenant_id,
+        codigo="GESTOR-FORMAL",
+        nombre="Gestor formal",
+        usuario_id=usuario.id,
+    )
     )
     session.add(gestor)
     session.commit()
