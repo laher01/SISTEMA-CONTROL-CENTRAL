@@ -1,11 +1,12 @@
 """Contrato HTTP de detalle de Contabilidad de Ítems."""
 
 import uuid
+from dataclasses import replace
+
+import pytest
+from fastapi import HTTPException
 
 from app.api.routes.contabilidad_items import detalle_expediente
-from fastapi import HTTPException
-from dataclasses import replace
-import pytest
 
 
 def test_detalle_no_revela_expediente_inexistente(session, auth_prueba):
