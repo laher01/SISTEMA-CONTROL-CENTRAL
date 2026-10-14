@@ -44,14 +44,8 @@ def listar(
 
 @router.put("/{empresa_id}", response_model=AsignacionOut)
 def asignar(
-@router.put("/{empresa_id}", response_model=AsignacionOut)
-def asignar(
-    session: SessionDep,
-    tenant_id: TenantDep,
-    auth: OperativeAuthDep,
-    empresa_id: uuid.UUID,
-    datos: AsignacionIn,
-) -> AsignacionEmpresaGestor:
+    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep,
+    empresa_id: uuid.UUID, datos: AsignacionIn,
 ) -> AsignacionEmpresaGestor:
     _administrador(auth)
     if datos.empresa_id != empresa_id:
@@ -93,15 +87,7 @@ def asignar(
         asignacion.activo = True
         asignacion.updated_at = ahora()
     session.flush()
-    session.flush()
-    auditoria.registrar(
-        session,
-        tenant_id,
-        "EMISOR_ASIGNADO",
-        "empresa",
-        empresa_id,
-        {"gestor_id": str(gestor.id), "responsable_id": str(responsable.id)},
-    )
-    session.commit()
+    auditoria.registrar(session, tenant_id, "EMISOR_ASIGNADO", "empresa",
+        empresa_id, {"gestor_id": str(gestor.id), "responsable_id": str(responsable.id)})
     session.commit()
     return asignacion
