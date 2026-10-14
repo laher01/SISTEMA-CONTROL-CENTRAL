@@ -426,9 +426,8 @@ class SolicitudCargaEmisor(ConId, ConTenant, ConCreacion, Base):
     """Autorización puntual previa a incorporación fiscal y contable."""
 
     __tablename__ = "solicitudes_carga_emisor"
-    __table_args__ = (
-        Index("ix_solicitudes_emisor_pendientes", "tenant_id", "estado"),
-    )
+    __tablename__ = "solicitudes_carga_emisor"
+    __table_args__ = (Index("ix_solicitudes_emisor_pendientes", "tenant_id", "estado"),)
 
     ruc_emisor: Mapped[str] = mapped_column(String(11), index=True)
     empresa_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("empresas.id"))
