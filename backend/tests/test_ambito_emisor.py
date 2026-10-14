@@ -81,3 +81,69 @@ def test_emisor_asignado_a_otro_gestor_se_identifica_sin_mutaciones(
         session, externo.id, empresa.ruc, usuario.id, gestor.id,
     )
     assert aislado.estado == EstadoAmbitoEmisor.SIN_ASIGNACION
+
+
+def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
+    client, session: Session, auth_prueba, settings,
+):
+    from sqlalchemy import func, select
+    from app.models import Documento, Expediente
+    from tests.xml import factura
+
+    tenant_id = auth_prueba.contexto.tenant_id
+    empresa = Empresa(
+        tenant_id=tenant_id, ruc="20444444444",
+        razon_social="Emisor de otro grupo", tipo_relacion="PROVEEDOR",
+    )
+    propietario = Miembro(
+        tenant_id=tenant_id, codigo="USR-OTRO-GRUPO",
+        nombre="Usuario dueño", rol="USUARIO", activo=True,
+    )
+    responsable = Miembro(
+        tenant_id=tenant_id, codigo="RESP-OTRO-GRUPO",
+        nombre="Responsable dueño", rol="RESPONSABLE", activo=True,
+    )
+    session.add_all([empresa, propietario, responsable])
+    session.flush()
+    gestor = Gestor(
+        tenant_id=tenant_id, codigo="GEST-OTRO-GRUPO",
+        nombre="Gestor dueño", usuario_id=propietario.id,
+    )
+    pedido = PedidoGerencia(
+        tenant_id=tenant_id, cliente_id=empresa.id,
+        responsable_id=responsable.id, periodo_mes=date(2026, 10, 1),
+        moneda="PEN", monto_solicitado=Decimal("100"), estado="ACTIVO",
+    )
+    session.add_all([gestor, pedido])
+    session.flush()
+    session.add(AsignacionPedidoGerencia(
+        tenant_id=tenant_id, pedido_id=pedido.id,
+        usuario_id=propietario.id, gestor_id=gestor.id,
+        proveedor_id=empresa.id, monto_asignado=Decimal("100"),
+    ))
+    session.commit()
+
+    anterior_documentos = session.scalar(
+        select(func.count()).select_from(Documento).where(Documento.tenant_id == tenant_id)
+    )
+    anterior_expedientes = session.scalar(
+        select(func.count()).select_from(Expediente).where(Expediente.tenant_id == tenant_id)
+    )
+
+    respuesta = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("factura_ajena.xml", factura(
+            numero="F001-00000851", emisor=empresa.ruc,
+        ), "application/xml")},
+    )
+    assert respuesta.status_code == 409, respuesta.text
+    assert respuesta.json()["detail"]["codigo"] == "EMISOR_REQUIERE_AUTORIZACION"
+
+    session.expire_all()
+    assert session.scalar(
+        select(func.count()).select_from(Documento).where(Documento.tenant_id == tenant_id)
+    ) == anterior_documentos
+    assert session.scalar(
+        select(func.count()).select_from(Expediente).where(Expediente.tenant_id == tenant_id)
+    ) == anterior_expedientes
+    assert not list(settings.storage_dir.rglob("*"))
