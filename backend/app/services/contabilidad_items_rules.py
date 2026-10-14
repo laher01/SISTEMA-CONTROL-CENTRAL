@@ -138,7 +138,7 @@ def posible_mismo_producto(a: ProductoReconocido, b: ProductoReconocido) -> bool
     ):
         return False
     return all(
-        texto_normalizado(x) == texto_normalizado(y)
+        texto_normalizado(x or "") == texto_normalizado(y or "")
         for x, y in (
             (a.marca, b.marca),
             (a.familia, b.familia),
