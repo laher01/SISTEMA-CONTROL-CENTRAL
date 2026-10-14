@@ -407,7 +407,9 @@ class AsignacionEmpresaGestor(ConId, ConTenant, ConCreacion, Base):
     """Titularidad operativa formal, única por empresa dentro de cada tenant."""
 
     __tablename__ = "asignaciones_empresas_gestores"
-    __table_args__ = (UniqueConstraint("tenant_id", "empresa_id", name="uq_asignacion_empresa_tenant"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "empresa_id", name="uq_asignacion_empresa_tenant"),
+    )
 
     empresa_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("empresas.id"), index=True)
     gestor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("gestores.id"), index=True)
@@ -438,7 +440,9 @@ class SolicitudCargaEmisor(ConId, ConTenant, ConCreacion, Base):
     sha256_archivo: Mapped[str] = mapped_column(String(64))
     ruta_temporal: Mapped[str | None] = mapped_column(String(500))
     estado: Mapped[str] = mapped_column(String(20), default="PENDIENTE", server_default="PENDIENTE")
-    decidido_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cuentas_acceso.id"))
+    decidido_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_acceso.id")
+    )
     decidido_at: Mapped[datetime | None]
     observacion: Mapped[str | None] = mapped_column(String(500))
 
