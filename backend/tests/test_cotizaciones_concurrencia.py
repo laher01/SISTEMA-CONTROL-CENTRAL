@@ -11,6 +11,40 @@ from sqlalchemy.orm import Session
 from app.models import Documento
 
 
+
+def _paquete(paginas: list[str]) -> bytes:
+    """Genera dos o más páginas PDF legibles sin depender de otros módulos de pruebas."""
+    import io
+
+    from pypdf import PdfWriter
+    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+
+    salida = PdfWriter()
+    for contenido in paginas:
+        hoja = salida.add_blank_page(width=595, height=842)
+        fuente = DictionaryObject(
+            {
+                NameObject("/F1"): DictionaryObject(
+                    {
+                        NameObject("/Type"): NameObject("/Font"),
+                        NameObject("/Subtype"): NameObject("/Type1"),
+                        NameObject("/BaseFont"): NameObject("/Helvetica"),
+                    }
+                )
+            }
+        )
+        hoja[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): fuente})
+        operadores = ["BT /F1 10 Tf 20 780 Td"]
+        for linea in contenido.splitlines():
+            operadores.append(f"({linea}) Tj 0 -20 Td")
+        operadores.append("ET")
+        stream = DecodedStreamObject()
+        stream.set_data("\\n".join(operadores).encode("ascii"))
+        hoja[NameObject("/Contents")] = salida._add_object(stream)
+    memoria = io.BytesIO()
+    salida.write(memoria)
+    return memoria.getvalue()
+
 def test_huella_comercial_concurrente_postgresql(engine, auth_prueba) -> None:
     if engine.dialect.name != "postgresql":
         pytest.skip("La concurrencia comercial exige PostgreSQL real")
@@ -60,8 +94,6 @@ def test_api_importacion_semantica_simultanea_postgresql(engine, client) -> None
     """Solicitudes HTTP paralelas compiten por una misma huella en PostgreSQL."""
     if engine.dialect.name != "postgresql":
         pytest.skip("La concurrencia HTTP exige PostgreSQL real")
-
-    from test_separador_pdf import _paquete
 
     from app.models import RelacionDocumento
 
