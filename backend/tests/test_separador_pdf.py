@@ -188,8 +188,6 @@ def test_reimportacion_semantica_pdf_distinto(client, session) -> None:
     assert segundo.status_code == 200, segundo.text
     assert segundo.json()["duplicados"] == 1
     assert segundo.json()["revision"] == 1
-    cotizaciones = list(
-        session.scalars(select(Documento).where(Documento.tipo_documento == "COT"))
-    )
+    cotizaciones = list(session.scalars(select(Documento).where(Documento.tipo_documento == "COT")))
     assert len(cotizaciones) == 3
     assert len({d.huella_comercial for d in cotizaciones}) == 3
