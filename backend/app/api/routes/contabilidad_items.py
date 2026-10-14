@@ -119,7 +119,6 @@ def resumen(
     ]
 
 
-
 @router.get("/expedientes/{expediente_id}/detalle")
 def detalle_expediente(
     expediente_id: uuid.UUID,
@@ -137,15 +136,18 @@ def detalle_expediente(
     )
     if expediente is None:
         raise HTTPException(404, "Expediente no encontrado o fuera de alcance")
-    estado = session.scalar(
-        select(AuditoriaFacturaItem.estado)
-        .where(
-            AuditoriaFacturaItem.tenant_id == auth.tenant_id,
-            AuditoriaFacturaItem.expediente_id == expediente_id,
+    estado = (
+        session.scalar(
+            select(AuditoriaFacturaItem.estado)
+            .where(
+                AuditoriaFacturaItem.tenant_id == auth.tenant_id,
+                AuditoriaFacturaItem.expediente_id == expediente_id,
+            )
+            .order_by(AuditoriaFacturaItem.created_at.desc(), AuditoriaFacturaItem.id.desc())
+            .limit(1)
         )
-        .order_by(AuditoriaFacturaItem.created_at.desc(), AuditoriaFacturaItem.id.desc())
-        .limit(1)
-    ) or "VIGENTE"
+        or "VIGENTE"
+    )
     consulta = (
         select(LineaComprobanteItem, Documento, ProductoItem)
         .join(
