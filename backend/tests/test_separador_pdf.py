@@ -100,3 +100,11 @@ def test_cotizacion_sin_numero_no_se_inventa() -> None:
     )
     with pytest.raises(DocumentoNoProcesable):
         analizar_paquete(pdf)
+
+
+def test_normalizacion_numero_con_espacios() -> None:
+    from app.services.separador_pdf import _cabecera
+
+    cabecera = _cabecera("COTIZACION No. 00275 - 2026")
+    assert cabecera is not None
+    assert cabecera[2] == "00275-2026"
