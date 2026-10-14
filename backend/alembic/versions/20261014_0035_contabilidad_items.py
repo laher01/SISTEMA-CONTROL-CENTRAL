@@ -63,13 +63,20 @@ def upgrade() -> None:
         sa.Column("estado", sa.String(40), nullable=False),
         sa.Column("motivo", sa.String(1000), nullable=False),
         sa.Column(
-            "solicitado_por_cuenta_id", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id"), nullable=False),
+            "solicitado_por_cuenta_id",
+            sa.Uuid(),
+            sa.ForeignKey("cuentas_acceso.id"),
+            nullable=False,
+        ),
         sa.Column("aprobado_por_cuenta_id", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id")),
     )
     op.create_index(
         "ix_auditorias_facturas_items_tenant_id", "auditorias_facturas_items", ["tenant_id"])
     op.create_index(
-        "ix_auditorias_facturas_items_expediente_id", "auditorias_facturas_items", ["expediente_id"])
+        "ix_auditorias_facturas_items_expediente_id",
+        "auditorias_facturas_items",
+        ["expediente_id"],
+    )
     op.create_index("ix_auditorias_facturas_items_estado", "auditorias_facturas_items", ["estado"])
 
 
