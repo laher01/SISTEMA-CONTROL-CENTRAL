@@ -46,7 +46,7 @@ jobs:
           set -Eeuo pipefail
           test -f deploy/.env.production
           compose=(docker compose --env-file deploy/.env.production -f deploy/docker-compose.production.yml)
-          source_file="deploy/backups/audit/factcentral_20261010T053407Z.dump"
+          source_file="deploy/backups/audit/factcentral_20261014T042911Z.dump"
           test -s "$source_file"
           sha256sum -c "$source_file.sha256"
           db="factcentral_restore_check_$(date +%s)_$$"
