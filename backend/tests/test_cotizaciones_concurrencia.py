@@ -1,6 +1,5 @@
 """Verificación real de exclusión concurrente sobre PostgreSQL, nunca SQLite."""
 
-import uuid
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 
