@@ -54,3 +54,50 @@ def test_huella_comercial_concurrente_postgresql(engine, auth_prueba) -> None:
             .where(Documento.tenant_id == tenant_id, Documento.huella_comercial == huella)
         )
     assert cantidad == 1
+
+
+def test_api_importacion_semantica_simultanea_postgresql(engine, client) -> None:
+    """Solicitudes HTTP paralelas compiten por una misma huella en PostgreSQL."""
+    if engine.dialect.name != "postgresql":
+        pytest.skip("La concurrencia HTTP exige PostgreSQL real")
+
+    from app.models import RelacionDocumento
+    from tests.test_separador_pdf import _paquete
+
+    archivos = [
+        _paquete(
+            [
+                "COTIZACION No. 00450\\nPROVEEDOR RUC 20615898598",
+                f"COTIZACION No. 0045{indice + 1}\\nPROVEEDOR RUC 20615898598",
+            ]
+        )
+        for indice in range(2)
+    ]
+    barrera = Barrier(2, timeout=15)
+
+    def enviar(pdf: bytes):
+        barrera.wait()
+        return client.post(
+            "/api/v1/documentos/paquete",
+            data={"confirmar": "true"},
+            files={"archivo": ("lote.pdf", pdf, "application/pdf")},
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        respuestas = list(pool.map(enviar, archivos))
+
+    assert all(respuesta.status_code == 200 for respuesta in respuestas), [
+        (respuesta.status_code, respuesta.text) for respuesta in respuestas
+    ]
+    assert sum(respuesta.json()["duplicados"] for respuesta in respuestas) == 1
+
+    with Session(engine) as session:
+        hijos = list(
+            session.scalars(
+                select(Documento).where(Documento.tipo_documento == "COT")
+            )
+        )
+        assert len(hijos) == 3
+        assert len({hijo.huella_comercial for hijo in hijos}) == 3
+        relaciones = list(session.scalars(select(RelacionDocumento)))
+        assert len(relaciones) == 3
