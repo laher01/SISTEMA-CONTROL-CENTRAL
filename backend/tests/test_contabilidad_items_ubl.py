@@ -33,7 +33,8 @@ def test_lineas_ubl_preservan_cantidad_unidad_precio_y_descripcion():
 
 def test_xml_malicioso_y_xml_no_factura_no_aportan_items():
     assert extraer_items_ubl(b"<a/>") == []
-    assert extraer_items_ubl(b'<!DOCTYPE a [<!ENTITY x SYSTEM "file:///etc/passwd">]><a>&x;</a>') == []
+    prohibido = b'<!DOCTYPE a [<!ENTITY x SYSTEM "file:///etc/passwd">]><a>&x;</a>'
+    assert extraer_items_ubl(prohibido) == []
 
 
 def test_cantidades_invalidas_no_se_contabilizan():
