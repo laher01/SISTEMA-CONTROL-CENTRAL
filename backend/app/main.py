@@ -27,6 +27,7 @@ from app.api.routes import (
     produccion,
     registros,
     responsable,
+    solicitudes_carga_emisor,
 )
 from app.core.config import get_settings
 
@@ -51,6 +52,7 @@ api.include_router(auth.router)
 for modulo in (
     administraciones,
     asignaciones_emisores,
+    solicitudes_carga_emisor,
     correo,
     documentos,
     chat,
