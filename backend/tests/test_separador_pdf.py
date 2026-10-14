@@ -78,7 +78,7 @@ def test_paquete_cotizaciones_numeracion_comercial() -> None:
     pdf = _paquete(
         [
             "COTIZACION No. 00275-2026\nCLIENTE RUC 20538821374",
-            "Anexo con condiciones comerciales de la cotizacion previa",
+            "Anexo con condiciones comerciales y detalle de productos",
             "COTIZACION No. 074\nRUC 20615898598\nCLIENTE RUC 20538821374",
             "COTIZACION No. 076\nRUC 20615898598\nCLIENTE RUC 20538821374",
         ]
