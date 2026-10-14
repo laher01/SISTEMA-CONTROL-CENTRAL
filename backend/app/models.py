@@ -403,6 +403,23 @@ class CorreccionIA(ConId, ConTenant, ConCreacion, Base):
     motivo: Mapped[str | None] = mapped_column(String(500))
 
 
+class AsignacionEmpresaGestor(ConId, ConTenant, ConCreacion, Base):
+    """Titularidad operativa formal, única por empresa dentro de cada tenant."""
+
+    __tablename__ = "asignaciones_empresas_gestores"
+    __table_args__ = (UniqueConstraint("tenant_id", "empresa_id", name="uq_asignacion_empresa_tenant"),)
+
+    empresa_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("empresas.id"), index=True)
+    gestor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("gestores.id"), index=True)
+    usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"))
+    responsable_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"))
+    creado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
+    activo: Mapped[bool] = mapped_column(default=True, server_default="true")
+    updated_at: Mapped[datetime] = mapped_column(
+        default=ahora, onupdate=ahora, server_default=func.now()
+    )
+
+
 class SolicitudCargaEmisor(ConId, ConTenant, ConCreacion, Base):
     """Autorización puntual previa a incorporación fiscal y contable."""
 
