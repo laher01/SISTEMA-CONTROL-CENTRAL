@@ -21,7 +21,9 @@ def upgrade() -> None:
         "asignaciones_empresas_gestores",
         sa.Column("id", sa.Uuid(), primary_key=True),
         sa.Column("tenant_id", sa.Uuid(), sa.ForeignKey("tenants.id"), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
         sa.Column("empresa_id", sa.Uuid(), sa.ForeignKey("empresas.id"), nullable=False),
         sa.Column("gestor_id", sa.Uuid(), sa.ForeignKey("gestores.id"), nullable=False),
         sa.Column("usuario_id", sa.Uuid(), sa.ForeignKey("miembros.id"), nullable=False),
@@ -30,7 +32,9 @@ def upgrade() -> None:
             "creado_por_cuenta_id", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id"), nullable=False
         ),
         sa.Column("activo", sa.Boolean(), nullable=False, server_default=sa.true()),
-        sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
         sa.UniqueConstraint("tenant_id", "empresa_id", name="uq_asignacion_empresa_tenant"),
     )
     op.create_index(
