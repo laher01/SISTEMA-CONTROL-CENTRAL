@@ -110,6 +110,7 @@ def resumen(
         for r in session.execute(stmt)
     ]
 
+
 class DecisionItemsIn(BaseModel):
     accion: Literal["OBSERVAR", "DESACTIVAR", "REACTIVAR"]
     motivo: str = Field(min_length=3, max_length=1000)
