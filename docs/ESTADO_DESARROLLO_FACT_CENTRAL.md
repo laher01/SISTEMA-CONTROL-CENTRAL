@@ -75,3 +75,21 @@ Causa verificada: `extraer_referencias_factura_gre` solo acepta serie F###/E###;
 Cambios: `automatizacion_documental.py` conserva `gre_factura_pendiente` para referencia ambigua y "importe_contabilizable": "0.00"; prueba añadida en `test_gre_primero_factura_despues.py` con impresión SUNAT de referencia incompleta. Commits `03598436`, `5378dabd`. **Pruebas no ejecutadas**.
 
 Siguiente trabajo: revisar contrato UI de expedientes para mostrar GRE provisionales (incluidas las ambiguas), con estado PENDIENTE_FACTURA y monto contable 0 sin falsificar fecha/serie; añadir extracción OCR robusta con PDF real aportado, validación de emisor/receptor/propiedad por gestor para PDF y conciliación sin contaminación entre grupos. Verificar seguridad y pruebas antes de deploy.
+
+
+## Validación con 13 PDF originales adjuntos (14/10/2026)
+
+Análisis local mediante `pdftotext -layout`, sin subir archivos privados a GitHub:
+- 13 archivos recibidos; 9 SHA-256 únicos y 4 copias exactas.
+- Las 5 GRE son PDF con texto seleccionable. El patrón vigente de `extraer_referencias_factura_gre` recupera correctamente serie/correlativo/RUC factura y RUC destinatario de las 5:
+  - EG07-330 => E001-468, emisor factura 20614885085, receptor 20524011353 (factura adjunta S/ 6,990.32).
+  - EG07-335 => E001-474, emisor 20614885085, receptor 20613213008 (factura S/ 660.56).
+  - EG07-339 => E001-481, emisor 20614885085, receptor 20615137422 (factura S/ 492.06).
+  - EG07-526 => E001-435, emisor 20612638935, receptor 20538821374 (factura no adjunta).
+  - EG07-136 => E001-246, emisor 10708800207, receptor 20524011353 (factura no adjunta).
+- E001-495 del emisor 20614885085, destinatario 20523209176, importe S/ 492.06 no equivale a E001-481 aunque compartan importe; deduplicación fiscal debe basarse en identidad.
+- La GRE no documenta un importe fiscal: pendientes no deben sumar ventas, IGV o importes.
+
+**Cambios de rama (no desplegados):** pruebas de formato para 5 GRE en `backend/tests/test_referencias_gre.py` (commit `a01d1de8`); API `GET /api/v1/documentos/provisionales-gre` ahora expone `estado=PENDIENTE_FACTURA` y `monto_contabilizable=0.00` (commit `3dcb87b6`); regresión en `backend/tests/test_gre_primero_factura_despues.py` (commit `11c3c176`).
+
+**Pendiente:** comprobar pipeline real `procesar -> aplicar_automaticamente` en FastAPI con PDF binario original; exponer GRE provisionales en pantalla principal de expedientes o vista unificada, no solo Pendientes; creación de expediente provisional formal requiere diseñar datos faltantes sin inventar fecha/moneda/valor de factura. Aislar PDF por titularidad del emisor antes de contabilizar (PR #185). CI aún no verificado. VPS sin cambios.
