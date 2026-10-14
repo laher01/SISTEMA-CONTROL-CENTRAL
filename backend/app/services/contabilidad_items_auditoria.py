@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.item_models import AuditoriaFacturaItem
-from app.models import Auditoria, Expediente
+from app.models import Alerta, Auditoria, Expediente
 from app.security import ContextoAcceso
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 
@@ -82,6 +82,8 @@ def registrar_decision(
     )
     session.add(decision)
     session.flush()
+    if auth.rol == "SECRETARIA":
+        _actualizar_alerta(session, auth.tenant_id, expediente_id, estado)
     session.add(
         Auditoria(
             tenant_id=auth.tenant_id,
@@ -92,6 +94,33 @@ def registrar_decision(
         )
     )
     return decision
+
+
+def _actualizar_alerta(
+    session: Session,
+    tenant_id: uuid.UUID,
+    expediente_id: uuid.UUID,
+    estado: str,
+    resuelta: bool = False,
+) -> None:
+    alerta = session.scalar(
+        select(Alerta).where(
+            Alerta.tenant_id == tenant_id,
+            Alerta.expediente_id == expediente_id,
+            Alerta.tipo == "ITEMS_REVISION",
+        )
+    )
+    if alerta is None:
+        alerta = Alerta(
+            tenant_id=tenant_id,
+            expediente_id=expediente_id,
+            tipo="ITEMS_REVISION",
+            mensaje="Auditoría de ítems pendiente de revisión administrativa",
+            resuelta=False,
+        )
+        session.add(alerta)
+    alerta.mensaje = f"Contabilidad de Ítems: {estado.replace('_', ' ').lower()}"[:500]
+    alerta.resuelta = resuelta
 
 
 def resolver_propuesta(
@@ -133,6 +162,7 @@ def resolver_propuesta(
     )
     session.add(decision)
     session.flush()
+    _actualizar_alerta(session, auth.tenant_id, propuesta.expediente_id, estado, True)
     session.add(
         Auditoria(
             tenant_id=auth.tenant_id,
