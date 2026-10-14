@@ -1072,7 +1072,11 @@ def eliminar_documento(
             "tipo_documento": documento.tipo_documento,
         },
     )
-    if expediente is not None:
+    if expediente is not None and expediente.deleted_at is None:
+        # Persistir el borrado lógico antes de consultar documentos activos.
+        # Evita que el cálculo de importes conserve la evidencia retirada
+        # cuando el recálculo hace SELECT con autoflush deshabilitado.
+        session.flush()
         actualizar_expediente(session, expediente, hoy, settings)
     session.commit()
 
