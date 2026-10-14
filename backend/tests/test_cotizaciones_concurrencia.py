@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 from app.models import Documento
 
 
-
 def _paquete(paginas: list[str]) -> bytes:
     """Genera dos o más páginas PDF legibles sin depender de otros módulos de pruebas."""
     import io
@@ -44,6 +43,7 @@ def _paquete(paginas: list[str]) -> bytes:
     memoria = io.BytesIO()
     salida.write(memoria)
     return memoria.getvalue()
+
 
 def test_huella_comercial_concurrente_postgresql(engine, auth_prueba) -> None:
     if engine.dialect.name != "postgresql":
