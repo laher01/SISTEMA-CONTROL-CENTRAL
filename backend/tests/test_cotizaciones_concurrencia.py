@@ -93,11 +93,7 @@ def test_api_importacion_semantica_simultanea_postgresql(engine, client) -> None
     assert sum(respuesta.json()["duplicados"] for respuesta in respuestas) == 1
 
     with Session(engine) as session:
-        hijos = list(
-            session.scalars(
-                select(Documento).where(Documento.tipo_documento == "COT")
-            )
-        )
+        hijos = list(session.scalars(select(Documento).where(Documento.tipo_documento == "COT")))
         assert len(hijos) == 3
         assert len({hijo.huella_comercial for hijo in hijos}) == 3
         relaciones = list(session.scalars(select(RelacionDocumento)))
