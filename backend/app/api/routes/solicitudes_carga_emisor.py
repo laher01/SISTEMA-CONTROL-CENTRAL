@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.api.deps import AlmacenDep, OperativeAuthDep, SessionDep, TenantDep
-from app.models import AlertaManual, SolicitudCargaEmisor
+from app.models import SolicitudCargaEmisor
 from app.services import auditoria
 
 router = APIRouter(prefix="/solicitudes-carga-emisor", tags=["solicitudes-carga-emisor"])
