@@ -67,14 +67,14 @@ def test_referencia_no_coincidente_no_relaciona_otra_factura(
     monkeypatch.setattr(
         documentos_routes,
         "procesar",
-        lambda *_: ResultadoProcesamiento(
-            texto=texto,
-            metodo="TEXTO_PDF",
-            motor="prueba",
-            paginas=1,
-            confianza=1.0,
-            sugerencia=sugerir_tipo(texto),
-        ),
+            lambda *_: ResultadoProcesamiento(
+                texto=texto,
+                metodo="TEXTO_PDF",
+                motor="prueba",
+                paginas=1,
+                confianza=1.0,
+                sugerencia=sugerir_tipo(texto),
+            ),
     )
     guia_doc = subir(client, "gre.pdf", pdf_vacio())
     factura_doc = subir(client, "factura.xml", factura(numero="F001-00000175"))
