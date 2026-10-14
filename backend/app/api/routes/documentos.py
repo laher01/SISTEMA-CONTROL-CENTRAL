@@ -314,7 +314,9 @@ async def importar_paquete_pdf(
             if "huella_comercial" in str(exc.orig).lower():
                 resultados.append({**clave, "estado": "duplicado"})
             else:
-                resultados.append({**clave, "estado": "error", "detalle": "Conflicto de integridad"})
+                resultados.append(
+                    {**clave, "estado": "error", "detalle": "Conflicto de integridad"}
+                )
         except (UblInvalido, DocumentoNoProcesable) as exc:
             session.rollback()
             resultados.append({**clave, "estado": "error", "detalle": str(exc)})
