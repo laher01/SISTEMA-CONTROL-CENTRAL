@@ -4,10 +4,11 @@ import uuid
 from pathlib import Path
 
 import pytest
-from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import make_url
+
+from alembic import command
 
 
 def test_alembic_0034_en_base_postgresql_aislada() -> None:
