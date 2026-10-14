@@ -75,12 +75,14 @@ def test_paquete_una_sola_factura_no_se_fragmenta() -> None:
 
 
 def test_paquete_cotizaciones_numeracion_comercial() -> None:
-    pdf = _paquete([
-        "COTIZACION No. 00275-2026\\nCLIENTE RUC 20538821374",
-        "Anexo con condiciones comerciales de la cotizacion previa",
-        "COTIZACION No. 074\\nRUC 20615898598\\nCLIENTE RUC 20538821374",
-        "COTIZACION No. 076\\nRUC 20615898598\\nCLIENTE RUC 20538821374",
-    ])
+    pdf = _paquete(
+        [
+            "COTIZACION No. 00275-2026\nCLIENTE RUC 20538821374",
+            "Anexo con condiciones comerciales de la cotizacion previa",
+            "COTIZACION No. 074\nRUC 20615898598\nCLIENTE RUC 20538821374",
+            "COTIZACION No. 076\nRUC 20615898598\nCLIENTE RUC 20538821374",
+        ]
+    )
     partes = analizar_paquete(pdf)
     assert [(p.inicio, p.fin, p.tipo, p.serie, p.correlativo) for p in partes] == [
         (0, 2, "COT", "COT", "00275-2026"),
@@ -90,9 +92,11 @@ def test_paquete_cotizaciones_numeracion_comercial() -> None:
 
 
 def test_cotizacion_sin_numero_no_se_inventa() -> None:
-    pdf = _paquete([
-        "COTIZACION\\nCLIENTE RUC 20538821374",
-        "COTIZACION No. 074\\nRUC 20615898598",
-    ])
+    pdf = _paquete(
+        [
+            "COTIZACION\nCLIENTE RUC 20538821374",
+            "COTIZACION No. 074\nRUC 20615898598",
+        ]
+    )
     with pytest.raises(DocumentoNoProcesable):
         analizar_paquete(pdf)
