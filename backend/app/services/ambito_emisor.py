@@ -11,7 +11,7 @@ from enum import StrEnum
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import AsignacionPedidoGerencia, Empresa, PedidoGerencia
+from app.models import AsignacionEmpresaGestor, AsignacionPedidoGerencia, Empresa, PedidoGerencia
 
 
 class EstadoAmbitoEmisor(StrEnum):
@@ -50,6 +50,27 @@ def revisar_asignaciones_emisor(
     )
     if empresa is None:
         return RevisionEmisor(EstadoAmbitoEmisor.SIN_ASIGNACION)
+
+    # Las asignaciones formales prevalecen sobre pedidos históricos.
+    titular = session.scalar(
+        select(AsignacionEmpresaGestor).where(
+            AsignacionEmpresaGestor.tenant_id == tenant_id,
+            AsignacionEmpresaGestor.empresa_id == empresa.id,
+            AsignacionEmpresaGestor.activo.is_(True),
+        )
+    )
+    if titular is not None:
+        autorizado = (
+            (gestor_id is not None and gestor_id == titular.gestor_id)
+            or (usuario_id is not None and usuario_id == titular.usuario_id)
+        )
+        return RevisionEmisor(
+            EstadoAmbitoEmisor.ASIGNADO_AL_GRUPO
+            if autorizado else EstadoAmbitoEmisor.ASIGNADO_A_OTRO_GRUPO,
+            empresa.id,
+            titular.gestor_id,
+            titular.responsable_id,
+        )
 
     filas = session.execute(
         select(
