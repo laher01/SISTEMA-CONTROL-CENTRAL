@@ -168,8 +168,10 @@ def aplicar_automaticamente(
             documento.datos_extraidos = datos
             return _revision(
                 documento,
-                ["GRE reconocida; factura relacionada sin identidad fiscal suficiente. "
-                 "Pendiente de validación, importe contabilizable S/ 0.00"],
+                [
+                    "GRE reconocida; factura relacionada sin identidad fiscal suficiente. "
+                    "Pendiente de validación, importe contabilizable S/ 0.00"
+                ],
             )
         return _revision(
             documento,
