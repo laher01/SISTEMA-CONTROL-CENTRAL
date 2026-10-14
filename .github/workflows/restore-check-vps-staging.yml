@@ -58,6 +58,16 @@ jobs:
           "${compose[@]}" exec -T db sh -c 'createdb -U "$POSTGRES_USER" "$1"' sh "$db" </dev/null
           "${compose[@]}" exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" --no-owner --no-acl --exit-on-error -d "$1"' sh "$db" < "$source_file"
           "${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1" -Atc "select count(*) from information_schema.tables where table_schema = '\''public'\''"' sh "$db" </dev/null
+          # Comprobar datos restaurados frente a la base origen sin modificarla.
+          # Las tablas cuentan filas; un mero "pg_restore --list" no prueba recuperación.
+          count_sql='SELECT count(*) FROM documentos'
+          prod_count="$("${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "$1"' sh "$count_sql" </dev/null)"
+          test_count="$("${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1" -Atc "$2"' sh "$db" "$count_sql" </dev/null)"
+          test "$prod_count" = "$test_count"
+          echo "DOCUMENTOS_RESTAURADOS: $test_count"
+          # Este job valida restauración, pero NO ejecuta Alembic 0034:
+          # el backend instalado todavía puede no contener la migración nueva.
+          echo "MIGRACION_0034_NO_EJECUTADA_EN_ESTA_PRUEBA"
           echo "RESTAURACION_VERIFICADA: $db"
           echo "BASE_ORIGINAL_INTACTA: fact_central"
           REMOTE
