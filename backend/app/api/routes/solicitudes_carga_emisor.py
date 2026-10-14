@@ -27,55 +27,33 @@ class SolicitudOut(BaseModel):
 
 
 def _puede_revisar(auth, solicitud: SolicitudCargaEmisor) -> bool:
-def _puede_revisar(auth, solicitud: SolicitudCargaEmisor) -> bool:
-    return auth.rol == "ADMINISTRADOR" or (
-        auth.rol == "RESPONSABLE" and auth.miembro_id == solicitud.responsable_propietario_id
-    )
+    return (auth.rol == "ADMINISTRADOR"
+            or (auth.rol == "RESPONSABLE"
+                and auth.miembro_id == solicitud.responsable_propietario_id))
 
 
 @router.get("", response_model=list[SolicitudOut])
-@router.get("", response_model=list[SolicitudOut])
-def listar(
-    session: SessionDep,
-    tenant_id: TenantDep,
-    auth: OperativeAuthDep,
-    estado: Literal["PENDIENTE", "APROBADA", "RECHAZADA"] = "PENDIENTE",
-):
-    consulta = select(SolicitudCargaEmisor).where(
+def listar(session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep,
+           estado: Literal["PENDIENTE", "APROBADA", "RECHAZADA"] = "PENDIENTE"):
     consulta = select(SolicitudCargaEmisor).where(
         SolicitudCargaEmisor.tenant_id == tenant_id,
         SolicitudCargaEmisor.estado == estado,
     )
     if auth.rol == "RESPONSABLE":
         consulta = consulta.where(
-        consulta = consulta.where(
-            SolicitudCargaEmisor.responsable_propietario_id == auth.miembro_id
-        )
-    elif auth.rol != "ADMINISTRADOR":
+            SolicitudCargaEmisor.responsable_propietario_id == auth.miembro_id)
     elif auth.rol != "ADMINISTRADOR":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Administración o Responsable")
     return list(session.scalars(consulta.order_by(SolicitudCargaEmisor.created_at.desc())))
 
 
 @router.post("/{solicitud_id}/rechazar", response_model=SolicitudOut)
-@router.post("/{solicitud_id}/rechazar", response_model=SolicitudOut)
-def rechazar(
-    session: SessionDep,
-    almacen: AlmacenDep,
-    tenant_id: TenantDep,
-    auth: OperativeAuthDep,
-    solicitud_id: uuid.UUID,
-    datos: Decision,
-):
-    solicitud = session.scalar(
-        select(SolicitudCargaEmisor)
-        .where(
-            SolicitudCargaEmisor.id == solicitud_id,
-            SolicitudCargaEmisor.tenant_id == tenant_id,
-        )
-        .with_for_update()
-    )
-    if solicitud is None:
+def rechazar(session: SessionDep, almacen: AlmacenDep, tenant_id: TenantDep,
+            auth: OperativeAuthDep, solicitud_id: uuid.UUID, datos: Decision):
+    solicitud = session.scalar(select(SolicitudCargaEmisor).where(
+        SolicitudCargaEmisor.id == solicitud_id,
+        SolicitudCargaEmisor.tenant_id == tenant_id,
+    ).with_for_update())
     if solicitud is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Solicitud no encontrada")
     if not _puede_revisar(auth, solicitud):
@@ -100,15 +78,8 @@ def rechazar(
     solicitud.observacion = datos.observacion
     solicitud.decidido_por_cuenta_id = auth.cuenta_id
     solicitud.decidido_at = datetime.now(UTC)
-    solicitud.decidido_at = datetime.now(UTC)
-    auditoria.registrar(
-        session,
-        tenant_id,
-        "CARGA_EMISOR_RECHAZADA",
-        "solicitud_carga_emisor",
-        solicitud.id,
-        {"ruc_emisor": solicitud.ruc_emisor, "por": auth.codigo},
-    )
-    session.commit()
+    auditoria.registrar(session, tenant_id, "CARGA_EMISOR_RECHAZADA",
+                        "solicitud_carga_emisor", solicitud.id,
+                        {"ruc_emisor": solicitud.ruc_emisor, "por": auth.codigo})
     session.commit()
     return solicitud
