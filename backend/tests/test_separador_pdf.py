@@ -154,3 +154,42 @@ def test_importacion_selectiva_y_reimportacion_con_padre(client, session) -> Non
     assert len(relaciones) == 2
     assert {r.destino_id for r in relaciones} == {d.id for d in hijos}
     assert {r.origen_id for r in relaciones} == {padres[0].id}
+
+
+def test_reimportacion_semantica_pdf_distinto(client, session) -> None:
+    from sqlalchemy import select
+
+    from app.models import Documento
+
+    original = _paquete(
+        [
+            "COTIZACION No. 0074\\nPROVEEDOR RUC 20615898598\\nCLIENTE RUC 20538821374",
+            "COTIZACION No. 0075\\nPROVEEDOR RUC 20615898598\\nCLIENTE RUC 20538821374",
+        ]
+    )
+    equivalente = _paquete(
+        [
+            "COTIZACION No. 0074\\nPROVEEDOR RUC 20615898598\\nCLIENTE RUC 20538821374\\nCOPIA",
+            "COTIZACION No. 0076\\nPROVEEDOR RUC 20615898598\\nCLIENTE RUC 20538821374",
+        ]
+    )
+
+    def importar(pdf: bytes):
+        return client.post(
+            "/api/v1/documentos/paquete",
+            data={"confirmar": "true"},
+            files={"archivo": ("paquete.pdf", pdf, "application/pdf")},
+        )
+
+    primero = importar(original)
+    assert primero.status_code == 200, primero.text
+    assert primero.json()["revision"] == 2
+    segundo = importar(equivalente)
+    assert segundo.status_code == 200, segundo.text
+    assert segundo.json()["duplicados"] == 1
+    assert segundo.json()["revision"] == 1
+    cotizaciones = list(
+        session.scalars(select(Documento).where(Documento.tipo_documento == "COT"))
+    )
+    assert len(cotizaciones) == 3
+    assert len({d.huella_comercial for d in cotizaciones}) == 3
