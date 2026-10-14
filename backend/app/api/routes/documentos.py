@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from datetime import date
 from decimal import Decimal
@@ -167,6 +168,49 @@ async def importar_paquete_pdf(
             )
         segmentos = [segmento for indice, segmento in enumerate(segmentos) if indice in seleccion]
 
+    # Un paquete comercial conserva su original en la misma área documental.
+    # La huella binaria permite reutilizarlo si se repite la importación.
+    paquete_original: Documento | None = None
+    if any(segmento.tipo == "COT" for segmento in segmentos):
+        sha_paquete = hashlib.sha256(contenido).hexdigest()
+        paquete_original = session.scalar(
+            select(Documento).where(
+                Documento.tenant_id == tenant_id,
+                Documento.sha256 == sha_paquete,
+                Documento.deleted_at.is_(None),
+            )
+        )
+        if paquete_original is not None and (
+            paquete_original.usuario_id != auth.usuario_id
+            or (auth.rol == "GESTOR" and paquete_original.gestor_id != auth.gestor_id)
+        ):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Paquete original fuera de su ámbito")
+        if paquete_original is None:
+            try:
+                paquete_original = ingerir_documento(
+                    session,
+                    almacen,
+                    settings,
+                    hoy,
+                    tenant_id,
+                    ArchivoSubido(
+                        nombre=archivo.filename or "paquete_cotizaciones.pdf",
+                        mime_type="application/pdf",
+                        contenido=contenido,
+                    ),
+                    TipoDocumento.OTRO,
+                    None,
+                    auth.gestor_id if auth.rol == "GESTOR" else None,
+                    auth.usuario_id,
+                    cuenta_administradora_responsable(session, auth),
+                )
+                session.commit()
+            except DocumentoDuplicado:
+                session.rollback()
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT, "Paquete original duplicado; vuelva a analizar"
+                ) from None
+
     resultados: list[dict[str, object]] = []
     for segmento in segmentos:
         clave = segmento.descripcion()
@@ -186,12 +230,29 @@ async def importar_paquete_pdf(
                 hoy,
                 tenant_id,
                 subido,
-                None,
+                TipoDocumento.COT if segmento.tipo == "COT" else None,
                 None,
                 auth.gestor_id if auth.rol == "GESTOR" else None,
                 auth.usuario_id,
                 cuenta_administradora_responsable(session, auth),
             )
+            if segmento.tipo == "COT" and paquete_original is not None:
+                documento.datos_extraidos = {
+                    "origen_paquete": {
+                        "documento_padre_id": str(paquete_original.id),
+                        "sha256_original": paquete_original.sha256,
+                        "pagina_inicio": segmento.inicio + 1,
+                        "pagina_fin": segmento.fin,
+                    },
+                    "cotizacion": {
+                        "numero": segmento.correlativo,
+                        "estado_identidad": "PENDIENTE_VALIDACION",
+                    },
+                }
+                auditoria.registrar(
+                    session, tenant_id, "COTIZACION_SEPARADA", "documento", documento.id,
+                    {"documento_padre_id": str(paquete_original.id)},
+                )
             if settings.procesamiento_automatico and _es_procesable(documento):
                 try:
                     _procesar_y_aplicar(session, settings, almacen, hoy, documento)
