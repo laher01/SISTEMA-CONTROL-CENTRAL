@@ -24,7 +24,9 @@ def upgrade() -> None:
         sa.Column("gestor_id", sa.Uuid(), sa.ForeignKey("gestores.id"), nullable=False),
         sa.Column("usuario_id", sa.Uuid(), sa.ForeignKey("miembros.id"), nullable=False),
         sa.Column("responsable_id", sa.Uuid(), sa.ForeignKey("miembros.id"), nullable=False),
-        sa.Column("creado_por_cuenta_id", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id"), nullable=False),
+        sa.Column(
+            "creado_por_cuenta_id", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id"), nullable=False
+        ),
         sa.Column("activo", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
         sa.UniqueConstraint("tenant_id", "empresa_id", name="uq_asignacion_empresa_tenant"),
