@@ -3,6 +3,7 @@
 El registro íntegro de comprobantes debe permanecer inalterado. Este módulo
 solo decide la inclusión en reportes operativos y la revisión administrativa.
 """
+
 import re
 import unicodedata
 from dataclasses import dataclass
