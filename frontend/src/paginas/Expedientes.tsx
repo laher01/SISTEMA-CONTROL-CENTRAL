@@ -9,6 +9,14 @@ import { ESTADOS_EXPEDIENTE, type Expediente, type SesionActual } from "../tipos
 import { formatearMonto as monto } from "../formato";
 
 const POR_PAGINA = 50;
+type GreProvisional = {
+  documento_id: string;
+  factura: string;
+  emisor_ruc: string;
+  receptor_ruc: string;
+  estado: string;
+  monto_contabilizable: string;
+};
 
 export default function Expedientes({ sesion }: { sesion: SesionActual }) {
   const [parametros, setParametros] = useSearchParams();
@@ -62,6 +70,15 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
     limit: "1000",
   });
   const { datos, error, cargando } = useDatos<Expediente[]>(ruta);
+  const { datos: greProvisionales, error: errorGre } = useDatos<GreProvisional[]>(
+    "/api/v1/documentos/provisionales-gre?limit=2000",
+  );
+  const greFiltradas = (greProvisionales ?? []).filter((guia) =>
+    (!receptor || guia.receptor_ruc.includes(receptor.trim())) &&
+    (!emisor || guia.emisor_ruc.includes(emisor.trim())) &&
+    (!buscar.trim() || guia.factura.toLowerCase().includes(buscar.trim().toLowerCase()) ||
+      guia.emisor_ruc.includes(buscar.trim()) || guia.receptor_ruc.includes(buscar.trim()))
+  );
   const { datos: resumen } = useDatos<{ total_expedientes: number; total_pen: string; total_usd: string }>(
     conParametros("/api/v1/expedientes/resumen", filtrosBase),
   );
@@ -199,6 +216,35 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
       <section className="panel-configuracion">
         <strong>Total del filtro completo (todas las páginas)</strong>
         <p>{resumen?.total_expedientes ?? "…"} expedientes · {monto("PEN", resumen?.total_pen ?? "0")} · {monto("USD", resumen?.total_usd ?? "0")}</p>
+      </section>
+
+      <section className="panel-configuracion" aria-label="GRE en espera de factura">
+        <h3>GRE provisionales — esperando factura ({greFiltradas.length})</h3>
+        <p className="tenue">
+          Son documentos pendientes, no expedientes fiscales completos. Importe contabilizable
+          S/ 0.00 hasta vincular la factura. No se suman a los totales del Dashboard.
+        </p>
+        {errorGre && <p role="alert">No se pudieron consultar las GRE provisionales: {String(errorGre)}</p>}
+        {greFiltradas.length > 0 && (
+          <table>
+            <thead><tr>
+              <th>Factura indicada en GRE</th><th>RUC emisor factura</th>
+              <th>RUC destinatario</th><th>Estado</th><th>Monto</th><th>Documento</th>
+            </tr></thead>
+            <tbody>
+              {greFiltradas.map((guia) => (
+                <tr key={guia.documento_id}>
+                  <td>{guia.factura}</td>
+                  <td>{guia.emisor_ruc}</td>
+                  <td>{guia.receptor_ruc}</td>
+                  <td>Pendiente de factura</td>
+                  <td>S/ {guia.monto_contabilizable}</td>
+                  <td><Link to="/pendientes">Ver GRE en Pendientes</Link></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </section>
 
       <div className="acciones">
