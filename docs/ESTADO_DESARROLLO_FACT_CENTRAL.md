@@ -45,3 +45,14 @@ Consultar el prompt maestro compartido el 14-10-2026; ejecución por prioridad: 
 
 - Commit `3247fe9f`: prueba HTTP en `backend/tests/test_ambito_emisor.py` para rechazo 409 XML de grupo ajeno, sin crear registros ni archivos. **No ejecutada**; verificar en CI/entorno local.
 - Pendiente inmediato: ejecutar la prueba y completar el esquema formal de titularidad, cola de cuarentena y decisión segura.
+
+## Avance: asignación formal de empresas (14/10/2026)
+
+- Modelo `AsignacionEmpresaGestor` en `backend/app/models.py`, unicidad empresa/tenant.
+- Migración `0036` en `backend/alembic/versions/20261014_0036_asignacion_empresa_gestor.py`; **no aplicada aún**.
+- API `backend/app/api/routes/asignaciones_emisores.py`: GET listado y PUT asignación solo ADMINISTRADOR con validación del grupo y auditoría; registrada en `app/main.py`.
+- Servicio `ambito_emisor.py` consulta antes la titularidad formal; asignaciones de pedido quedan como referencia provisional cuando no hay formal.
+- Prueba HTTP de privilegios, asignación y reconocimiento grupo añadida a `backend/tests/test_ambito_emisor.py`.
+- Commits: `48e19173`, `07a1c6f5`, `87ad9fb4`, `adce126d`, `87a6bccc`, `046c1279`.
+- CI: **sin ejecuciones asociadas al último commit al consultar**; validación pendiente.
+- **Próximo trabajo inmediato**: crear almacenamiento seguro de cuarentena por tenant, solicitudes automáticas y estados; implementar aprobación/rechazo y notificaciones; proteger rutas de paquetes, OCR e ingesta de correo; posteriormente frontend. Mantener PR borrador y no desplegar.
