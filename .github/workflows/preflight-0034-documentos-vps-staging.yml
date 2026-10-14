@@ -89,7 +89,7 @@ jobs:
               p = value.strip()
               if p.startswith("/data/documentos/"):
                   p = p[len("/data/documentos/"):]
-              return p.removeprefix("./").lstrip("/")
+              return (p[2:] if p.startswith("./") else p).lstrip("/")
           missing = [p for p in routes if normalize(p) not in members]
           print(f"RUTAS_DB_REVISADAS: {len(routes)}")
           print(f"RUTAS_SIN_ARCHIVO: {len(missing)}")
