@@ -3,15 +3,18 @@
 import uuid
 from datetime import date
 from decimal import Decimal
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import func, select, true
+from pydantic import BaseModel, Field
+from sqlalchemy import func, or_, select, true
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.api.deps import OperativeAuthDep, SessionDep
 from app.item_models import AuditoriaFacturaItem, LineaComprobanteItem, ProductoItem
 from app.models import Documento, Expediente
 from app.services.ambito_gerencia import alcance_expedientes_gerente
+from app.services.contabilidad_items_auditoria import registrar_decision, resolver_propuesta
 
 router = APIRouter(prefix="/contabilidad-items", tags=["contabilidad-items"])
 
@@ -40,6 +43,16 @@ def resumen(
 ) -> list[dict[str, str]]:
     """No mezcla unidades ni incluye facturas pendientes de auditoría."""
     alcance = _alcance(auth)
+    ultimo_estado = (
+        select(AuditoriaFacturaItem.estado)
+        .where(
+            AuditoriaFacturaItem.expediente_id == Expediente.id,
+            AuditoriaFacturaItem.tenant_id == auth.tenant_id,
+        )
+        .order_by(AuditoriaFacturaItem.created_at.desc(), AuditoriaFacturaItem.id.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
     stmt = (
         select(
             ProductoItem.id,
@@ -60,14 +73,7 @@ def resumen(
             Expediente.deleted_at.is_(None),
             ProductoItem.activo.is_(True),
             alcance,
-            ~select(1)
-            .select_from(AuditoriaFacturaItem)
-            .where(
-                AuditoriaFacturaItem.expediente_id == Expediente.id,
-                AuditoriaFacturaItem.tenant_id == auth.tenant_id,
-                AuditoriaFacturaItem.estado == "INVALIDADA_CONFIRMADA",
-            )
-            .exists(),
+            or_(ultimo_estado.is_(None), ultimo_estado.not_in(["INVALIDADA_CONFIRMADA", "INVALIDADA_PENDIENTE", "REACTIVACION_PENDIENTE"])), 
         )
     )
     if desde:
