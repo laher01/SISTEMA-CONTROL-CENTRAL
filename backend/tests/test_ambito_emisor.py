@@ -5,7 +5,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.models import (
-    AsignacionPedidoGerencia, Empresa, Gestor, Miembro, PedidoGerencia, Tenant,
+    AsignacionEmpresaGestor, AsignacionPedidoGerencia, Empresa, Gestor, Miembro, PedidoGerencia, Tenant,
 )
 from app.services.ambito_emisor import EstadoAmbitoEmisor, revisar_asignaciones_emisor
 
@@ -147,3 +147,54 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
         select(func.count()).select_from(Expediente).where(Expediente.tenant_id == tenant_id)
     ) == anterior_expedientes
     assert not list(settings.storage_dir.rglob("*"))
+
+
+def test_admin_asigna_empresa_y_bloquea_ajenos(
+    client, session: Session, auth_prueba,
+):
+    tenant_id = auth_prueba.contexto.tenant_id
+    emisor = Empresa(
+        tenant_id=tenant_id, ruc="20555555555",
+        razon_social="Emisor formal", tipo_relacion="PROVEEDOR",
+    )
+    responsable = Miembro(
+        tenant_id=tenant_id, codigo="RESP-FORMAL",
+        nombre="Responsable formal", rol="RESPONSABLE", activo=True,
+    )
+    session.add_all([emisor, responsable])
+    session.flush()
+    usuario = Miembro(
+        tenant_id=tenant_id, codigo="USUARIO-FORMAL",
+        nombre="Usuario formal", rol="USUARIO", activo=True,
+        responsable_id=responsable.id,
+    )
+    session.add(usuario)
+    session.flush()
+    gestor = Gestor(
+        tenant_id=tenant_id, codigo="GESTOR-FORMAL",
+        nombre="Gestor formal", usuario_id=usuario.id,
+    )
+    session.add(gestor)
+    session.commit()
+    payload = {
+        "empresa_id": str(emisor.id),
+        "gestor_id": str(gestor.id),
+        "responsable_id": str(responsable.id),
+    }
+    auth_prueba.como_usuario(usuario.id)
+    denegado = client.put(f"/api/v1/asignaciones-emisores/{emisor.id}", json=payload)
+    assert denegado.status_code == 403
+
+    auth_prueba.como_admin()
+    creado = client.put(f"/api/v1/asignaciones-emisores/{emisor.id}", json=payload)
+    assert creado.status_code == 200, creado.text
+    assert creado.json()["gestor_id"] == str(gestor.id)
+    asignacion = session.query(AsignacionEmpresaGestor).filter_by(empresa_id=emisor.id).one()
+    assert asignacion.tenant_id == tenant_id
+
+    ajeno = revisar_asignaciones_emisor(session, tenant_id, emisor.ruc, None, None)
+    assert ajeno.estado == EstadoAmbitoEmisor.ASIGNADO_A_OTRO_GRUPO
+    assert ajeno.responsable_propietario_id == responsable.id
+
+    propio = revisar_asignaciones_emisor(session, tenant_id, emisor.ruc, usuario.id, gestor.id)
+    assert propio.estado == EstadoAmbitoEmisor.ASIGNADO_AL_GRUPO
