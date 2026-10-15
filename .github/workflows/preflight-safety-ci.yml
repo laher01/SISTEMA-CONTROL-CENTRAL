@@ -48,5 +48,7 @@ jobs:
           assert 'pg_restore --list < "$tmp_backup"' in deploy
           assert deploy.index('pg_restore --list < "$tmp_backup"') < deploy.index('mv -- "$tmp_backup" "$backup"')
           assert deploy.index('git rev-parse origin/main') < deploy.index("git checkout main")
+          assert 'git merge --ff-only "$fetched_commit"' in deploy
+          assert "git pull" not in "\\n".join(line for line in deploy.splitlines() if not line.lstrip().startswith("#"))
           print("Protecciones estructurales verificadas")
           PY
