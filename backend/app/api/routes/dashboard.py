@@ -551,7 +551,15 @@ def desglose(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
     agrupar_por: Literal[
-        "responsable", "usuario", "gestor", "emisor", "receptor", "tipo_empresa", "dia", "mes", "anio"
+        "responsable",
+        "usuario",
+        "gestor",
+        "emisor",
+        "receptor",
+        "tipo_empresa",
+        "dia",
+        "mes",
+        "anio",
     ] = "usuario",
     orden: Literal["asc", "desc"] = "desc",
     responsable_id: uuid.UUID | None = None,
