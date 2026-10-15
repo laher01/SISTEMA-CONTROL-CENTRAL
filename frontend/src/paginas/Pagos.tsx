@@ -276,7 +276,7 @@ function PresupuestoMasivo({
       <p className="tenue">Seleccione empresas y aplique un monto común. Puede modificar cada importe antes de confirmar. Esta primera modalidad asigna el lote a un solo Responsable. La distribución del mismo cliente entre varios Responsables requerirá la siguiente ampliación del modelo.</p>
       <div className="filtros">
         <label>Monto común <input type="number" min="0.01" step="0.01" value={montoComun} onChange={e => setMontoComun(e.target.value)} /></label>
-        <button type="button" disabled={!(Number(montoComun) > 0)} onClick={() => setMontos(actual => Object.fromEntries(seleccionados.map(id => [id, montoComun])))}>
+        <button type="button" disabled={!(Number(montoComun) > 0)} onClick={() => setMontos(Object.fromEntries(seleccionados.map(id => [id, montoComun])))}>
           Aplicar monto a seleccionados
         </button>
         <button type="button" onClick={() => setSeleccionados(clientes.map(c => c.id))}>Seleccionar todas</button>
