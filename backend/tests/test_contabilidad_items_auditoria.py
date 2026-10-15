@@ -272,9 +272,7 @@ def test_conciliacion_sin_duplicar_y_resolucion_actualiza_importes(session, auth
     )
     session.add(revisor)
     session.flush()
-    resolver_propuesta(
-        session, replace(admin, cuenta_id=revisor.id), observacion.id, True
-    )
+    resolver_propuesta(session, replace(admin, cuenta_id=revisor.id), observacion.id, True)
     fila_final = conciliacion(session, admin)[0]
     assert fila_final["total_documentos"] == 3
     assert fila_final["aprobados"] == 2
