@@ -18,6 +18,7 @@ import ExpedienteDetalle from "./paginas/ExpedienteDetalle";
 import Expedientes from "./paginas/Expedientes";
 import { CambiarClave, Login } from "./paginas/Login";
 import Presentacion from "./paginas/Presentacion";
+import PaginaLegal from "./paginas/PaginasPublicas";
 import Organizacion from "./paginas/Organizacion";
 import MiEquipoResponsable from "./paginas/MiEquipoResponsable";
 import Pagos from "./paginas/Pagos";
@@ -138,11 +139,14 @@ export default function App() {
   const { datos: sesion, error, cargando, recargar } = useDatos<SesionActual>("/api/v1/auth/me");
   const { datos: activaciones } = useDatos<{ registros: boolean; control_documental: boolean; documentos: boolean; expedientes: boolean }>("/api/v1/configuracion/permisos/secretaria");
 
+  if (window.location.pathname === "/privacidad") return <PaginaLegal tipo="privacidad" />;
+  if (window.location.pathname === "/terminos") return <PaginaLegal tipo="terminos" />;
+  if (cargando && window.location.pathname === "/") return <Presentacion />;
   if (cargando) return <main className="contenido"><p>Cargando sesión…</p></main>;
   if (!sesion || error) {
     const esPortalOracle = window.location.hostname === "factcentral.online";
     const esIngreso = window.location.pathname === "/ingresar";
-    return esPortalOracle && !esIngreso
+    return (esPortalOracle || window.location.hostname === "app.nexomarnegocioseirl.online") && !esIngreso
       ? <Presentacion />
       : <Login alIngresar={recargar} />;
   }
