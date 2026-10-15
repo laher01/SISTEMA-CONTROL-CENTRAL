@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 
 import PaginaLegal from "./PaginasPublicas";
 import Presentacion from "./Presentacion";
+import { contenidoLandingInicial } from "../contenidoLanding";
 
 describe("páginas públicas para Google OAuth", () => {
   it("publica política de privacidad sin iniciar sesión", () => {
@@ -18,6 +19,17 @@ describe("páginas públicas para Google OAuth", () => {
     expect(html).toContain("Términos y condiciones");
     expect(html).toContain("/privacidad");
     expect(html).toContain("/ingresar");
+  });
+
+  it("presenta el catálogo comercial tipado sin mostrar precios no aprobados", () => {
+    const html = renderToStaticMarkup(<MemoryRouter><Presentacion /></MemoryRouter>);
+    expect(html).toContain(contenidoLandingInicial.titulo);
+    for (const beneficio of contenidoLandingInicial.beneficios) {
+      expect(html).toContain(beneficio.titulo);
+    }
+    expect(html).toContain("Los planes y sus tarifas se publicarán");
+    expect(html).toContain('/ingresar');
+    expect(html).not.toContain("S/ 90");
   });
 
   it("la presentación pública enlaza a la política y términos", () => {
