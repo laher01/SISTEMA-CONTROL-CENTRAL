@@ -134,9 +134,6 @@ def resumen(
         for r in session.execute(stmt)
     ]
 
-
-
-
 @router.get("/conciliacion")
 def conciliacion(
     session: SessionDep,
@@ -211,6 +208,7 @@ def conciliacion(
         }
         for fila in session.execute(consulta)
     ]
+
 
 @router.get("/expedientes/{expediente_id}/detalle")
 def detalle_expediente(
