@@ -18,7 +18,9 @@ xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
 </Invoice>"""
 
 
-def _guardar(session: Session, almacen: AlmacenLocal, tenant_id: uuid.UUID, data: bytes) -> Documento:
+def _guardar(
+    session: Session, almacen: AlmacenLocal, tenant_id: uuid.UUID, data: bytes
+) -> Documento:
     digest = hashlib.sha256(data).hexdigest()
     ruta = almacen.guardar(tenant_id, digest, data)
     documento = Documento(
