@@ -5,6 +5,7 @@ on:
     paths:
       - "deploy/preflight-secretaria.sh"
       - "deploy/bootstrap-main.sh"
+      - "deploy/deploy.sh"
       - "deploy/test_preflight_safety.py"
       - ".github/workflows/deploy-staging.yml"
       - ".github/workflows/preflight-safety-ci.yml"
@@ -21,6 +22,7 @@ jobs:
         run: |
           bash -n deploy/preflight-secretaria.sh
           bash -n deploy/bootstrap-main.sh
+          bash -n deploy/deploy.sh
       - name: Probar preflight sin afectar la VPS
         run: python3 deploy/test_preflight_safety.py
       - name: Verificar reglas de protección
@@ -30,6 +32,7 @@ jobs:
           script = Path("deploy/preflight-secretaria.sh").read_text()
           workflow = Path(".github/workflows/deploy-staging.yml").read_text()
           bootstrap = Path("deploy/bootstrap-main.sh").read_text()
+          deploy = Path("deploy/deploy.sh").read_text()
           assert 'git diff --quiet' in script
           assert 'git diff --cached --quiet' in script
           assert 'ls-files", "--others", "--exclude-standard", "-z' in script
@@ -40,5 +43,12 @@ jobs:
           assert "pg_dump" in bootstrap
           assert bootstrap.index("pg_dump") < bootstrap.index("git merge --ff-only")
           assert "deploy/bootstrap-main.sh" in workflow
+          assert 'chmod 700 "$BACKUP_DIR"' in deploy
+          assert 'chmod 600 "$tmp_backup"' in deploy
+          assert 'pg_restore --list < "$tmp_backup"' in deploy
+          assert deploy.index('pg_restore --list < "$tmp_backup"') < deploy.index('mv -- "$tmp_backup" "$backup"')
+          assert deploy.index('git rev-parse origin/main') < deploy.index("git checkout main")
+          assert 'git merge --ff-only "$fetched_commit"' in deploy
+          assert "git pull" not in "\\n".join(line for line in deploy.splitlines() if not line.lstrip().startswith("#"))
           print("Protecciones estructurales verificadas")
           PY
