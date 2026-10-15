@@ -16,6 +16,7 @@ export default function ContabilidadItems() {
   const [hasta, setHasta] = useState("");
   const [emisorId, setEmisorId] = useState("");
   const [receptorId, setReceptorId] = useState("");
+  const [errorFiltros, setErrorFiltros] = useState("");
   const [filtros, setFiltros] = useState({ desde: "", hasta: "", emisor_id: "", receptor_id: "" });
   const ruta = conParametros("/api/v1/contabilidad-items", {
     desde: filtros.desde,
@@ -34,6 +35,12 @@ export default function ContabilidadItems() {
       </p>
       <form onSubmit={(evento) => {
         evento.preventDefault();
+        const uuidValido = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if ([emisorId, receptorId].some((id) => id.trim() !== "" && !uuidValido.test(id.trim()))) {
+          setErrorFiltros("Los identificadores de emisor y receptor deben tener formato UUID.");
+          return;
+        }
+        setErrorFiltros("");
         setFiltros({ desde, hasta, emisor_id: emisorId.trim(), receptor_id: receptorId.trim() });
         recargar();
       }}>
@@ -47,7 +54,8 @@ export default function ContabilidadItems() {
         <input id="items-receptor" type="text" placeholder="UUID de empresa receptora" value={receptorId} onChange={(e) => setReceptorId(e.target.value)} />
         <button type="submit">Consultar</button>
       </form>
-      <p><a href={conParametros("/api/v1/contabilidad-items/exportar-csv", filtros)}>Exportar CSV de los filtros aplicados (máximo 500 grupos)</a></p>
+      {errorFiltros && <p role="alert">{errorFiltros}</p>}
+      <p><a href={(import.meta.env.VITE_API_URL ?? "") + conParametros("/api/v1/contabilidad-items/exportar-csv", filtros)}>Exportar CSV de los filtros aplicados (máximo 500 grupos)</a></p>
       {cargando && <p>Consultando ítems…</p>}
       {error && <p role="alert">No se pudo consultar: {error}</p>}
       {!cargando && !error && datos?.length === 0 && (
