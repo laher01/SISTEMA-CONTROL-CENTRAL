@@ -112,3 +112,25 @@ def test_observacion_resuelta_con_aprobacion_o_rechazo(session, auth_prueba, apr
     with pytest.raises(HTTPException) as error:
         resolver_propuesta(session, administrador, observacion.id, aprobar)
     assert error.value.status_code == 409
+
+
+def test_secretaria_distinta_puede_resolver_observacion(session, auth_prueba):
+    contexto = auth_prueba.contexto
+    expediente = _expediente(session, contexto.tenant_id)
+    administrador = replace(contexto, rol="ADMINISTRADOR")
+    observacion = registrar_decision(
+        session, administrador, expediente.id, "OBSERVAR", "Falta sustento de ítems"
+    )
+    secretaria_cuenta = CuentaAcceso(
+        tenant_id=contexto.tenant_id,
+        login="SECRETARIA-REVISION-ITEMS",
+        password_hash="hash-test",
+        activo=True,
+        cambio_clave_obligatorio=False,
+    )
+    session.add(secretaria_cuenta)
+    session.flush()
+    secretaria = replace(contexto, rol="SECRETARIA", cuenta_id=secretaria_cuenta.id)
+    resultado = resolver_propuesta(session, secretaria, observacion.id, True)
+    assert resultado.estado == "VIGENTE"
+    assert resultado.aprobado_por_cuenta_id == secretaria_cuenta.id
