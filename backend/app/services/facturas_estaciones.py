@@ -24,6 +24,7 @@ def extraer_factura_estacion(texto: str) -> dict[str, tuple[str, str]]:
     if not (escorpio or jabsa):
         return {}
     campos: dict[str, tuple[str, str]] = {}
+    compacto = " ".join(texto.split())
     numero = re.search(
         r"\b(F[0-9]{3})\s*(?:[-–—]\s*|N[°ºO.]\s*)0*([0-9]{1,10})\b",
         texto,
@@ -35,7 +36,10 @@ def extraer_factura_estacion(texto: str) -> dict[str, tuple[str, str]]:
 
     if escorpio:
         emisor = re.search(r"R\.?U\.?C\.?\s*N[°º]?\s*(\d{11})", texto, re.I)
-        receptor = re.search(r"SEÑOR\(ES\)\s*:\s*([^\n]+?)\s+RUC\s*:\s*(\d{11})", texto, re.I)
+        receptor_nombre = re.search(
+            r"SEÑOR\\(ES\\)\\s*:\\s*(.+?)\\s+(?:DIRECCI[OÖÓ]N|RUC)\\b", compacto, re.I
+        )
+        receptor_ruc = re.search(r"\\bRUC\\s*:\\s*(\\d{11})", compacto, re.I)
         nombre = re.search(
             r"(INVERSIONES\s+Y\s+ASESORAMIENTO\s+ESCORPIO\s+SAC)",
             " ".join(texto.split()),
@@ -45,9 +49,10 @@ def extraer_factura_estacion(texto: str) -> dict[str, tuple[str, str]]:
             campos["razon_social_emisor"] = (nombre.group(1).strip(), nombre.group(0))
         if emisor:
             campos["ruc_emisor"] = (emisor.group(1), emisor.group(0))
-        if receptor:
-            campos["razon_social_receptor"] = (receptor.group(1).strip(), receptor.group(0))
-            campos["ruc_receptor"] = (receptor.group(2), receptor.group(0))
+        if receptor_nombre:
+            campos["razon_social_receptor"] = (receptor_nombre.group(1), receptor_nombre.group(0))
+        if receptor_ruc:
+            campos["ruc_receptor"] = (receptor_ruc.group(1), receptor_ruc.group(0))
     else:
         emisor = re.search(r"(?m)^\s*RUC\s*:\s*(\d{11})", texto, re.I)
         receptor = re.search(r"(?m)^\s*RUC\s*:\s*(\d{11})\s+Placa\s*:", texto, re.I)
@@ -67,7 +72,7 @@ def extraer_factura_estacion(texto: str) -> dict[str, tuple[str, str]]:
         rf"\b{total_label}\s*(?:S/\.?\s*)?([0-9][0-9,.]*)\b",
         re.I,
     )
-    encontrados = list(total_re.finditer(texto))
+    encontrados = list(total_re.finditer(compacto))
     if encontrados:
         valor = _monto(encontrados[-1].group(1))
         if valor is not None:
