@@ -84,8 +84,6 @@ def test_vista_previa_informa_archivo_faltante_o_alterado(
 
 
 @pytest.mark.parametrize("limite", [0, -1, 101])
-def test_vista_previa_rechaza_limites_fuera_de_rango(
-    session: Session, tmp_path: Path, limite: int
-):
+def test_vista_previa_rechaza_limites_fuera_de_rango(session: Session, tmp_path: Path, limite: int):
     with pytest.raises(ValueError, match="límite"):
         previsualizar_pagina(session, AlmacenLocal(tmp_path), uuid.uuid4(), limite=limite)
