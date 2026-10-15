@@ -66,9 +66,9 @@ def test_listado_gmail_con_filtro_de_fechas(monkeypatch: pytest.MonkeyPatch) -> 
     assert filtro["q"] == ["after:2026/10/01 before:2026/10/16"]
 
 
-def test_listado_gmail_rechaza_filtro_incompleto() -> None:
+def test_listado_gmail_rechaza_filtro_sin_fecha_inicial() -> None:
     with pytest.raises(ValueError):
-        listar_ids_gmail("token-ficticio", desde=date(2026, 10, 1))
+        listar_ids_gmail("token-ficticio", hasta=date(2026, 10, 15))
 
 
 def test_periodo_inicial_mes_validado_para_ambos_proveedores() -> None:
