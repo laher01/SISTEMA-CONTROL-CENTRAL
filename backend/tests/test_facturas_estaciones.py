@@ -1,0 +1,64 @@
+"""Regresión de identidades fiscales de estaciones: sin confundir facturas y operaciones bancarias."""
+
+import pytest
+
+from app.services.extraccion_campos import extraer_campos
+from app.services.facturas_estaciones import extraer_factura_estacion
+
+
+@pytest.mark.parametrize(
+    ("numero", "receptor", "ruc_cliente", "total"),
+    [
+        ("0016490", "INVERSIONES BORISO E.I.R.L.", "20605535098", "1750.00"),
+        ("0016491", "B2C MUSA E.I.R.L.", "20614966174", "1850.00"),
+        ("0016492", "INVERSIONES Y NEGOCIOS HERNANDEZ E.I.R.L.", "20478053763", "1850.00"),
+        ("0016493", "FRUTTI DEL PAESE E.I.R.L.", "20611909234", "1750.00"),
+        ("0016494", "CORPORACION LATINOAMERICANO EL NORTE E.I.R.L.", "20524049245", "1186.00"),
+        ("0016495", "FRUTTI DEL PAESE E.I.R.L.", "20611909234", "1950.00"),
+        ("0016496", "INVERSIONES BORISO E.I.R.L.", "20605535098", "1870.00"),
+        ("0016497", "INVERSIONES Y NEGOCIACIONES REQUE E.I.R.L.", "20538820050", "1915.00"),
+        ("0016498", "B2C MUSA E.I.R.L.", "20614966174", "1900.00"),
+        ("0016499", "CORPORACION LATINOAMERICANO EL NORTE E.I.R.L.", "20524049245", "1949.00"),
+    ],
+)
+def test_escorpio_serie_ruc_cliente_y_total(numero: str, receptor: str, ruc_cliente: str, total: str) -> None:
+    texto = (
+        "INVERSIONES Y ASESORAMIENTO ESCORPIO SAC  R.U.C. N° 20516453835\n"
+        f"FACTURA ELECTRÓNICA F109 Nº {numero}\n"
+        f"SEÑOR(ES) : {receptor}     RUC : {ruc_cliente}\n"
+        "2026-10-02 2026-10-02 SOL\n"
+        f"IMPORTE TOTAL S/ {total}\nwww.facturacion.jadal.pe"
+    )
+    datos = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert datos is not None
+    c = datos["campos"]
+    assert c["serie"]["valor"] == "F109"
+    assert c["correlativo"]["valor"] == str(int(numero))
+    assert c["ruc_emisor"]["valor"] == "20516453835"
+    assert c["ruc_receptor"]["valor"] == ruc_cliente
+    assert c["razon_social_receptor"]["valor"] == receptor
+    assert c["importe_total"]["valor"] == total
+
+
+def test_jabsa_ticket_factura_y_total() -> None:
+    texto = (
+        "SERVICENTRO JABSA S.A\nRUC : 20374914201\n"
+        "FACTURA DE VENTA ELECTRÓNICA\nF003-00004475\n"
+        "Fecha Emision : 15/10/2026\n"
+        "Cliente : INVERSIONES Y NEGOCIACIONES MAREUF E.I\n"
+        "RUC : 20538821374  Placa :\n"
+        "OP.GRAVADAS S/ 2959.32\nIGV S/ 532.68\n"
+        "DESCUENTO S 0.00 TOTAL S/ 3492.00\n"
+        "Representación impresa de la BOLETA DE VENTA ELECTRONICA"
+    )
+    campos = extraer_campos(texto, "TEXTO_PDF", 1.0)["campos"]
+    assert campos["serie"]["valor"] == "F003"
+    assert campos["correlativo"]["valor"] == "4475"
+    assert campos["ruc_emisor"]["valor"] == "20374914201"
+    assert campos["ruc_receptor"]["valor"] == "20538821374"
+    assert campos["importe_total"]["valor"] == "3492.00"
+
+
+def test_transferencia_bcp_nunca_es_factura() -> None:
+    texto = "BCP\n¡Transferencia exitosa!\nS/ 10,160.00\nNúmero de operación 03857359"
+    assert extraer_factura_estacion(texto) == {}
