@@ -159,9 +159,7 @@ def renovar_google_token(*, refresh_token: str, client_id: str, client_secret: s
     return acceso
 
 
-def consulta_gmail_periodo(
-    *, desde: date, hasta: date
-) -> str:
+def consulta_gmail_periodo(*, desde: date, hasta: date) -> str:
     """Fechas inclusivas; Gmail usa before exclusivo (día siguiente)."""
     if hasta < desde:
         raise ValueError("La fecha final no puede ser anterior a la inicial")
@@ -174,14 +172,22 @@ def consulta_gmail_periodo(
 
 
 def listar_ids_gmail(
-    access_token: str, *, limite: int = 50, desde: date | None = None,
+    access_token: str,
+    *,
+    limite: int = 50,
+    desde: date | None = None,
     hasta: date | None = None,
 ) -> list[str]:
-    if (desde is None) != (hasta is None):
-        raise ValueError("Se requieren ambas fechas para filtrar mensajes")
-    parametros_dict = {"maxResults": max(1, min(limite, 100))}
-    if desde is not None and hasta is not None:
-        parametros_dict["q"] = consulta_gmail_periodo(desde=desde, hasta=hasta)
+    """Lee ids recientes o desde la fecha inicial, sin caducar la sincronización."""
+    if hasta is not None and desde is None:
+        raise ValueError("Se requiere fecha inicial")
+    parametros_dict: dict[str, int | str] = {"maxResults": max(1, min(limite, 100))}
+    if desde is not None:
+        parametros_dict["q"] = (
+            consulta_gmail_periodo(desde=desde, hasta=hasta)
+            if hasta is not None
+            else f"after:{desde:%Y/%m/%d}"
+        )
     parametros = urlencode(parametros_dict)
     datos = _json_google(
         "https://gmail.googleapis.com/gmail/v1/users/me/messages?" + parametros,
