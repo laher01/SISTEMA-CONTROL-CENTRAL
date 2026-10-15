@@ -17,6 +17,8 @@ export default function ContabilidadItems() {
   const [emisorId, setEmisorId] = useState("");
   const [receptorId, setReceptorId] = useState("");
   const [errorFiltros, setErrorFiltros] = useState("");
+  const [errorDescarga, setErrorDescarga] = useState("");
+  const [descargando, setDescargando] = useState(false);
   const [filtros, setFiltros] = useState({ desde: "", hasta: "", emisor_id: "", receptor_id: "" });
   const ruta = conParametros("/api/v1/contabilidad-items", {
     desde: filtros.desde,
@@ -55,7 +57,40 @@ export default function ContabilidadItems() {
         <button type="submit">Consultar</button>
       </form>
       {errorFiltros && <p role="alert">{errorFiltros}</p>}
-      <p><a href={(import.meta.env.VITE_API_URL ?? "") + conParametros("/api/v1/contabilidad-items/exportar-csv", filtros)}>Exportar CSV de los filtros aplicados (máximo 500 grupos)</a></p>
+      <p>
+        <button type="button" disabled={descargando} onClick={async () => {
+          setDescargando(true);
+          setErrorDescarga("");
+          try {
+            const rutaCsv = conParametros("/api/v1/contabilidad-items/exportar-csv", filtros);
+            const respuesta = await fetch((import.meta.env.VITE_API_URL ?? "") + rutaCsv, {
+              credentials: "include",
+            });
+            if (!respuesta.ok) {
+              throw new Error(`No se pudo exportar CSV (HTTP ${respuesta.status}).`);
+            }
+            const blob = await respuesta.blob();
+            const enlace = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            enlace.href = url;
+            enlace.download = "contabilidad-items.csv";
+            document.body.appendChild(enlace);
+            try {
+              enlace.click();
+            } finally {
+              enlace.remove();
+              window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+            }
+          } catch (fallo) {
+            setErrorDescarga(fallo instanceof Error ? fallo.message : String(fallo));
+          } finally {
+            setDescargando(false);
+          }
+        }}>
+          {descargando ? "Exportando…" : "Exportar CSV de los filtros aplicados (máximo 500 grupos)"}
+        </button>
+      </p>
+      {errorDescarga && <p role="alert">{errorDescarga}</p>}
       {cargando && <p>Consultando ítems…</p>}
       {error && <p role="alert">No se pudo consultar: {error}</p>}
       {!cargando && !error && datos?.length === 0 && (
