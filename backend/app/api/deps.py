@@ -93,7 +93,8 @@ def get_contexto_operativo(
         or (request.method == "GET" and request.url.path == "/api/v1/comisiones/receptores")
         or (
             request.method == "GET"
-            and request.url.path in {
+            and request.url.path
+            in {
                 "/api/v1/dashboard/resumen",
                 "/api/v1/dashboard/desglose",
                 "/api/v1/dashboard/opciones",
