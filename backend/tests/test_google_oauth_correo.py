@@ -1,8 +1,9 @@
-from datetime import date
+from datetime import date, timedelta
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+from app.api.routes.correo import BuzonIn
 from app.services import google_oauth_correo
 from app.services.google_oauth_correo import (
     consulta_gmail_periodo,
@@ -68,3 +69,29 @@ def test_listado_gmail_con_filtro_de_fechas(monkeypatch: pytest.MonkeyPatch) -> 
 def test_listado_gmail_rechaza_filtro_incompleto() -> None:
     with pytest.raises(ValueError):
         listar_ids_gmail("token-ficticio", desde=date(2026, 10, 1))
+
+
+def test_periodo_inicial_mes_validado_para_ambos_proveedores() -> None:
+    for proveedor in ("GOOGLE", "MICROSOFT"):
+        datos = BuzonIn(direccion="archivo@example.com", proveedor=proveedor)
+        assert datos.periodo_inicial == "MES"
+        assert date.today() - timedelta(days=30) < date.today()
+
+
+def test_periodo_inicial_rechaza_valores_no_admitidos() -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        BuzonIn(direccion="archivo@example.com", proveedor="GOOGLE", periodo_inicial="INDEFINIDO")
+
+
+def test_consulta_gmail_desde_sin_limite_superior(monkeypatch: pytest.MonkeyPatch) -> None:
+    urls: list[str] = []
+
+    def simular(url: str, **_kwargs: object) -> dict[str, object]:
+        urls.append(url)
+        return {"messages": []}
+
+    monkeypatch.setattr(google_oauth_correo, "_json_google", simular)
+    assert listar_ids_gmail("simulado", desde=date(2026, 9, 15)) == []
+    assert parse_qs(urlparse(urls[0]).query)["q"] == ["after:2026/09/15"]
