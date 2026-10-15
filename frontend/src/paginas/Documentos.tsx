@@ -79,6 +79,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
     tipo_empresa: tipoEmpresa,
     dia,
     fecha_emision: fechaEmision,
+    mes,
     serie_correlativo: correlativoBusqueda,
     tipo_documento: tipo,
     emisor_ruc: emisor.length === 11 ? emisor : undefined,

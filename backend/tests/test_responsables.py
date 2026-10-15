@@ -60,7 +60,9 @@ def test_responsable_solo_ve_sus_usuarios(
     respuesta = client.get("/api/v1/miembros/mis-usuarios")
     assert respuesta.status_code == 200, respuesta.text
     assert [u["codigo"] for u in respuesta.json()] == ["USER-PROP"]
-    assert client.get("/api/v1/dashboard/resumen").status_code == 403
+    dashboard = client.get("/api/v1/dashboard/resumen")
+    assert dashboard.status_code == 200, dashboard.text
+    assert dashboard.json()["expedientes_total"] == 0
     assert client.get("/api/v1/miembros").status_code == 403
 
 
