@@ -1001,6 +1001,7 @@ type BuzonCorreo = {
   proveedor: string;
   activo: boolean;
   ultimo_error: string | null;
+  importar_desde: string | null;
 };
 type RemitenteGestor = { id: string; direccion: string; gestor_id: string; gestor: string };
 type GestorCorreo = { id: string; codigo: string; nombre: string };
@@ -1115,10 +1116,11 @@ function RecepcionAutomaticaPanel() {
     </form>
     {errorBuzones && <p role="alert">{errorBuzones}</p>}
     <table>
-      <thead><tr><th>Dirección</th><th>Proveedor</th><th>Estado</th><th>Autorización</th></tr></thead>
+      <thead><tr><th>Dirección</th><th>Proveedor</th><th>Historial desde</th><th>Estado</th><th>Autorización</th></tr></thead>
       <tbody>{(buzones ?? []).map((b) => <tr key={b.id}>
         <td>{b.direccion}</td><td>{b.proveedor}</td>
-        <td>{b.activo ? "Google autorizado" : "Pendiente de conexión"}</td>
+        <td>{b.importar_desde ?? "Configuración anterior"}</td>
+        <td>{b.activo ? "Autorizado" : "Pendiente de conexión"}</td>
         <td>{b.proveedor === "GOOGLE" && !b.activo ?
           <button type="button" disabled={guardando || !estadoProveedores?.google_configurado}
             onClick={() => void conectarGoogle(b.id)}>Conectar con Google</button>
