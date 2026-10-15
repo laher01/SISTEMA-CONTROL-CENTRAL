@@ -233,8 +233,14 @@ def extraer_campos(
             moneda[0], min(0.95, moneda[1] * factor), moneda[2]
         ).a_dict(fuente)
 
-    total_match = TOTAL.search(texto)
-    if total_match and (importe := _normalizar_importe(total_match.group(1))) is not None:
+    total_cotizacion = _total_cotizacion(texto) if re.search(r"COTIZACI[OÓ]N", texto, re.I) else None
+    total_match = TOTAL.search(texto) if total_cotizacion is None else None
+    if total_cotizacion is not None:
+        importe, evidencia = total_cotizacion
+        campos["importe_total"] = CampoExtraido(
+            format(importe, ".2f"), min(0.97, 0.96 * factor), evidencia
+        ).a_dict(fuente)
+    elif total_match and (importe := _normalizar_importe(total_match.group(1))) is not None:
         campos["importe_total"] = CampoExtraido(
             format(importe, ".2f"), min(0.96, 0.94 * factor), total_match.group(0)
         ).a_dict(fuente)
@@ -1140,6 +1146,37 @@ def _normalizar_fecha_literal_es(dia: str, mes: str, anio: str) -> str | None:
         return date(int(anio), numero_mes, int(dia)).isoformat()
     except (KeyError, ValueError):
         return None
+
+
+def _total_cotizacion(texto: str) -> tuple[Decimal, str] | None:
+    """Lee el resumen de importes sin inferirlos de las cantidades."""
+    montos: dict[str, tuple[Decimal, str]] = {}
+    patron = re.compile(
+        r"^\s*(SUB\s*TOTAL|SUBTOTAL|I\.?G\.?V\.?\s*(?:18\s*%)?|"
+        r"TOTAL\s*(?:A\s*PAGAR)?)\s*[:=]?\s*(?:S/\.?\s*)?"
+        r"([0-9][0-9.,]*)\s*$",
+        re.IGNORECASE,
+    )
+    for linea in texto.splitlines():
+        coincidencia = patron.fullmatch(linea.strip())
+        if coincidencia is None:
+            continue
+        etiqueta = re.sub(r"[^A-Z]", "", coincidencia.group(1).upper())
+        nombre = "subtotal" if etiqueta.startswith("SUBTOTAL") else (
+            "igv" if etiqueta.startswith("IGV") else "total"
+        )
+        valor = _normalizar_importe(coincidencia.group(2))
+        if valor is not None and valor >= 0:
+            montos[nombre] = (valor, linea.strip())
+    total = montos.get("total")
+    if total is None:
+        return None
+    subtotal = montos.get("subtotal")
+    igv = montos.get("igv")
+    if subtotal is not None and igv is not None:
+        if abs(subtotal[0] + igv[0] - total[0]) > Decimal("0.02"):
+            return None
+    return total
 
 
 def _normalizar_importe(valor: str) -> Decimal | None:
