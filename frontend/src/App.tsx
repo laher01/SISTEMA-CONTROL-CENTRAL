@@ -34,6 +34,12 @@ import type { SesionActual } from "./tipos";
 type RolSesion = SesionActual["rol"];
 
 const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = [
+  {
+    a: "/",
+    texto: "Dashboard",
+    icono: "⌂",
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"],
+  },
   { a: "/resumen-empresas", texto: "Resumen empresas", icono: "▤", roles: ["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA", "GESTOR", "USUARIO", "RESPONSABLE", "GERENTE"] },
   { a: "/crear-gestores", texto: "Creador de Gestor", icono: "♙", roles: ["USUARIO"] },
   { a: "/responsables-operativos", texto: "Crear Responsables", icono: "♙", roles: ["GERENTE", "SECRETARIA"] },
@@ -46,12 +52,6 @@ const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = 
   { a: "/comisiones-responsables", texto: "Comisiones de mi equipo", icono: "▥", roles: ["RESPONSABLE"] },
   { a: "/pago-gestores", texto: "Pago de Gestores", icono: "▣", roles: ["USUARIO"] },
   { a: "/comisiones", texto: "Simular comisiones", icono: "◉", roles: ["RESPONSABLE", "USUARIO"] },
-  {
-    a: "/",
-    texto: "Dashboard",
-    icono: "⌂",
-    roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"],
-  },
   { a: "/subir", texto: "Subir documentos", icono: "↑", roles: ["USUARIO", "GESTOR"] },
   { a: "/mi-recepcion", texto: "Recepción Automática", icono: "✉", roles: ["GESTOR"] },
   {
