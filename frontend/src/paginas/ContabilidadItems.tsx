@@ -14,10 +14,14 @@ type FilaItem = {
 export default function ContabilidadItems() {
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
-  const [filtros, setFiltros] = useState({ desde: "", hasta: "" });
+  const [emisorId, setEmisorId] = useState("");
+  const [receptorId, setReceptorId] = useState("");
+  const [filtros, setFiltros] = useState({ desde: "", hasta: "", emisor_id: "", receptor_id: "" });
   const ruta = conParametros("/api/v1/contabilidad-items", {
     desde: filtros.desde,
     hasta: filtros.hasta,
+    emisor_id: filtros.emisor_id,
+    receptor_id: filtros.receptor_id,
   });
   const { datos, error, cargando, recargar } = useDatos<FilaItem[]>(ruta);
 
@@ -30,15 +34,20 @@ export default function ContabilidadItems() {
       </p>
       <form onSubmit={(evento) => {
         evento.preventDefault();
-        setFiltros({ desde, hasta });
+        setFiltros({ desde, hasta, emisor_id: emisorId.trim(), receptor_id: receptorId.trim() });
         recargar();
       }}>
         <label htmlFor="items-desde">Desde</label>
         <input id="items-desde" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
         <label htmlFor="items-hasta">Hasta</label>
         <input id="items-hasta" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+        <label htmlFor="items-emisor">ID del emisor (opcional)</label>
+        <input id="items-emisor" type="text" placeholder="UUID de empresa emisora" value={emisorId} onChange={(e) => setEmisorId(e.target.value)} />
+        <label htmlFor="items-receptor">ID del receptor (opcional)</label>
+        <input id="items-receptor" type="text" placeholder="UUID de empresa receptora" value={receptorId} onChange={(e) => setReceptorId(e.target.value)} />
         <button type="submit">Consultar</button>
       </form>
+      <p><a href={conParametros("/api/v1/contabilidad-items/exportar-csv", filtros)}>Exportar CSV de los filtros aplicados (máximo 500 grupos)</a></p>
       {cargando && <p>Consultando ítems…</p>}
       {error && <p role="alert">No se pudo consultar: {error}</p>}
       {!cargando && !error && datos?.length === 0 && (
