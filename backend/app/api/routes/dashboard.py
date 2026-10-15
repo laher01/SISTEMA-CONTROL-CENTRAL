@@ -240,23 +240,202 @@ def resumen_secretaria_clientes(
     ]
 
 
+def _alcance_dashboard(
+    tenant_id: uuid.UUID,
+    auth: OperativeAuthDep,
+    responsable_id: uuid.UUID | None = None,
+    usuario_id: uuid.UUID | None = None,
+    gestor_id: uuid.UUID | None = None,
+    emisor_id: uuid.UUID | None = None,
+    receptor_id: uuid.UUID | None = None,
+    tipo_empresa: Literal["A", "B"] | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    mes: str | None = None,
+) -> list[ColumnElement[bool]]:
+    """Una única fuente de alcance para resumen, desglose y opciones."""
+    from fastapi import HTTPException, status
+
+    condiciones: list[ColumnElement[bool]] = [
+        Expediente.tenant_id == tenant_id,
+        Expediente.deleted_at.is_(None),
+    ]
+    if auth.rol == "GESTOR":
+        condiciones.append(Expediente.gestor_id == auth.gestor_id)
+    elif auth.rol == RolMiembro.USUARIO:
+        condiciones.append(Expediente.usuario_id == auth.usuario_id)
+    elif auth.rol == RolMiembro.RESPONSABLE:
+        condiciones.append(
+            Expediente.usuario_id.in_(
+                select(Miembro.id).where(
+                    Miembro.tenant_id == tenant_id,
+                    Miembro.responsable_id == auth.miembro_id,
+                    Miembro.deleted_at.is_(None),
+                )
+            )
+        )
+    elif auth.rol == RolMiembro.GERENTE:
+        condiciones.append(alcance_expedientes_gerente(auth))
+    if responsable_id is not None:
+        condiciones.append(
+            Expediente.usuario_id.in_(
+                select(Miembro.id).where(
+                    Miembro.tenant_id == tenant_id,
+                    Miembro.responsable_id == responsable_id,
+                    Miembro.deleted_at.is_(None),
+                )
+            )
+        )
+    if usuario_id is not None:
+        condiciones.append(Expediente.usuario_id == usuario_id)
+    if gestor_id is not None:
+        condiciones.append(Expediente.gestor_id == gestor_id)
+    if emisor_id is not None:
+        condiciones.append(Expediente.emisor_id == emisor_id)
+    if receptor_id is not None:
+        condiciones.append(Expediente.receptor_id == receptor_id)
+    if tipo_empresa is not None:
+        condiciones.append(Expediente.emisor.has(Empresa.clasificacion_proveedor == tipo_empresa))
+    if fecha_desde is not None:
+        condiciones.append(Expediente.fecha_emision >= fecha_desde)
+    if fecha_hasta is not None:
+        condiciones.append(Expediente.fecha_emision <= fecha_hasta)
+    if mes:
+        try:
+            inicio = date.fromisoformat(f"{mes}-01")
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Mes inválido") from exc
+        if len(mes) != 7 or mes[4] != "-":
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Mes inválido")
+        siguiente = date(inicio.year + (inicio.month == 12), inicio.month % 12 + 1, 1)
+        condiciones.extend(
+            (Expediente.fecha_emision >= inicio, Expediente.fecha_emision < siguiente)
+        )
+    return condiciones
+
+
+@router.get("/opciones")
+def opciones_dashboard(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    responsable_id: uuid.UUID | None = None,
+    usuario_id: uuid.UUID | None = None,
+    gestor_id: uuid.UUID | None = None,
+    emisor_id: uuid.UUID | None = None,
+    receptor_id: uuid.UUID | None = None,
+    tipo_empresa: Literal["A", "B"] | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    mes: str | None = None,
+) -> dict[str, list[dict[str, str]]]:
+    """Opciones exclusivas de expedientes accesibles bajo los mismos filtros."""
+    condiciones = _alcance_dashboard(
+        tenant_id,
+        auth,
+        responsable_id,
+        usuario_id,
+        gestor_id,
+        emisor_id,
+        receptor_id,
+        tipo_empresa,
+        fecha_desde,
+        fecha_hasta,
+        mes,
+    )
+    expedientes = session.scalars(select(Expediente).where(*condiciones)).all()
+    usuarios_ids = {e.usuario_id for e in expedientes if e.usuario_id}
+    gestores_ids = {e.gestor_id for e in expedientes if e.gestor_id}
+    emisores_ids = {e.emisor_id for e in expedientes}
+    receptores_ids = {e.receptor_id for e in expedientes}
+    usuarios = list(
+        session.scalars(
+            select(Miembro).where(
+                Miembro.tenant_id == tenant_id,
+                Miembro.id.in_(usuarios_ids),
+                Miembro.deleted_at.is_(None),
+            )
+        )
+    )
+    responsables_ids = {u.responsable_id for u in usuarios if u.responsable_id}
+    responsables = session.scalars(
+        select(Miembro).where(
+            Miembro.tenant_id == tenant_id,
+            Miembro.id.in_(responsables_ids),
+            Miembro.deleted_at.is_(None),
+        )
+    ).all()
+    gestores = session.scalars(
+        select(Gestor).where(
+            Gestor.tenant_id == tenant_id,
+            Gestor.id.in_(gestores_ids),
+            Gestor.deleted_at.is_(None),
+        )
+    ).all()
+    empresas = session.scalars(
+        select(Empresa).where(
+            Empresa.tenant_id == tenant_id,
+            Empresa.id.in_(emisores_ids | receptores_ids),
+        )
+    ).all()
+
+    def miembros_opciones(items: list[Miembro]) -> list[dict[str, str]]:
+        return sorted(
+            [{"id": str(x.id), "nombre": f"{x.codigo} · {x.nombre}"} for x in items],
+            key=lambda x: x["nombre"],
+        )
+
+    def empresas_opciones(ids: set[uuid.UUID]) -> list[dict[str, str]]:
+        return sorted(
+            [
+                {"id": str(x.id), "nombre": f"{x.razon_social} · {x.ruc}"}
+                for x in empresas
+                if x.id in ids
+            ],
+            key=lambda x: x["nombre"],
+        )
+
+    return {
+        "responsables": miembros_opciones(list(responsables)),
+        "usuarios": miembros_opciones(usuarios),
+        "gestores": sorted(
+            [{"id": str(x.id), "nombre": f"{x.codigo} · {x.nombre}"} for x in gestores],
+            key=lambda x: x["nombre"],
+        ),
+        "emisores": empresas_opciones(emisores_ids),
+        "receptores": empresas_opciones(receptores_ids),
+    }
+
+
 @router.get("/resumen", response_model=DashboardResumen)
 def resumen(
     session: SessionDep,
     settings: SettingsDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
+    responsable_id: uuid.UUID | None = None,
+    usuario_id: uuid.UUID | None = None,
+    gestor_id: uuid.UUID | None = None,
+    emisor_id: uuid.UUID | None = None,
+    receptor_id: uuid.UUID | None = None,
+    tipo_empresa: Literal["A", "B"] | None = None,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    mes: str | None = None,
 ) -> DashboardResumen:
-    vigentes: list[ColumnElement[bool]] = [
-        Expediente.tenant_id == tenant_id,
-        Expediente.deleted_at.is_(None),
-    ]
-    if auth.rol == "GESTOR":
-        vigentes.append(Expediente.gestor_id == auth.gestor_id)
-    elif auth.rol == RolMiembro.USUARIO:
-        vigentes.append(Expediente.usuario_id == auth.usuario_id)
-    elif auth.rol == RolMiembro.GERENTE:
-        vigentes.append(alcance_expedientes_gerente(auth))
+    vigentes = _alcance_dashboard(
+        tenant_id,
+        auth,
+        responsable_id,
+        usuario_id,
+        gestor_id,
+        emisor_id,
+        receptor_id,
+        tipo_empresa,
+        fecha_desde,
+        fecha_hasta,
+        mes,
+    )
 
     por_estado = {e: 0 for e in EstadoExpediente}
     for estado, total in session.execute(
@@ -309,6 +488,34 @@ def resumen(
         Documento.deleted_at.is_(None),
         Documento.estado.in_(list(pendientes)),
     ]
+    # Los pendientes sin expediente no poseen emisor/receptor ni fecha de emisión
+    # verificables: no atribuirlos a filtros de expedientes.
+    if emisor_id or receptor_id or tipo_empresa or mes or fecha_desde or fecha_hasta:
+        documentos_scope.append(Documento.id.is_(None))
+    if responsable_id is not None:
+        documentos_scope.append(
+            Documento.usuario_id.in_(
+                select(Miembro.id).where(
+                    Miembro.tenant_id == tenant_id,
+                    Miembro.responsable_id == responsable_id,
+                    Miembro.deleted_at.is_(None),
+                )
+            )
+        )
+    if usuario_id is not None:
+        documentos_scope.append(Documento.usuario_id == usuario_id)
+    if gestor_id is not None:
+        documentos_scope.append(Documento.gestor_id == gestor_id)
+    if auth.rol == RolMiembro.RESPONSABLE:
+        documentos_scope.append(
+            Documento.usuario_id.in_(
+                select(Miembro.id).where(
+                    Miembro.tenant_id == tenant_id,
+                    Miembro.responsable_id == auth.miembro_id,
+                    Miembro.deleted_at.is_(None),
+                )
+            )
+        )
     if auth.rol == "GESTOR":
         documentos_scope.append(Documento.gestor_id == auth.gestor_id)
     elif auth.rol == RolMiembro.USUARIO:
@@ -345,12 +552,15 @@ def desglose(
     auth: OperativeAuthDep,
     agrupar_por: Literal["usuario", "emisor", "receptor", "dia", "mes", "anio"] = "usuario",
     orden: Literal["asc", "desc"] = "desc",
+    responsable_id: uuid.UUID | None = None,
     usuario_id: uuid.UUID | None = None,
+    gestor_id: uuid.UUID | None = None,
     emisor_id: uuid.UUID | None = None,
     receptor_id: uuid.UUID | None = None,
     tipo_empresa: Literal["A", "B"] | None = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
+    mes: str | None = None,
 ) -> DashboardDesglose:
     consulta = (
         select(Expediente)
@@ -363,26 +573,21 @@ def desglose(
             Expediente.deleted_at.is_(None),
         )
     )
-    if auth.rol == "GESTOR":
-        consulta = consulta.where(Expediente.gestor_id == auth.gestor_id)
-    elif auth.rol == RolMiembro.USUARIO:
-        consulta = consulta.where(Expediente.usuario_id == auth.usuario_id)
-    elif auth.rol == RolMiembro.GERENTE:
-        consulta = consulta.where(alcance_expedientes_gerente(auth))
-    if usuario_id is not None:
-        consulta = consulta.where(Expediente.usuario_id == usuario_id)
-    if emisor_id is not None:
-        consulta = consulta.where(Expediente.emisor_id == emisor_id)
-    if receptor_id is not None:
-        consulta = consulta.where(Expediente.receptor_id == receptor_id)
-    if tipo_empresa is not None:
-        consulta = consulta.where(
-            Expediente.emisor.has(Empresa.clasificacion_proveedor == tipo_empresa)
+    consulta = consulta.where(
+        *_alcance_dashboard(
+            tenant_id,
+            auth,
+            responsable_id,
+            usuario_id,
+            gestor_id,
+            emisor_id,
+            receptor_id,
+            tipo_empresa,
+            fecha_desde,
+            fecha_hasta,
+            mes,
         )
-    if fecha_desde is not None:
-        consulta = consulta.where(Expediente.fecha_emision >= fecha_desde)
-    if fecha_hasta is not None:
-        consulta = consulta.where(Expediente.fecha_emision <= fecha_hasta)
+    )
 
     expedientes = list(session.scalars(consulta))
     usuarios = {
