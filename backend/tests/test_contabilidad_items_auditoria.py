@@ -7,9 +7,11 @@ from decimal import Decimal
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import CuentaAcceso, Empresa, Expediente
+from app.api.routes.contabilidad_items import _alcance
+from app.models import CuentaAcceso, Empresa, Expediente, Miembro
 from app.services.contabilidad_items_auditoria import (
     registrar_decision,
     resolver_propuesta,
@@ -156,3 +158,62 @@ def test_secretaria_no_puede_resolver_desactivacion_pendiente(session, auth_prue
     with pytest.raises(HTTPException) as error:
         resolver_propuesta(session, segunda_secretaria, propuesta.id, True)
     assert error.value.status_code == 403
+
+
+def test_responsable_consulta_solo_expedientes_de_su_equipo(session, auth_prueba):
+    contexto = auth_prueba.contexto
+    responsable = Miembro(
+        tenant_id=contexto.tenant_id,
+        codigo="RESP-ITEMS-TEST",
+        nombre="Responsable auditoría",
+        rol="RESPONSABLE",
+    )
+    otro_responsable = Miembro(
+        tenant_id=contexto.tenant_id,
+        codigo="RESP-ITEMS-OTRO",
+        nombre="Otro responsable",
+        rol="RESPONSABLE",
+    )
+    session.add_all([responsable, otro_responsable])
+    session.flush()
+    usuario_propio = Miembro(
+        tenant_id=contexto.tenant_id,
+        codigo="USU-ITEMS-PROPIO",
+        nombre="Usuario del equipo",
+        rol="USUARIO",
+        responsable_id=responsable.id,
+    )
+    usuario_ajeno = Miembro(
+        tenant_id=contexto.tenant_id,
+        codigo="USU-ITEMS-AJENO",
+        nombre="Usuario de otro equipo",
+        rol="USUARIO",
+        responsable_id=otro_responsable.id,
+    )
+    session.add_all([usuario_propio, usuario_ajeno])
+    session.flush()
+    expediente = _expediente(session, contexto.tenant_id)
+    expediente.usuario_id = usuario_propio.id
+    otro_expediente = Expediente(
+        tenant_id=contexto.tenant_id,
+        emisor_id=expediente.emisor_id,
+        receptor_id=expediente.receptor_id,
+        tipo_comprobante="FACT",
+        serie="F001",
+        correlativo="2",
+        fecha_emision=date(2026, 10, 14),
+        moneda="PEN",
+        importe_total=Decimal("75.00"),
+        usuario_id=usuario_ajeno.id,
+    )
+    session.add(otro_expediente)
+    session.flush()
+    auth = replace(contexto, rol="RESPONSABLE", miembro_id=responsable.id)
+    expedientes = session.scalars(
+        select(Expediente).where(
+            Expediente.tenant_id == contexto.tenant_id,
+            _alcance(auth),
+        )
+    ).all()
+    assert expediente.id in {e.id for e in expedientes}
+    assert otro_expediente.id not in {e.id for e in expedientes}
