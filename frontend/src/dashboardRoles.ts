@@ -10,5 +10,7 @@ export function controlesDashboard(rol: SesionActual["rol"]) {
 }
 
 export function agrupacionInicial(rol: SesionActual["rol"]) {
-  return rol === "GESTOR" ? "receptor" : "usuario";
+  if (rol === "GESTOR") return "receptor";
+  if (rol === "USUARIO") return "gestor";
+  return "usuario";
 }
