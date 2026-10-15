@@ -49,6 +49,7 @@ const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = 
   { a: "/mi-equipo/pedidos", texto: "Pedidos", icono: "▤", roles: ["RESPONSABLE"] },
   { a: "/mi-equipo/cobros", texto: "Cobros y clientes", icono: "◈", roles: ["RESPONSABLE"] },
   { a: "/mi-equipo/pagos", texto: "Pago de Usuarios", icono: "▣", roles: ["RESPONSABLE"] },
+  { a: "/comisiones-responsables", texto: "Comisiones de mi equipo", icono: "▥", roles: ["RESPONSABLE"] },
   { a: "/pago-gestores", texto: "Pago de Gestores", icono: "▣", roles: ["USUARIO"] },
   { a: "/comisiones", texto: "Simular comisiones", icono: "◉", roles: ["RESPONSABLE", "USUARIO"] },
   { a: "/subir", texto: "Subir documentos", icono: "↑", roles: ["USUARIO", "GESTOR"] },
@@ -238,7 +239,7 @@ export default function App() {
           <Route path="/mi-cartera" element={<CarteraGerencia />} />
           <Route path="/produccion" element={sesion.rol === "GERENTE" ? <Navigate to="/mi-cartera" replace /> : <Produccion />} />
           <Route path="/pagos" element={<Pagos sesion={sesion} />} />
-          <Route path="/comisiones-responsables" element={sesion.rol === "GERENTE" ? <ComisionesResponsables sesion={sesion} /> : <Navigate to="/" replace />} />
+          <Route path="/comisiones-responsables" element={<ComisionesResponsables sesion={sesion} />} />
           <Route path="/configuracion" element={<Configuracion sesion={sesion} />} />
           <Route path="*" element={<p>Página no encontrada.</p>} />
           </>

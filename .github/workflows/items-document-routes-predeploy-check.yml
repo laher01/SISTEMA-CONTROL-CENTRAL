@@ -1,0 +1,76 @@
+name: items-document-routes-predeploy-check
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factcentral-staging-audit
+  cancel-in-progress: false
+jobs:
+  document_routes:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 20
+    steps:
+      - name: Validate authorized VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          test "$GITHUB_REF_NAME" = main
+          test "$VPS_HOST" = "132.145.233.172"
+          test "$VPS_USER" = ubuntu
+          for k in VPS_DEPLOY_PATH VPS_SSH_PRIVATE_KEY VPS_SSH_KNOWN_HOSTS; do
+            test -n "${!k:-}" || exit 1
+          done
+      - name: Configure SSH
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Check DB document paths against recent document archive
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+        run: |
+          ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
+            "cd -- '$VPS_DEPLOY_PATH' && bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          archive="deploy/backups/documentos/documentos_20261015T073324Z.tar.gz"
+          test -s "$archive"
+          sha256sum -c "$archive.sha256"
+          test -s deploy/.env.production
+          compose=(docker compose --env-file deploy/.env.production -f deploy/docker-compose.production.yml)
+          tmp="$(mktemp -d)"
+          trap 'rm -rf -- "$tmp"' EXIT
+          "${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "COPY (SELECT ruta_storage FROM documentos WHERE ruta_storage IS NOT NULL ORDER BY ruta_storage) TO STDOUT"' > "$tmp/routes"
+          tar -tzf "$archive" > "$tmp/archive"
+          python3 - "$tmp/routes" "$tmp/archive" <<'PY'
+          import sys
+          from pathlib import Path
+          routes = Path(sys.argv[1]).read_text().splitlines()
+          members = set(Path(sys.argv[2]).read_text().splitlines())
+          members = {m[2:] if m.startswith('./') else m for m in members}
+          def normalize(s):
+              s = s.strip()
+              if s.startswith('/data/documentos/'):
+                  s = s[len('/data/documentos/'):]
+              return s.removeprefix('./').lstrip('/')
+          missing = [p for p in routes if normalize(p) not in members]
+          print(f'RUTAS_BD_ACTUAL: {len(routes)}')
+          print(f'RUTAS_NO_EN_RESPALDO: {len(missing)}')
+          if missing:
+              raise SystemExit('Document archive does not cover all current DB paths; no paths disclosed')
+          print('DOCUMENTOS_RUTAS_VERIFICADAS')
+          PY
+          echo "RESPALDO_DOCUMENTAL_ORIGINAL_NO_MODIFICADO"
+          REMOTE
