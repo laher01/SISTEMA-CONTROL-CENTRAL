@@ -8,7 +8,7 @@ type Fila = {
   expedientes: number; total: string;
 };
 type Resumen = { proveedores: Fila[]; clientes: Fila[] };
-type DocumentoDetalle = { id: string; nombre_original: string; tipo_documento: string | null; estado: string; fecha_emision: string | null; serie: string | null; correlativo: string | null; moneda: string | null; importe_total: string | null }; 
+type DocumentoDetalle = { id: string; expediente_id: string | null; nombre_original: string; tipo_documento: string | null; estado: string; fecha_emision: string | null; serie: string | null; correlativo: string | null; moneda: string | null; importe_total: string | null }; 
 type UsuarioEquipo = { id: string; codigo: string; nombre: string };
 type GestorEquipo = { id: string; usuario_id: string; codigo: string; nombre: string };
 
@@ -144,7 +144,7 @@ export default function ResumenEmpresas({ esResponsable = false }: { esResponsab
         <thead><tr><th>Archivo</th><th>Tipo</th><th>Estado</th><th>Fecha emisión</th><th>Comprobante</th></tr></thead>
         <tbody>{(documentosDetalle ?? []).map((d) => <tr key={d.id}>
           <td>{d.nombre_original}</td><td>{d.tipo_documento ?? "—"}</td><td>{d.estado}</td>
-          <td>{d.fecha_emision ?? "—"}</td><td>{[d.serie, d.correlativo].filter(Boolean).join("-") || "—"}</td>
+          <td>{d.fecha_emision ?? "—"}</td><td>{d.expediente_id ? <a href={`/expedientes/${encodeURIComponent(d.expediente_id)}`} target="_blank" rel="noopener noreferrer" title="Abrir expediente en otra pestaña">{[d.serie, d.correlativo].filter(Boolean).join("-") || "Ver expediente"}</a> : ([d.serie, d.correlativo].filter(Boolean).join("-") || "Sin expediente")}</td>
         </tr>)}{!cargandoDetalle && !documentosDetalle?.length && <tr><td colSpan={5}>Sin documentos para los filtros seleccionados.</td></tr>}</tbody>
       </table>
     </div>}
