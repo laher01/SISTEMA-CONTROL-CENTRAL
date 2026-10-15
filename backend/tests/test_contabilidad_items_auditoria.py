@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.routes.contabilidad_items import _alcance
+from app.api.routes.contabilidad_items import _alcance, conciliacion
 from app.models import CuentaAcceso, Empresa, Expediente, Miembro
 from app.services.contabilidad_items_auditoria import (
     registrar_decision,
@@ -217,3 +217,68 @@ def test_responsable_consulta_solo_expedientes_de_su_equipo(session, auth_prueba
     ).all()
     assert expediente.id in {e.id for e in expedientes}
     assert otro_expediente.id not in {e.id for e in expedientes}
+
+
+def test_conciliacion_sin_duplicar_y_resolucion_actualiza_importes(session, auth_prueba):
+    contexto = auth_prueba.contexto
+    primero = _expediente(session, contexto.tenant_id)
+    segundo = Expediente(
+        tenant_id=contexto.tenant_id,
+        emisor_id=primero.emisor_id,
+        receptor_id=primero.receptor_id,
+        tipo_comprobante="FACT",
+        serie="F001",
+        correlativo="2",
+        fecha_emision=date(2026, 10, 14),
+        moneda="PEN",
+        importe_total=Decimal("75.00"),
+    )
+    tercero = Expediente(
+        tenant_id=contexto.tenant_id,
+        emisor_id=primero.emisor_id,
+        receptor_id=primero.receptor_id,
+        tipo_comprobante="FACT",
+        serie="F001",
+        correlativo="3",
+        fecha_emision=date(2026, 10, 14),
+        moneda="PEN",
+        importe_total=Decimal("25.00"),
+    )
+    session.add_all([segundo, tercero])
+    session.flush()
+    secretaria = replace(contexto, rol="SECRETARIA")
+    observacion = registrar_decision(
+        session, secretaria, segundo.id, "OBSERVAR", "Sustento pendiente"
+    )
+    registrar_decision(session, secretaria, tercero.id, "DESACTIVAR", "Revisión pendiente")
+    admin = replace(contexto, rol="ADMINISTRADOR")
+    filas = conciliacion(session, admin)
+    assert len(filas) == 1
+    fila = filas[0]
+    assert fila["total_documentos"] == 3
+    assert fila["aprobados"] == 1
+    assert fila["observados"] == 1
+    assert fila["otros"] == 1
+    assert Decimal(str(fila["importe_total"])) == Decimal("150.00")
+    assert Decimal(str(fila["importe_aprobado"])) == Decimal("50.00")
+    assert Decimal(str(fila["importe_observado"])) == Decimal("75.00")
+    assert Decimal(str(fila["importe_otros"])) == Decimal("25.00")
+    revisor = CuentaAcceso(
+        tenant_id=contexto.tenant_id,
+        login="REVISOR-CONCILIACION",
+        password_hash="hash-test",
+        activo=True,
+        cambio_clave_obligatorio=False,
+    )
+    session.add(revisor)
+    session.flush()
+    resolver_propuesta(session, replace(admin, cuenta_id=revisor.id), observacion.id, True)
+    fila_final = conciliacion(session, admin)[0]
+    assert fila_final["total_documentos"] == 3
+    assert fila_final["aprobados"] == 2
+    assert fila_final["observados"] == 0
+    assert fila_final["otros"] == 1
+    assert Decimal(str(fila_final["importe_total"])) == Decimal("150.00")
+    assert Decimal(str(fila_final["importe_aprobado"])) == Decimal("125.00")
+    assert Decimal(str(fila_final["importe_observado"])) == Decimal("0.00")
+    assert Decimal(str(fila_final["importe_otros"])) == Decimal("25.00")
