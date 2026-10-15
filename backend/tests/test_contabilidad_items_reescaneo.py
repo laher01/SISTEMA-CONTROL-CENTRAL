@@ -97,8 +97,7 @@ def test_vista_previa_recupera_pagina_siguiente_sin_repetir_documentos(
     session.flush()
     almacen = AlmacenLocal(tmp_path)
     documentos = [
-        _guardar(session, almacen, tenant.id, XML + f"<!--{i}-->".encode())
-        for i in range(3)
+        _guardar(session, almacen, tenant.id, XML + f"<!--{i}-->".encode()) for i in range(3)
     ]
     primer_lote = previsualizar_pagina(session, almacen, tenant.id, limite=2)
     assert len(primer_lote) == 2
