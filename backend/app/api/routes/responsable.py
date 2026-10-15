@@ -987,45 +987,59 @@ def resumen_equipo(
         )
     )
     ids = [u.id for u in usuarios]
-    clientes = [
-        {
-            "usuario_id": str(uid),
-            "receptor_id": str(eid),
-            "ruc": ruc,
-            "razon_social": nombre,
-            "moneda": moneda,
-            "expedientes": cantidad,
-            "produccion": str(Decimal(total)),
-        }
-        for uid, eid, ruc, nombre, moneda, cantidad, total in session.execute(
-            select(
-                Expediente.usuario_id,
-                Empresa.id,
-                Empresa.ruc,
-                Empresa.razon_social,
-                Expediente.moneda,
-                func.count(Expediente.id),
-                func.coalesce(func.sum(Expediente.importe_total), 0),
-            )
-            .join(Empresa, Expediente.receptor_id == Empresa.id)
-            .where(
-                Expediente.tenant_id == tenant_id,
-                Empresa.tenant_id == tenant_id,
-                Empresa.autorizada.is_(True),
-                Empresa.deleted_at.is_(None),
-                Expediente.usuario_id.in_(ids),
-                Expediente.deleted_at.is_(None),
-            )
-            .group_by(
-                Expediente.usuario_id,
-                Empresa.id,
-                Empresa.ruc,
-                Empresa.razon_social,
-                Expediente.moneda,
-            )
-            .order_by(Empresa.razon_social)
+    tasas_por_usuario = {usuario.id: usuario for usuario in usuarios}
+    clientes = []
+    for uid, eid, ruc, nombre, moneda, agente, cantidad, total in session.execute(
+        select(
+            Expediente.usuario_id,
+            Empresa.id,
+            Empresa.ruc,
+            Empresa.razon_social,
+            Expediente.moneda,
+            Empresa.agente_retencion,
+            func.count(Expediente.id),
+            func.coalesce(func.sum(Expediente.importe_total), 0),
         )
-    ]
+        .join(Empresa, Expediente.receptor_id == Empresa.id)
+        .where(
+            Expediente.tenant_id == tenant_id,
+            Empresa.tenant_id == tenant_id,
+            Empresa.autorizada.is_(True),
+            Empresa.deleted_at.is_(None),
+            Expediente.usuario_id.in_(ids),
+            Expediente.deleted_at.is_(None),
+        )
+        .group_by(
+            Expediente.usuario_id,
+            Empresa.id,
+            Empresa.ruc,
+            Empresa.razon_social,
+            Expediente.moneda,
+            Empresa.agente_retencion,
+        )
+        .order_by(Empresa.razon_social)
+    ):
+        usuario = tasas_por_usuario[uid]
+        tasa = usuario.porcentaje_con_agente if agente else usuario.porcentaje_sin_agente
+        comision = (
+            (Decimal(total) * Decimal(tasa) / Decimal("100")).quantize(Decimal("0.01"))
+            if tasa is not None
+            else None
+        )
+        clientes.append(
+            {
+                "usuario_id": str(uid),
+                "receptor_id": str(eid),
+                "ruc": ruc,
+                "razon_social": nombre,
+                "moneda": moneda,
+                "expedientes": cantidad,
+                "produccion": str(Decimal(total)),
+                "agente_retencion": bool(agente),
+                "porcentaje_usuario": str(tasa) if tasa is not None else None,
+                "comision_usuario_referencial": str(comision) if comision is not None else None,
+            }
+        )
     pedidos = []
     for pedido in session.scalars(
         select(PedidoGerencia)

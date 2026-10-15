@@ -14,7 +14,7 @@ interface UsuarioResponsable {
 }
 interface Equipo {
   usuarios: { id: string; codigo: string; nombre: string }[];
-  clientes: { usuario_id: string; receptor_id: string; ruc: string; razon_social: string; moneda: string; expedientes: number; produccion: string }[];
+  clientes: { usuario_id: string; receptor_id: string; ruc: string; razon_social: string; moneda: string; expedientes: number; produccion: string; agente_retencion: boolean; porcentaje_usuario: string | null; comision_usuario_referencial: string | null }[];
   pedidos: { id: string; cliente: string; ruc: string; periodo: string; moneda: string; monto_solicitado: string; monto_asignado: string; pendiente_distribuir: string; estado: string; asignaciones: { usuario_id: string; monto: string }[] }[];
   pagos: { id: string; porcentaje: string; usuario_id: string; periodo_desde: string; periodo_hasta: string; moneda: string; produccion: string; bruto: string; adelantos: string; saldo: string; estado: string }[];
 }
@@ -292,11 +292,11 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
       {pestana === "COBROS" && <>
         <h3>Clientes y producción documentada del equipo</h3>
         <p>Producción registrada: <strong>{formatearMonto(moneda, sumar(clientes.map((c) => c.produccion)))}</strong></p>
-        <p className="tenue">Esta producción no equivale a cobros recibidos. Los pagos del cliente necesitan conciliación independiente.</p>
-        <table><thead><tr><th>Usuario</th><th>RUC</th><th>Cliente/Receptor</th><th>Expedientes</th><th>Producción</th></tr></thead>
+        <p className="tenue">La producción no equivale a cobros recibidos. Las comisiones de Usuarios son referenciales según su porcentaje y condición de agente; no equivalen a la comisión que Gerencia debe al Responsable ni a un pago autorizado.</p>
+        <table><thead><tr><th>Usuario</th><th>RUC</th><th>Cliente/Receptor</th><th>Expedientes</th><th>Producción</th><th>Agente de retención</th><th>% Usuario</th><th>Comisión referencial Usuario</th></tr></thead>
           <tbody>{clientes.map((c) => <tr key={`${c.usuario_id}-${c.receptor_id}-${c.moneda}`}>
             <td>{nombreUsuario(c.usuario_id)}</td><td>{c.ruc}</td><td>{c.razon_social}</td>
-            <td>{c.expedientes}</td><td>{formatearMonto(moneda, c.produccion)}</td></tr>)}</tbody>
+            <td>{c.expedientes}</td><td>{formatearMonto(moneda, c.produccion)}</td><td>{c.agente_retencion ? "Sí" : "No"}</td><td>{c.porcentaje_usuario === null ? "Sin tasa" : `${c.porcentaje_usuario}%`}</td><td>{c.comision_usuario_referencial === null ? "Sin tasa" : formatearMonto(moneda, c.comision_usuario_referencial)}</td></tr>)}</tbody>
         </table>
         {clientes.length === 0 && <p>No hay expedientes vinculados a tus Usuarios en esta moneda.</p>}
       </>}
