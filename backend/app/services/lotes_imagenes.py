@@ -73,8 +73,11 @@ def decidir_factura(
         return DecisionFiscal.REVISION_REQUERIDA
     clave_nueva = (nueva.tenant_id, nueva.ruc_emisor, nueva.tipo, nueva.serie, nueva.correlativo)
     clave_existente = (
-        existente.tenant_id, existente.ruc_emisor, existente.tipo,
-        existente.serie, existente.correlativo,
+        existente.tenant_id,
+        existente.ruc_emisor,
+        existente.tipo,
+        existente.serie,
+        existente.correlativo,
     )
     if clave_nueva != clave_existente:
         return DecisionFiscal.REVISION_REQUERIDA
