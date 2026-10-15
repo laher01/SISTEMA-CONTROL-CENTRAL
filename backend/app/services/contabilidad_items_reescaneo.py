@@ -7,6 +7,7 @@ La ejecución persistente se habilitará solo tras pruebas de aislamiento y rein
 import hashlib
 import uuid
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -48,6 +49,14 @@ def previsualizar_pagina(
     for documento in session.scalars(consulta):
         if not documento.nombre_original.lower().endswith(".xml"):
             resultados.append(ResultadoVistaPrevia(documento.id, "NO_XML"))
+            continue
+        ruta_relativa = PurePosixPath(documento.ruta_storage)
+        if (
+            ruta_relativa.is_absolute()
+            or not ruta_relativa.parts
+            or ruta_relativa.parts[0] != str(tenant_id)
+        ):
+            resultados.append(ResultadoVistaPrevia(documento.id, "RUTA_FUERA_TENANT"))
             continue
         try:
             ruta = almacen.ruta_absoluta(documento.ruta_storage)
