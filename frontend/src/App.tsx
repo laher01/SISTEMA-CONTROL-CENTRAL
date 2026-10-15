@@ -141,6 +141,7 @@ export default function App() {
 
   if (window.location.pathname === "/privacidad") return <PaginaLegal tipo="privacidad" />;
   if (window.location.pathname === "/terminos") return <PaginaLegal tipo="terminos" />;
+  if (window.location.pathname === "/bienvenida") return <Presentacion />;
   // /ingresar es una ruta de autenticación, nunca una landing pública.
   // Priorizarla explícitamente para evitar regresiones en cambios de portada.
   if (window.location.pathname.replace(/\/+$/, "") === "/ingresar") {
