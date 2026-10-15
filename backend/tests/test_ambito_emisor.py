@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.models import (
     AsignacionEmpresaGestor,
+    CuentaAcceso,
     AsignacionPedidoGerencia,
     Empresa,
     Gestor,
@@ -242,9 +243,18 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
     assert ruta_temporal.is_file()
 
     auth_prueba.como_admin()
-    # La persona administradora que decide debe ser una cuenta distinta
-    # de quien inició la solicitud; jamás anular esta regla en producción.
-    auth_prueba.contexto = replace(auth_prueba.contexto, cuenta_id=uuid.uuid4())
+    # Una segunda cuenta administrativa REAL: la decisión conserva
+    # trazabilidad y validez referencial con cuentas_acceso.
+    revisor = CuentaAcceso(
+        tenant_id=tenant_id,
+        login=f"REVISION-EMISOR-{uuid.uuid4().hex[:8]}",
+        password_hash="test-hash",
+        activo=True,
+        cambio_clave_obligatorio=False,
+    )
+    session.add(revisor)
+    session.commit()
+    auth_prueba.contexto = replace(auth_prueba.contexto, cuenta_id=revisor.id)
     rechazo = client.post(
         f"/api/v1/solicitudes-carga-emisor/{solicitud.id}/rechazar",
         json={"observacion": "No autorizado"},
