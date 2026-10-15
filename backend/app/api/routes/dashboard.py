@@ -333,32 +333,44 @@ def opciones_dashboard(
 ) -> dict[str, list[dict[str, str]]]:
     """Opciones exclusivas de expedientes accesibles bajo los mismos filtros."""
     condiciones = _alcance_dashboard(
-        tenant_id, auth, responsable_id, usuario_id, gestor_id,
-        emisor_id, receptor_id, tipo_empresa, fecha_desde, fecha_hasta, mes,
+        tenant_id,
+        auth,
+        responsable_id,
+        usuario_id,
+        gestor_id,
+        emisor_id,
+        receptor_id,
+        tipo_empresa,
+        fecha_desde,
+        fecha_hasta,
+        mes,
     )
-    expedientes = session.scalars(
-        select(Expediente).where(*condiciones)
-    ).all()
+    expedientes = session.scalars(select(Expediente).where(*condiciones)).all()
     usuarios_ids = {e.usuario_id for e in expedientes if e.usuario_id}
     gestores_ids = {e.gestor_id for e in expedientes if e.gestor_id}
     emisores_ids = {e.emisor_id for e in expedientes}
     receptores_ids = {e.receptor_id for e in expedientes}
-    usuarios = list(session.scalars(
-        select(Miembro).where(
-            Miembro.tenant_id == tenant_id, Miembro.id.in_(usuarios_ids),
-            Miembro.deleted_at.is_(None),
+    usuarios = list(
+        session.scalars(
+            select(Miembro).where(
+                Miembro.tenant_id == tenant_id,
+                Miembro.id.in_(usuarios_ids),
+                Miembro.deleted_at.is_(None),
+            )
         )
-    ))
+    )
     responsables_ids = {u.responsable_id for u in usuarios if u.responsable_id}
     responsables = session.scalars(
         select(Miembro).where(
-            Miembro.tenant_id == tenant_id, Miembro.id.in_(responsables_ids),
+            Miembro.tenant_id == tenant_id,
+            Miembro.id.in_(responsables_ids),
             Miembro.deleted_at.is_(None),
         )
     ).all()
     gestores = session.scalars(
         select(Gestor).where(
-            Gestor.tenant_id == tenant_id, Gestor.id.in_(gestores_ids),
+            Gestor.tenant_id == tenant_id,
+            Gestor.id.in_(gestores_ids),
             Gestor.deleted_at.is_(None),
         )
     ).all()
@@ -377,8 +389,11 @@ def opciones_dashboard(
 
     def empresas_opciones(ids: set[uuid.UUID]) -> list[dict[str, str]]:
         return sorted(
-            [{"id": str(x.id), "nombre": f"{x.razon_social} · {x.ruc}"}
-             for x in empresas if x.id in ids],
+            [
+                {"id": str(x.id), "nombre": f"{x.razon_social} · {x.ruc}"}
+                for x in empresas
+                if x.id in ids
+            ],
             key=lambda x: x["nombre"],
         )
 
@@ -411,8 +426,17 @@ def resumen(
     mes: str | None = None,
 ) -> DashboardResumen:
     vigentes = _alcance_dashboard(
-        tenant_id, auth, responsable_id, usuario_id, gestor_id,
-        emisor_id, receptor_id, tipo_empresa, fecha_desde, fecha_hasta, mes,
+        tenant_id,
+        auth,
+        responsable_id,
+        usuario_id,
+        gestor_id,
+        emisor_id,
+        receptor_id,
+        tipo_empresa,
+        fecha_desde,
+        fecha_hasta,
+        mes,
     )
 
     por_estado = {e: 0 for e in EstadoExpediente}
