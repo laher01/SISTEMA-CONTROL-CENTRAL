@@ -139,6 +139,8 @@ def resolver_propuesta(
     )
     if propuesta is None:
         raise HTTPException(404, "Propuesta no encontrada")
+    if auth.rol == "SECRETARIA" and propuesta.estado != "OBSERVADA":
+        raise HTTPException(403, "Secretaría solo puede resolver observaciones de ítems")
     _expediente_autorizado(session, auth, propuesta.expediente_id)
     vigente = ultima_decision(session, auth.tenant_id, propuesta.expediente_id)
     if vigente is None or vigente.id != propuesta.id:
