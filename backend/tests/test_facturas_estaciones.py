@@ -62,3 +62,37 @@ def test_jabsa_ticket_factura_y_total() -> None:
 def test_transferencia_bcp_nunca_es_factura() -> None:
     texto = "BCP\n¡Transferencia exitosa!\nS/ 10,160.00\nNúmero de operación 03857359"
     assert extraer_factura_estacion(texto) == {}
+
+
+def test_texto_pypdf_escorpio_fragmentado() -> None:
+    texto = (
+        "INVERSIONES Y ASESORAMIENTO ESCORPIO\\nSAC\\n"
+        "Página Web: www.facturacion.jadal.pe\\n"
+        "R.U.C. N° 20516453835\\nFACTURA ELECTRÓNICA\\nF109  Nº 0016490\\n"
+        "SEÑOR(ES)\\n: INVERSIONES BORISO E.I.R.L.\\n"
+        "DIRECCIÖN\\n: LIMA\\nRUC\\n: 20605535098\\n"
+        "FECHA DE EMISIÓN\\n2026-10-02\\n"
+        "IMPORTE TOTAL\\nS/\\n1,750.00"
+    )
+    campos = extraer_campos(texto, "TEXTO_PDF", 1.0)["campos"]
+    assert campos["serie"]["valor"] == "F109"
+    assert campos["correlativo"]["valor"] == "16490"
+    assert campos["ruc_receptor"]["valor"] == "20605535098"
+    assert campos["razon_social_receptor"]["valor"] == "INVERSIONES BORISO E.I.R.L."
+    assert campos["importe_total"]["valor"] == "1750.00"
+
+
+def test_texto_pypdf_jabsa_desordenado() -> None:
+    texto = (
+        "F003-00004475\\nFACTURA DE VENTA ELECTRÓNICA\\n"
+        ": 15/10/2026Fecha Emision\\nSERVICENTRO JABSA S.A\\n"
+        "RUC : 20374914201\\n"
+        "S/TOTAL\\n532.68S/IGV\\nOP.GRAVADAS S/ 2959.32\\n3492.00\\n"
+        "Cliente\\nRUC\\n:\\n:\\n:\\nCAJERO 2 PUCUSANA\\n"
+        "INVERSIONES Y NEGOCIACIONES MAREUF E.I\\n20538821374\\n"
+    )
+    campos = extraer_campos(texto, "TEXTO_PDF", 1.0)["campos"]
+    assert campos["ruc_emisor"]["valor"] == "20374914201"
+    assert campos["ruc_receptor"]["valor"] == "20538821374"
+    assert campos["fecha_emision"]["valor"] == "2026-10-15"
+    assert campos["importe_total"]["valor"] == "3492.00"
