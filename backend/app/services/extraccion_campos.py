@@ -1174,9 +1174,12 @@ def _total_cotizacion(texto: str) -> tuple[Decimal, str] | None:
         return None
     subtotal = montos.get("subtotal")
     igv = montos.get("igv")
-    if subtotal is not None and igv is not None:
-        if abs(subtotal[0] + igv[0] - total[0]) > Decimal("0.02"):
-            return None
+    if (
+        subtotal is not None
+        and igv is not None
+        and abs(subtotal[0] + igv[0] - total[0]) > Decimal("0.02")
+    ):
+        return None
     return total
 
 
