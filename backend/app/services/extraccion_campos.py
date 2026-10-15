@@ -7,9 +7,10 @@ que una persona o una etapa posterior pueda confirmarlos antes de afectar el COR
 import re
 import unicodedata
 from dataclasses import dataclass
-from app.services.facturas_estaciones import extraer_factura_estacion
 from datetime import date
 from decimal import Decimal, InvalidOperation
+
+from app.services.facturas_estaciones import extraer_factura_estacion
 
 
 @dataclass(frozen=True)
