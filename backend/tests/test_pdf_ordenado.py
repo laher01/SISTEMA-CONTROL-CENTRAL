@@ -27,9 +27,7 @@ def test_pdf_ordenado_no_agrega_hoja_resumen(tmp_path):
     )
     almacen = SimpleNamespace(ruta_absoluta=lambda _: ruta)
 
-    writer, visibles, adjuntos = pdf_con_documentos(
-        [documento], almacen, "FACT E001-1532"
-    )
+    writer, visibles, adjuntos = pdf_con_documentos([documento], almacen, "FACT E001-1532")
     salida = io.BytesIO()
     writer.write(salida)
     lector = PdfReader(io.BytesIO(salida.getvalue()))
