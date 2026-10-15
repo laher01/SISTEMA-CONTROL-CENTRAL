@@ -97,6 +97,11 @@ jobs:
                 uv run alembic "$2" "$3"
               ' sh "$db" "$2" "$target" </dev/null
           }
+          # Preflight de compatibilidad: la imagen actual debe contener 0036 y poder reconocer 0037.
+          # Sin alterar ningun dato de produccion, abortar si la cadena Alembic no esta completa.
+          "${compose[@]}" run --no-deps --rm -T \
+            -v "$tmp/20261014_0037_contabilidad_items.py:/app/alembic/versions/20261014_0037_contabilidad_items.py:ro" \
+            backend sh -c 'test -s /app/alembic/versions/20261014_0036_asignacion_empresa_gestor.py && uv run alembic heads | grep -q "0037"' </dev/null
           migrate 0037 upgrade
           test "$(sql 'select version_num from alembic_version')" = 0037
           test "$(sql "select count(*) from information_schema.tables where table_schema='public' and table_name in ('productos_items','lineas_comprobantes_items','auditorias_facturas_items')")" = 3
