@@ -134,3 +134,25 @@ def test_secretaria_distinta_puede_resolver_observacion(session, auth_prueba):
     resultado = resolver_propuesta(session, secretaria, observacion.id, True)
     assert resultado.estado == "VIGENTE"
     assert resultado.aprobado_por_cuenta_id == secretaria_cuenta.id
+
+
+def test_secretaria_no_puede_resolver_desactivacion_pendiente(session, auth_prueba):
+    contexto = auth_prueba.contexto
+    expediente = _expediente(session, contexto.tenant_id)
+    secretaria = replace(contexto, rol="SECRETARIA")
+    propuesta = registrar_decision(
+        session, secretaria, expediente.id, "DESACTIVAR", "Requiere revisión"
+    )
+    segunda_cuenta = CuentaAcceso(
+        tenant_id=contexto.tenant_id,
+        login="SECRETARIA-OTRA-REVISION",
+        password_hash="hash-test",
+        activo=True,
+        cambio_clave_obligatorio=False,
+    )
+    session.add(segunda_cuenta)
+    session.flush()
+    segunda_secretaria = replace(contexto, rol="SECRETARIA", cuenta_id=segunda_cuenta.id)
+    with pytest.raises(HTTPException) as error:
+        resolver_propuesta(session, segunda_secretaria, propuesta.id, True)
+    assert error.value.status_code == 403
