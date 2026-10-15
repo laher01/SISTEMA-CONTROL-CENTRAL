@@ -2,7 +2,7 @@ import io
 from collections.abc import Iterable
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 from pypdf import PdfWriter
 from pypdf.errors import PdfReadError
 
@@ -26,10 +26,9 @@ def pdf_con_documentos(
     almacen: AlmacenLocal,
     titulo: str,
 ) -> tuple[PdfWriter, int, int]:
-    """Produce PDF legible con imagenes, PDFs y originales embebidos.
+    """Une documentos visibles sin portada; conserva los originales adjuntos.
 
-    El manifiesto de portada identifica los originales. Archivos que no son
-    renderizables se incluyen como adjuntos, nunca se descartan.
+    Los archivos no representables visualmente se adjuntan sin descartarse.
     """
     ordenados = sorted(
         documentos,
@@ -41,22 +40,6 @@ def pdf_con_documentos(
         raise ValueError("El expediente excede el limite del PDF consolidado")
 
     writer = PdfWriter()
-    portada = Image.new("RGB", (1240, 1754), "white")
-    lapiz = ImageDraw.Draw(portada)
-    lapiz.text((80, 70), "FACT CENTRAL - EXPEDIENTE DIGITAL", fill="black")
-    lapiz.text((80, 125), titulo[:100], fill="black")
-    lapiz.text((80, 170), "Originales incluidos como adjuntos dentro de este PDF.", fill="black")
-    y = 230
-    for numero, documento in enumerate(ordenados, start=1):
-        etiqueta = f"{numero:03d} {documento.tipo_documento or 'OTRO'} {documento.nombre_original}"
-        lapiz.text((80, y), etiqueta[:135], fill="black")
-        y += 27
-        if y > 1640:
-            break
-    buffer = io.BytesIO()
-    portada.save(buffer, format="PDF")
-    writer.append(io.BytesIO(buffer.getvalue()))
-
     visibles = 0
     adjuntos = 0
     for numero, doc in enumerate(ordenados, start=1):
