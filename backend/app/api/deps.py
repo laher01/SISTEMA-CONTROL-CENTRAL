@@ -82,7 +82,8 @@ def get_contexto_operativo(
     permitido_responsable = (
         (
             request.method == "GET"
-            and request.url.path in {
+            and request.url.path
+            in {
                 "/api/v1/contabilidad-items",
                 "/api/v1/contabilidad-items/exportar-csv",
             }
