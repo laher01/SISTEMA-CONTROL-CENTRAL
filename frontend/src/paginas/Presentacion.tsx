@@ -1,5 +1,6 @@
 import "../presentacion.css";
 import { Link } from "react-router-dom";
+import { PiePublico } from "./PaginasPublicas";
 
 export default function Presentacion() {
   return (
@@ -46,7 +47,7 @@ export default function Presentacion() {
         <Link to="/ingresar" className="presentacion-primario">Ir a la página de ingreso</Link>
       </section>
 
-      <footer className="presentacion-pie">FACT CENTRAL · Plataforma de gestión documental empresarial</footer>
+      <PiePublico />
     </main>
   );
 }
