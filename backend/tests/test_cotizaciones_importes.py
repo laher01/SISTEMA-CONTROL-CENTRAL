@@ -25,3 +25,12 @@ def test_cotizacion_inconsistente_no_inventa_total() -> None:
     resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
     assert resultado is not None
     assert "importe_total" not in resultado["campos"]
+
+
+def test_cliente_ruc_no_es_atribuido_a_emisor_cotizacion() -> None:
+    texto = "COTIZACION No. 00861\nCOMPOSTELA INVERSIONES GENERALES\nCLIENTE RUC 20538821374"
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    campos = resultado["campos"]
+    assert campos["ruc_receptor"]["valor"] == "20538821374"
+    assert "ruc_emisor" not in campos
