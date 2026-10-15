@@ -85,6 +85,7 @@ def get_contexto_operativo(
             and request.url.path
             in {
                 "/api/v1/contabilidad-items",
+                "/api/v1/contabilidad-items/conciliacion",
                 "/api/v1/contabilidad-items/exportar-csv",
             }
             or (
