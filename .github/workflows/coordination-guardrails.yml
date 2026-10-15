@@ -1,0 +1,38 @@
+name: coordination-guardrails
+
+on:
+  pull_request:
+    paths: ["AGENTS.md", "docs/COORDINACION/**", ".github/workflows/coordination-guardrails.yml"]
+  push:
+    branches: [main]
+    paths: ["AGENTS.md", "docs/COORDINACION/**", ".github/workflows/coordination-guardrails.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate coordination source of truth
+        run: |
+          set -euo pipefail
+          test -s AGENTS.md
+          for n in 00 01 02 03 04 05 06 07; do
+            test -n "$(find docs/COORDINACION -maxdepth 1 -name "${n}_*.md" -size +0c -print -quit)"
+          done
+          grep -q '00_LEER_PRIMERO.md' AGENTS.md
+          grep -qi 'tenant' docs/COORDINACION/04_ARQUITECTURA_SAAS.md
+      - name: Reject obvious private keys and passwords
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import re
+          files = [pathlib.Path("AGENTS.md"), *pathlib.Path("docs/COORDINACION").glob("*.md")]
+          patterns = [r"-----BEGIN (?:OPENSSH |RSA |EC )?PRIVATE KEY-----",
+                      r"(?im)^\s*(?:password|private_key|api_secret)\s*[:=]\s*\S{8,}"]
+          for file in files:
+              if any(re.search(rule, file.read_text(encoding="utf-8")) for rule in patterns):
+                  raise SystemExit(f"Possible secret in {file}")
+          PY
