@@ -42,7 +42,7 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
         run: |
-          test "${GITHUB_REF_NAME}" = "integration/pr186-main-20261014"
+          test "${GITHUB_REF_NAME}" = "main"
           ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
             "cd -- '$VPS_DEPLOY_PATH' && bash -s" <<'REMOTE'
           set -Eeuo pipefail
