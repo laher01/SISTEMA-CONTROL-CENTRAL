@@ -46,6 +46,7 @@ const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = 
   { a: "/responsables-operativos", texto: "Crear Responsables", icono: "♙", roles: ["GERENTE", "SECRETARIA"] },
   { a: "/crear-usuarios", texto: "Crear Usuarios", icono: "♙", roles: ["RESPONSABLE"] },
   { a: "/mi-cartera", texto: "Mi cartera comercial", icono: "▥", roles: ["GERENTE"] },
+  { a: "/contabilidad-items", texto: "Contabilidad de Ítems", icono: "▦", roles: ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"] },
   { a: "/mi-equipo", texto: "Mis Usuarios", icono: "♙", roles: ["RESPONSABLE"] },
   { a: "/mi-equipo/pedidos", texto: "Pedidos", icono: "▤", roles: ["RESPONSABLE"] },
   { a: "/mi-equipo/cobros", texto: "Cobros y clientes", icono: "◈", roles: ["RESPONSABLE"] },
