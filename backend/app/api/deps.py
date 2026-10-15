@@ -88,7 +88,6 @@ def get_contexto_operativo(
             }
         )
         or (
-        (
             request.method == "PATCH"
             and request.url.path.startswith("/api/v1/miembros/mis-usuarios/")
             and request.url.path.endswith("/porcentajes")
