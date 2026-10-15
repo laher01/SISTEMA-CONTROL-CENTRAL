@@ -12,6 +12,7 @@ describe("Dashboard por rol", () => {
   });
   it("Usuario solo filtra sus gestores", () => {
     expect(controlesDashboard("USUARIO")).toEqual({ responsable: false, usuario: false, gestor: true });
+    expect(agrupacionInicial("USUARIO")).toBe("gestor");
   });
   it("Gestor no ve filtros jerárquicos superiores", () => {
     expect(controlesDashboard("GESTOR")).toEqual({ responsable: false, usuario: false, gestor: false });
