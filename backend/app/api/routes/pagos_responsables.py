@@ -453,7 +453,7 @@ def modificar_comision(
     auth: OperativeAuthDep,
 ) -> dict[str, str]:
     _ambito(auth, datos.responsable_id)
-    if auth.rol == RolMiembro.GERENTE:
+    if auth.rol not in (RolMiembro.ADMINISTRADOR, RolMiembro.SUPERADMIN):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "Las comisiones personalizadas globales requieren Administración",
