@@ -269,7 +269,7 @@ def _alcance_dashboard(
             Expediente.usuario_id.in_(
                 select(Miembro.id).where(
                     Miembro.tenant_id == tenant_id,
-                    Miembro.responsable_id == auth.usuario_id,
+                    Miembro.responsable_id == auth.miembro_id,
                     Miembro.deleted_at.is_(None),
                 )
             )
