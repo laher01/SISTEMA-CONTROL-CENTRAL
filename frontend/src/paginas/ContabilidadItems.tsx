@@ -11,6 +11,18 @@ type FilaItem = {
   importe: string;
 };
 
+type Conciliacion = {
+  moneda: string;
+  total_documentos: number;
+  importe_total: string;
+  aprobados: number;
+  importe_aprobado: string;
+  observados: number;
+  importe_observado: string;
+  otros: number;
+  importe_otros: string;
+};
+
 export default function ContabilidadItems() {
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
@@ -27,6 +39,7 @@ export default function ContabilidadItems() {
     receptor_id: filtros.receptor_id,
   });
   const { datos, error, cargando, recargar } = useDatos<FilaItem[]>(ruta);
+  const conciliacion = useDatos<Conciliacion[]>(conParametros("/api/v1/contabilidad-items/conciliacion", filtros));
 
   return (
     <section aria-label="Contabilidad de ítems">
@@ -91,6 +104,21 @@ export default function ContabilidadItems() {
         </button>
       </p>
       {errorDescarga && <p role="alert">{errorDescarga}</p>}
+      <h3>Conciliación de comprobantes por moneda</h3>
+      <p>Importe total = aprobado + observado + otros estados internos. Los valores corresponden a comprobantes, no a la suma de líneas de productos.</p>
+      {conciliacion.error && <p role="alert">No se pudo conciliar: {conciliacion.error}</p>}
+      {conciliacion.cargando && <p>Calculando conciliación…</p>}
+      {conciliacion.datos && <div style={{ overflowX: "auto" }}>
+        <table>
+          <thead><tr><th>Moneda</th><th>Total comprobantes</th><th>Importe total</th><th>Aprobados</th><th>Importe aprobado</th><th>Observados</th><th>Importe observado</th><th>Otros estados</th><th>Importe otros</th></tr></thead>
+          <tbody>{conciliacion.datos.map((fila) => <tr key={fila.moneda}>
+            <td>{fila.moneda}</td><td>{fila.total_documentos}</td><td>{fila.importe_total}</td>
+            <td>{fila.aprobados}</td><td>{fila.importe_aprobado}</td>
+            <td>{fila.observados}</td><td>{fila.importe_observado}</td>
+            <td>{fila.otros}</td><td>{fila.importe_otros}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>}
       {cargando && <p>Consultando ítems…</p>}
       {error && <p role="alert">No se pudo consultar: {error}</p>}
       {!cargando && !error && datos?.length === 0 && (
