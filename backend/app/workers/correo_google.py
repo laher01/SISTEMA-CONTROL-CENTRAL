@@ -55,7 +55,8 @@ def revisar_ciclo_google(session: Session, settings: Settings) -> int:
             )
             for id_mensaje in (
                 listar_ids_gmail(acceso, desde=buzon.importar_desde)
-                if buzon.importar_desde else listar_ids_gmail(acceso)
+                if buzon.importar_desde
+                else listar_ids_gmail(acceso)
             ):
                 previo = session.scalar(
                     select(CorreoMensaje.id).where(
