@@ -87,3 +87,26 @@ def test_vista_previa_informa_archivo_faltante_o_alterado(
 def test_vista_previa_rechaza_limites_fuera_de_rango(session: Session, tmp_path: Path, limite: int):
     with pytest.raises(ValueError, match="límite"):
         previsualizar_pagina(session, AlmacenLocal(tmp_path), uuid.uuid4(), limite=limite)
+
+
+def test_vista_previa_recupera_pagina_siguiente_sin_repetir_documentos(
+    session: Session, tmp_path: Path
+):
+    tenant = Tenant(nombre="tenant_cursor_reescaneo")
+    session.add(tenant)
+    session.flush()
+    almacen = AlmacenLocal(tmp_path)
+    documentos = [
+        _guardar(session, almacen, tenant.id, XML + f"<!--{i}-->".encode())
+        for i in range(3)
+    ]
+    primer_lote = previsualizar_pagina(session, almacen, tenant.id, limite=2)
+    assert len(primer_lote) == 2
+    segundo_lote = previsualizar_pagina(
+        session, almacen, tenant.id, despues_id=primer_lote[-1].documento_id, limite=2
+    )
+    assert len(segundo_lote) == 1
+    ids = [fila.documento_id for fila in primer_lote + segundo_lote]
+    assert len(ids) == len(set(ids)) == 3
+    assert set(ids) == {documento.id for documento in documentos}
+    assert all(fila.estado == "XML_REVISADO" for fila in primer_lote + segundo_lote)
