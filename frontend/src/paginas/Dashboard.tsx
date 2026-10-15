@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useDatos } from "../api";
+import { agrupacionInicial, controlesDashboard } from "../dashboardRoles";
 import { Estado } from "../componentes";
 import { ETIQUETA_ALERTA, ETIQUETA_ESTADO, formatearMonto } from "../formato";
 import {
@@ -10,11 +11,13 @@ import {
   type AgrupacionDashboard,
   type DashboardDesglose,
   type DashboardResumen,
+  type SesionActual,
 } from "../tipos";
 
-export default function Dashboard() {
+export default function Dashboard({ sesion }: { sesion: SesionActual }) {
+  const { responsable: esAdministracion, usuario: mostrarUsuario, gestor: mostrarGestor } = controlesDashboard(sesion.rol);
 
-  const [agruparPor, setAgruparPor] = useState<AgrupacionDashboard>("usuario");
+  const [agruparPor, setAgruparPor] = useState<AgrupacionDashboard>(agrupacionInicial(sesion.rol));
   const [orden, setOrden] = useState<"asc" | "desc">("desc");
   const [responsableId, setResponsableId] = useState("");
   const [usuarioId, setUsuarioId] = useState("");
@@ -112,7 +115,10 @@ export default function Dashboard() {
                     value={agruparPor}
                     onChange={(e) => setAgruparPor(e.target.value as AgrupacionDashboard)}
                   >
-                    <option value="usuario">Usuario</option>
+                    {esAdministracion && <option value="responsable">Responsable</option>}
+                    {mostrarUsuario && <option value="usuario">Usuario</option>}
+                    {mostrarGestor && <option value="gestor">Gestor</option>}
+                    <option value="tipo_empresa">Tipo de empresa</option>
                     <option value="emisor">Empresa emisora</option>
                     <option value="receptor">Empresa receptora</option>
                     <option value="dia">Día</option>
@@ -127,7 +133,7 @@ export default function Dashboard() {
                     <option value="asc">Menor / más antiguo</option>
                   </select>
                 </label>
-                <label>
+                {esAdministracion && <label>
                   Responsable
                   <select value={responsableId} onChange={(e) => {
                     setResponsableId(e.target.value);
@@ -136,8 +142,8 @@ export default function Dashboard() {
                     <option value="">Todos</option>
                     {(opciones?.responsables ?? []).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
                   </select>
-                </label>
-                <label>
+                </label>}
+                {mostrarUsuario && <label>
                   Usuario
                   <select value={usuarioId} onChange={(e) => {
                     setUsuarioId(e.target.value);
@@ -146,8 +152,8 @@ export default function Dashboard() {
                     <option value="">Todos</option>
                     {(opciones?.usuarios ?? []).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
                   </select>
-                </label>
-                <label>
+                </label>}
+                {mostrarGestor && <label>
                   Gestor
                   <select value={gestorId} onChange={(e) => {
                     setGestorId(e.target.value); setEmisorId(""); setReceptorId("");
@@ -155,7 +161,7 @@ export default function Dashboard() {
                     <option value="">Todos</option>
                     {(opciones?.gestores ?? []).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
                   </select>
-                </label>
+                </label>}
                 <label>
                   Emisor
                   <select value={emisorId} onChange={(e) => {setEmisorId(e.target.value); setReceptorId("");}}>
@@ -231,6 +237,14 @@ export default function Dashboard() {
                         </tr>
                       ))}
                     </tbody>
+                    <tfoot>
+                      <tr>
+                        <th>Total filtrado</th><th>—</th>
+                        <th className="num">{desglose.filas.reduce((sum, fila) => sum + fila.expedientes, 0)}</th>
+                        <th className="num">{formatearMonto("PEN", desglose.filas.reduce((sum, fila) => sum + Number(fila.total_pen), 0))}</th>
+                        <th className="num">{formatearMonto("USD", desglose.filas.reduce((sum, fila) => sum + Number(fila.total_usd), 0))}</th>
+                      </tr>
+                    </tfoot>
                   </table>
                 )}
               </Estado>
@@ -283,7 +297,10 @@ export default function Dashboard() {
 
 function etiquetaAgrupacion(agruparPor: AgrupacionDashboard): string {
   const etiquetas: Record<AgrupacionDashboard, string> = {
+    responsable: "Responsable",
     usuario: "Usuario",
+    gestor: "Gestor",
+    tipo_empresa: "Tipo de empresa",
     emisor: "Empresa emisora",
     receptor: "Empresa receptora",
     dia: "Día",

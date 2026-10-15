@@ -25,6 +25,21 @@ def test_dashboard_mes_resumen_desglose_y_opciones(client: TestClient) -> None:
     assert desglose.status_code == 200
     assert sum(f["expedientes"] for f in desglose.json()["filas"]) == 2
 
+    for grupo in (
+        "responsable",
+        "usuario",
+        "gestor",
+        "emisor",
+        "receptor",
+        "tipo_empresa",
+        "dia",
+        "mes",
+        "anio",
+    ):
+        agrupado = client.get("/api/v1/dashboard/desglose", params={"agrupar_por": grupo})
+        assert agrupado.status_code == 200, agrupado.text
+        assert sum(fila["expedientes"] for fila in agrupado.json()["filas"]) == 2
+
     opciones = client.get("/api/v1/dashboard/opciones")
     assert opciones.status_code == 200
     assert len(opciones.json()["emisores"]) == 1
