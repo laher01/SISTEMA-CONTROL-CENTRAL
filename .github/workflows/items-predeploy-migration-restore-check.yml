@@ -1,0 +1,113 @@
+name: items-predeploy-migration-restore-check
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factcentral-staging-audit
+  cancel-in-progress: false
+jobs:
+  migration_restore:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: integration/pr186-main-20261014
+          persist-credentials: false
+      - name: Verificar destino autorizado
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          test "$GITHUB_REF_NAME" = main
+          test "$VPS_HOST" = "132.145.233.172"
+          test "$VPS_USER" = ubuntu
+          for name in VPS_DEPLOY_PATH VPS_SSH_PRIVATE_KEY VPS_SSH_KNOWN_HOSTS; do
+            test -n "${!name:-}" || exit 1
+          done
+          test -s backend/alembic/versions/20261014_0037_contabilidad_items.py
+      - name: Configurar SSH
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Restaurar dump fresco y probar Alembic en base temporal
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+        run: |
+          migration_b64="$(base64 -w0 backend/alembic/versions/20261014_0037_contabilidad_items.py)"
+          ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
+            "cd -- '$VPS_DEPLOY_PATH' && MIGRATION_B64='$migration_b64' bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          umask 077
+          test -s deploy/.env.production
+          compose=(docker compose --env-file deploy/.env.production -f deploy/docker-compose.production.yml)
+          tmp="$(mktemp -d)"
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          dir=deploy/backups/audit
+          mkdir -p "$dir"
+          chmod 700 "$dir"
+          dump="$dir/factcentral_items_validation_${stamp}.dump"
+          db="factcentral_items_validation_${stamp}_$$"
+          created=0
+          cleanup() {
+            if [ "$created" = 1 ]; then
+              "${compose[@]}" exec -T db sh -c 'dropdb -U "$POSTGRES_USER" --if-exists "$1"' sh "$db" </dev/null || true
+            fi
+            rm -rf -- "$tmp"
+          }
+          trap cleanup EXIT
+          printf '%s' "$MIGRATION_B64" | base64 -d > "$tmp/20261014_0037_contabilidad_items.py"
+          unset MIGRATION_B64
+          test -s "$tmp/20261014_0037_contabilidad_items.py"
+          "${compose[@]}" ps --status running db | grep -q db
+          "${compose[@]}" exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$dump"
+          test -s "$dump"
+          sha256sum "$dump" > "$dump.sha256"
+          sha256sum -c "$dump.sha256"
+          "${compose[@]}" exec -T db sh -c 'createdb -U "$POSTGRES_USER" "$1"' sh "$db" </dev/null
+          created=1
+          "${compose[@]}" exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" --no-owner --no-acl --exit-on-error -d "$1"' sh "$db" < "$dump"
+          sql() {
+            "${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1" -Atc "$2"' sh "$db" "$1" </dev/null
+          }
+          initial="$(sql 'select version_num from alembic_version')"
+          echo "VERSION_ORIGEN_RESTAURADA: $initial"
+          test "$initial" = 0036 || { echo "La copia no se encuentra en 0036: detener sin modificar produccion"; exit 1; }
+          before="$(sql 'select count(*) from documentos')"
+          migrate() {
+            target="$1"
+            "${compose[@]}" run --no-deps --rm -T \
+              -v "$tmp/20261014_0037_contabilidad_items.py:/app/alembic/versions/20261014_0037_contabilidad_items.py:ro" \
+              backend sh -c '
+                set -eu
+                export FC_DATABASE_URL="$(uv run python -c "import os,sys; from sqlalchemy.engine import make_url; u=make_url(os.environ[\\"FC_DATABASE_URL\\"]); print(u.set(database=sys.argv[1]).render_as_string(hide_password=False))" "$1")"
+                uv run alembic "$2" "$3"
+              ' sh "$db" "$2" "$target" </dev/null
+          }
+          migrate 0037 upgrade
+          test "$(sql 'select version_num from alembic_version')" = 0037
+          test "$(sql "select count(*) from information_schema.tables where table_schema='public' and table_name in ('productos_items','lineas_comprobantes_items','auditorias_facturas_items')")" = 3
+          migrate 0036 downgrade
+          test "$(sql 'select version_num from alembic_version')" = 0036
+          test "$(sql "select count(*) from information_schema.tables where table_schema='public' and table_name in ('productos_items','lineas_comprobantes_items','auditorias_facturas_items')")" = 0
+          migrate 0037 upgrade
+          test "$(sql 'select version_num from alembic_version')" = 0037
+          test "$(sql 'select count(*) from documentos')" = "$before"
+          echo "MIGRACION_Y_ROLLBACK_TEMPORAL_OK"
+          echo "DOCUMENTOS_PRESERVADOS: $before"
+          echo "BACKUP_VALIDACION: $dump"
+          echo "BASE_ORIGINAL_SIN_CAMBIOS"
+          REMOTE
