@@ -82,3 +82,17 @@ Ejemplo de respuesta conceptual:
 ## Puerta de despliegue
 
 **Entorno autorizado: solamente VPS antigua `132.145.233.172`. No actualizar ni desplegar Oracle.** No fusionar a `main` ni ejecutar `check-updates.sh` sin confirmar qué servidor toca. Antes de cualquier producción: CI verde, pruebas reales, backup y restauración comprobada, revisión de PR concurrentes, migración compatible, despliegue aislado y healthcheck. Esta especificación no acredita implementación ni pruebas aprobadas.
+
+
+## Alcance confirmado: imágenes pegadas, cámara, galería y PC
+
+Cuatro entradas hacia una única cola y el mismo procesamiento OCR:
+
+- Pegar fotos desde el portapapeles del navegador con Ctrl+V o acción compatible del usuario; leer exclusivamente elementos tipo imagen aportados por el evento de pegado.
+- Tomar foto desde la cámara de un celular, con alternativa para seleccionar de la galería.
+- Subir una o varias imágenes desde archivos/galería móvil.
+- Seleccionar o arrastrar varias imágenes desde una computadora.
+
+La carga no exige conversión previa a PDF. Cada imagen recibe un identificador y progreso individual; la cola separa hasta diez imágenes por sublote. Es necesario poder agrupar/reordenar páginas de un mismo documento antes de identificarlo y aplicar reglas de duplicación. Las fotos ambiguas o incompletas se envían a revisión, sin crear expedientes. El pegado móvil está sujeto a soporte del navegador y siempre debe ofrecerse la carga convencional.
+
+Estado al documentar: captura móvil, selección múltiple y arrastre ya presentes en el frontend; pegado explícito desde el portapapeles e integración de sublotes requieren desarrollo y pruebas.
