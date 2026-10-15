@@ -143,9 +143,10 @@ export default function App() {
   if (window.location.pathname === "/terminos") return <PaginaLegal tipo="terminos" />;
   // /ingresar es una ruta de autenticación, nunca una landing pública.
   // Priorizarla explícitamente para evitar regresiones en cambios de portada.
-  if (window.location.pathname.replace(/\\/+$/, "") === "/ingresar") {
+  if (window.location.pathname.replace(/\/+$/, "") === "/ingresar") {
     if (cargando) return <main className="contenido"><p>Cargando sesión…</p></main>;
     if (!sesion || error) return <Login alIngresar={recargar} />;
+    if (sesion.cambio_clave_obligatorio) return <CambiarClave sesion={sesion} alCambiar={recargar} />;
     return <Navigate to="/" replace />;
   }
   if (cargando && window.location.pathname === "/") return <Presentacion />;
