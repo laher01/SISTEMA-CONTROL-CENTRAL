@@ -10,37 +10,45 @@ import {
   type AgrupacionDashboard,
   type DashboardDesglose,
   type DashboardResumen,
-  type Empresa,
-  type Miembro,
 } from "../tipos";
 
 export default function Dashboard() {
-  const { datos, error, cargando } = useDatos<DashboardResumen>("/api/v1/dashboard/resumen");
-  const { datos: usuarios } = useDatos<Miembro[]>("/api/v1/miembros?rol=USUARIO");
-  const { datos: empresas } = useDatos<Empresa[]>("/api/v1/empresas");
 
   const [agruparPor, setAgruparPor] = useState<AgrupacionDashboard>("usuario");
   const [orden, setOrden] = useState<"asc" | "desc">("desc");
+  const [responsableId, setResponsableId] = useState("");
   const [usuarioId, setUsuarioId] = useState("");
+  const [gestorId, setGestorId] = useState("");
+  const [mes, setMes] = useState("");
   const [emisorId, setEmisorId] = useState("");
   const [receptorId, setReceptorId] = useState("");
   const [tipoEmpresa, setTipoEmpresa] = useState<"" | "A" | "B">("");
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
 
-  const rutaDesglose = useMemo(() => {
-    const params = new URLSearchParams({
-      agrupar_por: agruparPor,
-      orden,
-    });
+  const filtros = useMemo(() => {
+    const params = new URLSearchParams();
+    if (responsableId) params.set("responsable_id", responsableId);
     if (usuarioId) params.set("usuario_id", usuarioId);
+    if (gestorId) params.set("gestor_id", gestorId);
     if (emisorId) params.set("emisor_id", emisorId);
     if (receptorId) params.set("receptor_id", receptorId);
     if (tipoEmpresa) params.set("tipo_empresa", tipoEmpresa);
     if (fechaDesde) params.set("fecha_desde", fechaDesde);
     if (fechaHasta) params.set("fecha_hasta", fechaHasta);
-    return `/api/v1/dashboard/desglose?${params.toString()}`;
-  }, [agruparPor, orden, usuarioId, emisorId, receptorId, tipoEmpresa, fechaDesde, fechaHasta]);
+    if (mes) params.set("mes", mes);
+    return params.toString();
+  }, [responsableId, usuarioId, gestorId, emisorId, receptorId, tipoEmpresa, fechaDesde, fechaHasta, mes]);
+
+  const rutaDesglose = `/api/v1/dashboard/desglose?agrupar_por=${agruparPor}&orden=${orden}&${filtros}`;
+  const { datos, error, cargando } = useDatos<DashboardResumen>(`/api/v1/dashboard/resumen?${filtros}`);
+  const { datos: opciones } = useDatos<{
+    responsables: { id: string; nombre: string }[];
+    usuarios: { id: string; nombre: string }[];
+    gestores: { id: string; nombre: string }[];
+    emisores: { id: string; nombre: string }[];
+    receptores: { id: string; nombre: string }[];
+  }>(`/api/v1/dashboard/opciones?${filtros}`);
 
   const {
     datos: desglose,
@@ -53,7 +61,10 @@ export default function Dashboard() {
     (datos?.documentos_pendientes.PENDIENTE_RELACION ?? 0);
 
   const limpiarFiltros = () => {
+    setResponsableId("");
     setUsuarioId("");
+    setGestorId("");
+    setMes("");
     setEmisorId("");
     setReceptorId("");
     setTipoEmpresa("");
@@ -117,36 +128,46 @@ export default function Dashboard() {
                   </select>
                 </label>
                 <label>
-                  Usuario
-                  <select value={usuarioId} onChange={(e) => setUsuarioId(e.target.value)}>
+                  Responsable
+                  <select value={responsableId} onChange={(e) => {
+                    setResponsableId(e.target.value);
+                    setUsuarioId(""); setGestorId(""); setEmisorId(""); setReceptorId("");
+                  }}>
                     <option value="">Todos</option>
-                    {(usuarios ?? []).map((usuario) => (
-                      <option key={usuario.id} value={usuario.id}>
-                        {usuario.codigo} · {usuario.nombre}
-                      </option>
-                    ))}
+                    {(opciones?.responsables ?? []).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Usuario
+                  <select value={usuarioId} onChange={(e) => {
+                    setUsuarioId(e.target.value);
+                    setGestorId(""); setEmisorId(""); setReceptorId("");
+                  }}>
+                    <option value="">Todos</option>
+                    {(opciones?.usuarios ?? []).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Gestor
+                  <select value={gestorId} onChange={(e) => {
+                    setGestorId(e.target.value); setEmisorId(""); setReceptorId("");
+                  }}>
+                    <option value="">Todos</option>
+                    {(opciones?.gestores ?? []).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
                   </select>
                 </label>
                 <label>
                   Emisor
-                  <select value={emisorId} onChange={(e) => setEmisorId(e.target.value)}>
+                  <select value={emisorId} onChange={(e) => {setEmisorId(e.target.value); setReceptorId("");}}>
                     <option value="">Todos</option>
-                    {(empresas ?? []).map((empresa) => (
-                      <option key={empresa.id} value={empresa.id}>
-                        {empresa.razon_social} · {empresa.ruc}
-                      </option>
-                    ))}
+                    {(opciones?.emisores ?? []).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
                   </select>
                 </label>
                 <label>
                   Receptor
                   <select value={receptorId} onChange={(e) => setReceptorId(e.target.value)}>
                     <option value="">Todos</option>
-                    {(empresas ?? []).map((empresa) => (
-                      <option key={empresa.id} value={empresa.id}>
-                        {empresa.razon_social} · {empresa.ruc}
-                      </option>
-                    ))}
+                    {(opciones?.receptores ?? []).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
                   </select>
                 </label>
                 <label>
@@ -159,6 +180,10 @@ export default function Dashboard() {
                     <option value="A">Tipo A</option>
                     <option value="B">Tipo B</option>
                   </select>
+                </label>
+                <label>
+                  Mes de emisión
+                  <input type="month" value={mes} onChange={(e) => setMes(e.target.value)} />
                 </label>
                 <label>
                   Desde
