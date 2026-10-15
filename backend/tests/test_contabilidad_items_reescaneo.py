@@ -134,9 +134,7 @@ def test_vista_previa_no_lee_ruta_de_otro_tenant(session: Session, tmp_path: Pat
     assert resultado[0].lineas_detectadas == 0
 
 
-def test_registrar_lote_xml_no_duplica_lineas_ni_altera_original(
-    session: Session, tmp_path: Path
-):
+def test_registrar_lote_xml_no_duplica_lineas_ni_altera_original(session: Session, tmp_path: Path):
     tenant = Tenant(nombre="tenant_lote_xml")
     session.add(tenant)
     session.flush()
