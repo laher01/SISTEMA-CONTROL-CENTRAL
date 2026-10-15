@@ -129,8 +129,8 @@ def resolver_propuesta(
     decision_id: uuid.UUID,
     aprobar: bool,
 ) -> AuditoriaFacturaItem:
-    if auth.rol not in ROL_REVISION:
-        raise HTTPException(403, "Solo administración o gerencia revisan propuestas")
+    if auth.rol not in ROL_PROPUESTA:
+        raise HTTPException(403, "Rol sin permiso para resolver propuestas")
     propuesta = session.scalar(
         select(AuditoriaFacturaItem).where(
             AuditoriaFacturaItem.id == decision_id,
