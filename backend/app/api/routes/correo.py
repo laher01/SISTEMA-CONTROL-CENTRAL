@@ -96,7 +96,8 @@ def registrar_buzon(
         proveedor=proveedor,
         responsable_id=auth.miembro_id,
         activo=False,
-        importar_desde=date.today() - timedelta(days={"DIA": 1, "SEMANA": 7, "MES": 30}[datos.periodo_inicial]),
+        importar_desde=date.today()
+        - timedelta(days={"DIA": 1, "SEMANA": 7, "MES": 30}[datos.periodo_inicial]),
     )
     session.add(nuevo)
     try:
