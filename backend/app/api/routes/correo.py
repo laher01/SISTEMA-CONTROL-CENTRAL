@@ -6,7 +6,7 @@ Las direcciones son registros, no conexiones activas: OAuth se autoriza aparte.
 import hashlib
 import secrets
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -48,6 +48,7 @@ def _solo_administracion(rol: str) -> None:
 class BuzonIn(BaseModel):
     direccion: str = Field(min_length=5, max_length=320, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     proveedor: str = "GOOGLE"
+    periodo_inicial: str = Field(default="MES", pattern="^(DIA|SEMANA|MES)$")
 
 
 class RemitenteIn(BaseModel):
@@ -67,6 +68,7 @@ def listar_buzones(
             "proveedor": b.proveedor,
             "activo": b.activo,
             "ultimo_error": b.ultimo_error,
+            "importar_desde": b.importar_desde.isoformat() if b.importar_desde else None,
         }
         for b in session.scalars(select(CorreoBuzon).where(CorreoBuzon.tenant_id == tenant_id))
     ]
@@ -94,6 +96,8 @@ def registrar_buzon(
         proveedor=proveedor,
         responsable_id=auth.miembro_id,
         activo=False,
+        importar_desde=date.today()
+        - timedelta(days={"DIA": 1, "SEMANA": 7, "MES": 30}[datos.periodo_inicial]),
     )
     session.add(nuevo)
     try:

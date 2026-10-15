@@ -1001,6 +1001,7 @@ type BuzonCorreo = {
   proveedor: string;
   activo: boolean;
   ultimo_error: string | null;
+  importar_desde: string | null;
 };
 type RemitenteGestor = { id: string; direccion: string; gestor_id: string; gestor: string };
 type GestorCorreo = { id: string; codigo: string; nombre: string };
@@ -1019,6 +1020,7 @@ function RecepcionAutomaticaPanel() {
     useDatos<IncidenciaCorreo[]>("/api/v1/correo/incidencias");
   const [direccionBuzon, setDireccionBuzon] = useState("");
   const [proveedor, setProveedor] = useState("GOOGLE");
+  const [periodoInicial, setPeriodoInicial] = useState("MES");
   const [direccionRemitente, setDireccionRemitente] = useState("");
   const [gestorId, setGestorId] = useState("");
   const [guardando, setGuardando] = useState(false);
@@ -1046,6 +1048,7 @@ function RecepcionAutomaticaPanel() {
       await enviarJson("/api/v1/correo/buzones", "POST", {
         direccion: direccionBuzon.trim().toLowerCase(),
         proveedor,
+        periodo_inicial: periodoInicial,
       });
       setDireccionBuzon("");
       setMensaje("Buzón registrado. Pendiente de autorizar OAuth antes de activar la lectura.");
@@ -1102,14 +1105,22 @@ function RecepcionAutomaticaPanel() {
           <option value="IMAP">IMAP corporativo</option>
         </select>
       </label>
+      <label>Importación inicial
+        <select value={periodoInicial} onChange={(e) => setPeriodoInicial(e.target.value)}>
+          <option value="DIA">Último día</option>
+          <option value="SEMANA">Última semana</option>
+          <option value="MES">Último mes (30 días)</option>
+        </select>
+      </label>
       <button type="submit" disabled={guardando}>Registrar buzón</button>
     </form>
     {errorBuzones && <p role="alert">{errorBuzones}</p>}
     <table>
-      <thead><tr><th>Dirección</th><th>Proveedor</th><th>Estado</th><th>Autorización</th></tr></thead>
+      <thead><tr><th>Dirección</th><th>Proveedor</th><th>Historial desde</th><th>Estado</th><th>Autorización</th></tr></thead>
       <tbody>{(buzones ?? []).map((b) => <tr key={b.id}>
         <td>{b.direccion}</td><td>{b.proveedor}</td>
-        <td>{b.activo ? "Google autorizado" : "Pendiente de conexión"}</td>
+        <td>{b.importar_desde ?? "Configuración anterior"}</td>
+        <td>{b.activo ? "Autorizado" : "Pendiente de conexión"}</td>
         <td>{b.proveedor === "GOOGLE" && !b.activo ?
           <button type="button" disabled={guardando || !estadoProveedores?.google_configurado}
             onClick={() => void conectarGoogle(b.id)}>Conectar con Google</button>
