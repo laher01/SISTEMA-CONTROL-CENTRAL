@@ -66,6 +66,18 @@ def extraer_factura_estacion(texto: str) -> dict[str, tuple[str, str]]:
             campos["ruc_receptor"] = (receptor.group(1), receptor.group(0))
         if cliente:
             campos["razon_social_receptor"] = (cliente.group(1).strip(), cliente.group(0))
+        # Algunos tickets pypdf separan las columnas Cliente/RUC de sus valores.
+        if "ruc_receptor" not in campos and "Cliente" in texto:
+            bloque = texto[texto.find("Cliente") :]
+            cliente_despues = re.search(
+                r"(?m)^\\s*([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ .-]{8,})\\s*\\n\\s*(\\d{11})\\s*$",
+                bloque,
+            )
+            if cliente_despues:
+                campos["razon_social_receptor"] = (
+                    cliente_despues.group(1).strip(), cliente_despues.group(0)
+                )
+                campos["ruc_receptor"] = (cliente_despues.group(2), cliente_despues.group(0))
 
     total_label = "IMPORTE TOTAL" if escorpio else "TOTAL"
     total_re = re.compile(
@@ -77,6 +89,26 @@ def extraer_factura_estacion(texto: str) -> dict[str, tuple[str, str]]:
         valor = _monto(encontrados[-1].group(1))
         if valor is not None:
             campos["importe_total"] = (str(valor), encontrados[-1].group(0))
+    if jabsa and "importe_total" not in campos:
+        # El motor PDF puede colocar la cifra total debajo de OP.GRAVADAS,
+        # y la cifra de IGV antes de su etiqueta. Solo aceptar si cuadra.
+        bases = re.search(
+            r"OP\\.GRAVADAS\\s*S/\\s*([0-9,.]+)\\s*\\n\\s*([0-9,.]+)", texto, re.I
+        )
+        igv = re.search(r"([0-9,.]+)\\s*S/\\s*IGV\\b", texto, re.I)
+        if bases and igv:
+            base = _monto(bases.group(1))
+            candidato = _monto(bases.group(2))
+            impuesto = _monto(igv.group(1))
+            if (
+                base is not None
+                and candidato is not None
+                and impuesto is not None
+                and abs(base + impuesto - candidato) <= Decimal("0.02")
+            ):
+                campos["importe_total"] = (
+                    str(candidato), f"{bases.group(0)} | {igv.group(0)}"
+                )
 
     if escorpio:
         fecha = re.search(r"\b(20\d{2}-\d{2}-\d{2})\b", texto)
@@ -87,6 +119,15 @@ def extraer_factura_estacion(texto: str) -> dict[str, tuple[str, str]]:
         if fecha:
             campos["fecha_emision"] = (
                 f"{fecha.group(3)}-{fecha.group(2)}-{fecha.group(1)}", fecha.group(0)
+            )
+    if jabsa and "fecha_emision" not in campos:
+        invertida = re.search(
+            r"(\\d{2})/(\\d{2})/(20\\d{2})\\s*Fecha\\s+Emision", texto, re.I
+        )
+        if invertida:
+            campos["fecha_emision"] = (
+                f"{invertida.group(3)}-{invertida.group(2)}-{invertida.group(1)}",
+                invertida.group(0),
             )
     if campos.get("importe_total"):
         campos["moneda"] = ("PEN", "S/ (total)")
