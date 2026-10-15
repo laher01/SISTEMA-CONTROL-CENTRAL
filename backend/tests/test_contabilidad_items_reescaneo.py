@@ -37,9 +37,7 @@ def _guardar(
     return documento
 
 
-def test_vista_previa_paginada_aislada_sin_modificar_original(
-    session: Session, tmp_path: Path
-):
+def test_vista_previa_paginada_aislada_sin_modificar_original(session: Session, tmp_path: Path):
     primero = Tenant(nombre="tenant_previsualizacion_a")
     segundo = Tenant(nombre="tenant_previsualizacion_b")
     session.add_all([primero, segundo])
