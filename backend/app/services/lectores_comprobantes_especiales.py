@@ -5,8 +5,8 @@ Los datos permanecen como sugerencias auditables para confirmación humana.
 """
 
 import re
-from contextlib import suppress
 import unicodedata
+from contextlib import suppress
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
