@@ -1,4 +1,5 @@
 """Regresiones: Dashboard comparte alcance para tarjetas, tabla y opciones."""
+
 from fastapi.testclient import TestClient
 
 from tests.xml import factura
@@ -31,9 +32,7 @@ def test_dashboard_mes_resumen_desglose_y_opciones(client: TestClient) -> None:
     assert para_emisor.status_code == 200
     assert para_emisor.json()["expedientes_total"] == 2
 
-    para_receptor = client.get(
-        "/api/v1/dashboard/desglose", params={"receptor_id": receptor_id}
-    )
+    para_receptor = client.get("/api/v1/dashboard/desglose", params={"receptor_id": receptor_id})
     assert para_receptor.status_code == 200
     assert sum(f["expedientes"] for f in para_receptor.json()["filas"]) == 2
 
