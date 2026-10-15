@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useDatos } from "../api";
+import { agrupacionInicial, controlesDashboard } from "../dashboardRoles";
 import { Estado } from "../componentes";
 import { ETIQUETA_ALERTA, ETIQUETA_ESTADO, formatearMonto } from "../formato";
 import {
@@ -14,11 +15,9 @@ import {
 } from "../tipos";
 
 export default function Dashboard({ sesion }: { sesion: SesionActual }) {
-  const esAdministracion = ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA"].includes(sesion.rol);
-  const mostrarUsuario = esAdministracion || sesion.rol === "RESPONSABLE";
-  const mostrarGestor = mostrarUsuario || sesion.rol === "USUARIO";
+  const { responsable: esAdministracion, usuario: mostrarUsuario, gestor: mostrarGestor } = controlesDashboard(sesion.rol);
 
-  const [agruparPor, setAgruparPor] = useState<AgrupacionDashboard>(sesion.rol === "GESTOR" ? "receptor" : "usuario");
+  const [agruparPor, setAgruparPor] = useState<AgrupacionDashboard>(agrupacionInicial(sesion.rol));
   const [orden, setOrden] = useState<"asc" | "desc">("desc");
   const [responsableId, setResponsableId] = useState("");
   const [usuarioId, setUsuarioId] = useState("");
