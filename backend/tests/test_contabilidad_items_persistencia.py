@@ -1,6 +1,7 @@
 """Prueba real SQLAlchemy/PostgreSQL: idempotencia y aislamiento multitenant."""
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import func, select
@@ -75,5 +76,19 @@ def test_reescaneo_rechaza_documento_inexistente(session: Session):
 
     with pytest.raises(ValueError, match="tenant autorizado"):
         registrar_items_ubl(session, propietario.id, uuid.uuid4(), XML)
+
+    assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 0
+
+
+def test_reescaneo_rechaza_documento_eliminado(session: Session):
+    propietario = Tenant(nombre="tenant_xml_eliminado")
+    session.add(propietario)
+    session.flush()
+    documento = _documento(session, propietario.id)
+    documento.deleted_at = datetime.now(UTC)
+    session.flush()
+
+    with pytest.raises(ValueError, match="tenant autorizado"):
+        registrar_items_ubl(session, propietario.id, documento.id, XML)
 
     assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 0
