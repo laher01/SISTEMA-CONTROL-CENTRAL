@@ -109,3 +109,21 @@ def test_vista_previa_recupera_pagina_siguiente_sin_repetir_documentos(
     assert len(ids) == len(set(ids)) == 3
     assert set(ids) == {documento.id for documento in documentos}
     assert all(fila.estado == "XML_REVISADO" for fila in primer_lote + segundo_lote)
+
+
+def test_vista_previa_no_lee_ruta_de_otro_tenant(session: Session, tmp_path: Path):
+    propietario = Tenant(nombre="tenant_origen_ruta_xml")
+    ajeno = Tenant(nombre="tenant_ruta_xml_ajena")
+    session.add_all([propietario, ajeno])
+    session.flush()
+    almacen = AlmacenLocal(tmp_path)
+    documento_ajeno = _guardar(session, almacen, ajeno.id, XML)
+    documento = _guardar(session, almacen, propietario.id, XML)
+    documento.ruta_storage = documento_ajeno.ruta_storage
+    session.flush()
+
+    resultado = previsualizar_pagina(session, almacen, propietario.id)
+    assert len(resultado) == 1
+    assert resultado[0].documento_id == documento.id
+    assert resultado[0].estado == "RUTA_FUERA_TENANT"
+    assert resultado[0].lineas_detectadas == 0
