@@ -488,6 +488,34 @@ def resumen(
         Documento.deleted_at.is_(None),
         Documento.estado.in_(list(pendientes)),
     ]
+    # Los pendientes sin expediente no poseen emisor/receptor ni fecha de emisión
+    # verificables: no atribuirlos a filtros de expedientes.
+    if emisor_id or receptor_id or tipo_empresa or mes or fecha_desde or fecha_hasta:
+        documentos_scope.append(Documento.id.is_(None))
+    if responsable_id is not None:
+        documentos_scope.append(
+            Documento.usuario_id.in_(
+                select(Miembro.id).where(
+                    Miembro.tenant_id == tenant_id,
+                    Miembro.responsable_id == responsable_id,
+                    Miembro.deleted_at.is_(None),
+                )
+            )
+        )
+    if usuario_id is not None:
+        documentos_scope.append(Documento.usuario_id == usuario_id)
+    if gestor_id is not None:
+        documentos_scope.append(Documento.gestor_id == gestor_id)
+    if auth.rol == RolMiembro.RESPONSABLE:
+        documentos_scope.append(
+            Documento.usuario_id.in_(
+                select(Miembro.id).where(
+                    Miembro.tenant_id == tenant_id,
+                    Miembro.responsable_id == auth.miembro_id,
+                    Miembro.deleted_at.is_(None),
+                )
+            )
+        )
     if auth.rol == "GESTOR":
         documentos_scope.append(Documento.gestor_id == auth.gestor_id)
     elif auth.rol == RolMiembro.USUARIO:
