@@ -813,6 +813,7 @@ class CorreoBuzon(ConId, ConTenant, ConCreacion, Base):
     responsable_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
     activo: Mapped[bool] = mapped_column(default=False, server_default="false")
     cursor: Mapped[str | None] = mapped_column(String(500))
+    importar_desde: Mapped[date | None] = mapped_column(Date, nullable=True)
     ultimo_error: Mapped[str | None] = mapped_column(String(500))
 
 
