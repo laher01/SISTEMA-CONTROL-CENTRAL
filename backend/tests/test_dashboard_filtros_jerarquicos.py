@@ -6,7 +6,6 @@ from fastapi.testclient import TestClient
 
 from app.security import ContextoAcceso
 from tests.conftest import AuthPrueba
-
 from tests.xml import factura
 
 
