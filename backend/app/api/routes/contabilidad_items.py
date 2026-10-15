@@ -134,6 +134,7 @@ def resumen(
         for r in session.execute(stmt)
     ]
 
+
 @router.get("/conciliacion")
 def conciliacion(
     session: SessionDep,
