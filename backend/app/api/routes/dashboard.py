@@ -550,7 +550,7 @@ def desglose(
     session: SessionDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
-    agrupar_por: Literal["usuario", "emisor", "receptor", "dia", "mes", "anio"] = "usuario",
+    agrupar_por: Literal["responsable", "usuario", "gestor", "emisor", "receptor", "tipo_empresa", "dia", "mes", "anio"] = "usuario",
     orden: Literal["asc", "desc"] = "desc",
     responsable_id: uuid.UUID | None = None,
     usuario_id: uuid.UUID | None = None,
@@ -600,6 +600,16 @@ def desglose(
         )
     }
 
+    gestores = {
+        gestor.id: gestor
+        for gestor in session.scalars(
+            select(Gestor).where(
+                Gestor.tenant_id == tenant_id,
+                Gestor.deleted_at.is_(None),
+            )
+        )
+    }
+
     acumulado: dict[str, DashboardDesgloseFila] = {}
     for expediente in expedientes:
         if agrupar_por == "usuario":
@@ -612,6 +622,34 @@ def desglose(
                 if miembro is not None
                 else "Sin usuario asignado"
             )
+            ruc = None
+        elif agrupar_por == "responsable":
+            miembro_usuario = usuarios.get(expediente.usuario_id) if expediente.usuario_id else None
+            responsable = (
+                usuarios.get(miembro_usuario.responsable_id)
+                if miembro_usuario and miembro_usuario.responsable_id
+                else None
+            )
+            clave = str(responsable.id) if responsable else "sin-responsable"
+            etiqueta = (
+                f"{responsable.codigo} · {responsable.nombre}"
+                if responsable
+                else "Sin responsable asignado"
+            )
+            ruc = None
+        elif agrupar_por == "gestor":
+            gestor = gestores.get(expediente.gestor_id) if expediente.gestor_id else None
+            clave = str(expediente.gestor_id or "sin-gestor")
+            etiqueta = (
+                f"{gestor.codigo} · {gestor.nombre}"
+                if gestor
+                else "Sin gestor asignado"
+            )
+            ruc = None
+        elif agrupar_por == "tipo_empresa":
+            tipo = expediente.emisor.clasificacion_proveedor
+            clave = str(tipo or "sin-clasificar")
+            etiqueta = f"Tipo {tipo}" if tipo else "Sin clasificación"
             ruc = None
         elif agrupar_por == "emisor":
             clave = str(expediente.emisor_id)
