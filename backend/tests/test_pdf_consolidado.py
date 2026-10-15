@@ -7,7 +7,7 @@ from pypdf import PdfReader
 from tests.xml import factura
 
 
-def test_pdf_contiene_factura_original_y_portada(client: TestClient) -> None:
+def test_pdf_xml_solo_informa_descargar_zip(client: TestClient) -> None:
     subida = client.post(
         "/api/v1/documentos",
         files={"archivo": ("factura.xml", factura(numero="F001-00000701"))},
@@ -15,10 +15,8 @@ def test_pdf_contiene_factura_original_y_portada(client: TestClient) -> None:
     assert subida.status_code == 201, subida.text
     expediente_id = subida.json()["expediente_id"]
     respuesta = client.get(f"/api/v1/expedientes/{expediente_id}/descargar-pdf")
-    assert respuesta.status_code == 200, respuesta.text
-    reader = PdfReader(io.BytesIO(respuesta.content))
-    assert len(reader.pages) >= 1
-    assert len(reader.attachments) == 1
+    assert respuesta.status_code == 422, respuesta.text
+    assert "Descargue el ZIP" in respuesta.json()["detail"]
 
 
 def test_pdf_convierte_imagen_vinculada(client: TestClient) -> None:
@@ -41,7 +39,7 @@ def test_pdf_convierte_imagen_vinculada(client: TestClient) -> None:
     resultado = client.get(f"/api/v1/expedientes/{expediente_id}/descargar-pdf")
     assert resultado.status_code == 200, resultado.text
     lector = PdfReader(io.BytesIO(resultado.content))
-    assert len(lector.pages) >= 2
+    assert len(lector.pages) == 1
     assert len(lector.attachments) == 2
 
 
