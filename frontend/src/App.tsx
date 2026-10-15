@@ -141,14 +141,19 @@ export default function App() {
 
   if (window.location.pathname === "/privacidad") return <PaginaLegal tipo="privacidad" />;
   if (window.location.pathname === "/terminos") return <PaginaLegal tipo="terminos" />;
-  if (cargando && window.location.pathname === "/") return <Presentacion />;
+  if (window.location.pathname === "/bienvenida") return <Presentacion />;
+  // /ingresar es una ruta de autenticación, nunca una landing pública.
+  // Priorizarla explícitamente para evitar regresiones en cambios de portada.
+  if (window.location.pathname.replace(/\/+$/, "") === "/ingresar") {
+    if (cargando) return <main className="contenido"><p>Cargando sesión…</p></main>;
+    if (!sesion || error) return <Login alIngresar={recargar} />;
+    if (sesion.cambio_clave_obligatorio) return <CambiarClave sesion={sesion} alCambiar={recargar} />;
+    return <Navigate to="/" replace />;
+  }
   if (cargando) return <main className="contenido"><p>Cargando sesión…</p></main>;
   if (!sesion || error) {
     const esPortalOracle = window.location.hostname === "factcentral.online";
-    const esIngreso = window.location.pathname === "/ingresar";
-    return (esPortalOracle || window.location.hostname === "app.nexomarnegocioseirl.online") && !esIngreso
-      ? <Presentacion />
-      : <Login alIngresar={recargar} />;
+    return esPortalOracle ? <Presentacion /> : <Login alIngresar={recargar} />;
   }
   if (sesion.cambio_clave_obligatorio) {
     return <CambiarClave sesion={sesion} alCambiar={recargar} />;
