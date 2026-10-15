@@ -29,7 +29,7 @@ def test_alembic_0034_en_base_postgresql_aislada() -> None:
         creada = True
         config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
         config.set_main_option("sqlalchemy.url", temporal.render_as_string(hide_password=False))
-        command.upgrade(config, "head")
+        command.upgrade(config, "0036")
         engine = create_engine(temporal)
         try:
             inspector = inspect(engine)
@@ -40,8 +40,20 @@ def test_alembic_0034_en_base_postgresql_aislada() -> None:
                 for item in inspector.get_unique_constraints("documentos")
             )
             with engine.connect() as conn:
+                assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0036"
+                documentos_antes = conn.scalar(text("SELECT count(*) FROM documentos"))
+            command.upgrade(config, "0037")
+            assert inspect(engine).has_table("productos_items")
+            assert inspect(engine).has_table("lineas_comprobantes_items")
+            assert inspect(engine).has_table("auditorias_facturas_items")
+            command.downgrade(config, "0036")
+            assert not inspect(engine).has_table("productos_items")
+            assert not inspect(engine).has_table("lineas_comprobantes_items")
+            assert not inspect(engine).has_table("auditorias_facturas_items")
+            command.upgrade(config, "0037")
+            with engine.connect() as conn:
                 assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0037"
-            command.upgrade(config, "head")
+                assert conn.scalar(text("SELECT count(*) FROM documentos")) == documentos_antes
         finally:
             engine.dispose()
     finally:
