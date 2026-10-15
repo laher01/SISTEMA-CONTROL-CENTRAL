@@ -149,13 +149,10 @@ export default function App() {
     if (sesion.cambio_clave_obligatorio) return <CambiarClave sesion={sesion} alCambiar={recargar} />;
     return <Navigate to="/" replace />;
   }
-  if (cargando && window.location.pathname === "/") return <Presentacion />;
   if (cargando) return <main className="contenido"><p>Cargando sesión…</p></main>;
   if (!sesion || error) {
     const esPortalOracle = window.location.hostname === "factcentral.online";
-    return esPortalOracle || window.location.hostname === "app.nexomarnegocioseirl.online"
-      ? <Presentacion />
-      : <Login alIngresar={recargar} />;
+    return esPortalOracle ? <Presentacion /> : <Login alIngresar={recargar} />;
   }
   if (sesion.cambio_clave_obligatorio) {
     return <CambiarClave sesion={sesion} alCambiar={recargar} />;
