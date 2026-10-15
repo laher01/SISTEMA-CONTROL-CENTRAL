@@ -83,7 +83,12 @@ def resumen(
             or_(
                 ultimo_estado.is_(None),
                 ultimo_estado.not_in(
-                    ["OBSERVADA", "INVALIDADA_CONFIRMADA", "INVALIDADA_PENDIENTE", "REACTIVACION_PENDIENTE"]
+                    [
+                        "OBSERVADA",
+                        "INVALIDADA_CONFIRMADA",
+                        "INVALIDADA_PENDIENTE",
+                        "REACTIVACION_PENDIENTE",
+                    ]
                 ),
             ),
         )
