@@ -82,9 +82,7 @@ def test_rol_usuario_no_puede_desactivar_factura(session, auth_prueba):
 @pytest.mark.parametrize(
     ("aprobar", "esperado"), [(True, "VIGENTE"), (False, "INVALIDADA_CONFIRMADA")]
 )
-def test_observacion_resuelta_con_aprobacion_o_rechazo(
-    session, auth_prueba, aprobar, esperado
-):
+def test_observacion_resuelta_con_aprobacion_o_rechazo(session, auth_prueba, aprobar, esperado):
     contexto = auth_prueba.contexto
     revisor = CuentaAcceso(
         tenant_id=contexto.tenant_id,
