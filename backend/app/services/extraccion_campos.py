@@ -677,7 +677,7 @@ def _ajustar_partes_cotizacion(
         ("razon_social_receptor", "CLIENTE"),
         ("razon_social_emisor", "PROVEEDOR"),
     ):
-        coincidencias = re.findall(rf"(?im)^\\s*{etiqueta}\\s*:\\s*([^\\n]+)$", texto)
+        coincidencias = re.findall(rf"(?im)^\s*{etiqueta}\s*:\s*([^\n]+)$", texto)
         nombres = {
             _recortar_razon(nombre)
             for nombre in coincidencias
