@@ -34,11 +34,12 @@ type Pestana = "USUARIOS" | "PEDIDOS" | "COBROS" | "PAGOS";
 
 export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?: Pestana }) {
   const pestana = inicial;
+  const [mesCobros, setMesCobros] = useState("");
   const { datos, error, cargando, recargar } = useDatos<UsuarioResponsable[]>(
     "/api/v1/miembros/mis-usuarios",
   );
   const { datos: equipo, error: errorEquipo, cargando: cargandoEquipo, recargar: recargarEquipo } =
-    useDatos<Equipo>("/api/v1/responsable/resumen");
+    useDatos<Equipo>(`/api/v1/responsable/resumen${pestana === "COBROS" && mesCobros ? `?mes=${encodeURIComponent(mesCobros)}` : ""}`);
   const [moneda, setMoneda] = useState<"PEN" | "USD">("PEN");
   const [usuarioDestino, setUsuarioDestino] = useState<Record<string, string>>({});
   const [montos, setMontos] = useState<Record<string, string>>({});
@@ -291,6 +292,7 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
       </>}
       {pestana === "COBROS" && <>
         <h3>Clientes y producción documentada del equipo</h3>
+        <div className="filtros"><label>Mes de emisión <input type="month" value={mesCobros} onChange={(e) => setMesCobros(e.target.value)} /></label><button type="button" onClick={() => setMesCobros("")}>Todo el historial</button></div>
         <p>Producción registrada: <strong>{formatearMonto(moneda, sumar(clientes.map((c) => c.produccion)))}</strong></p>
         <p className="tenue">La producción no equivale a cobros recibidos. Las comisiones de Usuarios son referenciales según su porcentaje y condición de agente; no equivalen a la comisión que Gerencia debe al Responsable ni a un pago autorizado.</p>
         <table><thead><tr><th>Usuario</th><th>RUC</th><th>Cliente/Receptor</th><th>Expedientes</th><th>Producción</th><th>Agente de retención</th><th>% Usuario</th><th>Comisión referencial Usuario</th></tr></thead>
