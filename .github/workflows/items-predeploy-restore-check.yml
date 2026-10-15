@@ -1,0 +1,82 @@
+name: items-predeploy-restore-check
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factcentral-staging-audit
+  cancel-in-progress: false
+jobs:
+  backup_restore:
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirmar servidor permitido
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          test "$VPS_HOST" = "132.145.233.172"
+          test "$VPS_USER" = "ubuntu"
+          for key in VPS_DEPLOY_PATH VPS_SSH_PRIVATE_KEY VPS_SSH_KNOWN_HOSTS; do
+            test -n "${!key:-}" || exit 1
+          done
+      - name: Preparar SSH
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Respaldo nuevo y restauracion en DB temporal
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+        run: |
+          test "${GITHUB_REF_NAME}" = "main"
+          ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
+            "cd -- '$VPS_DEPLOY_PATH' && bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          umask 077
+          test -s deploy/.env.production
+          compose=(docker compose --env-file deploy/.env.production -f deploy/docker-compose.production.yml)
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          dir=deploy/backups/audit
+          mkdir -p "$dir"
+          chmod 700 "$dir"
+          dump="$dir/factcentral_predeploy_${stamp}.dump"
+          partial="$dump.partial"
+          db="factcentral_predeploy_${stamp}_$$"
+          created=0
+          clean() {
+            if [ "$created" = 1 ]; then
+              "${compose[@]}" exec -T db sh -c 'dropdb -U "$POSTGRES_USER" --if-exists "$1"' sh "$db" </dev/null || true
+            fi
+            rm -f -- "$partial"
+          }
+          trap clean EXIT
+          "${compose[@]}" ps --status running db | grep -q db
+          "${compose[@]}" exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$partial"
+          test -s "$partial"
+          "${compose[@]}" exec -T db pg_restore --list < "$partial" >/dev/null
+          mv "$partial" "$dump"
+          sha256sum "$dump" > "$dump.sha256"
+          sha256sum -c "$dump.sha256"
+          "${compose[@]}" exec -T db sh -c 'createdb -U "$POSTGRES_USER" "$1"' sh "$db" </dev/null
+          created=1
+          "${compose[@]}" exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" --no-owner --no-acl --exit-on-error -d "$1"' sh "$db" < "$dump"
+          "${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1" -Atc "select version_num from alembic_version"' sh "$db" </dev/null
+          "${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1" -Atc "select count(*) from documentos"' sh "$db" </dev/null
+          echo "BACKUP_RECIENTE_VERIFICADO: $dump"
+          echo "RESTORE_TEMPORAL_OK"
+          echo "MIGRACIONES_0037_Y_ROLLBACK_AUN_PENDIENTES"
+          REMOTE
