@@ -3,6 +3,7 @@ from logging.config import fileConfig
 from sqlalchemy import create_engine
 
 from alembic import context
+from app import item_models  # noqa: F401
 from app.core.config import get_settings
 from app.models import Base
 

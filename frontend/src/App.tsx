@@ -10,6 +10,7 @@ import CarteraGerencia from "./paginas/CarteraGerencia";
 import Chat from "./paginas/Chat";
 import Comisiones from "./paginas/Comisiones";
 import ComisionesResponsables from "./paginas/ComisionesResponsables";
+import ContabilidadItems from "./paginas/ContabilidadItems";
 import Dashboard from "./paginas/Dashboard";
 import Documentos from "./paginas/Documentos";
 import Empresas from "./paginas/Empresas";
@@ -72,6 +73,7 @@ const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = 
     icono: "▧",
     roles: ["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA"],
   },
+  { a: "/contabilidad-items", texto: "Contabilidad de Ítems", icono: "▥", roles: ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"] },
   {
     a: "/documentos",
     texto: "Documentos",
@@ -219,6 +221,7 @@ export default function App() {
           <Route path="/mi-recepcion" element={sesion.rol === "GESTOR" ? <RecepcionGestor /> : <Navigate to="/" replace />} />
           <Route path="/chat" element={<Chat />} />
           <Route path="/secretaria" element={["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA"].includes(sesion.rol) && !(sesion.rol === "SECRETARIA" && activaciones?.control_documental === false) ? <Secretaria sesion={sesion} /> : <Navigate to="/expedientes" replace />} />
+          <Route path="/contabilidad-items" element={<ContabilidadItems />} />
           <Route path="/documentos" element={sesion.rol === "SECRETARIA" && activaciones?.documentos === false ? <Navigate to="/expedientes" replace /> : <Documentos sesion={sesion} />} />
           <Route path="/expedientes" element={<Expedientes sesion={sesion} />} />
           <Route path="/expedientes/:id" element={<ExpedienteDetalle />} />

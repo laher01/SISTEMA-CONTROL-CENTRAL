@@ -29,7 +29,7 @@ def test_alembic_0034_en_base_postgresql_aislada() -> None:
         creada = True
         config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
         config.set_main_option("sqlalchemy.url", temporal.render_as_string(hide_password=False))
-        command.upgrade(config, "head")
+        command.upgrade(config, "0034")
         engine = create_engine(temporal)
         try:
             inspector = inspect(engine)
@@ -42,6 +42,8 @@ def test_alembic_0034_en_base_postgresql_aislada() -> None:
             with engine.connect() as conn:
                 assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0034"
             command.upgrade(config, "head")
+            with engine.connect() as conn:
+                assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0035"
         finally:
             engine.dispose()
     finally:
