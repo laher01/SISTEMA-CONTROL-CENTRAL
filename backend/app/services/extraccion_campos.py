@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
+from app.services.lectores_comprobantes_especiales import leer_comprobante_especial
+
 
 @dataclass(frozen=True)
 class CampoExtraido:
@@ -243,6 +245,13 @@ def extraer_campos(
     if operacion:
         campos["numero_operacion"] = CampoExtraido(
             operacion.group(1).upper(), min(0.94, 0.9 * factor), operacion.group(0)
+        ).a_dict(fuente)
+
+    for nombre, (valor, evidencia) in leer_comprobante_especial(texto).items():
+        # Usar evidencia explícita del formato especializado frente a números
+        # de página, cantidades y correlativos encontrados por proximidad.
+        campos[nombre] = CampoExtraido(
+            valor, min(0.96, 0.94 * factor), evidencia
         ).a_dict(fuente)
 
     if not campos and not candidatos:
