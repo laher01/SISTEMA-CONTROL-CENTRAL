@@ -79,7 +79,12 @@ def test_rol_usuario_no_puede_desactivar_factura(session, auth_prueba):
     assert exc.value.status_code == 403
 
 
-def test_observacion_resuelta_con_aprobacion_o_rechazo(session, auth_prueba):
+@pytest.mark.parametrize(
+    ("aprobar", "esperado"), [(True, "VIGENTE"), (False, "INVALIDADA_CONFIRMADA")]
+)
+def test_observacion_resuelta_con_aprobacion_o_rechazo(
+    session, auth_prueba, aprobar, esperado
+):
     contexto = auth_prueba.contexto
     revisor = CuentaAcceso(
         tenant_id=contexto.tenant_id,
@@ -93,20 +98,19 @@ def test_observacion_resuelta_con_aprobacion_o_rechazo(session, auth_prueba):
     secretaria = replace(contexto, rol="SECRETARIA")
     administrador = replace(contexto, cuenta_id=revisor.id, rol="ADMINISTRADOR")
 
-    for aprobar, esperado in ((True, "VIGENTE"), (False, "INVALIDADA_CONFIRMADA")):
-        expediente = _expediente(session, contexto.tenant_id)
-        observacion = registrar_decision(
-            session, secretaria, expediente.id, "OBSERVAR", "Ítem requiere justificación"
-        )
-        assert observacion.estado == "OBSERVADA"
-        with pytest.raises(HTTPException) as error:
-            resolver_propuesta(session, secretaria, observacion.id, aprobar)
-        assert error.value.status_code == 403
+    expediente = _expediente(session, contexto.tenant_id)
+    observacion = registrar_decision(
+        session, secretaria, expediente.id, "OBSERVAR", "Ítem requiere justificación"
+    )
+    assert observacion.estado == "OBSERVADA"
+    with pytest.raises(HTTPException) as error:
+        resolver_propuesta(session, secretaria, observacion.id, aprobar)
+    assert error.value.status_code == 403
 
-        resuelta = resolver_propuesta(session, administrador, observacion.id, aprobar)
-        assert resuelta.estado == esperado
-        assert resuelta.aprobado_por_cuenta_id == revisor.id
-        assert ultima_decision(session, contexto.tenant_id, expediente.id).id == resuelta.id
-        with pytest.raises(HTTPException) as error:
-            resolver_propuesta(session, administrador, observacion.id, aprobar)
-        assert error.value.status_code == 409
+    resuelta = resolver_propuesta(session, administrador, observacion.id, aprobar)
+    assert resuelta.estado == esperado
+    assert resuelta.aprobado_por_cuenta_id == revisor.id
+    assert ultima_decision(session, contexto.tenant_id, expediente.id).id == resuelta.id
+    with pytest.raises(HTTPException) as error:
+        resolver_propuesta(session, administrador, observacion.id, aprobar)
+    assert error.value.status_code == 409
