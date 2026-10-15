@@ -250,9 +250,7 @@ def extraer_campos(
     # Perfiles de estaciones: solo sobrescribir con etiquetas verificables.
     # Cada valor mantiene evidencia, fuente y confirmación obligatoria.
     for nombre, (valor, evidencia) in extraer_factura_estacion(texto).items():
-        campos[nombre] = CampoExtraido(
-            valor, min(0.96, 0.94 * factor), evidencia
-        ).a_dict(fuente)
+        campos[nombre] = CampoExtraido(valor, min(0.96, 0.94 * factor), evidencia).a_dict(fuente)
 
     if not campos and not candidatos:
         return None
