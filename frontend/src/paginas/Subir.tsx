@@ -1,4 +1,4 @@
-import { useRef, useState, type DragEvent } from "react";
+import { useRef, useState, type ClipboardEvent, type DragEvent } from "react";
 import { Link } from "react-router-dom";
 
 import { ErrorApi, enviarFormulario } from "../api";
@@ -65,6 +65,8 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
   };
   const [filas, setFilas] = useState<Fila[]>([]);
   const [arrastrando, setArrastrando] = useState(false);
+  const [mostrarOpciones, setMostrarOpciones] = useState(false);
+  const [avisoPegado, setAvisoPegado] = useState("");
   const entrada = useRef<HTMLInputElement>(null);
   const entradaCamara = useRef<HTMLInputElement>(null);
   const entradaEscaneos = useRef<HTMLInputElement>(null);
@@ -97,7 +99,7 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
     }
   };
 
-  const agregar = (lista: FileList | null) => {
+  const agregar = (lista: FileList | File[] | null) => {
     if (!lista || lista.length === 0) return;
     const nuevas: Fila[] = Array.from(lista).map((archivo, i) => ({
       clave: `${Date.now()}-${i}-${archivo.name}`,
@@ -119,6 +121,16 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
         despachar();
       });
     }
+  };
+
+  const pegarImagen = (evento: ClipboardEvent<HTMLDivElement>) => {
+    const imagenes = Array.from(evento.clipboardData.files).filter((archivo) =>
+      archivo.type.startsWith("image/"),
+    );
+    if (!imagenes.length) return;
+    evento.preventDefault();
+    agregar(imagenes);
+    setAvisoPegado(`${imagenes.length} imagen(es) añadidas a la cola.`);
   };
 
   const soltar = (evento: DragEvent) => {
@@ -231,9 +243,29 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
 
   return (
     <>
-      <h2>Subir documentos</h2>
+      <h2>Ingreso de documentos</h2>
+      <p>Dos modalidades independientes: ingreso inteligente y PDF paquetizados.</p>
+      <section className="resumen-carga" aria-label="Ingreso inteligente" style={{ marginBottom: 20 }}>
+        <h3>Ingreso inteligente de documentos</h3>
+        <p>Arrastra PDF individuales o imágenes; también puedes pegar fotos o capturarlas desde el celular.</p>
+        <button type="button" onClick={() => setMostrarOpciones((actual) => !actual)}>
+          {mostrarOpciones ? "Ocultar opciones" : "Agregar documentos"}
+        </button>
+        {mostrarOpciones && (
+          <div className="acciones">
+            <button type="button" onClick={() => entrada.current?.click()}>Subir PDF o XML</button>
+            <button type="button" onClick={() => entradaCamara.current?.click()}>Tomar foto</button>
+            <button type="button" onClick={() => entradaEscaneos.current?.click()}>Subir imágenes</button>
+            <button type="button" onClick={() => { setAvisoPegado("Haz clic en la zona de pegado y presiona Ctrl+V."); document.getElementById("zona-pegado-documental")?.focus(); }}>Pegar imagen</button>
+          </div>
+        )}
+        <div id="zona-pegado-documental" tabIndex={0} role="textbox" aria-label="Zona para pegar imágenes" aria-multiline={false} onPaste={pegarImagen} style={{ border: "1px dashed currentColor", borderRadius: 8, padding: 12, marginTop: 12 }}>
+          Haz clic aquí y pega una imagen con Ctrl+V. En el celular también puedes utilizar la opción de pegar del navegador si está disponible.
+        </div>
+        {avisoPegado && <p role="status">{avisoPegado}</p>}
+      </section>
       <section className="resumen-carga" style={{ marginBottom: 20 }}>
-        <h3>Importación masiva de paquetes PDF</h3>
+        <h3>Importación masiva de PDF paquetizados (apartado independiente)</h3>
         <p>
           Seleccione varios paquetes PDF. El análisis muestra los comprobantes antes de
           importar. Los paquetes se procesan uno por uno para proteger la memoria de la VPS.
