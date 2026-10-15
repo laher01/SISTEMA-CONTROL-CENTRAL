@@ -1034,7 +1034,8 @@ def crear_pedidos_masivos(
     except IntegrityError as exc:
         session.rollback()
         raise HTTPException(
-            status.HTTP_409_CONFLICT, "Hay pedidos existentes o concurrentes; no se creó ningún lote"
+            status.HTTP_409_CONFLICT,
+            "Hay pedidos existentes o concurrentes; no se creó ningún lote"
         ) from exc
     except Exception:
         session.rollback()
