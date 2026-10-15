@@ -94,9 +94,7 @@ def registrar_pagina_verificada(
     Solo persiste ítems de XML revisados. Los errores individuales no impiden
     continuar, y las escrituras se aíslan mediante savepoints por documento.
     """
-    previa = previsualizar_pagina(
-        session, almacen, tenant_id, despues_id=despues_id, limite=limite
-    )
+    previa = previsualizar_pagina(session, almacen, tenant_id, despues_id=despues_id, limite=limite)
     resultados: list[ResultadoLote] = []
     for item in previa:
         if item.estado != "XML_REVISADO":
