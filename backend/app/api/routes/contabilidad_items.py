@@ -45,6 +45,8 @@ def resumen(
     limite: int = Query(100, ge=1, le=500),
 ) -> list[dict[str, str]]:
     """No mezcla unidades ni incluye facturas pendientes de auditoría."""
+    if desde is not None and hasta is not None and desde > hasta:
+        raise HTTPException(422, "La fecha inicial no puede ser posterior a la final")
     alcance = _alcance(auth)
     ultimo_estado = (
         select(AuditoriaFacturaItem.estado)
