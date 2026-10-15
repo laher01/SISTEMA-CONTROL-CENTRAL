@@ -196,6 +196,8 @@ def extraer_campos(
         _aplicar_parser_especializado(texto, formato, rucs, campos, fuente, factor)
 
     _extraer_razones_vinculadas_a_ruc(texto, campos, fuente, factor)
+    if re.search(r"COTIZACI[OÓ]N", texto, re.I):
+        _ajustar_partes_cotizacion(texto, campos, fuente, factor)
 
     fecha_match = FECHA_ETIQUETADA.search(texto)
     fecha_literal = FECHA_LITERAL_ES.search(texto) if fecha_match is None else None
@@ -644,6 +646,31 @@ def _parsear_efact(
             receptor[1],
             fuente,
         )
+
+
+def _ajustar_partes_cotizacion(
+    texto: str,
+    campos: dict[str, dict[str, object]],
+    fuente: str,
+    factor: float,
+) -> None:
+    """No atribuir el RUC del cliente al proveedor de una cotización."""
+    patron = re.compile(
+        r"\\b(?:CLIENTE|RUC\\s+(?:DEL\\s+)?CLIENTE|RUC\\s+RECEPTOR)"
+        r"\\s*(?:RUC)?\\s*[:=-]?\\s*(\\d{11})\\b",
+        re.IGNORECASE,
+    )
+    clientes = {coincidencia.group(1) for coincidencia in patron.finditer(texto)}
+    if len(clientes) != 1:
+        return
+    cliente = clientes.pop()
+    campos["ruc_receptor"] = CampoExtraido(
+        cliente, min(0.95, 0.94 * factor), _contexto(texto, cliente)
+    ).a_dict(fuente)
+    emisor = campos.get("ruc_emisor")
+    if emisor is not None and str(emisor["valor"]) == cliente:
+        campos.pop("ruc_emisor", None)
+        campos.pop("razon_social_emisor", None)
 
 
 def _extraer_rucs_etiquetados(
