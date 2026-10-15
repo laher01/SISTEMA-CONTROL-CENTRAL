@@ -222,6 +222,94 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
   );
 }
 
+function PresupuestoMasivo({
+  esGerente, gerenteId, gerentes, mes, moneda, clientes, responsables, alCambiar, alMensaje,
+}: {
+  esGerente: boolean;
+  gerenteId: string;
+  gerentes: FiltroOpcion[];
+  mes: string;
+  moneda: "PEN" | "USD";
+  clientes: FiltroOpcion[];
+  responsables: FiltroOpcion[];
+  alCambiar: () => void;
+  alMensaje: (mensaje: string) => void;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [montoComun, setMontoComun] = useState("");
+  const [seleccionados, setSeleccionados] = useState<string[]>([]);
+  const [montos, setMontos] = useState<Record<string, string>>({});
+  const [responsableId, setResponsableId] = useState("");
+  const [modalidad, setModalidad] = useState<"POR_PEDIDO" | "SIN_RESTRICCION">("POR_PEDIDO");
+  const [observacion, setObservacion] = useState("");
+  const [procesando, setProcesando] = useState(false);
+  const filas = clientes.filter(c => seleccionados.includes(c.id));
+  const total = filas.reduce((sum, cliente) => sum + (Number(montos[cliente.id]) || 0), 0);
+  const valido = filas.length > 0 && filas.every(c => Number.isFinite(Number(montos[c.id])) && Number(montos[c.id]) > 0 && /^\\d+(?:\\.\\d{1,2})?$/.test(montos[c.id] ?? ""));
+  const enviar = async () => {
+    if (!valido || !responsableId || (!esGerente && !gerenteId)) return;
+    if (!window.confirm(`¿Crear ${filas.length} pedidos para un Responsable por un total de ${formatearMonto(moneda, total)}? No se registrará ningún pedido si uno falla.`)) return;
+    setProcesando(true);
+    try {
+      await enviarJson("/api/v1/pagos/pedidos/masivo", "POST", {
+        gerente_id: esGerente ? null : gerenteId,
+        responsable_id: responsableId,
+        periodo_mes: mes + "-01",
+        moneda, modalidad, observacion: observacion || null,
+        items: filas.map(c => ({ cliente_id: c.id, monto_solicitado: montos[c.id] })),
+      });
+      setSeleccionados([]);
+      setMontos({});
+      setAbierto(false);
+      alCambiar();
+      alMensaje("Lote de presupuestos registrado correctamente.");
+    } catch (e) {
+      alMensaje(e instanceof Error ? e.message : String(e));
+    } finally {
+      setProcesando(false);
+    }
+  };
+  return <section>
+    <button type="button" onClick={() => setAbierto(v => !v)}>{abierto ? "Cerrar presupuesto masivo" : "Presupuesto masivo por receptoras"}</button>
+    {abierto && <>
+      <h4>Presupuesto masivo · {mes}</h4>
+      <p className="tenue">Seleccione empresas y aplique un monto común. Puede modificar cada importe antes de confirmar. Esta primera modalidad asigna el lote a un solo Responsable. La distribución del mismo cliente entre varios Responsables requerirá la siguiente ampliación del modelo.</p>
+      <div className="filtros">
+        <label>Monto común <input type="number" min="0.01" step="0.01" value={montoComun} onChange={e => setMontoComun(e.target.value)} /></label>
+        <button type="button" disabled={!(Number(montoComun) > 0)} onClick={() => setMontos(actual => Object.fromEntries(seleccionados.map(id => [id, montoComun])))}>
+          Aplicar monto a seleccionados
+        </button>
+        <button type="button" onClick={() => setSeleccionados(clientes.map(c => c.id))}>Seleccionar todas</button>
+        <button type="button" onClick={() => setSeleccionados([])}>Limpiar selección</button>
+      </div>
+      <div className="tabla-responsive"><table><thead><tr><th>Seleccionar</th><th>Empresa receptora</th><th>Presupuesto</th></tr></thead>
+        <tbody>{clientes.map(c => <tr key={c.id}>
+          <td><input type="checkbox" checked={seleccionados.includes(c.id)} aria-label={`Seleccionar ${c.nombre}`}
+            onChange={e => setSeleccionados(actual => e.target.checked ? [...actual, c.id] : actual.filter(id => id !== c.id))} /></td>
+          <td>{c.codigo} · {c.nombre}</td>
+          <td><input type="number" min="0.01" step="0.01" aria-label={`Monto de ${c.nombre}`}
+            disabled={!seleccionados.includes(c.id)} value={montos[c.id] ?? ""} onChange={e => setMontos(actual => ({ ...actual, [c.id]: e.target.value }))} /></td>
+        </tr>)}</tbody>
+      </table></div>
+      <div className="filtros">
+        {!esGerente && <label>Gerente <select value={gerenteId} disabled><option value={gerenteId}>{gerentes.find(g => g.id === gerenteId)?.nombre ?? "Seleccione Gerente arriba"}</option></select></label>}
+        <label>Responsable <select value={responsableId} onChange={e => setResponsableId(e.target.value)}>
+          <option value="">Seleccionar Responsable</option>
+          {responsables.map(r => <option key={r.id} value={r.id}>{r.codigo} · {r.nombre}</option>)}
+        </select></label>
+        <label>Modalidad <select value={modalidad} onChange={e => setModalidad(e.target.value as typeof modalidad)}>
+          <option value="POR_PEDIDO">Por pedido</option><option value="SIN_RESTRICCION">Sin restricción</option>
+        </select></label>
+        <input placeholder="Observación" value={observacion} onChange={e => setObservacion(e.target.value)} />
+      </div>
+      <p><strong>{filas.length} empresas · Total: {formatearMonto(moneda, total)}</strong></p>
+      <button type="button" disabled={procesando || !valido || !responsableId || (!esGerente && !gerenteId)} onClick={() => void enviar()}>
+        {procesando ? "Registrando…" : "Confirmar lote de pedidos"}
+      </button>
+    </>}
+  </section>;
+}
+
 function PedidosGerencia({
   gerentes,
   esGerente,
@@ -338,6 +426,8 @@ function PedidosGerencia({
           No se realiza una distribución automática al registrar el pedido.
         </p>
       </section>
+
+      <PresupuestoMasivo esGerente={esGerente} gerenteId={gerenteId} gerentes={gerentes} mes={mes} moneda={moneda} clientes={clientes} responsables={responsables} alCambiar={alCambiar} alMensaje={alMensaje} />
 
       {error && <p className="error">{error}</p>}
 
