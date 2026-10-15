@@ -1020,11 +1020,7 @@ def resumen_equipo(
         .order_by(Empresa.razon_social)
     ):
         usuario = tasas_por_usuario[uid]
-        tasa = (
-            usuario.porcentaje_con_agente
-            if agente
-            else usuario.porcentaje_sin_agente
-        )
+        tasa = usuario.porcentaje_con_agente if agente else usuario.porcentaje_sin_agente
         comision = (
             (Decimal(total) * Decimal(tasa) / Decimal("100")).quantize(Decimal("0.01"))
             if tasa is not None
