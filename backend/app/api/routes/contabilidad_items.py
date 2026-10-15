@@ -169,17 +169,17 @@ def conciliacion(
             func.count(Expediente.id).label("total_documentos"),
             func.coalesce(func.sum(Expediente.importe_total), 0).label("total"),
             func.sum(case((aprobado, 1), else_=0)).label("aprobados"),
-            func.coalesce(
-                func.sum(case((aprobado, Expediente.importe_total), else_=0)), 0
-            ).label("importe_aprobado"),
+            func.coalesce(func.sum(case((aprobado, Expediente.importe_total), else_=0)), 0).label(
+                "importe_aprobado"
+            ),
             func.sum(case((observado, 1), else_=0)).label("observados"),
-            func.coalesce(
-                func.sum(case((observado, Expediente.importe_total), else_=0)), 0
-            ).label("importe_observado"),
+            func.coalesce(func.sum(case((observado, Expediente.importe_total), else_=0)), 0).label(
+                "importe_observado"
+            ),
             func.sum(case((otra, 1), else_=0)).label("otros"),
-            func.coalesce(
-                func.sum(case((otra, Expediente.importe_total), else_=0)), 0
-            ).label("importe_otros"),
+            func.coalesce(func.sum(case((otra, Expediente.importe_total), else_=0)), 0).label(
+                "importe_otros"
+            ),
         )
         .where(
             Expediente.tenant_id == auth.tenant_id,
