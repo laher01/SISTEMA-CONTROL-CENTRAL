@@ -84,9 +84,18 @@ def leer_comprobante_especial(
     )
     if fecha:
         meses = [
-            "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
-            "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE",
-            "NOVIEMBRE", "DICIEMBRE",
+            "ENERO",
+            "FEBRERO",
+            "MARZO",
+            "ABRIL",
+            "MAYO",
+            "JUNIO",
+            "JULIO",
+            "AGOSTO",
+            "SEPTIEMBRE",
+            "OCTUBRE",
+            "NOVIEMBRE",
+            "DICIEMBRE",
         ]
         mes = "SEPTIEMBRE" if fecha.group(2) == "SETIEMBRE" else fecha.group(2)
         with suppress(ValueError):
