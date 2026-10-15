@@ -10,7 +10,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_, select, true
+from sqlalchemy import case, func, or_, select, true
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.api.deps import OperativeAuthDep, SessionDep
@@ -134,6 +134,77 @@ def resumen(
         for r in session.execute(stmt)
     ]
 
+
+
+
+@router.get("/conciliacion")
+def conciliacion(
+    session: SessionDep,
+    auth: OperativeAuthDep,
+    desde: date | None = None,
+    hasta: date | None = None,
+    emisor_id: uuid.UUID | None = None,
+    receptor_id: uuid.UUID | None = None,
+) -> list[dict[str, str | int]]:
+    """Control de importes de expedientes, sin duplicar por documentos o líneas."""
+    if desde is not None and hasta is not None and desde > hasta:
+        raise HTTPException(422, "La fecha inicial no puede ser posterior a la final")
+    ultimo_estado = (
+        select(AuditoriaFacturaItem.estado)
+        .where(
+            AuditoriaFacturaItem.expediente_id == Expediente.id,
+            AuditoriaFacturaItem.tenant_id == auth.tenant_id,
+        )
+        .order_by(AuditoriaFacturaItem.created_at.desc(), AuditoriaFacturaItem.id.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    estado = func.coalesce(ultimo_estado, "VIGENTE")
+    aprobado = estado == "VIGENTE"
+    observado = estado == "OBSERVADA"
+    otra = estado.not_in(("VIGENTE", "OBSERVADA"))
+    consulta = (
+        select(
+            Expediente.moneda,
+            func.count(Expediente.id).label("total_documentos"),
+            func.coalesce(func.sum(Expediente.importe_total), 0).label("total"),
+            func.sum(case((aprobado, 1), else_=0)).label("aprobados"),
+            func.coalesce(func.sum(case((aprobado, Expediente.importe_total), else_=0)), 0).label("importe_aprobado"),
+            func.sum(case((observado, 1), else_=0)).label("observados"),
+            func.coalesce(func.sum(case((observado, Expediente.importe_total), else_=0)), 0).label("importe_observado"),
+            func.sum(case((otra, 1), else_=0)).label("otros"),
+            func.coalesce(func.sum(case((otra, Expediente.importe_total), else_=0)), 0).label("importe_otros"),
+        )
+        .where(
+            Expediente.tenant_id == auth.tenant_id,
+            Expediente.deleted_at.is_(None),
+            _alcance(auth),
+        )
+        .group_by(Expediente.moneda)
+        .order_by(Expediente.moneda)
+    )
+    if desde is not None:
+        consulta = consulta.where(Expediente.fecha_emision >= desde)
+    if hasta is not None:
+        consulta = consulta.where(Expediente.fecha_emision <= hasta)
+    if emisor_id is not None:
+        consulta = consulta.where(Expediente.emisor_id == emisor_id)
+    if receptor_id is not None:
+        consulta = consulta.where(Expediente.receptor_id == receptor_id)
+    return [
+        {
+            "moneda": fila.moneda,
+            "total_documentos": fila.total_documentos,
+            "importe_total": str(fila.total),
+            "aprobados": fila.aprobados,
+            "importe_aprobado": str(fila.importe_aprobado),
+            "observados": fila.observados,
+            "importe_observado": str(fila.importe_observado),
+            "otros": fila.otros,
+            "importe_otros": str(fila.importe_otros),
+        }
+        for fila in session.execute(consulta)
+    ]
 
 @router.get("/expedientes/{expediente_id}/detalle")
 def detalle_expediente(
