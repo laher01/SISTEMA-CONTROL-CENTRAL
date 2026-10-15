@@ -233,8 +233,9 @@ def extraer_campos(
             moneda[0], min(0.95, moneda[1] * factor), moneda[2]
         ).a_dict(fuente)
 
-    total_cotizacion = _total_cotizacion(texto) if re.search(r"COTIZACI[OÓ]N", texto, re.I) else None
-    total_match = TOTAL.search(texto) if total_cotizacion is None else None
+    es_cotizacion = bool(re.search(r"COTIZACI[OÓ]N", texto, re.I))
+    total_cotizacion = _total_cotizacion(texto) if es_cotizacion else None
+    total_match = TOTAL.search(texto) if not es_cotizacion else None
     if total_cotizacion is not None:
         importe, evidencia = total_cotizacion
         campos["importe_total"] = CampoExtraido(
