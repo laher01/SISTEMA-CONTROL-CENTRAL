@@ -50,14 +50,15 @@ echo "Respaldo PostgreSQL creado: $backup"
 
 previous_commit="$(git rev-parse HEAD)"
 git fetch origin main
-if [ -n "${EXPECTED_COMMIT:-}" ] && [ "$(git rev-parse origin/main)" != "$EXPECTED_COMMIT" ]; then
+fetched_commit="$(git rev-parse origin/main)"
+if [ -n "${EXPECTED_COMMIT:-}" ] && [ "$fetched_commit" != "$EXPECTED_COMMIT" ]; then
   echo "El commit de origin/main no coincide con el esperado; cancelar antes de actualizar" >&2
   exit 1
 fi
 git checkout main
 # Usar exclusivamente la referencia obtenida en el fetch ya validado.
 # Evitar git pull, que ejecutaría un segundo fetch y podría mover el destino.
-git merge --ff-only origin/main
+git merge --ff-only "$fetched_commit"
 current_commit="$(git rev-parse HEAD)"
 
 if [ -n "${EXPECTED_COMMIT:-}" ] && [ "$current_commit" != "$EXPECTED_COMMIT" ]; then
