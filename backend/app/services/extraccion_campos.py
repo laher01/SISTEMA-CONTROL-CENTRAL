@@ -241,13 +241,12 @@ def extraer_campos(
         campos["importe_total"] = CampoExtraido(
             format(importe, ".2f"), min(0.97, 0.96 * factor), evidencia
         ).a_dict(fuente)
-    elif (
-        total_match
-        and (importe_generico := _normalizar_importe(total_match.group(1))) is not None
-    ):
-        campos["importe_total"] = CampoExtraido(
-            format(importe_generico, ".2f"), min(0.96, 0.94 * factor), total_match.group(0)
-        ).a_dict(fuente)
+    elif total_match:
+        importe_generico = _normalizar_importe(total_match.group(1))
+        if importe_generico is not None:
+            campos["importe_total"] = CampoExtraido(
+                format(importe_generico, ".2f"), min(0.96, 0.94 * factor), total_match.group(0)
+            ).a_dict(fuente)
 
     operacion = OPERACION.search(texto)
     if operacion:
