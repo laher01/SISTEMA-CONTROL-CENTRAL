@@ -56,7 +56,8 @@ def test_dashboard_mes_resumen_desglose_y_opciones(client: TestClient) -> None:
 
 
 def test_responsable_sin_cartera_no_ve_registros_ajenos(
-    client: TestClient, auth_prueba: AuthPrueba,
+    client: TestClient,
+    auth_prueba: AuthPrueba,
 ) -> None:
     subida = client.post(
         "/api/v1/documentos",
