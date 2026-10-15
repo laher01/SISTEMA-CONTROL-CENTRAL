@@ -53,7 +53,10 @@ def revisar_ciclo_google(session: Session, settings: Settings) -> int:
                 client_id=settings.google_oauth_client_id,
                 client_secret=settings.google_oauth_client_secret,
             )
-            for id_mensaje in listar_ids_gmail(acceso):
+            for id_mensaje in (
+                listar_ids_gmail(acceso, desde=buzon.importar_desde)
+                if buzon.importar_desde else listar_ids_gmail(acceso)
+            ):
                 previo = session.scalar(
                     select(CorreoMensaje.id).where(
                         CorreoMensaje.tenant_id == buzon.tenant_id,
