@@ -52,16 +52,28 @@ def test_factura_duplicada(factura: IdentidadFactura) -> None:
     [("ruc_receptor", "20111111111"), ("importe", "120.00"), ("fecha_emision", "2026-10-14")],
 )
 def test_conflictos(factura: IdentidadFactura, campo: str, valor: str) -> None:
-    assert decidir_factura(replace(factura, **{campo: valor}), factura, confianza_suficiente=True) == DecisionFiscal.REVISAR_CONFLICTO
+    assert (
+        decidir_factura(replace(factura, **{campo: valor}), factura, confianza_suficiente=True)
+        == DecisionFiscal.REVISAR_CONFLICTO
+    )
 
 
 def test_confianza_insuficiente(factura: IdentidadFactura) -> None:
-    assert decidir_factura(factura, None, confianza_suficiente=False) == DecisionFiscal.REVISION_REQUERIDA
+    assert (
+        decidir_factura(factura, None, confianza_suficiente=False)
+        == DecisionFiscal.REVISION_REQUERIDA
+    )
 
 
 def test_faltan_datos(factura: IdentidadFactura) -> None:
-    assert decidir_factura(replace(factura, ruc_emisor=""), None, confianza_suficiente=True) == DecisionFiscal.REVISION_REQUERIDA
+    assert (
+        decidir_factura(replace(factura, ruc_emisor=""), None, confianza_suficiente=True)
+        == DecisionFiscal.REVISION_REQUERIDA
+    )
 
 
 def test_tenant_distinto_no_se_trata_como_duplicado(factura: IdentidadFactura) -> None:
-    assert decidir_factura(replace(factura, tenant_id="empresa-b"), factura, confianza_suficiente=True) == DecisionFiscal.REVISION_REQUERIDA
+    assert (
+        decidir_factura(replace(factura, tenant_id="empresa-b"), factura, confianza_suficiente=True)
+        == DecisionFiscal.REVISION_REQUERIDA
+    )
