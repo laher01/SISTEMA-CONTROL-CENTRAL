@@ -115,7 +115,10 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
                     value={agruparPor}
                     onChange={(e) => setAgruparPor(e.target.value as AgrupacionDashboard)}
                   >
-                    {sesion.rol !== "GESTOR" && <option value="usuario">Usuario</option>}
+                    {esAdministracion && <option value="responsable">Responsable</option>}
+                    {mostrarUsuario && <option value="usuario">Usuario</option>}
+                    {mostrarGestor && <option value="gestor">Gestor</option>}
+                    <option value="tipo_empresa">Tipo de empresa</option>
                     <option value="emisor">Empresa emisora</option>
                     <option value="receptor">Empresa receptora</option>
                     <option value="dia">Día</option>
@@ -234,6 +237,14 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
                         </tr>
                       ))}
                     </tbody>
+                    <tfoot>
+                      <tr>
+                        <th>Total filtrado</th><th>—</th>
+                        <th className="num">{desglose.filas.reduce((sum, fila) => sum + fila.expedientes, 0)}</th>
+                        <th className="num">{formatearMonto("PEN", desglose.filas.reduce((sum, fila) => sum + Number(fila.total_pen), 0))}</th>
+                        <th className="num">{formatearMonto("USD", desglose.filas.reduce((sum, fila) => sum + Number(fila.total_usd), 0))}</th>
+                      </tr>
+                    </tfoot>
                   </table>
                 )}
               </Estado>
@@ -286,7 +297,10 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
 
 function etiquetaAgrupacion(agruparPor: AgrupacionDashboard): string {
   const etiquetas: Record<AgrupacionDashboard, string> = {
+    responsable: "Responsable",
     usuario: "Usuario",
+    gestor: "Gestor",
+    tipo_empresa: "Tipo de empresa",
     emisor: "Empresa emisora",
     receptor: "Empresa receptora",
     dia: "Día",
