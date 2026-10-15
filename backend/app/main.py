@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import (
     administraciones,
     alertas,
+    asignaciones_emisores,
     auth,
     chat,
     comisiones,
@@ -26,6 +27,7 @@ from app.api.routes import (
     produccion,
     registros,
     responsable,
+    solicitudes_carga_emisor,
 )
 from app.core.config import get_settings
 
@@ -49,6 +51,8 @@ api = APIRouter(prefix="/api/v1")
 api.include_router(auth.router)
 for modulo in (
     administraciones,
+    asignaciones_emisores,
+    solicitudes_carga_emisor,
     correo,
     documentos,
     chat,

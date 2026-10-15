@@ -18,6 +18,7 @@ from app.api.errores import no_encontrado
 from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, RolMiembro, TipoDocumento
 from app.models import (
+    AlertaManual,
     Documento,
     Empresa,
     Expediente,
@@ -25,6 +26,7 @@ from app.models import (
     Miembro,
     ReferenciaGRE,
     RelacionDocumento,
+    SolicitudCargaEmisor,
     ahora,
 )
 from app.schemas import (
@@ -39,6 +41,7 @@ from app.schemas import (
 )
 from app.security import cuenta_administradora_responsable
 from app.services import auditoria
+from app.services.ambito_emisor import EstadoAmbitoEmisor, revisar_asignaciones_emisor
 from app.services.ambito_gerencia import alcance_expedientes_gerente, expediente_visible_gerente
 from app.services.aprendizaje_documental import (
     aplicar_perfiles_aprendidos,
@@ -68,7 +71,7 @@ from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 from app.services.relaciones_documentales import sugerir_relaciones
 from app.services.separador_pdf import analizar_paquete, extraer_fragmento
-from app.services.ubl import UblInvalido
+from app.services.ubl import UblInvalido, parece_xml, parse_ubl
 from app.storage import AlmacenLocal
 
 router = APIRouter(prefix="/documentos", tags=["documentos"])
@@ -396,6 +399,79 @@ async def subir_documento(
         mime_type=archivo.content_type or "application/octet-stream",
         contenido=contenido,
     )
+    # Control previo al registro: una factura/guía UBL asignada a otro
+    # grupo no puede crear expediente ni incrementar montos.
+    if parece_xml(subido.nombre, subido.contenido):
+        try:
+            ubl = parse_ubl(subido.contenido)
+        except UblInvalido as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+        if ubl is not None:
+            revision = revisar_asignaciones_emisor(
+                session, tenant_id, ubl.emisor.ruc, usuario_id, gestor_id
+            )
+            if revision.estado in (
+                EstadoAmbitoEmisor.ASIGNADO_A_OTRO_GRUPO,
+                EstadoAmbitoEmisor.AMBIGUO,
+            ):
+                # El registro de solicitud NO crea un Documento/Expediente.
+                # El archivo permanece en área de cuarentena, fuera de los
+                # listados, y solo la API de revisión puede liberarlo.
+                huella = hashlib.sha256(subido.contenido).hexdigest()
+                solicitud = SolicitudCargaEmisor(
+                    tenant_id=tenant_id,
+                    ruc_emisor=ubl.emisor.ruc,
+                    empresa_id=revision.empresa_id,
+                    solicitante_cuenta_id=auth.cuenta_id,
+                    usuario_solicitante_id=usuario_id,
+                    gestor_solicitante_id=gestor_id,
+                    gestor_propietario_id=revision.gestor_propietario_id,
+                    responsable_propietario_id=revision.responsable_propietario_id,
+                    sha256_archivo=huella,
+                    estado="PENDIENTE",
+                )
+                session.add(solicitud)
+                session.flush()
+                # Usar namespace reservado que no colisione con originales.
+                solicitud.ruta_temporal = almacen.guardar(
+                    tenant_id, f"cuarentena-{solicitud.id}-{huella}", subido.contenido
+                )
+                session.add(
+                    AlertaManual(
+                        tenant_id=tenant_id,
+                        creado_por_codigo=auth.codigo,
+                        creado_por_rol=auth.rol,
+                        destinatario_usuario_id=revision.responsable_propietario_id,
+                        destinatario_gestor_id=revision.gestor_propietario_id,
+                        para_administracion=True,
+                        asunto="Autorización de documento de empresa ajena",
+                        mensaje=(
+                            f"Solicitud {solicitud.id}; emisor {ubl.emisor.ruc}; "
+                            f"solicitante {auth.codigo}; gestor propietario "
+                            f"{revision.gestor_propietario_id}; responsable "
+                            f"{revision.responsable_propietario_id}."
+                        ),
+                    )
+                )
+                auditoria.registrar(
+                    session,
+                    tenant_id,
+                    "CARGA_EMISOR_PENDIENTE",
+                    "solicitud_carga_emisor",
+                    solicitud.id,
+                    {"ruc_emisor": ubl.emisor.ruc, "sha256": huella},
+                )
+                session.commit()
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    {
+                        "codigo": "EMISOR_REQUIERE_AUTORIZACION",
+                        "solicitud_id": str(solicitud.id),
+                        "mensaje": "Solicitud creada, pendiente de autorización",
+                        "ruc_emisor": ubl.emisor.ruc,
+                        "estado": revision.estado.value,
+                    },
+                )
     try:
         documento = ingerir_documento(
             session,
@@ -1014,6 +1090,9 @@ def provisionales_gre(
         {
             "documento_id": str(ref.documento_id),
             "factura": f"{ref.serie}-{ref.correlativo}",
+            "estado": "PENDIENTE_FACTURA",
+            "moneda": "PEN",
+            "monto_contabilizable": "0.00",
             "emisor_ruc": ref.emisor_ruc,
             "receptor_ruc": ref.receptor_ruc,
             "cliente_autorizado": bool(
@@ -1072,7 +1151,11 @@ def eliminar_documento(
             "tipo_documento": documento.tipo_documento,
         },
     )
-    if expediente is not None:
+    if expediente is not None and expediente.deleted_at is None:
+        # Persistir el borrado lógico antes de consultar documentos activos.
+        # Evita que el cálculo de importes conserve la evidencia retirada
+        # cuando el recálculo hace SELECT con autoflush deshabilitado.
+        session.flush()
         actualizar_expediente(session, expediente, hoy, settings)
     session.commit()
 

@@ -271,7 +271,7 @@ function FilaRegistro({
   };
 
   const retirar = async () => {
-    if (!window.confirm("¿Eliminar lógicamente este registro? Los originales se conservarán.")) return;
+    if (!window.confirm("¿Ocultar este expediente y TODOS sus documentos de los módulos operativos? Se conservarán los originales y la auditoría; no se eliminarán físicamente.")) return;
     setOcupado(true);
     setError("");
     try {

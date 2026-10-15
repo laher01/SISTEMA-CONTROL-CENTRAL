@@ -531,6 +531,27 @@ def test_documentos_filtran_por_tipo_y_emisor(client: TestClient) -> None:
     assert futuro.json() == []
 
 
+def test_eliminar_expediente_oculta_documentos_en_todos_los_modulos(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
+    archivo = subir(client, "comprobante.xml", factura(numero="F001-00009987"))
+    expediente_id = archivo["expediente_id"]
+    assert expediente_id is not None
+    auth_prueba.como_admin()
+
+    respuesta = client.delete(f"/api/v1/expedientes/{expediente_id}")
+    assert respuesta.status_code == 204, respuesta.text
+    assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 404
+    assert client.get(f"/api/v1/documentos/{archivo['id']}").status_code == 404
+    documentos = client.get("/api/v1/documentos")
+    assert documentos.status_code == 200
+    assert all(item["id"] != archivo["id"] for item in documentos.json())
+    listado = client.get("/api/v1/registros")
+    assert listado.status_code == 200, listado.text
+    assert all(item["expediente_id"] != expediente_id for item in listado.json()["filas"])
+
+
 def test_eliminar_documento_es_logico_y_deja_de_listarlo(
     client: TestClient,
     auth_prueba: AuthPrueba,

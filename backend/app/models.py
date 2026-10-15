@@ -403,6 +403,49 @@ class CorreccionIA(ConId, ConTenant, ConCreacion, Base):
     motivo: Mapped[str | None] = mapped_column(String(500))
 
 
+class AsignacionEmpresaGestor(ConId, ConTenant, ConCreacion, Base):
+    """Titularidad operativa formal, única por empresa dentro de cada tenant."""
+
+    __tablename__ = "asignaciones_empresas_gestores"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "empresa_id", name="uq_asignacion_empresa_tenant"),
+    )
+
+    empresa_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("empresas.id"), index=True)
+    gestor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("gestores.id"), index=True)
+    usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"))
+    responsable_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"))
+    creado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
+    activo: Mapped[bool] = mapped_column(default=True, server_default="true")
+    updated_at: Mapped[datetime] = mapped_column(
+        default=ahora, onupdate=ahora, server_default=func.now()
+    )
+
+
+class SolicitudCargaEmisor(ConId, ConTenant, ConCreacion, Base):
+    """Autorización puntual previa a incorporación fiscal y contable."""
+
+    __tablename__ = "solicitudes_carga_emisor"
+    __tablename__ = "solicitudes_carga_emisor"
+    __table_args__ = (Index("ix_solicitudes_emisor_pendientes", "tenant_id", "estado"),)
+
+    ruc_emisor: Mapped[str] = mapped_column(String(11), index=True)
+    empresa_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("empresas.id"))
+    solicitante_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
+    usuario_solicitante_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"))
+    gestor_solicitante_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"))
+    gestor_propietario_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"))
+    responsable_propietario_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"))
+    sha256_archivo: Mapped[str] = mapped_column(String(64))
+    ruta_temporal: Mapped[str | None] = mapped_column(String(500))
+    estado: Mapped[str] = mapped_column(String(20), default="PENDIENTE", server_default="PENDIENTE")
+    decidido_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_acceso.id")
+    )
+    decidido_at: Mapped[datetime | None]
+    observacion: Mapped[str | None] = mapped_column(String(500))
+
+
 class AlertaManual(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "alertas_manuales"
 
