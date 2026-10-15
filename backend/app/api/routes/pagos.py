@@ -1020,8 +1020,12 @@ def crear_pedidos_masivos(
         session.flush()
         lote_id = str(uuid.uuid4())
         auditoria.registrar(
-            session, tenant_id, "PEDIDOS_GERENCIA_MASIVOS_CREADOS",
-            "pedido_gerencia", nuevos[0].id, {
+            session,
+            tenant_id,
+            "PEDIDOS_GERENCIA_MASIVOS_CREADOS",
+            "pedido_gerencia",
+            nuevos[0].id,
+            {
             "lote_id": lote_id,
             "gerente_id": str(gerente_id),
             "responsable_id": str(responsable.id),
