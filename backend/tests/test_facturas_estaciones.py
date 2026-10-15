@@ -21,7 +21,9 @@ from app.services.facturas_estaciones import extraer_factura_estacion
         ("0016499", "CORPORACION LATINOAMERICANO EL NORTE E.I.R.L.", "20524049245", "1949.00"),
     ],
 )
-def test_escorpio_serie_ruc_cliente_y_total(\n    numero: str, receptor: str, ruc_cliente: str, total: str\n) -> None:
+def test_escorpio_serie_ruc_cliente_y_total(
+    numero: str, receptor: str, ruc_cliente: str, total: str
+) -> None:
     texto = (
         "INVERSIONES Y ASESORAMIENTO ESCORPIO SAC  R.U.C. N° 20516453835\n"
         f"FACTURA ELECTRÓNICA F109 Nº {numero}\n"
