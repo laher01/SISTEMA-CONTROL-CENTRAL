@@ -671,6 +671,25 @@ def _ajustar_partes_cotizacion(
     if emisor is not None and str(emisor["valor"]) == cliente:
         campos.pop("ruc_emisor", None)
         campos.pop("razon_social_emisor", None)
+    # Aceptar razones sociales solo si la línea indica expresamente su función.
+    # No inferir la razón social del proveedor a partir de un encabezado ambiguo.
+    for campo, etiqueta in (
+        ("razon_social_receptor", "CLIENTE"),
+        ("razon_social_emisor", "PROVEEDOR"),
+    ):
+        coincidencias = re.findall(
+            rf"(?im)^\\s*{etiqueta}\\s*:\\s*([^\\n]+)$", texto
+        )
+        nombres = {
+            _recortar_razon(nombre)
+            for nombre in coincidencias
+            if _razon_social_valida(_recortar_razon(nombre))
+        }
+        if len(nombres) == 1:
+            nombre = nombres.pop()
+            campos[campo] = CampoExtraido(
+                nombre, min(0.88, 0.86 * factor), f"{etiqueta}: {nombre}"
+            ).a_dict(fuente)
 
 
 def _extraer_rucs_etiquetados(
