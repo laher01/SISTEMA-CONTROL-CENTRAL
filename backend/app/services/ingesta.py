@@ -21,6 +21,7 @@ from app.models import (
     ahora,
 )
 from app.services import auditoria
+from app.services.contabilidad_items_ubl import registrar_items_ubl
 from app.services.expedientes import (
     actualizar_expediente,
     buscar_expediente,
@@ -201,6 +202,8 @@ def ingerir_documento(
     )
     session.add(documento)
     session.flush()
+    if comprobante is not None and comprobante.tipo_documento == TipoDocumento.FACT:
+        registrar_items_ubl(session, tenant_id, documento.id, archivo.contenido)
     auditoria.registrar(
         session,
         tenant_id,
