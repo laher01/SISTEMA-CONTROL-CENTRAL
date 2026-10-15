@@ -65,4 +65,10 @@ def pdf_con_documentos(
         nombre_adjunto = f"{numero:03d}-{doc.id}{extension if extension else '.bin'}"
         writer.add_attachment(filename=nombre_adjunto, data=contenido)
         adjuntos += 1
+    if not writer.pages:
+        writer.close()
+        raise ValueError(
+            "El expediente no contiene PDF o imágenes para generar un PDF ordenado. "
+            "Descargue el ZIP para obtener los archivos originales."
+        )
     return writer, visibles, adjuntos
