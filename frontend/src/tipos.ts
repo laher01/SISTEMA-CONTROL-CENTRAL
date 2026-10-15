@@ -177,7 +177,7 @@ export interface DashboardResumen {
 }
 
 
-export type AgrupacionDashboard = "usuario" | "emisor" | "receptor" | "dia" | "mes" | "anio";
+export type AgrupacionDashboard = "responsable" | "usuario" | "gestor" | "emisor" | "receptor" | "tipo_empresa" | "dia" | "mes" | "anio";
 
 export interface DashboardDesgloseFila {
   clave: string;
