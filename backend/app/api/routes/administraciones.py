@@ -121,6 +121,96 @@ def listar_administraciones(
     ]
 
 
+@router.get("/{tenant_id}/inspeccion")
+def inspeccionar_tenant(
+    tenant_id: uuid.UUID,
+    session: SessionDep,
+    auth: OperativeAuthDep,
+) -> dict[str, Any]:
+    """Vista SUPERADMIN exclusivamente de lectura; nunca suplanta sesiones del tenant."""
+    if auth.rol != RolMiembro.SUPERADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo SUPERADMIN puede inspeccionar tenants")
+    tenant = session.get(Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Administración no encontrada")
+    miembros = list(
+        session.scalars(
+            select(Miembro).where(
+                Miembro.tenant_id == tenant_id,
+                Miembro.deleted_at.is_(None),
+            ).order_by(Miembro.rol, Miembro.codigo)
+        )
+    )
+    gestores = list(
+        session.scalars(
+            select(Gestor).where(
+                Gestor.tenant_id == tenant_id,
+                Gestor.deleted_at.is_(None),
+            ).order_by(Gestor.codigo)
+        )
+    )
+    cuentas = {
+        cuenta.miembro_id: cuenta.login
+        for cuenta in session.scalars(
+            select(CuentaAcceso).where(
+                CuentaAcceso.tenant_id == tenant_id,
+                CuentaAcceso.deleted_at.is_(None),
+                CuentaAcceso.activo.is_(True),
+                CuentaAcceso.miembro_id.is_not(None),
+            )
+        )
+    }
+    contadores = {
+        "empresas": session.scalar(
+            select(func.count(Empresa.id)).where(
+                Empresa.tenant_id == tenant_id, Empresa.deleted_at.is_(None)
+            )
+        ) or 0,
+        "expedientes": session.scalar(
+            select(func.count(Expediente.id)).where(
+                Expediente.tenant_id == tenant_id, Expediente.deleted_at.is_(None)
+            )
+        ) or 0,
+        "documentos": session.scalar(
+            select(func.count(Documento.id)).where(
+                Documento.tenant_id == tenant_id, Documento.deleted_at.is_(None)
+            )
+        ) or 0,
+    }
+    return {
+        "tenant": {
+            "id": str(tenant.id),
+            "codigo": tenant.codigo,
+            "nombre": tenant.nombre,
+            "subdominio": tenant.subdominio,
+            "estado": tenant.estado,
+        },
+        "solo_lectura": True,
+        "miembros": [
+            {
+                "id": str(m.id),
+                "codigo": m.codigo,
+                "nombre": m.nombre,
+                "rol": m.rol,
+                "activo": m.activo,
+                "login": cuentas.get(m.id),
+                "responsable_id": str(m.responsable_id) if m.responsable_id else None,
+            }
+            for m in miembros
+        ],
+        "gestores": [
+            {
+                "id": str(g.id),
+                "codigo": g.codigo,
+                "nombre": g.nombre,
+                "usuario_id": str(g.usuario_id) if g.usuario_id else None,
+            }
+            for g in gestores
+        ],
+        "contadores": contadores,
+    }
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 def crear_administracion(
     datos: AltaAdministracionIn,
