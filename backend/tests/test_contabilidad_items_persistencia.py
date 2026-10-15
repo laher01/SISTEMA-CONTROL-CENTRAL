@@ -2,6 +2,8 @@
 
 import uuid
 
+import pytest
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -50,3 +52,29 @@ def test_items_ubl_idempotentes_y_separados_por_tenant(session: Session):
     assert session.scalar(select(func.count()).select_from(ProductoItem)) == 2
     productos = list(session.scalars(select(ProductoItem)))
     assert productos[0].tenant_id != productos[1].tenant_id
+
+
+def test_reescaneo_rechaza_documento_de_otro_tenant(session: Session):
+    propietario = Tenant(nombre="propietario_xml")
+    ajeno = Tenant(nombre="tenant_ajeno_xml")
+    session.add_all([propietario, ajeno])
+    session.flush()
+    documento = _documento(session, propietario.id)
+
+    with pytest.raises(ValueError, match="tenant autorizado"):
+        registrar_items_ubl(session, ajeno.id, documento.id, XML)
+
+    session.flush()
+    assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 0
+    assert session.scalar(select(func.count()).select_from(ProductoItem)) == 0
+
+
+def test_reescaneo_rechaza_documento_inexistente(session: Session):
+    propietario = Tenant(nombre="tenant_xml_inexistente")
+    session.add(propietario)
+    session.flush()
+
+    with pytest.raises(ValueError, match="tenant autorizado"):
+        registrar_items_ubl(session, propietario.id, uuid.uuid4(), XML)
+
+    assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 0
