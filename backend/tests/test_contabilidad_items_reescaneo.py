@@ -5,10 +5,15 @@ import uuid
 from pathlib import Path
 
 import pytest
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.item_models import LineaComprobanteItem
 from app.models import Documento, Tenant
-from app.services.contabilidad_items_reescaneo import previsualizar_pagina
+from app.services.contabilidad_items_reescaneo import (
+    previsualizar_pagina,
+    registrar_pagina_verificada,
+)
 from app.storage import AlmacenLocal
 
 XML = b"""<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
@@ -127,3 +132,24 @@ def test_vista_previa_no_lee_ruta_de_otro_tenant(session: Session, tmp_path: Pat
     assert resultado[0].documento_id == documento.id
     assert resultado[0].estado == "RUTA_FUERA_TENANT"
     assert resultado[0].lineas_detectadas == 0
+
+
+def test_registrar_lote_xml_no_duplica_lineas_ni_altera_original(
+    session: Session, tmp_path: Path
+):
+    tenant = Tenant(nombre="tenant_lote_xml")
+    session.add(tenant)
+    session.flush()
+    almacen = AlmacenLocal(tmp_path)
+    documento = _guardar(session, almacen, tenant.id, XML)
+
+    primero = registrar_pagina_verificada(session, almacen, tenant.id)
+    assert len(primero) == 1
+    assert primero[0].estado == "PROCESADO"
+    assert primero[0].lineas_nuevas == 1
+
+    segundo = registrar_pagina_verificada(session, almacen, tenant.id)
+    assert segundo[0].estado == "PROCESADO"
+    assert segundo[0].lineas_nuevas == 0
+    assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 1
+    assert almacen.leer(documento.ruta_storage) == XML
