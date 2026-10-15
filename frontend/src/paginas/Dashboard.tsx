@@ -10,11 +10,15 @@ import {
   type AgrupacionDashboard,
   type DashboardDesglose,
   type DashboardResumen,
+  type SesionActual,
 } from "../tipos";
 
-export default function Dashboard() {
+export default function Dashboard({ sesion }: { sesion: SesionActual }) {
+  const esAdministracion = ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA"].includes(sesion.rol);
+  const mostrarUsuario = esAdministracion || sesion.rol === "RESPONSABLE";
+  const mostrarGestor = mostrarUsuario || sesion.rol === "USUARIO";
 
-  const [agruparPor, setAgruparPor] = useState<AgrupacionDashboard>("usuario");
+  const [agruparPor, setAgruparPor] = useState<AgrupacionDashboard>(sesion.rol === "GESTOR" ? "receptor" : "usuario");
   const [orden, setOrden] = useState<"asc" | "desc">("desc");
   const [responsableId, setResponsableId] = useState("");
   const [usuarioId, setUsuarioId] = useState("");
@@ -112,7 +116,7 @@ export default function Dashboard() {
                     value={agruparPor}
                     onChange={(e) => setAgruparPor(e.target.value as AgrupacionDashboard)}
                   >
-                    <option value="usuario">Usuario</option>
+                    {sesion.rol !== "GESTOR" && <option value="usuario">Usuario</option>}
                     <option value="emisor">Empresa emisora</option>
                     <option value="receptor">Empresa receptora</option>
                     <option value="dia">Día</option>
@@ -127,7 +131,7 @@ export default function Dashboard() {
                     <option value="asc">Menor / más antiguo</option>
                   </select>
                 </label>
-                <label>
+                {esAdministracion && <label>
                   Responsable
                   <select value={responsableId} onChange={(e) => {
                     setResponsableId(e.target.value);
@@ -136,8 +140,8 @@ export default function Dashboard() {
                     <option value="">Todos</option>
                     {(opciones?.responsables ?? []).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
                   </select>
-                </label>
-                <label>
+                </label>}
+                {mostrarUsuario && <label>
                   Usuario
                   <select value={usuarioId} onChange={(e) => {
                     setUsuarioId(e.target.value);
@@ -146,8 +150,8 @@ export default function Dashboard() {
                     <option value="">Todos</option>
                     {(opciones?.usuarios ?? []).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
                   </select>
-                </label>
-                <label>
+                </label>}
+                {mostrarGestor && <label>
                   Gestor
                   <select value={gestorId} onChange={(e) => {
                     setGestorId(e.target.value); setEmisorId(""); setReceptorId("");
@@ -155,7 +159,7 @@ export default function Dashboard() {
                     <option value="">Todos</option>
                     {(opciones?.gestores ?? []).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
                   </select>
-                </label>
+                </label>}
                 <label>
                   Emisor
                   <select value={emisorId} onChange={(e) => {setEmisorId(e.target.value); setReceptorId("");}}>
