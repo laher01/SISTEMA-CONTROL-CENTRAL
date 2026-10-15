@@ -116,6 +116,7 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
   const cambiarMes = (valor: string) => {
     if (!/^\d{4}-\d{2}$/.test(valor)) return;
     const [anio, mes] = valor.split("-").map(Number);
+    if (!anio || !mes || mes < 1 || mes > 12) return;
     const ultimo = new Date(anio, mes, 0).getDate();
     setMesFiltro(valor);
     setDesde(`${valor}-01`);
