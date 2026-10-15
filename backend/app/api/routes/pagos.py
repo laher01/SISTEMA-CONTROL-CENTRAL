@@ -952,10 +952,18 @@ def crear_pedidos_masivos(
     if gerente_id is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Se requiere Gerente")
     gerente = session.get(Miembro, gerente_id)
-    if not gerente or gerente.tenant_id != tenant_id or gerente.rol != RolMiembro.GERENTE or not gerente.activo or gerente.deleted_at is not None:
+    if (
+        not gerente or gerente.tenant_id != tenant_id
+        or gerente.rol != RolMiembro.GERENTE
+        or not gerente.activo or gerente.deleted_at is not None
+    ):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Gerente inválido")
     responsable = session.get(Miembro, datos.responsable_id)
-    if not responsable or responsable.tenant_id != tenant_id or responsable.rol != RolMiembro.RESPONSABLE or not responsable.activo or responsable.deleted_at is not None:
+    if (
+        not responsable or responsable.tenant_id != tenant_id
+        or responsable.rol != RolMiembro.RESPONSABLE
+        or not responsable.activo or responsable.deleted_at is not None
+    ):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Responsable inválido")
     vinculo = session.scalar(select(GerenteResponsable.id).where(
         GerenteResponsable.tenant_id == tenant_id,
@@ -979,7 +987,9 @@ def crear_pedidos_masivos(
             GerenteEmpresa.activo.is_(True),
         ))
         if cartera is None:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Cliente fuera de la cartera del Gerente")
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Cliente fuera de la cartera del Gerente"
+            )
         duplicado = session.scalar(select(PedidoGerencia.id).where(
             PedidoGerencia.tenant_id == tenant_id,
             PedidoGerencia.gerente_id == gerente_id,
@@ -988,7 +998,9 @@ def crear_pedidos_masivos(
             PedidoGerencia.moneda == datos.moneda,
         ))
         if duplicado is not None:
-            raise HTTPException(status.HTTP_409_CONFLICT, "El lote contiene un Cliente con pedido existente")
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "El lote contiene un Cliente con pedido existente"
+            )
         nuevos.append(PedidoGerencia(
             tenant_id=tenant_id,
             gerente_id=gerente_id,
@@ -1007,7 +1019,9 @@ def crear_pedidos_masivos(
         session.add_all(nuevos)
         session.flush()
         lote_id = str(uuid.uuid4())
-        auditoria.registrar(session, tenant_id, "PEDIDOS_GERENCIA_MASIVOS_CREADOS", "pedido_gerencia", nuevos[0].id, {
+        auditoria.registrar(
+            session, tenant_id, "PEDIDOS_GERENCIA_MASIVOS_CREADOS",
+            "pedido_gerencia", nuevos[0].id, {
             "lote_id": lote_id,
             "gerente_id": str(gerente_id),
             "responsable_id": str(responsable.id),
@@ -1019,7 +1033,9 @@ def crear_pedidos_masivos(
         session.commit()
     except IntegrityError as exc:
         session.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "Hay pedidos existentes o concurrentes; no se creó ningún lote") from exc
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Hay pedidos existentes o concurrentes; no se creó ningún lote"
+        ) from exc
     except Exception:
         session.rollback()
         raise
