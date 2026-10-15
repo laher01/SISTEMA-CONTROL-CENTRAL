@@ -250,9 +250,7 @@ def extraer_campos(
     for nombre, (valor, evidencia) in leer_comprobante_especial(texto).items():
         # Usar evidencia explícita del formato especializado frente a números
         # de página, cantidades y correlativos encontrados por proximidad.
-        campos[nombre] = CampoExtraido(
-            valor, min(0.96, 0.94 * factor), evidencia
-        ).a_dict(fuente)
+        campos[nombre] = CampoExtraido(valor, min(0.96, 0.94 * factor), evidencia).a_dict(fuente)
 
     if not campos and not candidatos:
         return None
