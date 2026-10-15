@@ -656,8 +656,8 @@ def _ajustar_partes_cotizacion(
 ) -> None:
     """No atribuir el RUC del cliente al proveedor de una cotización."""
     patron = re.compile(
-        r"\\b(?:CLIENTE|RUC\\s+(?:DEL\\s+)?CLIENTE|RUC\\s+RECEPTOR)"
-        r"\\s*(?:RUC)?\\s*[:=-]?\\s*(\\d{11})\\b",
+        r"\b(?:CLIENTE|RUC\s+(?:DEL\s+)?CLIENTE|RUC\s+RECEPTOR)"
+        r"\s*(?:RUC)?\s*[:=-]?\s*(\d{11})\b",
         re.IGNORECASE,
     )
     clientes = {coincidencia.group(1) for coincidencia in patron.finditer(texto)}
