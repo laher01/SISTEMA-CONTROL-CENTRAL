@@ -15,7 +15,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.api.deps import OperativeAuthDep, SessionDep
 from app.item_models import AuditoriaFacturaItem, LineaComprobanteItem, ProductoItem
-from app.models import Documento, Expediente
+from app.models import Documento, Expediente, Miembro
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.contabilidad_items_auditoria import registrar_decision, resolver_propuesta
 
@@ -27,6 +27,15 @@ def _alcance(auth: OperativeAuthDep) -> ColumnElement[bool]:
         return true()
     if auth.rol == "GERENTE":
         return alcance_expedientes_gerente(auth)
+    if auth.rol == "RESPONSABLE":
+        if auth.miembro_id is None:
+            raise HTTPException(403, "Responsable sin identidad asignada")
+        usuarios_equipo = select(Miembro.id).where(
+            Miembro.tenant_id == auth.tenant_id,
+            Miembro.responsable_id == auth.miembro_id,
+            Miembro.deleted_at.is_(None),
+        )
+        return Expediente.usuario_id.in_(usuarios_equipo)
     if auth.rol == "USUARIO":
         return Expediente.usuario_id == auth.usuario_id
     if auth.rol == "GESTOR":
