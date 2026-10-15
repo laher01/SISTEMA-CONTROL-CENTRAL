@@ -156,6 +156,35 @@ def test_importacion_selectiva_y_reimportacion_con_padre(client, session) -> Non
     assert {r.origen_id for r in relaciones} == {padres[0].id}
 
 
+def test_cotizaciones_separadas_conservan_lectura_y_origen(client, session) -> None:
+    from sqlalchemy import select
+
+    from app.models import Documento
+
+    pdf = _paquete(
+        [
+            "COTIZACION No. 00861\\nFECHA DE EMISION: 25/08/2026\\nCLIENTE RUC 20538821374",
+            "COTIZACION No. 00862\\nFECHA DE EMISION: 25/08/2026\\nCLIENTE RUC 20538821374",
+        ]
+    )
+    respuesta = client.post(
+        "/api/v1/documentos/paquete",
+        data={"confirmar": "true"},
+        files={"archivo": ("compostela.pdf", pdf, "application/pdf")},
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["revision"] == 2
+    hijos = list(session.scalars(select(Documento).where(Documento.tipo_documento == "COT")))
+    assert len(hijos) == 2
+    for doc in hijos:
+        datos = doc.datos_extraidos or {}
+        assert datos["origen_paquete"]["documento_padre_id"]
+        assert datos["cotizacion"]["numero"] in ("00861", "00862")
+        assert datos["procesamiento_documental"]["metodo"] == "TEXTO_PDF"
+        assert "COTIZACION" in datos["procesamiento_documental"]["texto"]
+        assert doc.expediente_id is None
+
+
 def test_reimportacion_semantica_pdf_distinto(client, session) -> None:
     from sqlalchemy import select
 
