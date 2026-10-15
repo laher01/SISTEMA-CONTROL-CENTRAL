@@ -93,7 +93,7 @@ jobs:
               -v "$tmp/20261014_0037_contabilidad_items.py:/app/alembic/versions/20261014_0037_contabilidad_items.py:ro" \
               backend sh -c '
                 set -eu
-                export FC_DATABASE_URL="$(uv run python -c "import os,sys; from sqlalchemy.engine import make_url; u=make_url(os.environ[\\"FC_DATABASE_URL\\"]); print(u.set(database=sys.argv[1]).render_as_string(hide_password=False))" "$1")"
+                export FC_DATABASE_URL="$(uv run python -c "import os,sys; from sqlalchemy.engine import make_url; u=make_url(os.environ[\"FC_DATABASE_URL\"]); print(u.set(database=sys.argv[1]).render_as_string(hide_password=False))" "$1")"
                 uv run alembic "$2" "$3"
               ' sh "$db" "$2" "$target" </dev/null
           }
