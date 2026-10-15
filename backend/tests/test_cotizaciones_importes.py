@@ -21,12 +21,7 @@ def test_cotizacion_compostela_prioriza_total_verificado() -> None:
 
 
 def test_cotizacion_inconsistente_no_inventa_total() -> None:
-    texto = (
-        "COTIZACION No. 00861\n"
-        "SUB TOTAL: S/ 4,411.99\n"
-        "IGV 18%: S/ 794.16\n"
-        "TOTAL: S/ 1.00\n"
-    )
+    texto = "COTIZACION No. 00861\nSUB TOTAL: S/ 4,411.99\nIGV 18%: S/ 794.16\nTOTAL: S/ 1.00\n"
     resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
     assert resultado is not None
     assert "importe_total" not in resultado["campos"]
