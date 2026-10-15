@@ -921,6 +921,116 @@ def _resumen_pedido(
     )
 
 
+
+class PedidoMasivoItem(BaseModel):
+    cliente_id: uuid.UUID
+    monto_solicitado: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+
+
+class PedidoMasivoIn(BaseModel):
+    gerente_id: uuid.UUID | None = None
+    responsable_id: uuid.UUID
+    periodo_mes: date
+    moneda: str = Field(pattern="^(PEN|USD)$")
+    modalidad: str = Field(default="POR_PEDIDO", pattern="^(POR_PEDIDO|SIN_RESTRICCION)$")
+    observacion: str | None = Field(default=None, max_length=500)
+    items: list[PedidoMasivoItem] = Field(min_length=1, max_length=200)
+
+
+@router.post("/pedidos/masivo", status_code=status.HTTP_201_CREATED)
+def crear_pedidos_masivos(
+    datos: PedidoMasivoIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, object]:
+    """Lote atómico: varias receptoras, un Responsable; sin alterar la unicidad existente."""
+    _validar_acceso(auth.rol)
+    gerente_id = auth.miembro_id if auth.rol == RolMiembro.GERENTE else datos.gerente_id
+    if auth.rol == RolMiembro.GERENTE and datos.gerente_id not in (None, gerente_id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Gerencia ajena")
+    if gerente_id is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Se requiere Gerente")
+    gerente = session.get(Miembro, gerente_id)
+    if not gerente or gerente.tenant_id != tenant_id or gerente.rol != RolMiembro.GERENTE or not gerente.activo or gerente.deleted_at is not None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Gerente inválido")
+    responsable = session.get(Miembro, datos.responsable_id)
+    if not responsable or responsable.tenant_id != tenant_id or responsable.rol != RolMiembro.RESPONSABLE or not responsable.activo or responsable.deleted_at is not None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Responsable inválido")
+    vinculo = session.scalar(select(GerenteResponsable.id).where(
+        GerenteResponsable.tenant_id == tenant_id,
+        GerenteResponsable.gerente_id == gerente_id,
+        GerenteResponsable.responsable_id == responsable.id,
+        GerenteResponsable.activo.is_(True),
+    ))
+    if vinculo is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Responsable no vinculado")
+    cliente_ids = [item.cliente_id for item in datos.items]
+    if len(cliente_ids) != len(set(cliente_ids)):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Cliente repetido en lote")
+    periodo = datos.periodo_mes.replace(day=1)
+    nuevos: list[PedidoGerencia] = []
+    for item in datos.items:
+        cliente = _cliente_valido(session, tenant_id, item.cliente_id)
+        cartera = session.scalar(select(GerenteEmpresa.id).where(
+            GerenteEmpresa.tenant_id == tenant_id,
+            GerenteEmpresa.gerente_id == gerente_id,
+            GerenteEmpresa.empresa_id == cliente.id,
+            GerenteEmpresa.activo.is_(True),
+        ))
+        if cartera is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Cliente fuera de la cartera del Gerente")
+        duplicado = session.scalar(select(PedidoGerencia.id).where(
+            PedidoGerencia.tenant_id == tenant_id,
+            PedidoGerencia.gerente_id == gerente_id,
+            PedidoGerencia.cliente_id == cliente.id,
+            PedidoGerencia.periodo_mes == periodo,
+            PedidoGerencia.moneda == datos.moneda,
+        ))
+        if duplicado is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "El lote contiene un Cliente con pedido existente")
+        nuevos.append(PedidoGerencia(
+            tenant_id=tenant_id,
+            gerente_id=gerente_id,
+            cliente_id=cliente.id,
+            responsable_id=responsable.id,
+            periodo_mes=periodo,
+            moneda=datos.moneda,
+            monto_solicitado=item.monto_solicitado,
+            modalidad=datos.modalidad,
+            modo_distribucion="MANUAL",
+            estado="ACTIVO",
+            observacion=datos.observacion.strip() if datos.observacion else None,
+            creado_por_cuenta_id=cuenta_administradora_responsable(session, auth),
+        ))
+    try:
+        session.add_all(nuevos)
+        session.flush()
+        lote_id = str(uuid.uuid4())
+        auditoria.registrar(session, tenant_id, "PEDIDOS_GERENCIA_MASIVOS_CREADOS", "pedido_gerencia", nuevos[0].id, {
+            "lote_id": lote_id,
+            "gerente_id": str(gerente_id),
+            "responsable_id": str(responsable.id),
+            "pedido_ids": [str(p.id) for p in nuevos],
+            "moneda": datos.moneda,
+            "periodo": periodo.isoformat(),
+            "total": str(sum((Decimal(p.monto_solicitado) for p in nuevos), Decimal("0"))),
+        })
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Hay pedidos existentes o concurrentes; no se creó ningún lote") from exc
+    except Exception:
+        session.rollback()
+        raise
+    return {
+        "lote_id": lote_id,
+        "pedidos_creados": len(nuevos),
+        "total": str(sum((Decimal(p.monto_solicitado) for p in nuevos), Decimal("0"))),
+        "pedido_ids": [str(p.id) for p in nuevos],
+    }
+
+
 @router.post(
     "/pedidos",
     response_model=PedidoGerenciaOut,
