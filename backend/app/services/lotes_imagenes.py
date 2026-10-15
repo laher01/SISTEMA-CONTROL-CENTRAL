@@ -5,13 +5,11 @@ No almacena archivos ni ejecuta OCR: se integra antes de encolar trabajos.
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TypeVar
 
-T = TypeVar("T")
 MAX_IMAGENES_POR_SUBLOTE = 10
 
 
-def dividir_sublotes(elementos: list[T], limite: int = MAX_IMAGENES_POR_SUBLOTE) -> list[list[T]]:
+def dividir_sublotes[T](elementos: list[T], limite: int = MAX_IMAGENES_POR_SUBLOTE) -> list[list[T]]:
     """Preserva orden y evita grupos vacíos sin mutar el lote original."""
     if limite < 1 or limite > MAX_IMAGENES_POR_SUBLOTE:
         raise ValueError("El límite debe estar entre 1 y 10")
