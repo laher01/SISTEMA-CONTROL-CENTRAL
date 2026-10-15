@@ -81,6 +81,19 @@ def get_contexto_operativo(
                 raise HTTPException(status.HTTP_403_FORBIDDEN, "Módulo desactivado para Secretaría")
     permitido_responsable = (
         (
+            request.method == "GET"
+            and request.url.path
+            in {
+                "/api/v1/contabilidad-items",
+                "/api/v1/contabilidad-items/exportar-csv",
+            }
+            or (
+                request.method == "GET"
+                and request.url.path.startswith("/api/v1/contabilidad-items/expedientes/")
+                and request.url.path.endswith("/detalle")
+            )
+        )
+        or (
             request.method == "PATCH"
             and request.url.path.startswith("/api/v1/miembros/mis-usuarios/")
             and request.url.path.endswith("/porcentajes")
