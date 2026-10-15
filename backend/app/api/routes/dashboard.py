@@ -650,11 +650,7 @@ def desglose(
         elif agrupar_por == "gestor":
             gestor = gestores.get(expediente.gestor_id) if expediente.gestor_id else None
             clave = str(expediente.gestor_id or "sin-gestor")
-            etiqueta = (
-                f"{gestor.codigo} · {gestor.nombre}"
-                if gestor
-                else "Sin gestor asignado"
-            )
+            etiqueta = f"{gestor.codigo} · {gestor.nombre}" if gestor else "Sin gestor asignado"
             ruc = None
         elif agrupar_por == "tipo_empresa":
             tipo = expediente.emisor.clasificacion_proveedor
