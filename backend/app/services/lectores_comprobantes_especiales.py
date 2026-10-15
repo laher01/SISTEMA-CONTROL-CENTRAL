@@ -5,6 +5,7 @@ Los datos permanecen como sugerencias auditables para confirmación humana.
 """
 
 import re
+from contextlib import suppress
 import unicodedata
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -82,18 +83,17 @@ def leer_comprobante_especial(
         normal,
     )
     if fecha:
-        meses = (
-            "ENERO FEBRERO MARZO ABRIL MAYO JUNIO JULIO AGOSTO "
-            "SEPTIEMBRE OCTUBRE NOVIEMBRE DICIEMBRE"
-        ).split()
+        meses = [
+            "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
+            "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE",
+            "NOVIEMBRE", "DICIEMBRE",
+        ]
         mes = "SEPTIEMBRE" if fecha.group(2) == "SETIEMBRE" else fecha.group(2)
-        try:
+        with suppress(ValueError):
             campos["fecha_emision"] = (
                 date(int(fecha.group(3)), meses.index(mes) + 1, int(fecha.group(1))).isoformat(),
                 fecha.group(0),
             )
-        except ValueError:
-            pass
     # El beneficiario queda como evidencia comercial, nunca como RUC.
     beneficiario = re.search(r"(?im)^\s*Enviado\s+a\s*[:]?\s*([^\n]+)", texto)
     if beneficiario and beneficiario.group(1).strip():
