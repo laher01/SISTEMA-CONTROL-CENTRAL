@@ -55,7 +55,9 @@ if [ -n "${EXPECTED_COMMIT:-}" ] && [ "$(git rev-parse origin/main)" != "$EXPECT
   exit 1
 fi
 git checkout main
-git pull --ff-only origin main
+# Usar exclusivamente la referencia obtenida en el fetch ya validado.
+# Evitar git pull, que ejecutaría un segundo fetch y podría mover el destino.
+git merge --ff-only origin/main
 current_commit="$(git rev-parse HEAD)"
 
 if [ -n "${EXPECTED_COMMIT:-}" ] && [ "$current_commit" != "$EXPECTED_COMMIT" ]; then
