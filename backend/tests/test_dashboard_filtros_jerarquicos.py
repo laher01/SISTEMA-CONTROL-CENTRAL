@@ -43,6 +43,7 @@ def test_dashboard_mes_resumen_desglose_y_opciones(client: TestClient) -> None:
     sin_registros = client.get("/api/v1/dashboard/resumen", params={"mes": "2020-01"})
     assert sin_registros.status_code == 200
     assert sin_registros.json()["expedientes_total"] == 0
+    assert sum(sin_registros.json()["documentos_pendientes"].values()) == 0
     for importe in sin_registros.json()["montos"]:
         assert float(importe["bancarizable"]) == 0
         assert float(importe["no_bancarizable"]) == 0
