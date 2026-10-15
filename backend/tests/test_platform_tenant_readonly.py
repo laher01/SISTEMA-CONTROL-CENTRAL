@@ -14,12 +14,18 @@ def test_inspeccion_tenant_solo_superadmin(
     session.add(tenant)
     session.flush()
     admin = Miembro(
-        tenant_id=tenant.id, codigo="ADMIN01", nombre="Admin aislado",
-        rol="ADMINISTRADOR", activo=True,
+        tenant_id=tenant.id,
+        codigo="ADMIN01",
+        nombre="Admin aislado",
+        rol="ADMINISTRADOR",
+        activo=True,
     )
     otro = Miembro(
-        tenant_id=tenant.id, codigo="USR01", nombre="Usuario aislado",
-        rol="USUARIO", activo=True,
+        tenant_id=tenant.id,
+        codigo="USR01",
+        nombre="Usuario aislado",
+        rol="USUARIO",
+        activo=True,
     )
     session.add_all([admin, otro])
     session.flush()
