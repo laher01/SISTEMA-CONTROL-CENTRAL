@@ -75,7 +75,8 @@ def extraer_factura_estacion(texto: str) -> dict[str, tuple[str, str]]:
             )
             if cliente_despues:
                 campos["razon_social_receptor"] = (
-                    cliente_despues.group(1).strip(), cliente_despues.group(0)
+                    cliente_despues.group(1).strip(),
+                    cliente_despues.group(0),
                 )
                 campos["ruc_receptor"] = (cliente_despues.group(2), cliente_despues.group(0))
 
@@ -92,9 +93,7 @@ def extraer_factura_estacion(texto: str) -> dict[str, tuple[str, str]]:
     if jabsa and "importe_total" not in campos:
         # El motor PDF puede colocar la cifra total debajo de OP.GRAVADAS,
         # y la cifra de IGV antes de su etiqueta. Solo aceptar si cuadra.
-        bases = re.search(
-            r"OP\\.GRAVADAS\\s*S/\\s*([0-9,.]+)\\s*\\n\\s*([0-9,.]+)", texto, re.I
-        )
+        bases = re.search(r"OP\\.GRAVADAS\\s*S/\\s*([0-9,.]+)\\s*\\n\\s*([0-9,.]+)", texto, re.I)
         igv = re.search(r"([0-9,.]+)\\s*S/\\s*IGV\\b", texto, re.I)
         if bases and igv:
             base = _monto(bases.group(1))
@@ -106,9 +105,7 @@ def extraer_factura_estacion(texto: str) -> dict[str, tuple[str, str]]:
                 and impuesto is not None
                 and abs(base + impuesto - candidato) <= Decimal("0.02")
             ):
-                campos["importe_total"] = (
-                    str(candidato), f"{bases.group(0)} | {igv.group(0)}"
-                )
+                campos["importe_total"] = (str(candidato), f"{bases.group(0)} | {igv.group(0)}")
 
     if escorpio:
         fecha = re.search(r"\b(20\d{2}-\d{2}-\d{2})\b", texto)
@@ -118,12 +115,11 @@ def extraer_factura_estacion(texto: str) -> dict[str, tuple[str, str]]:
         fecha = re.search(r"Fecha\s+Emision\s*:\s*(\d{2})/(\d{2})/(20\d{2})", texto, re.I)
         if fecha:
             campos["fecha_emision"] = (
-                f"{fecha.group(3)}-{fecha.group(2)}-{fecha.group(1)}", fecha.group(0)
+                f"{fecha.group(3)}-{fecha.group(2)}-{fecha.group(1)}",
+                fecha.group(0),
             )
     if jabsa and "fecha_emision" not in campos:
-        invertida = re.search(
-            r"(\\d{2})/(\\d{2})/(20\\d{2})\\s*Fecha\\s+Emision", texto, re.I
-        )
+        invertida = re.search(r"(\\d{2})/(\\d{2})/(20\\d{2})\\s*Fecha\\s+Emision", texto, re.I)
         if invertida:
             campos["fecha_emision"] = (
                 f"{invertida.group(3)}-{invertida.group(2)}-{invertida.group(1)}",
