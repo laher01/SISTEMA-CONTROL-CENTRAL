@@ -84,8 +84,13 @@ def get_contexto_operativo(
             request.method == "GET"
             and request.url.path in {
                 "/api/v1/contabilidad-items",
-                "/api/v1/contabilidad-items/exportar",
+                "/api/v1/contabilidad-items/exportar-csv",
             }
+            or (
+                request.method == "GET"
+                and request.url.path.startswith("/api/v1/contabilidad-items/expedientes/")
+                and request.url.path.endswith("/detalle")
+            )
         )
         or (
             request.method == "PATCH"
