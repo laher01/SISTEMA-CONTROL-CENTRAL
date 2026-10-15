@@ -81,7 +81,16 @@ def _procesar_pdf(contenido: bytes, limite: int, max_paginas_ocr: int) -> Result
         lector = PdfReader(io.BytesIO(contenido), strict=False)
         if lector.is_encrypted and lector.decrypt("") == 0:
             raise DocumentoNoProcesable("El PDF está protegido con contraseña")
-        partes = [(pagina.extract_text() or "").strip() for pagina in lector.pages]
+        partes = []
+        for pagina in lector.pages:
+            extraido = (pagina.extract_text() or "").strip()
+            # Algunos tickets JABSA almacenan texto en un orden distinto al
+            # diseño visible; el modo layout preserva filas y etiquetas.
+            if "SERVICENTRO JABSA" in extraido.upper() and "FACTURA DE VENTA" in extraido.upper():
+                maquetado = (pagina.extract_text(extraction_mode="layout") or "").strip()
+                if maquetado:
+                    extraido = maquetado
+            partes.append(extraido)
     except (PdfReadError, OSError, ValueError) as exc:
         raise DocumentoNoProcesable("El PDF está dañado o no tiene una estructura válida") from exc
     texto = _limitar("\n\n".join(parte for parte in partes if parte), limite)
