@@ -295,9 +295,7 @@ def _alcance_dashboard(
     if receptor_id is not None:
         condiciones.append(Expediente.receptor_id == receptor_id)
     if tipo_empresa is not None:
-        condiciones.append(
-            Expediente.emisor.has(Empresa.clasificacion_proveedor == tipo_empresa)
-        )
+        condiciones.append(Expediente.emisor.has(Empresa.clasificacion_proveedor == tipo_empresa))
     if fecha_desde is not None:
         condiciones.append(Expediente.fecha_emision >= fecha_desde)
     if fecha_hasta is not None:
@@ -549,8 +547,17 @@ def desglose(
     )
     consulta = consulta.where(
         *_alcance_dashboard(
-            tenant_id, auth, responsable_id, usuario_id, gestor_id,
-            emisor_id, receptor_id, tipo_empresa, fecha_desde, fecha_hasta, mes,
+            tenant_id,
+            auth,
+            responsable_id,
+            usuario_id,
+            gestor_id,
+            emisor_id,
+            receptor_id,
+            tipo_empresa,
+            fecha_desde,
+            fecha_hasta,
+            mes,
         )
     )
 
