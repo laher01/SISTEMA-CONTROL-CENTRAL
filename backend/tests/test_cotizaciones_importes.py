@@ -34,3 +34,19 @@ def test_cliente_ruc_no_es_atribuido_a_emisor_cotizacion() -> None:
     campos = resultado["campos"]
     assert campos["ruc_receptor"]["valor"] == "20538821374"
     assert "ruc_emisor" not in campos
+
+
+def test_partes_comerciales_con_etiquetas_explicitas() -> None:
+    texto = (
+        "COTIZACION No. 00861\n"
+        "PROVEEDOR: COMPOSTELA INVERSIONES GENERALES\n"
+        "CLIENTE: INVERSIONES Y NEGOCIACIONES MAREUF E.I.R.L.\n"
+        "CLIENTE RUC 20538821374\n"
+    )
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    campos = resultado["campos"]
+    assert campos["ruc_receptor"]["valor"] == "20538821374"
+    assert campos["razon_social_receptor"]["valor"] == "INVERSIONES Y NEGOCIACIONES MAREUF E.I.R.L."
+    assert campos["razon_social_emisor"]["valor"] == "COMPOSTELA INVERSIONES GENERALES"
+    assert "ruc_emisor" not in campos
