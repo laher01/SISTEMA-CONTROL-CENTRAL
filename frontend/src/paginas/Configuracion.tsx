@@ -1019,6 +1019,7 @@ function RecepcionAutomaticaPanel() {
     useDatos<IncidenciaCorreo[]>("/api/v1/correo/incidencias");
   const [direccionBuzon, setDireccionBuzon] = useState("");
   const [proveedor, setProveedor] = useState("GOOGLE");
+  const [periodoInicial, setPeriodoInicial] = useState("MES");
   const [direccionRemitente, setDireccionRemitente] = useState("");
   const [gestorId, setGestorId] = useState("");
   const [guardando, setGuardando] = useState(false);
@@ -1046,6 +1047,7 @@ function RecepcionAutomaticaPanel() {
       await enviarJson("/api/v1/correo/buzones", "POST", {
         direccion: direccionBuzon.trim().toLowerCase(),
         proveedor,
+        periodo_inicial: periodoInicial,
       });
       setDireccionBuzon("");
       setMensaje("Buzón registrado. Pendiente de autorizar OAuth antes de activar la lectura.");
@@ -1100,6 +1102,13 @@ function RecepcionAutomaticaPanel() {
           <option value="GOOGLE">Gmail / Google</option>
           <option value="MICROSOFT">Outlook / Microsoft</option>
           <option value="IMAP">IMAP corporativo</option>
+        </select>
+      </label>
+      <label>Importación inicial
+        <select value={periodoInicial} onChange={(e) => setPeriodoInicial(e.target.value)}>
+          <option value="DIA">Último día</option>
+          <option value="SEMANA">Última semana</option>
+          <option value="MES">Último mes (30 días)</option>
         </select>
       </label>
       <button type="submit" disabled={guardando}>Registrar buzón</button>
