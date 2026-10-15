@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Documento
-from app.services.contabilidad_items_ubl import extraer_items_ubl
+from app.services.contabilidad_items_ubl import extraer_items_ubl, registrar_items_ubl
 from app.storage import AlmacenLocal
 
 MAX_PAGINA = 100
@@ -71,4 +71,68 @@ def previsualizar_pagina(
             resultados.append(ResultadoVistaPrevia(documento.id, "XML_REVISADO", len(items)))
         except (OSError, ValueError):
             resultados.append(ResultadoVistaPrevia(documento.id, "ARCHIVO_NO_DISPONIBLE"))
+    return resultados
+
+
+@dataclass(frozen=True)
+class ResultadoLote:
+    documento_id: uuid.UUID
+    estado: str
+    lineas_nuevas: int = 0
+
+
+def registrar_pagina_verificada(
+    session: Session,
+    almacen: AlmacenLocal,
+    tenant_id: uuid.UUID,
+    *,
+    despues_id: uuid.UUID | None = None,
+    limite: int = 50,
+) -> list[ResultadoLote]:
+    """Procesa una página segura; el llamador controla commit y cursor.
+
+    Solo persiste ítems de XML revisados. Los errores individuales no impiden
+    continuar, y las escrituras se aíslan mediante savepoints por documento.
+    """
+    previa = previsualizar_pagina(
+        session, almacen, tenant_id, despues_id=despues_id, limite=limite
+    )
+    resultados: list[ResultadoLote] = []
+    for item in previa:
+        if item.estado != "XML_REVISADO":
+            resultados.append(ResultadoLote(item.documento_id, item.estado))
+            continue
+        documento = session.scalar(
+            select(Documento).where(
+                Documento.id == item.documento_id,
+                Documento.tenant_id == tenant_id,
+                Documento.deleted_at.is_(None),
+            )
+        )
+        if documento is None:
+            resultados.append(ResultadoLote(item.documento_id, "DOCUMENTO_NO_DISPONIBLE"))
+            continue
+        try:
+            ruta_relativa = PurePosixPath(documento.ruta_storage)
+            if (
+                ruta_relativa.is_absolute()
+                or not ruta_relativa.parts
+                or ruta_relativa.parts[0] != str(tenant_id)
+            ):
+                resultados.append(ResultadoLote(item.documento_id, "RUTA_FUERA_TENANT"))
+                continue
+            ruta = almacen.ruta_absoluta(documento.ruta_storage)
+            if ruta.stat().st_size > MAX_XML_BYTES:
+                resultados.append(ResultadoLote(item.documento_id, "EXCEDE_LIMITE"))
+                continue
+            contenido = ruta.read_bytes()
+            if hashlib.sha256(contenido).hexdigest() != documento.sha256:
+                resultados.append(ResultadoLote(item.documento_id, "HASH_DIFERENTE"))
+                continue
+            with session.begin_nested():
+                nuevos = registrar_items_ubl(session, tenant_id, documento.id, contenido)
+                session.flush()
+            resultados.append(ResultadoLote(item.documento_id, "PROCESADO", nuevos))
+        except (OSError, ValueError):
+            resultados.append(ResultadoLote(item.documento_id, "ERROR_REINTENTABLE"))
     return resultados
