@@ -129,8 +129,8 @@ def resolver_propuesta(
     decision_id: uuid.UUID,
     aprobar: bool,
 ) -> AuditoriaFacturaItem:
-    if auth.rol not in ROL_REVISION:
-        raise HTTPException(403, "Solo administración o gerencia revisan propuestas")
+    if auth.rol not in ROL_PROPUESTA:
+        raise HTTPException(403, "Rol sin permiso para resolver propuestas")
     propuesta = session.scalar(
         select(AuditoriaFacturaItem).where(
             AuditoriaFacturaItem.id == decision_id,
@@ -139,15 +139,19 @@ def resolver_propuesta(
     )
     if propuesta is None:
         raise HTTPException(404, "Propuesta no encontrada")
+    if auth.rol == "SECRETARIA" and propuesta.estado != "OBSERVADA":
+        raise HTTPException(403, "Secretaría solo puede resolver observaciones de ítems")
     _expediente_autorizado(session, auth, propuesta.expediente_id)
     vigente = ultima_decision(session, auth.tenant_id, propuesta.expediente_id)
     if vigente is None or vigente.id != propuesta.id:
         raise HTTPException(409, "La propuesta ya fue reemplazada")
-    if propuesta.estado not in {"INVALIDADA_PENDIENTE", "REACTIVACION_PENDIENTE"}:
+    if propuesta.estado not in {"OBSERVADA", "INVALIDADA_PENDIENTE", "REACTIVACION_PENDIENTE"}:
         raise HTTPException(409, "No es una propuesta pendiente")
     if propuesta.solicitado_por_cuenta_id == auth.cuenta_id:
         raise HTTPException(403, "No se permite aprobar la propia decisión")
-    if propuesta.estado == "INVALIDADA_PENDIENTE":
+    if propuesta.estado == "OBSERVADA":
+        estado = "VIGENTE" if aprobar else "INVALIDADA_CONFIRMADA"
+    elif propuesta.estado == "INVALIDADA_PENDIENTE":
         estado = "INVALIDADA_CONFIRMADA" if aprobar else "VIGENTE"
     else:
         estado = "VIGENTE" if aprobar else "INVALIDADA_CONFIRMADA"

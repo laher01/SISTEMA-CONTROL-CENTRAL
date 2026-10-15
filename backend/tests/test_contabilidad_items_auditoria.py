@@ -77,3 +77,82 @@ def test_rol_usuario_no_puede_desactivar_factura(session, auth_prueba):
     with pytest.raises(HTTPException) as exc:
         registrar_decision(session, contexto, expediente.id, "DESACTIVAR", "No autorizado")
     assert exc.value.status_code == 403
+
+
+@pytest.mark.parametrize(
+    ("aprobar", "esperado"), [(True, "VIGENTE"), (False, "INVALIDADA_CONFIRMADA")]
+)
+def test_observacion_resuelta_con_aprobacion_o_rechazo(session, auth_prueba, aprobar, esperado):
+    contexto = auth_prueba.contexto
+    revisor = CuentaAcceso(
+        tenant_id=contexto.tenant_id,
+        login="REVISOR-OBSERVACIONES",
+        password_hash="hash-test",
+        activo=True,
+        cambio_clave_obligatorio=False,
+    )
+    session.add(revisor)
+    session.flush()
+    secretaria = replace(contexto, rol="SECRETARIA")
+    administrador = replace(contexto, cuenta_id=revisor.id, rol="ADMINISTRADOR")
+
+    expediente = _expediente(session, contexto.tenant_id)
+    observacion = registrar_decision(
+        session, secretaria, expediente.id, "OBSERVAR", "Ítem requiere justificación"
+    )
+    assert observacion.estado == "OBSERVADA"
+    with pytest.raises(HTTPException) as error:
+        resolver_propuesta(session, secretaria, observacion.id, aprobar)
+    assert error.value.status_code == 403
+
+    resuelta = resolver_propuesta(session, administrador, observacion.id, aprobar)
+    assert resuelta.estado == esperado
+    assert resuelta.aprobado_por_cuenta_id == revisor.id
+    assert ultima_decision(session, contexto.tenant_id, expediente.id).id == resuelta.id
+    with pytest.raises(HTTPException) as error:
+        resolver_propuesta(session, administrador, observacion.id, aprobar)
+    assert error.value.status_code == 409
+
+
+def test_secretaria_distinta_puede_resolver_observacion(session, auth_prueba):
+    contexto = auth_prueba.contexto
+    expediente = _expediente(session, contexto.tenant_id)
+    administrador = replace(contexto, rol="ADMINISTRADOR")
+    observacion = registrar_decision(
+        session, administrador, expediente.id, "OBSERVAR", "Falta sustento de ítems"
+    )
+    secretaria_cuenta = CuentaAcceso(
+        tenant_id=contexto.tenant_id,
+        login="SECRETARIA-REVISION-ITEMS",
+        password_hash="hash-test",
+        activo=True,
+        cambio_clave_obligatorio=False,
+    )
+    session.add(secretaria_cuenta)
+    session.flush()
+    secretaria = replace(contexto, rol="SECRETARIA", cuenta_id=secretaria_cuenta.id)
+    resultado = resolver_propuesta(session, secretaria, observacion.id, True)
+    assert resultado.estado == "VIGENTE"
+    assert resultado.aprobado_por_cuenta_id == secretaria_cuenta.id
+
+
+def test_secretaria_no_puede_resolver_desactivacion_pendiente(session, auth_prueba):
+    contexto = auth_prueba.contexto
+    expediente = _expediente(session, contexto.tenant_id)
+    secretaria = replace(contexto, rol="SECRETARIA")
+    propuesta = registrar_decision(
+        session, secretaria, expediente.id, "DESACTIVAR", "Requiere revisión"
+    )
+    segunda_cuenta = CuentaAcceso(
+        tenant_id=contexto.tenant_id,
+        login="SECRETARIA-OTRA-REVISION",
+        password_hash="hash-test",
+        activo=True,
+        cambio_clave_obligatorio=False,
+    )
+    session.add(segunda_cuenta)
+    session.flush()
+    segunda_secretaria = replace(contexto, rol="SECRETARIA", cuenta_id=segunda_cuenta.id)
+    with pytest.raises(HTTPException) as error:
+        resolver_propuesta(session, segunda_secretaria, propuesta.id, True)
+    assert error.value.status_code == 403
