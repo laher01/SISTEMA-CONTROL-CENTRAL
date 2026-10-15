@@ -135,18 +135,22 @@ def inspeccionar_tenant(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Administración no encontrada")
     miembros = list(
         session.scalars(
-            select(Miembro).where(
+            select(Miembro)
+            .where(
                 Miembro.tenant_id == tenant_id,
                 Miembro.deleted_at.is_(None),
-            ).order_by(Miembro.rol, Miembro.codigo)
+            )
+            .order_by(Miembro.rol, Miembro.codigo)
         )
     )
     gestores = list(
         session.scalars(
-            select(Gestor).where(
+            select(Gestor)
+            .where(
                 Gestor.tenant_id == tenant_id,
                 Gestor.deleted_at.is_(None),
-            ).order_by(Gestor.codigo)
+            )
+            .order_by(Gestor.codigo)
         )
     )
     cuentas = {
@@ -165,17 +169,20 @@ def inspeccionar_tenant(
             select(func.count(Empresa.id)).where(
                 Empresa.tenant_id == tenant_id, Empresa.deleted_at.is_(None)
             )
-        ) or 0,
+        )
+        or 0,
         "expedientes": session.scalar(
             select(func.count(Expediente.id)).where(
                 Expediente.tenant_id == tenant_id, Expediente.deleted_at.is_(None)
             )
-        ) or 0,
+        )
+        or 0,
         "documentos": session.scalar(
             select(func.count(Documento.id)).where(
                 Documento.tenant_id == tenant_id, Documento.deleted_at.is_(None)
             )
-        ) or 0,
+        )
+        or 0,
     }
     return {
         "tenant": {
