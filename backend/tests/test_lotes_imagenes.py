@@ -10,7 +10,10 @@ from app.services.lotes_imagenes import (
 )
 
 
-@pytest.mark.parametrize("cantidad,grupos", [(0, []), (1, [1]), (10, [10]), (11, [10, 1]), (25, [10, 10, 5])])
+@pytest.mark.parametrize(
+    "cantidad,grupos",
+    [(0, []), (1, [1]), (10, [10]), (11, [10, 1]), (25, [10, 10, 5])],
+)
 def test_planificar_sublotes(cantidad: int, grupos: list[int]) -> None:
     elementos = list(range(cantidad))
     sublotes = dividir_sublotes(elementos)
@@ -38,10 +41,16 @@ def test_factura_nueva(factura: IdentidadFactura) -> None:
 
 
 def test_factura_duplicada(factura: IdentidadFactura) -> None:
-    assert decidir_factura(factura, factura, confianza_suficiente=True) == DecisionFiscal.RECHAZAR_DUPLICADO
+    assert (
+        decidir_factura(factura, factura, confianza_suficiente=True)
+        == DecisionFiscal.RECHAZAR_DUPLICADO
+    )
 
 
-@pytest.mark.parametrize("campo,valor", [("ruc_receptor", "20111111111"), ("importe", "120.00"), ("fecha_emision", "2026-10-14")])
+@pytest.mark.parametrize(
+    "campo,valor",
+    [("ruc_receptor", "20111111111"), ("importe", "120.00"), ("fecha_emision", "2026-10-14")],
+)
 def test_conflictos(factura: IdentidadFactura, campo: str, valor: str) -> None:
     assert decidir_factura(replace(factura, **{campo: valor}), factura, confianza_suficiente=True) == DecisionFiscal.REVISAR_CONFLICTO
 
