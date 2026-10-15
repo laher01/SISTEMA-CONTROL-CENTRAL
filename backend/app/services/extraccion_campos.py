@@ -1163,8 +1163,10 @@ def _total_cotizacion(texto: str) -> tuple[Decimal, str] | None:
         if coincidencia is None:
             continue
         etiqueta = re.sub(r"[^A-Z]", "", coincidencia.group(1).upper())
-        nombre = "subtotal" if etiqueta.startswith("SUBTOTAL") else (
-            "igv" if etiqueta.startswith("IGV") else "total"
+        nombre = (
+            "subtotal"
+            if etiqueta.startswith("SUBTOTAL")
+            else ("igv" if etiqueta.startswith("IGV") else "total")
         )
         valor = _normalizar_importe(coincidencia.group(2))
         if valor is not None and valor >= 0:
