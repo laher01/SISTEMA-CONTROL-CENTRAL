@@ -1,6 +1,11 @@
 """Regresiones: Dashboard comparte alcance para tarjetas, tabla y opciones."""
 
+import uuid
+
 from fastapi.testclient import TestClient
+
+from app.security import ContextoAcceso
+from tests.conftest import AuthPrueba
 
 from tests.xml import factura
 
@@ -49,3 +54,35 @@ def test_dashboard_mes_resumen_desglose_y_opciones(client: TestClient) -> None:
     assert opciones_vacias.json()["receptores"] == []
 
     assert client.get("/api/v1/dashboard/resumen", params={"mes": "2026-99"}).status_code == 422
+
+
+def test_responsable_sin_cartera_no_ve_registros_ajenos(
+    client: TestClient, auth_prueba: AuthPrueba,
+) -> None:
+    subida = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("factura.xml", factura(numero="F001-00000915"))},
+    )
+    assert subida.status_code == 201, subida.text
+    anterior = auth_prueba.contexto
+    auth_prueba.contexto = ContextoAcceso(
+        cuenta_id=anterior.cuenta_id,
+        tenant_id=anterior.tenant_id,
+        rol="RESPONSABLE",
+        miembro_id=uuid.uuid4(),
+        gestor_id=None,
+        usuario_id=None,
+        codigo="RESP-PRUEBA",
+        nombre="Responsable de prueba",
+        cambio_clave_obligatorio=False,
+    )
+    for endpoint in ("resumen", "desglose", "opciones"):
+        respuesta = client.get(f"/api/v1/dashboard/{endpoint}")
+        assert respuesta.status_code == 200, respuesta.text
+        if endpoint == "resumen":
+            assert respuesta.json()["expedientes_total"] == 0
+        elif endpoint == "desglose":
+            assert respuesta.json()["filas"] == []
+        else:
+            assert respuesta.json()["emisores"] == []
+            assert respuesta.json()["receptores"] == []
