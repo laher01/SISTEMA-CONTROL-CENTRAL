@@ -30,9 +30,14 @@ def test_limite_no_valido(limite: int) -> None:
 @pytest.fixture
 def factura() -> IdentidadFactura:
     return IdentidadFactura(
-        tenant_id="empresa-a", ruc_emisor="20123456789", tipo="01",
-        serie="F001", correlativo="123", ruc_receptor="20987654321",
-        importe="118.00", fecha_emision="2026-10-15",
+        tenant_id="empresa-a",
+        ruc_emisor="20123456789",
+        tipo="01",
+        serie="F001",
+        correlativo="123",
+        ruc_receptor="20987654321",
+        importe="118.00",
+        fecha_emision="2026-10-15",
     )
 
 
