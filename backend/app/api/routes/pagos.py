@@ -1026,20 +1026,23 @@ def crear_pedidos_masivos(
             "pedido_gerencia",
             nuevos[0].id,
             {
-            "lote_id": lote_id,
-            "gerente_id": str(gerente_id),
-            "responsable_id": str(responsable.id),
-            "pedido_ids": [str(p.id) for p in nuevos],
-            "moneda": datos.moneda,
-            "periodo": periodo.isoformat(),
-            "total": str(sum((Decimal(p.monto_solicitado) for p in nuevos), Decimal("0"))),
-        })
+                "lote_id": lote_id,
+                "gerente_id": str(gerente_id),
+                "responsable_id": str(responsable.id),
+                "pedido_ids": [str(p.id) for p in nuevos],
+                "moneda": datos.moneda,
+                "periodo": periodo.isoformat(),
+                "total": str(
+                    sum((Decimal(p.monto_solicitado) for p in nuevos), Decimal("0"))
+                ),
+            },
+        )
         session.commit()
     except IntegrityError as exc:
         session.rollback()
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "Hay pedidos existentes o concurrentes; no se creó ningún lote"
+            "Hay pedidos existentes o concurrentes; no se creó ningún lote",
         ) from exc
     except Exception:
         session.rollback()
