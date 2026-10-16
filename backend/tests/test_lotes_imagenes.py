@@ -82,3 +82,21 @@ def test_tenant_distinto_no_se_trata_como_duplicado(factura: IdentidadFactura) -
         decidir_factura(replace(factura, tenant_id="empresa-b"), factura, confianza_suficiente=True)
         == DecisionFiscal.REVISION_REQUERIDA
     )
+
+
+@pytest.mark.parametrize("importe", ["0", "-1.00", "NaN", "Infinity", "ABC"])
+def test_importe_invalido_requiere_revision(factura: IdentidadFactura, importe: str) -> None:
+    nueva = replace(factura, importe=importe)
+    assert (
+        decidir_factura(nueva, None, confianza_suficiente=True)
+        == DecisionFiscal.REVISION_REQUERIDA
+    )
+
+
+@pytest.mark.parametrize("fecha", ["2026-02-30", "no-es-fecha", ""])
+def test_fecha_invalida_requiere_revision(factura: IdentidadFactura, fecha: str) -> None:
+    nueva = replace(factura, fecha_emision=fecha)
+    assert (
+        decidir_factura(nueva, None, confianza_suficiente=True)
+        == DecisionFiscal.REVISION_REQUERIDA
+    )
