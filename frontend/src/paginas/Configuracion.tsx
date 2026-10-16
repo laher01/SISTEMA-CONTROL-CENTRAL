@@ -1,3 +1,4 @@
+import InspeccionTenant from "./InspeccionTenant";
 import { useMemo, useState, type FormEvent } from "react";
 
 import { eliminar, enviarJson, useDatos } from "../api";
@@ -909,6 +910,7 @@ interface AdministracionGlobal {
 }
 
 function AdministracionesPanel() {
+  const [inspeccionId, setInspeccionId] = useState<string | null>(null);
   const { datos, error, cargando, recargar } = useDatos<AdministracionGlobal[]>(
     "/api/v1/configuracion/administraciones",
   );
@@ -975,10 +977,13 @@ function AdministracionesPanel() {
       {cargando && <p>Cargando Administraciones…</p>}
       {error && <p role="alert">{error}</p>}
       <p>Total de Administraciones registradas: <strong>{datos?.length ?? 0}</strong></p>
+      {inspeccionId && <InspeccionTenant tenantId={inspeccionId} cerrar={() => setInspeccionId(null)} />}
+
       <table>
-        <thead><tr><th>Administración</th><th>Código</th><th>Subdominio</th><th>Login administrador</th><th>Suscripción</th><th>Origen</th><th>Estado</th><th>Identificador</th><th>Documentos</th><th>Expedientes</th><th>Proveedores</th><th>Receptores</th><th>Responsables</th><th>Administradores</th><th>Gerentes</th><th>Secretaría</th><th>Usuarios</th><th>Gestores</th><th>Cuentas habilitadas</th></tr></thead>
+        <thead><tr><th>Consulta</th><th>Administración</th><th>Código</th><th>Subdominio</th><th>Login administrador</th><th>Suscripción</th><th>Origen</th><th>Estado</th><th>Identificador</th><th>Documentos</th><th>Expedientes</th><th>Proveedores</th><th>Receptores</th><th>Responsables</th><th>Administradores</th><th>Gerentes</th><th>Secretaría</th><th>Usuarios</th><th>Gestores</th><th>Cuentas habilitadas</th></tr></thead>
         <tbody>{visibles.map((a) => (
           <tr key={a.id}>
+            <td><button type="button" aria-label={`Inspeccionar ${a.nombre}`} onClick={() => setInspeccionId(a.id)}>Inspeccionar</button></td>
             <td>{a.nombre}</td><td>{a.codigo || "Legado"}</td><td>{a.subdominio || "Sin asignar"}</td><td>{a.login_administrador || "Sin cuenta"}</td><td>{a.estado_suscripcion === "NO_IMPLEMENTADO" ? "Pendiente de implementar" : a.estado_suscripcion}</td><td>{a.origen}</td><td>{a.estado}</td><td>{a.id}</td><td>{a.documentos}</td><td>{a.expedientes}</td><td>{a.proveedores}</td><td>{a.receptores}</td><td>{a.responsables}</td><td>{a.administradores}</td>
             <td>{a.gerentes}</td><td>{a.secretarias}</td><td>{a.usuarios}</td>
             <td>{a.gestores}</td><td>{a.cuentas_activas}</td>
