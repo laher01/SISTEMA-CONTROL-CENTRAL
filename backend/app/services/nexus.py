@@ -49,10 +49,18 @@ def responder(
     saludo = re.sub(r"[^a-záéíóúñ ]", " ", normalizado)
     saludo = " ".join(saludo.split())
     if saludo in {
-        "hola", "hola nexus", "buenos dias", "buenos días",
-        "buenas tardes", "buenas noches", "qué tal cómo está hoy",
-        "que tal como esta hoy", "qué tal cómo estás hoy",
-        "que tal como estas hoy", "cómo estás", "como estas",
+        "hola",
+        "hola nexus",
+        "buenos dias",
+        "buenos días",
+        "buenas tardes",
+        "buenas noches",
+        "qué tal cómo está hoy",
+        "que tal como esta hoy",
+        "qué tal cómo estás hoy",
+        "que tal como estas hoy",
+        "cómo estás",
+        "como estas",
     }:
         nombre = str(contexto.actor.get("nombre") or "").strip().split(" ")[0]
         prefijo = f"¡Hola, {nombre}!" if nombre else "¡Hola!"
