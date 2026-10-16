@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
+from app.services.facturas_estaciones import extraer_factura_estacion
+
 
 @dataclass(frozen=True)
 class CampoExtraido:
@@ -244,6 +246,11 @@ def extraer_campos(
         campos["numero_operacion"] = CampoExtraido(
             operacion.group(1).upper(), min(0.94, 0.9 * factor), operacion.group(0)
         ).a_dict(fuente)
+
+    # Perfiles de estaciones: solo sobrescribir con etiquetas verificables.
+    # Cada valor mantiene evidencia, fuente y confirmación obligatoria.
+    for nombre, (valor, evidencia) in extraer_factura_estacion(texto).items():
+        campos[nombre] = CampoExtraido(valor, min(0.96, 0.94 * factor), evidencia).a_dict(fuente)
 
     if not campos and not candidatos:
         return None
