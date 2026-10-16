@@ -1001,7 +1001,8 @@ def crear_pedidos_masivos(
             raise HTTPException(
                 status.HTTP_409_CONFLICT, "El lote contiene un Cliente con pedido existente"
             )
-        nuevos.append(PedidoGerencia(
+        nuevos.append(
+            PedidoGerencia(
             tenant_id=tenant_id,
             gerente_id=gerente_id,
             cliente_id=cliente.id,
@@ -1013,8 +1014,9 @@ def crear_pedidos_masivos(
             modo_distribucion="MANUAL",
             estado="ACTIVO",
             observacion=datos.observacion.strip() if datos.observacion else None,
-            creado_por_cuenta_id=cuenta_administradora_responsable(session, auth),
-        ))
+                creado_por_cuenta_id=cuenta_administradora_responsable(session, auth),
+            )
+        )
     try:
         session.add_all(nuevos)
         session.flush()
