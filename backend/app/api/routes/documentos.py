@@ -56,7 +56,6 @@ from app.services.automatizacion_documental import (
 from app.services.cache_ocr import procesar_con_cache
 from app.services.expedientes import actualizar_expediente, buscar_expediente
 from app.services.identidad_cotizaciones import identidad_cotizacion
-from app.services.lotes_imagenes import MAX_IMAGENES_POR_SUBLOTE
 from app.services.ingesta import (
     ArchivoSubido,
     ComprobanteYaRegistrado,
@@ -67,6 +66,7 @@ from app.services.ingesta import (
     vincular_documento,
 )
 from app.services.jerarquia_documental import nombres_jerarquia
+from app.services.lotes_imagenes import MAX_IMAGENES_POR_SUBLOTE
 from app.services.metadatos_documento import metadatos_individuales
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
