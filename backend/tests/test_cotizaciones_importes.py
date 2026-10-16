@@ -1,5 +1,7 @@
 """Regresión del total comercial de las cotizaciones COMPOSTELA."""
 
+import pytest
+
 from app.services.extraccion_campos import extraer_campos
 
 
@@ -50,3 +52,41 @@ def test_partes_comerciales_con_etiquetas_explicitas() -> None:
     assert campos["razon_social_receptor"]["valor"] == "INVERSIONES Y NEGOCIACIONES MAREUF E.I.R.L."
     assert campos["razon_social_emisor"]["valor"] == "COMPOSTELA INVERSIONES GENERALES"
     assert "ruc_emisor" not in campos
+
+
+@pytest.mark.parametrize(
+    ("subtotal", "igv", "total"),
+    [
+        ("5,305.50", "954.99", "6,260.49"),
+        ("4,410.40", "793.87", "5,204.27"),
+        ("4,177.00", "751.86", "4,928.86"),
+        ("5,125.18", "922.53", "6,047.71"),
+        ("4,411.99", "794.16", "5,206.15"),
+    ],
+)
+def test_cotizacion_real_pdf_columnas_antes_de_etiquetas(
+    subtotal: str, igv: str, total: str
+) -> None:
+    # Fragmento reproducido de la disposición de texto real en 5 páginas,
+    # sin incluir nombres, RUC ni otros datos personales del PDF.
+    texto = (
+        "COTIZACIÓN\nNº 00861\nCANT UND COSTO TOTAL\n"
+        "1 UND 4.30 S/   4.30S/\n"
+        f"{subtotal}S/\n{igv}S/\n{total}S/\n"
+        "NOTA: DURACIÓN DE LA COTIZACIÓN ES POR 30 DÍAS\n"
+        "SUB TOTAL\nIGV 18%\nTOTAL"
+    )
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    assert resultado["campos"]["importe_total"]["valor"] == total.replace(",", "")
+
+
+def test_cotizacion_columnas_sin_cuadre_no_asume_total() -> None:
+    texto = (
+        "COTIZACIÓN\nCANT UND COSTO TOTAL\n1 UND 2.00S/\n"
+        "4,411.99S/\n794.16S/\n1.00S/\n"
+        "NOTA: DURACIÓN DE LA COTIZACIÓN\nSUB TOTAL\nIGV 18%\nTOTAL"
+    )
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    assert "importe_total" not in resultado["campos"]
