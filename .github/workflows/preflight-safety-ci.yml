@@ -5,6 +5,7 @@ on:
     paths:
       - "deploy/preflight-secretaria.sh"
       - "deploy/bootstrap-main.sh"
+      - "deploy/preflight-backup-restore-items.sh"
       - "deploy/test_preflight_safety.py"
       - ".github/workflows/deploy-staging.yml"
       - ".github/workflows/preflight-safety-ci.yml"
@@ -21,6 +22,7 @@ jobs:
         run: |
           bash -n deploy/preflight-secretaria.sh
           bash -n deploy/bootstrap-main.sh
+          bash -n deploy/preflight-backup-restore-items.sh
       - name: Probar preflight sin afectar la VPS
         run: python3 deploy/test_preflight_safety.py
       - name: Verificar reglas de protección
@@ -30,6 +32,7 @@ jobs:
           script = Path("deploy/preflight-secretaria.sh").read_text()
           workflow = Path(".github/workflows/deploy-staging.yml").read_text()
           bootstrap = Path("deploy/bootstrap-main.sh").read_text()
+          restore = Path("deploy/preflight-backup-restore-items.sh").read_text()
           assert 'git diff --quiet' in script
           assert 'git diff --cached --quiet' in script
           assert 'ls-files", "--others", "--exclude-standard", "-z' in script
@@ -40,5 +43,12 @@ jobs:
           assert "pg_dump" in bootstrap
           assert bootstrap.index("pg_dump") < bootstrap.index("git merge --ff-only")
           assert "deploy/bootstrap-main.sh" in workflow
+          assert "preflight-backup-restore-items.sh" in workflow
+          assert "preflight-backup-restore-items.sh" in Path(".github/workflows/preflight-safety-ci.yml").read_text()
+          assert workflow.index("Verificar backup y restauración aislada antes del despliegue") < workflow.index("Desplegar commit validado en VPS autorizada")
+          assert "sha256sum -c" in restore
+          assert "pg_restore -U" in restore and "--exit-on-error" in restore
+          assert "createdb -U" in restore and "dropdb -U" in restore
+          assert "set -Eeuo pipefail" in restore
           print("Protecciones estructurales verificadas")
           PY
