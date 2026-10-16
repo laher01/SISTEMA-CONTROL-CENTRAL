@@ -932,9 +932,7 @@ class PedidoMasivoIn(BaseModel):
     responsable_id: uuid.UUID
     periodo_mes: date
     moneda: str = Field(pattern="^(PEN|USD)$")
-    modalidad: str = Field(
-        default="POR_PEDIDO", pattern="^(POR_PEDIDO|SIN_RESTRICCION)$"
-    )
+    modalidad: str = Field(default="POR_PEDIDO", pattern="^(POR_PEDIDO|SIN_RESTRICCION)$")
     observacion: str | None = Field(default=None, max_length=500)
     items: list[PedidoMasivoItem] = Field(min_length=1, max_length=200)
 
