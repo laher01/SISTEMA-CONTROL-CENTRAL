@@ -25,3 +25,19 @@ def calcular_avance_pedido(
     else:
         estado = "ROJO"
     return porcentaje, estado
+
+
+def calcular_avance_consolidado(
+    importes: list[tuple[Decimal, Decimal]],
+) -> tuple[Decimal, str]:
+    """Calcula avance ponderado por importes, nunca promedio de porcentajes."""
+    if not importes:
+        raise ValueError("Se requiere al menos un pedido")
+    total_presupuesto = Decimal("0")
+    total_ejecutado = Decimal("0")
+    for presupuesto, ejecutado in importes:
+        if presupuesto <= 0 or ejecutado < 0:
+            raise ValueError("Importes inválidos en el consolidado")
+        total_presupuesto += presupuesto
+        total_ejecutado += ejecutado
+    return calcular_avance_pedido(total_presupuesto, total_ejecutado)
