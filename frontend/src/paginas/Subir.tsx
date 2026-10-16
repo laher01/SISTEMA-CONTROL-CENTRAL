@@ -1,7 +1,7 @@
 import { useRef, useState, type ClipboardEvent, type DragEvent } from "react";
 import { Link } from "react-router-dom";
 
-import { ErrorApi, enviarFormulario } from "../api";
+import { ErrorApi, enviarFormulario, obtener } from "../api";
 import { ETIQUETA_TIPO_DOCUMENTO, formatearFecha, formatearMonto } from "../formato";
 import type { Documento, SesionActual } from "../tipos";
 
@@ -99,6 +99,55 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
     }
   };
 
+  const subirSublote = async (grupo: Fila[]) => {
+    grupo.forEach((fila) => actualizar(fila.clave, { estado: "subiendo" }));
+    const formulario = new FormData();
+    grupo.forEach((fila) => formulario.append("archivos", fila.archivo));
+    try {
+      const informe = await enviarFormulario<{
+        resultados: Array<{
+          indice: number;
+          estado: "ok" | "duplicado" | "error";
+          documento_id?: string;
+          detalle?: unknown;
+        }>;
+      }>("/api/v1/documentos/lote-imagenes", formulario);
+      for (const [indice, fila] of grupo.entries()) {
+        const respuesta = informe.resultados.find((item) => item.indice === indice);
+        if (respuesta?.estado === "ok" && respuesta.documento_id) {
+          try {
+            const documento = await obtener<Documento>(
+              `/api/v1/documentos/${respuesta.documento_id}`,
+            );
+            actualizar(fila.clave, { estado: "ok", documento });
+          } catch {
+            actualizar(fila.clave, {
+              estado: "error",
+              mensaje: `Documento registrado (${respuesta.documento_id}), pero no se pudo consultar. No lo vuelva a cargar sin verificar.`,
+            });
+          }
+        } else {
+          const detalle = respuesta?.detalle;
+          const mensaje =
+            detalle && typeof detalle === "object" && "mensaje" in detalle
+              ? String(detalle.mensaje)
+              : typeof detalle === "string"
+                ? detalle
+                : "No fue posible procesar la imagen";
+          actualizar(
+            fila.clave,
+            respuesta?.estado === "duplicado"
+              ? { estado: "duplicado", mensaje }
+              : { estado: "error", mensaje },
+          );
+        }
+      }
+    } catch (error) {
+      const mensaje = error instanceof Error ? error.message : String(error);
+      grupo.forEach((fila) => actualizar(fila.clave, { estado: "error", mensaje }));
+    }
+  };
+
   const agregar = (lista: FileList | File[] | null) => {
     if (!lista || lista.length === 0) return;
     const nuevas: Fila[] = Array.from(lista).map((archivo, i) => ({
@@ -115,8 +164,21 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
     while (activos.current < CONCURRENCIA) {
       const fila = cola.current.shift();
       if (!fila) return;
+      const grupo = [fila];
+      if (fila.archivo.type.startsWith("image/")) {
+        while (
+          grupo.length < 10 &&
+          cola.current[0]?.archivo.type.startsWith("image/")
+        ) {
+          const siguiente = cola.current.shift();
+          if (siguiente) grupo.push(siguiente);
+        }
+      }
       activos.current += 1;
-      void subirUno(fila).finally(() => {
+      const operacion = fila.archivo.type.startsWith("image/")
+        ? subirSublote(grupo)
+        : subirUno(fila);
+      void operacion.finally(() => {
         activos.current -= 1;
         despachar();
       });
