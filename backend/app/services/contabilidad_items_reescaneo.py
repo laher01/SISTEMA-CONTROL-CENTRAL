@@ -64,7 +64,7 @@ def previsualizar_pagina(
             if ruta.stat().st_size > MAX_XML_BYTES:
                 resultados.append(ResultadoVistaPrevia(documento.id, "EXCEDE_LIMITE"))
                 continue
-            with ruta.open('rb') as archivo:
+            with ruta.open("rb") as archivo:
                 contenido = archivo.read(MAX_XML_BYTES + 1)
             if len(contenido) > MAX_XML_BYTES:
                 resultados.append(ResultadoVistaPrevia(documento.id, "EXCEDE_LIMITE"))
@@ -128,7 +128,7 @@ def registrar_pagina_verificada(
             if ruta.stat().st_size > MAX_XML_BYTES:
                 resultados.append(ResultadoLote(item.documento_id, "EXCEDE_LIMITE"))
                 continue
-            with ruta.open('rb') as archivo:
+            with ruta.open("rb") as archivo:
                 contenido = archivo.read(MAX_XML_BYTES + 1)
             if len(contenido) > MAX_XML_BYTES:
                 resultados.append(ResultadoLote(item.documento_id, "EXCEDE_LIMITE"))
