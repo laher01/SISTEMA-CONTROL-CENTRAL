@@ -1221,6 +1221,41 @@ def _total_cotizacion(texto: str) -> tuple[Decimal, str] | None:
         if valor is not None and valor >= 0:
             montos[nombre] = (valor, linea.strip())
     total = montos.get("total")
+    if total is None and re.search(r"COTIZACI[OÓ]N", texto, re.I):
+        # PDFs COMPOSTELA/JADAL pueden ordenar las columnas antes de los rótulos.
+        # Aceptar solo tres importes aislados (subtotal, IGV, total) seguidos
+        # inmediatamente de la nota comercial y con aritmética consistente.
+        lineas = [linea.strip() for linea in texto.splitlines() if linea.strip()]
+        if "CANT UND COSTO TOTAL" in texto.upper() and all(
+            re.search(rf"(?m)^\\s*{etiqueta}\\s*$", texto, re.I)
+            for etiqueta in ("SUB TOTAL", "IGV 18%", "TOTAL")
+        ):
+            patron_monto = re.compile(r"^([0-9][0-9,.]*)S/\\s*$")
+            for indice, linea in enumerate(lineas):
+                if not linea.upper().startswith("NOTA:") or indice < 3:
+                    continue
+                candidatos = [patron_monto.fullmatch(x) for x in lineas[indice - 3 : indice]]
+                if not all(candidatos):
+                    continue
+                importes = [
+                    _normalizar_importe(coincidencia.group(1))
+                    for coincidencia in candidatos
+                    if coincidencia is not None
+                ]
+                if len(importes) != 3 or any(importe is None for importe in importes):
+                    continue
+                subtotal, impuesto, total_comercial = importes
+                if (
+                    subtotal is not None
+                    and impuesto is not None
+                    and total_comercial is not None
+                    and subtotal > 0
+                    and abs(subtotal + impuesto - total_comercial) <= Decimal("0.02")
+                    and abs(subtotal * Decimal("0.18") - impuesto) <= Decimal("0.03")
+                ):
+                    evidencia = " | ".join(lineas[indice - 3 : indice])
+                    total = (total_comercial, evidencia)
+                    break
     if total is None:
         return None
     subtotal = montos.get("subtotal")
