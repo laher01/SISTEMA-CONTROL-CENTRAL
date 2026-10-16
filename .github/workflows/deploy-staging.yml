@@ -129,8 +129,11 @@ jobs:
           VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
         run: |
           test "$VPS_HOST" = "132.145.233.172" && test "$VPS_USER" = "ubuntu" || exit 1
+          # Usar el script del commit comprobado por Actions, no uno ausente u obsoleto en la VPS.
+          # El archivo temporal vive en deploy/ para conservar la resolucion de rutas del script.
           ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
-            "cd -- '$VPS_DEPLOY_PATH' && EXPECTED_HOST='132.145.233.172' bash deploy/preflight-backup-restore-items.sh"
+            "set -eu; cd -- '$VPS_DEPLOY_PATH'; script=\$(mktemp deploy/.preflight-restore-XXXXXX.sh); trap 'rm -f \"\$script\"' EXIT; cat > \"\$script\"; EXPECTED_HOST='132.145.233.172' bash \"\$script\"" \
+            < deploy/preflight-backup-restore-items.sh
 
       - name: Desplegar commit validado en VPS autorizada
         env:
