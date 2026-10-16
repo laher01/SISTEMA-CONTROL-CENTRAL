@@ -73,7 +73,8 @@ def previsualizar_pagina(
                 resultados.append(ResultadoVistaPrevia(documento.id, "HASH_DIFERENTE"))
                 continue
             items = extraer_items_ubl(contenido)
-            resultados.append(ResultadoVistaPrevia(documento.id, "XML_REVISADO", len(items)))
+            estado = "XML_REVISADO" if items else "SIN_ITEMS_UBL"
+            resultados.append(ResultadoVistaPrevia(documento.id, estado, len(items)))
         except (OSError, ValueError):
             resultados.append(ResultadoVistaPrevia(documento.id, "ARCHIVO_NO_DISPONIBLE"))
     return resultados
