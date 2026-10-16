@@ -12,6 +12,8 @@ def calcular_avance_pedido(
     El llamador debe suministrar exclusivamente ejecución documentada, deduplicada,
     autorizada y perteneciente al mismo Tenant y pedido.
     """
+    if not presupuesto.is_finite() or not ejecutado.is_finite():
+        raise ValueError("Los importes deben ser finitos")
     if presupuesto <= 0:
         raise ValueError("El presupuesto debe ser positivo")
     if ejecutado < 0:
@@ -36,7 +38,12 @@ def calcular_avance_consolidado(
     total_presupuesto = Decimal("0")
     total_ejecutado = Decimal("0")
     for presupuesto, ejecutado in importes:
-        if presupuesto <= 0 or ejecutado < 0:
+        if (
+            not presupuesto.is_finite()
+            or not ejecutado.is_finite()
+            or presupuesto <= 0
+            or ejecutado < 0
+        ):
             raise ValueError("Importes inválidos en el consolidado")
         total_presupuesto += presupuesto
         total_ejecutado += ejecutado
