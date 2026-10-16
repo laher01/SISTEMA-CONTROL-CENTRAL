@@ -22,7 +22,7 @@ class SesionFalsa:
 def imagen_png() -> UploadFile:
     return UploadFile(
         filename="captura.png",
-        file=io.BytesIO(b"\\x89PNG\\r\\n\\x1a\\n" + b"datos-prueba"),
+        file=io.BytesIO(b"\x89PNG\r\n\x1a\n" + b"datos-prueba"),
     )
 
 
