@@ -241,9 +241,9 @@ def extraer_campos(
     total_cotizacion = _total_cotizacion(texto) if es_cotizacion else None
     total_match = TOTAL.search(texto) if not es_cotizacion else None
     if total_cotizacion is not None:
-        importe, evidencia = total_cotizacion
+        importe_comercial, evidencia = total_cotizacion
         campos["importe_total"] = CampoExtraido(
-            format(importe, ".2f"), min(0.97, 0.96 * factor), evidencia
+            format(importe_comercial, ".2f"), min(0.97, 0.96 * factor), evidencia
         ).a_dict(fuente)
     if total_match and (importe := _normalizar_importe(total_match.group(1))) is not None:
         campos["importe_total"] = CampoExtraido(
