@@ -56,6 +56,7 @@ from app.services.automatizacion_documental import (
 from app.services.cache_ocr import procesar_con_cache
 from app.services.expedientes import actualizar_expediente, buscar_expediente
 from app.services.identidad_cotizaciones import identidad_cotizacion
+from app.services.lotes_imagenes import MAX_IMAGENES_POR_SUBLOTE
 from app.services.ingesta import (
     ArchivoSubido,
     ComprobanteYaRegistrado,
@@ -331,6 +332,68 @@ async def importar_paquete_pdf(
         "duplicados": sum(x["estado"] == "duplicado" for x in resultados),
         "errores": sum(x["estado"] == "error" for x in resultados),
         "documentos": resultados,
+    }
+
+
+@router.post("/lote-imagenes")
+async def subir_sublote_imagenes(
+    session: SessionDep,
+    settings: SettingsDep,
+    almacen: AlmacenDep,
+    hoy: HoyDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    archivos: Annotated[list[UploadFile], File()],
+) -> dict[str, object]:
+    """Procesa hasta diez imágenes secuencialmente reutilizando permisos y deduplicación.
+
+    Cada archivo es independiente: un duplicado o un fallo no cancela los
+    documentos que ya fueron registrados correctamente en el mismo sublote.
+    El endpoint no agrupa páginas en una factura; eso exige revisión del usuario.
+    """
+    if not 1 <= len(archivos) <= MAX_IMAGENES_POR_SUBLOTE:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Cada sublote debe contener entre 1 y 10 imágenes",
+        )
+    resultados: list[dict[str, object]] = []
+    for indice, archivo in enumerate(archivos):
+        cabecera = await archivo.read(12)
+        await archivo.seek(0)
+        firma_valida = (
+            cabecera.startswith(b"\\xff\\xd8\\xff")
+            or cabecera.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+            or (cabecera.startswith(b"RIFF") and cabecera[8:12] == b"WEBP")
+            or cabecera.startswith((b"II*\\x00", b"MM\\x00*"))
+        )
+        if not firma_valida:
+            resultados.append(
+                {"indice": indice, "estado": "error", "detalle": "Imagen no reconocida"}
+            )
+            continue
+        try:
+            documento = await subir_documento(
+                session=session,
+                settings=settings,
+                almacen=almacen,
+                hoy=hoy,
+                tenant_id=tenant_id,
+                auth=auth,
+                archivo=archivo,
+            )
+            resultados.append(
+                {"indice": indice, "estado": "ok", "documento_id": str(documento.id)}
+            )
+        except HTTPException as exc:
+            session.rollback()
+            estado = "duplicado" if exc.status_code == status.HTTP_409_CONFLICT else "error"
+            resultados.append({"indice": indice, "estado": estado, "detalle": exc.detail})
+    return {
+        "total": len(archivos),
+        "procesados": sum(x["estado"] == "ok" for x in resultados),
+        "duplicados": sum(x["estado"] == "duplicado" for x in resultados),
+        "errores": sum(x["estado"] == "error" for x in resultados),
+        "resultados": resultados,
     }
 
 
