@@ -117,7 +117,7 @@ jobs:
           test "$VPS_USER" = "ubuntu"
           bash -n deploy/preflight-backup-restore-items.sh
           ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
-            "cd -- '$VPS_DEPLOY_PATH' && test -f deploy/preflight-backup-restore-items.sh && bash deploy/preflight-backup-restore-items.sh"
+            "cd -- '$VPS_DEPLOY_PATH' && bash -s" < deploy/preflight-backup-restore-items.sh
 
       - name: Exigir despliegue manual desde main
         run: |
