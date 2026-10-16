@@ -198,6 +198,8 @@ def extraer_campos(
         _aplicar_parser_especializado(texto, formato, rucs, campos, fuente, factor)
 
     _extraer_razones_vinculadas_a_ruc(texto, campos, fuente, factor)
+    if re.search(r"COTIZACI[OÓ]N", texto, re.I):
+        _ajustar_partes_cotizacion(texto, campos, fuente, factor)
 
     fecha_match = FECHA_ETIQUETADA.search(texto)
     fecha_literal = FECHA_LITERAL_ES.search(texto) if fecha_match is None else None
@@ -235,7 +237,14 @@ def extraer_campos(
             moneda[0], min(0.95, moneda[1] * factor), moneda[2]
         ).a_dict(fuente)
 
-    total_match = TOTAL.search(texto)
+    es_cotizacion = bool(re.search(r"COTIZACI[OÓ]N", texto, re.I))
+    total_cotizacion = _total_cotizacion(texto) if es_cotizacion else None
+    total_match = TOTAL.search(texto) if not es_cotizacion else None
+    if total_cotizacion is not None:
+        importe, evidencia = total_cotizacion
+        campos["importe_total"] = CampoExtraido(
+            format(importe, ".2f"), min(0.97, 0.96 * factor), evidencia
+        ).a_dict(fuente)
     if total_match and (importe := _normalizar_importe(total_match.group(1))) is not None:
         campos["importe_total"] = CampoExtraido(
             format(importe, ".2f"), min(0.96, 0.94 * factor), total_match.group(0)
@@ -1187,3 +1196,81 @@ def _sin_tildes(valor: str) -> str:
         for caracter in unicodedata.normalize("NFKD", valor)
         if not unicodedata.combining(caracter)
     )
+
+
+def _total_cotizacion(texto: str) -> tuple[Decimal, str] | None:
+    """Lee el resumen de importes sin inferirlos de las cantidades."""
+    montos: dict[str, tuple[Decimal, str]] = {}
+    patron = re.compile(
+        r"^\s*(SUB\s*TOTAL|SUBTOTAL|I\.?G\.?V\.?\s*(?:18\s*%)?|"
+        r"TOTAL\s*(?:A\s*PAGAR)?)\s*[:=]?\s*(?:S/\.?\s*)?"
+        r"([0-9][0-9.,]*)\s*$",
+        re.IGNORECASE,
+    )
+    for linea in texto.splitlines():
+        coincidencia = patron.fullmatch(linea.strip())
+        if coincidencia is None:
+            continue
+        etiqueta = re.sub(r"[^A-Z]", "", coincidencia.group(1).upper())
+        nombre = (
+            "subtotal"
+            if etiqueta.startswith("SUBTOTAL")
+            else ("igv" if etiqueta.startswith("IGV") else "total")
+        )
+        valor = _normalizar_importe(coincidencia.group(2))
+        if valor is not None and valor >= 0:
+            montos[nombre] = (valor, linea.strip())
+    total = montos.get("total")
+    if total is None:
+        return None
+    subtotal = montos.get("subtotal")
+    igv = montos.get("igv")
+    if (
+        subtotal is not None
+        and igv is not None
+        and abs(subtotal[0] + igv[0] - total[0]) > Decimal("0.02")
+    ):
+        return None
+    return total
+
+
+def _ajustar_partes_cotizacion(
+    texto: str,
+    campos: dict[str, dict[str, object]],
+    fuente: str,
+    factor: float,
+) -> None:
+    """No atribuir el RUC del cliente al proveedor de una cotización."""
+    patron = re.compile(
+        r"\b(?:CLIENTE|RUC\s+(?:DEL\s+)?CLIENTE|RUC\s+RECEPTOR)"
+        r"\s*(?:RUC)?\s*[:=-]?\s*(\d{11})\b",
+        re.IGNORECASE,
+    )
+    clientes = {coincidencia.group(1) for coincidencia in patron.finditer(texto)}
+    if len(clientes) != 1:
+        return
+    cliente = clientes.pop()
+    campos["ruc_receptor"] = CampoExtraido(
+        cliente, min(0.95, 0.94 * factor), _contexto(texto, cliente)
+    ).a_dict(fuente)
+    emisor = campos.get("ruc_emisor")
+    if emisor is not None and str(emisor["valor"]) == cliente:
+        campos.pop("ruc_emisor", None)
+        campos.pop("razon_social_emisor", None)
+    # Aceptar razones sociales solo si la línea indica expresamente su función.
+    # No inferir la razón social del proveedor a partir de un encabezado ambiguo.
+    for campo, etiqueta in (
+        ("razon_social_receptor", "CLIENTE"),
+        ("razon_social_emisor", "PROVEEDOR"),
+    ):
+        coincidencias = re.findall(rf"(?im)^\s*{etiqueta}\s*:\s*([^\n]+)$", texto)
+        nombres = {
+            _recortar_razon(nombre)
+            for nombre in coincidencias
+            if _razon_social_valida(_recortar_razon(nombre))
+        }
+        if len(nombres) == 1:
+            nombre = nombres.pop()
+            campos[campo] = CampoExtraido(
+                nombre, min(0.88, 0.86 * factor), f"{etiqueta}: {nombre}"
+            ).a_dict(fuente)
