@@ -36,8 +36,6 @@ def test_importes_invalidos(presupuesto: str, ejecutado: str) -> None:
 
 
 def test_importes_grandes_con_precision_decimal() -> None:
-    porcentaje, estado = calcular_avance_pedido(
-        Decimal("500000"), Decimal("600000")
-    )
+    porcentaje, estado = calcular_avance_pedido(Decimal("500000"), Decimal("600000"))
     assert porcentaje == Decimal("120")
     assert estado == "NARANJA"
