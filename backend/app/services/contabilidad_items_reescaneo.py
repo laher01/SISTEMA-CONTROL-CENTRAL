@@ -64,7 +64,11 @@ def previsualizar_pagina(
             if ruta.stat().st_size > MAX_XML_BYTES:
                 resultados.append(ResultadoVistaPrevia(documento.id, "EXCEDE_LIMITE"))
                 continue
-            contenido = ruta.read_bytes()
+            with ruta.open('rb') as archivo:
+                contenido = archivo.read(MAX_XML_BYTES + 1)
+            if len(contenido) > MAX_XML_BYTES:
+                resultados.append(ResultadoVistaPrevia(documento.id, "EXCEDE_LIMITE"))
+                continue
             if hashlib.sha256(contenido).hexdigest() != documento.sha256:
                 resultados.append(ResultadoVistaPrevia(documento.id, "HASH_DIFERENTE"))
                 continue
@@ -124,7 +128,11 @@ def registrar_pagina_verificada(
             if ruta.stat().st_size > MAX_XML_BYTES:
                 resultados.append(ResultadoLote(item.documento_id, "EXCEDE_LIMITE"))
                 continue
-            contenido = ruta.read_bytes()
+            with ruta.open('rb') as archivo:
+                contenido = archivo.read(MAX_XML_BYTES + 1)
+            if len(contenido) > MAX_XML_BYTES:
+                resultados.append(ResultadoLote(item.documento_id, "EXCEDE_LIMITE"))
+                continue
             if hashlib.sha256(contenido).hexdigest() != documento.sha256:
                 resultados.append(ResultadoLote(item.documento_id, "HASH_DIFERENTE"))
                 continue
