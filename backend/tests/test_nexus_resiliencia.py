@@ -35,6 +35,7 @@ def test_nexus_llm_timeout_usa_fallback_contextual(
     assert datos["accion"] == "CONTEXTO_NEXUS"
     assert datos["llm_usado"] is False
     assert datos["seccion"] == "REGISTROS"
+    assert "no está disponible temporalmente" in datos["respuesta"]
     assert "timeout simulado" not in datos["respuesta"]
 
 
@@ -64,4 +65,5 @@ def test_nexus_llm_respuesta_sin_texto_usa_fallback(
     assert datos["motor"] == "CONTEXTUAL"
     assert datos["llm_usado"] is False
     assert datos["seccion"] == "EMPRESAS"
+    assert "no está disponible temporalmente" in datos["respuesta"]
     assert "El motor conversacional externo todavía no está configurado" not in datos["respuesta"]
