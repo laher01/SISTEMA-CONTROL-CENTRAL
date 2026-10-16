@@ -380,6 +380,8 @@ async def subir_sublote_imagenes(
                 tenant_id=tenant_id,
                 auth=auth,
                 archivo=archivo,
+                tipo_documento=None,
+                expediente_id=None,
             )
             resultados.append(
                 {"indice": indice, "estado": "ok", "documento_id": str(documento.id)}
