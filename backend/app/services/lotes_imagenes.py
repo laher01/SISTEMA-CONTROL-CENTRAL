@@ -4,6 +4,8 @@ No almacena archivos ni ejecuta OCR: se integra antes de encolar trabajos.
 """
 
 from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 
 MAX_IMAGENES_POR_SUBLOTE = 10
@@ -38,8 +40,9 @@ class IdentidadFactura:
 
 
 def _completa(factura: IdentidadFactura) -> bool:
-    return (
-        bool(factura.tenant_id.strip())
+    """Una identidad incompleta o inválida nunca autoriza crear automáticamente."""
+    if not (
+        factura.tenant_id.strip()
         and factura.ruc_emisor.isdigit()
         and len(factura.ruc_emisor) == 11
         and factura.ruc_receptor.isdigit()
@@ -54,7 +57,14 @@ def _completa(factura: IdentidadFactura) -> bool:
                 factura.fecha_emision,
             )
         )
-    )
+    ):
+        return False
+    try:
+        monto = Decimal(factura.importe)
+        date.fromisoformat(factura.fecha_emision)
+    except (InvalidOperation, ValueError):
+        return False
+    return monto.is_finite() and monto > 0
 
 
 def decidir_factura(
