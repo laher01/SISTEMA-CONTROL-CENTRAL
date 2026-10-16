@@ -90,6 +90,9 @@ def extraer_factura_estacion(texto: str) -> dict[str, tuple[str, str]]:
         valor = _monto(encontrados[-1].group(1))
         if valor is not None:
             campos["importe_total"] = (str(valor), encontrados[-1].group(0))
+    # En el PDF fragmentado "S/TOTAL" puede preceder al IGV, no al total.
+    if jabsa and "S/TOTAL" in texto.upper():
+        campos.pop("importe_total", None)
     if jabsa and "importe_total" not in campos:
         # El motor PDF puede colocar la cifra total debajo de OP.GRAVADAS,
         # y la cifra de IGV antes de su etiqueta. Solo aceptar si cuadra.
