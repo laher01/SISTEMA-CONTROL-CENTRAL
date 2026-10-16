@@ -124,9 +124,17 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
   };
 
   const pegarImagen = (evento: ClipboardEvent<HTMLDivElement>) => {
-    const imagenes = Array.from(evento.clipboardData.files).filter((archivo) =>
-      archivo.type.startsWith("image/"),
-    );
+    const imagenes = Array.from(evento.clipboardData.items)
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((archivo): archivo is File => archivo !== null);
+    if (!imagenes.length) {
+      imagenes.push(
+        ...Array.from(evento.clipboardData.files).filter((archivo) =>
+          archivo.type.startsWith("image/"),
+        ),
+      );
+    }
     if (!imagenes.length) return;
     evento.preventDefault();
     agregar(imagenes);
