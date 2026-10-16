@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.services.pedido_avance import calcular_avance_pedido
+from app.services.pedido_avance import calcular_avance_consolidado, calcular_avance_pedido
 
 
 @pytest.mark.parametrize(
@@ -39,3 +39,32 @@ def test_importes_grandes_con_precision_decimal() -> None:
     porcentaje, estado = calcular_avance_pedido(Decimal("500000"), Decimal("600000"))
     assert porcentaje == Decimal("120")
     assert estado == "NARANJA"
+
+
+def test_consolidado_pondera_importes_no_porcentajes() -> None:
+    porcentaje, estado = calcular_avance_consolidado(
+        [
+            (Decimal("900"), Decimal("900")),
+            (Decimal("100"), Decimal("0")),
+        ]
+    )
+    assert porcentaje == Decimal("90")
+    assert estado == "VERDE"
+
+
+def test_consolidado_con_exceso() -> None:
+    porcentaje, estado = calcular_avance_consolidado(
+        [
+            (Decimal("200"), Decimal("250")),
+            (Decimal("300"), Decimal("350")),
+        ]
+    )
+    assert porcentaje == Decimal("120")
+    assert estado == "NARANJA"
+
+
+def test_consolidado_vacio_o_invalido() -> None:
+    with pytest.raises(ValueError):
+        calcular_avance_consolidado([])
+    with pytest.raises(ValueError):
+        calcular_avance_consolidado([(Decimal("10"), Decimal("-1"))])
