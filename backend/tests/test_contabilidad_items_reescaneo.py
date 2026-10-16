@@ -185,3 +185,23 @@ def test_xml_invalido_o_sin_items_no_genera_lineas(
     lote = registrar_pagina_verificada(session, almacen, tenant.id)
     assert lote[0].estado == "SIN_ITEMS_UBL"
     assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 0
+
+
+def test_ruta_con_traversal_no_procesa_archivo_de_otro_tenant(
+    session: Session, tmp_path: Path
+):
+    propietario = Tenant(nombre="tenant_traversal_a")
+    ajeno = Tenant(nombre="tenant_traversal_b")
+    session.add_all([propietario, ajeno])
+    session.flush()
+    almacen = AlmacenLocal(tmp_path)
+    ajeno_doc = _guardar(session, almacen, ajeno.id, XML)
+    doc = _guardar(session, almacen, propietario.id, XML)
+    doc.ruta_storage = f"{propietario.id}/../{ajeno_doc.ruta_storage}"
+    session.flush()
+
+    previa = previsualizar_pagina(session, almacen, propietario.id)
+    assert previa[0].estado == "RUTA_FUERA_TENANT"
+    lote = registrar_pagina_verificada(session, almacen, propietario.id)
+    assert lote[0].estado == "RUTA_FUERA_TENANT"
+    assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 0
