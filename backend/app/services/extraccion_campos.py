@@ -1227,10 +1227,10 @@ def _total_cotizacion(texto: str) -> tuple[Decimal, str] | None:
         # inmediatamente de la nota comercial y con aritmética consistente.
         lineas = [linea.strip() for linea in texto.splitlines() if linea.strip()]
         if "CANT UND COSTO TOTAL" in texto.upper() and all(
-            re.search(rf"(?m)^\\s*{etiqueta}\\s*$", texto, re.I)
+            re.search(rf"(?m)^\s*{etiqueta}\s*$", texto, re.I)
             for etiqueta in ("SUB TOTAL", "IGV 18%", "TOTAL")
         ):
-            patron_monto = re.compile(r"^([0-9][0-9,.]*)S/\\s*$")
+            patron_monto = re.compile(r"^([0-9][0-9,.]*)S/\s*$")
             for indice, linea in enumerate(lineas):
                 if not linea.upper().startswith("NOTA:") or indice < 3:
                     continue
