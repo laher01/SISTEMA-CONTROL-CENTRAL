@@ -1003,17 +1003,17 @@ def crear_pedidos_masivos(
             )
         nuevos.append(
             PedidoGerencia(
-            tenant_id=tenant_id,
-            gerente_id=gerente_id,
-            cliente_id=cliente.id,
-            responsable_id=responsable.id,
-            periodo_mes=periodo,
-            moneda=datos.moneda,
-            monto_solicitado=item.monto_solicitado,
-            modalidad=datos.modalidad,
-            modo_distribucion="MANUAL",
-            estado="ACTIVO",
-            observacion=datos.observacion.strip() if datos.observacion else None,
+                tenant_id=tenant_id,
+                gerente_id=gerente_id,
+                cliente_id=cliente.id,
+                responsable_id=responsable.id,
+                periodo_mes=periodo,
+                moneda=datos.moneda,
+                monto_solicitado=item.monto_solicitado,
+                modalidad=datos.modalidad,
+                modo_distribucion="MANUAL",
+                estado="ACTIVO",
+                observacion=datos.observacion.strip() if datos.observacion else None,
                 creado_por_cuenta_id=cuenta_administradora_responsable(session, auth),
             )
         )
