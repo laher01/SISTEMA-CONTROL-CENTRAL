@@ -48,3 +48,12 @@ def calcular_avance_consolidado(
         total_presupuesto += presupuesto
         total_ejecutado += ejecutado
     return calcular_avance_pedido(total_presupuesto, total_ejecutado)
+
+
+def requiere_alerta_exceso(
+    presupuesto: Decimal,
+    ejecutado: Decimal,
+) -> bool:
+    """Alerta urgente solo por encima de 120 %, sin rechazar la operación real."""
+    _, estado = calcular_avance_pedido(presupuesto, ejecutado)
+    return estado == "ROJO"
