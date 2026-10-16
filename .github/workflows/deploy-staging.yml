@@ -122,6 +122,16 @@ jobs:
             exit 1
           }
 
+      - name: Verificar backup y restauración aislada antes del despliegue
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+        run: |
+          test "$VPS_HOST" = "132.145.233.172" && test "$VPS_USER" = "ubuntu" || exit 1
+          ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
+            "cd -- '$VPS_DEPLOY_PATH' && EXPECTED_HOST='132.145.233.172' bash deploy/preflight-backup-restore-items.sh"
+
       - name: Desplegar commit validado en VPS autorizada
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
