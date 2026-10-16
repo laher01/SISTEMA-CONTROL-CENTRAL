@@ -225,6 +225,11 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
     { relacionados: 0, revision: 0, duplicados: 0, errores: 0 },
   );
 
+  const lotesDeDiez = Math.ceil(filas.length / 10);
+  const archivosTerminados = filas.filter((f) =>
+    f.resultado.estado === "ok" || f.resultado.estado === "duplicado" || f.resultado.estado === "error",
+  ).length;
+
   const conteo = (estado: Resultado["estado"]) =>
     filas.filter((f) => f.resultado.estado === estado).length;
 
@@ -438,7 +443,7 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
           <div className="resumen-lote">
             <p className="resumen-carga">
               {conteo("ok")} subidos · {conteo("duplicado")} duplicados · {conteo("error")} con error ·{" "}
-              {conteo("en_cola") + conteo("subiendo")} en proceso
+              {conteo("en_cola") + conteo("subiendo")} en proceso · {archivosTerminados}/{filas.length} finalizados · {lotesDeDiez} grupo(s) de hasta 10
             </p>
             <strong>Total del lote: {formatearMonto("PEN", String(totales.pen))}</strong>
             {totales.usd > 0 && (
