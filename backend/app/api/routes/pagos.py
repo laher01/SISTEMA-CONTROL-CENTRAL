@@ -932,7 +932,9 @@ class PedidoMasivoIn(BaseModel):
     responsable_id: uuid.UUID
     periodo_mes: date
     moneda: str = Field(pattern="^(PEN|USD)$")
-    modalidad: str = Field(default="POR_PEDIDO", pattern="^(POR_PEDIDO|SIN_RESTRICCION)$")
+    modalidad: str = Field(
+        default="POR_PEDIDO", pattern="^(POR_PEDIDO|SIN_RESTRICCION)$"
+    )
     observacion: str | None = Field(default=None, max_length=500)
     items: list[PedidoMasivoItem] = Field(min_length=1, max_length=200)
 
@@ -953,24 +955,30 @@ def crear_pedidos_masivos(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Se requiere Gerente")
     gerente = session.get(Miembro, gerente_id)
     if (
-        not gerente or gerente.tenant_id != tenant_id
+        not gerente
+        or gerente.tenant_id != tenant_id
         or gerente.rol != RolMiembro.GERENTE
-        or not gerente.activo or gerente.deleted_at is not None
+        or not gerente.activo
+        or gerente.deleted_at is not None
     ):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Gerente inválido")
     responsable = session.get(Miembro, datos.responsable_id)
     if (
-        not responsable or responsable.tenant_id != tenant_id
+        not responsable
+        or responsable.tenant_id != tenant_id
         or responsable.rol != RolMiembro.RESPONSABLE
-        or not responsable.activo or responsable.deleted_at is not None
+        or not responsable.activo
+        or responsable.deleted_at is not None
     ):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Responsable inválido")
-    vinculo = session.scalar(select(GerenteResponsable.id).where(
-        GerenteResponsable.tenant_id == tenant_id,
-        GerenteResponsable.gerente_id == gerente_id,
-        GerenteResponsable.responsable_id == responsable.id,
-        GerenteResponsable.activo.is_(True),
-    ))
+    vinculo = session.scalar(
+        select(GerenteResponsable.id).where(
+            GerenteResponsable.tenant_id == tenant_id,
+            GerenteResponsable.gerente_id == gerente_id,
+            GerenteResponsable.responsable_id == responsable.id,
+            GerenteResponsable.activo.is_(True),
+        )
+    )
     if vinculo is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Responsable no vinculado")
     cliente_ids = [item.cliente_id for item in datos.items]
@@ -980,23 +988,27 @@ def crear_pedidos_masivos(
     nuevos: list[PedidoGerencia] = []
     for item in datos.items:
         cliente = _cliente_valido(session, tenant_id, item.cliente_id)
-        cartera = session.scalar(select(GerenteEmpresa.id).where(
-            GerenteEmpresa.tenant_id == tenant_id,
-            GerenteEmpresa.gerente_id == gerente_id,
-            GerenteEmpresa.empresa_id == cliente.id,
-            GerenteEmpresa.activo.is_(True),
-        ))
+        cartera = session.scalar(
+            select(GerenteEmpresa.id).where(
+                GerenteEmpresa.tenant_id == tenant_id,
+                GerenteEmpresa.gerente_id == gerente_id,
+                GerenteEmpresa.empresa_id == cliente.id,
+                GerenteEmpresa.activo.is_(True),
+            )
+        )
         if cartera is None:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN, "Cliente fuera de la cartera del Gerente"
             )
-        duplicado = session.scalar(select(PedidoGerencia.id).where(
-            PedidoGerencia.tenant_id == tenant_id,
-            PedidoGerencia.gerente_id == gerente_id,
-            PedidoGerencia.cliente_id == cliente.id,
-            PedidoGerencia.periodo_mes == periodo,
-            PedidoGerencia.moneda == datos.moneda,
-        ))
+        duplicado = session.scalar(
+            select(PedidoGerencia.id).where(
+                PedidoGerencia.tenant_id == tenant_id,
+                PedidoGerencia.gerente_id == gerente_id,
+                PedidoGerencia.cliente_id == cliente.id,
+                PedidoGerencia.periodo_mes == periodo,
+                PedidoGerencia.moneda == datos.moneda,
+            )
+        )
         if duplicado is not None:
             raise HTTPException(
                 status.HTTP_409_CONFLICT, "El lote contiene un Cliente con pedido existente"
