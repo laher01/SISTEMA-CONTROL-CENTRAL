@@ -1,7 +1,11 @@
 name: deploy-staging
 
 on:
-  # El despliegue nunca se ejecuta por un push o merge a main.
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - '.github/workflows/deploy-staging.yml'
   workflow_dispatch:
 
 permissions:
@@ -60,7 +64,7 @@ jobs:
       - run: npm run build
 
   deploy:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     needs: [verify-backend, verify-frontend]
     runs-on: ubuntu-latest
     environment: staging
@@ -107,15 +111,18 @@ jobs:
           ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
             "cd -- '$VPS_DEPLOY_PATH' && EXPECTED_COMMIT='$EXPECTED_COMMIT' bash -s" < deploy/preflight-secretaria.sh
 
-      - name: Exigir despliegue manual desde main
+      - name: Verificar evento y commit de main
         run: |
-          test "${{ github.event_name }}" = "workflow_dispatch" || exit 1
+          case "${{ github.event_name }}" in
+            push|workflow_dispatch) ;;
+            *) echo "::error::Evento no autorizado"; exit 1 ;;
+          esac
           test "${{ github.ref_name }}" = "main" || {
             echo "::error::Solo se permite desplegar un commit integrado en main"
             exit 1
           }
 
-      - name: Desplegar main en VPS autorizada (manual)
+      - name: Desplegar commit validado en VPS autorizada
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
