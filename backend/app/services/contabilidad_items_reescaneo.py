@@ -1,7 +1,7 @@
 """Vista previa paginada y de solo lectura para el reescaneo histórico UBL.
 
-No modifica originales, catálogos, líneas ni estados de auditoría.
-La ejecución persistente se habilitará solo tras pruebas de aislamiento y reintentos.
+La vista previa no modifica datos. El registro por página requiere una transacción
+controlada por el llamador; no representa todavía una tarea durable reanudable.
 """
 
 import hashlib
@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models import Documento
@@ -131,6 +132,6 @@ def registrar_pagina_verificada(
                 nuevos = registrar_items_ubl(session, tenant_id, documento.id, contenido)
                 session.flush()
             resultados.append(ResultadoLote(item.documento_id, "PROCESADO", nuevos))
-        except (OSError, ValueError):
+        except (OSError, ValueError, SQLAlchemyError):
             resultados.append(ResultadoLote(item.documento_id, "ERROR_REINTENTABLE"))
     return resultados
