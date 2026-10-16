@@ -1,6 +1,7 @@
 name: preflight-safety-ci
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - "deploy/preflight-secretaria.sh"
