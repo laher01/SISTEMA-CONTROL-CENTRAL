@@ -3,6 +3,9 @@ name: deploy-staging
 on:
   push:
     branches: [main]
+  pull_request:
+    paths:
+      - '.github/workflows/deploy-staging.yml'
   workflow_dispatch:
 
 permissions:
