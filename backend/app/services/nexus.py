@@ -105,6 +105,7 @@ def responder(
         salida = _responder_busqueda_web(settings, texto)
         return _enriquecer(salida, contexto, fuentes_conocimiento, "ESPECIALISTA_WEB")
 
+    fallo_llm = False
     if settings.nexus_llm_url:
         try:
             return _responder_llm(
@@ -116,7 +117,7 @@ def responder(
                 fuentes_conocimiento,
             )
         except (urllib.error.URLError, TimeoutError, ValueError, json.JSONDecodeError):
-            pass
+            fallo_llm = True
 
     return _responder_contextual(
         contexto,
@@ -124,6 +125,7 @@ def responder(
         conocimiento,
         fuentes_conocimiento,
         requiere_llm=not bool(settings.nexus_llm_url),
+        fallo_llm=fallo_llm,
     )
 
 
@@ -163,6 +165,7 @@ def _responder_contextual(
     fuentes: list[NexusFuente],
     *,
     requiere_llm: bool,
+    fallo_llm: bool = False,
 ) -> NexusChatOut:
     datos = contexto.datos
     partes = [
@@ -175,6 +178,11 @@ def _responder_contextual(
         partes.append(
             "Encontré reglas o documentación relacionada en la base de conocimiento y las adjunto "
             "como fuentes. Puedo explicarlas con más detalle."
+        )
+    if fallo_llm:
+        partes.append(
+            "El motor conversacional no está disponible temporalmente; "
+            "respondo con el contexto autorizado de FACT CENTRAL."
         )
     if requiere_llm:
         partes.append(
