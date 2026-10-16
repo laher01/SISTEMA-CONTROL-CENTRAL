@@ -1,7 +1,10 @@
 name: deploy-staging
 
 on:
-  # El despliegue nunca se ejecuta por un push o merge a main.
+  # Despliegue automático exclusivamente tras un cambio integrado en main.
+  push:
+    branches: [main]
+  # Ejecución manual conservada para recuperación operativa.
   workflow_dispatch:
 
 permissions:
@@ -60,7 +63,7 @@ jobs:
       - run: npm run build
 
   deploy:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: [verify-backend, verify-frontend]
     runs-on: ubuntu-latest
     environment: staging
@@ -107,15 +110,18 @@ jobs:
           ssh -o BatchMode=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
             "cd -- '$VPS_DEPLOY_PATH' && EXPECTED_COMMIT='$EXPECTED_COMMIT' bash -s" < deploy/preflight-secretaria.sh
 
-      - name: Exigir despliegue manual desde main
+      - name: Exigir commit integrado en main
         run: |
-          test "${{ github.event_name }}" = "workflow_dispatch" || exit 1
           test "${{ github.ref_name }}" = "main" || {
             echo "::error::Solo se permite desplegar un commit integrado en main"
             exit 1
           }
+          case "${{ github.event_name }}" in
+            push|workflow_dispatch) ;;
+            *) echo "::error::Evento de despliegue no autorizado"; exit 1 ;;
+          esac
 
-      - name: Desplegar main en VPS autorizada (manual)
+      - name: Desplegar main en VPS autorizada (automático o manual)
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
