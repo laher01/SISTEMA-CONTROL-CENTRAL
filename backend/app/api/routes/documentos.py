@@ -361,10 +361,10 @@ async def subir_sublote_imagenes(
         cabecera = await archivo.read(12)
         await archivo.seek(0)
         firma_valida = (
-            cabecera.startswith(b"\\xff\\xd8\\xff")
-            or cabecera.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+            cabecera.startswith(b"\xff\xd8\xff")
+            or cabecera.startswith(b"\x89PNG\r\n\x1a\n")
             or (cabecera.startswith(b"RIFF") and cabecera[8:12] == b"WEBP")
-            or cabecera.startswith((b"II*\\x00", b"MM\\x00*"))
+            or cabecera.startswith((b"II*\x00", b"MM\x00*"))
         )
         if not firma_valida:
             resultados.append(
