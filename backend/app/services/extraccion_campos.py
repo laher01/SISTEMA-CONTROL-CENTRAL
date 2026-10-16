@@ -1258,12 +1258,12 @@ def _total_cotizacion(texto: str) -> tuple[Decimal, str] | None:
                     break
     if total is None:
         return None
-    subtotal = montos.get("subtotal")
-    igv = montos.get("igv")
+    subtotal_etiquetado = montos.get("subtotal")
+    igv_etiquetado = montos.get("igv")
     if (
-        subtotal is not None
-        and igv is not None
-        and abs(subtotal[0] + igv[0] - total[0]) > Decimal("0.02")
+        subtotal_etiquetado is not None
+        and igv_etiquetado is not None
+        and abs(subtotal_etiquetado[0] + igv_etiquetado[0] - total[0])
     ):
         return None
     return total
