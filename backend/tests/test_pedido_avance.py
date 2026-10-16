@@ -78,3 +78,18 @@ def test_importes_no_finitos_rechazados(invalido: str) -> None:
         calcular_avance_pedido(Decimal("10"), Decimal(invalido))
     with pytest.raises(ValueError):
         calcular_avance_consolidado([(Decimal("10"), Decimal(invalido))])
+
+
+@pytest.mark.parametrize(
+    ("ejecutado", "estado"),
+    [
+        ("99.9999", "VERDE"),
+        ("100.0000", "NARANJA"),
+        ("120.0000", "NARANJA"),
+        ("120.0001", "ROJO"),
+    ],
+)
+def test_limites_sin_redondeo_previo(ejecutado: str, estado: str) -> None:
+    porcentaje, actual = calcular_avance_pedido(Decimal("100"), Decimal(ejecutado))
+    assert porcentaje == Decimal(ejecutado)
+    assert actual == estado
