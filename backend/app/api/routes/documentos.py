@@ -383,9 +383,7 @@ async def subir_sublote_imagenes(
                 tipo_documento=None,
                 expediente_id=None,
             )
-            resultados.append(
-                {"indice": indice, "estado": "ok", "documento_id": str(documento.id)}
-            )
+            resultados.append({"indice": indice, "estado": "ok", "documento_id": str(documento.id)})
         except HTTPException as exc:
             session.rollback()
             detalle = exc.detail
