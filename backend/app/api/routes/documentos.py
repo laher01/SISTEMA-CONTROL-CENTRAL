@@ -388,8 +388,14 @@ async def subir_sublote_imagenes(
             )
         except HTTPException as exc:
             session.rollback()
-            estado = "duplicado" if exc.status_code == status.HTTP_409_CONFLICT else "error"
-            resultados.append({"indice": indice, "estado": estado, "detalle": exc.detail})
+            detalle = exc.detail
+            es_duplicado = (
+                exc.status_code == status.HTTP_409_CONFLICT
+                and isinstance(detalle, dict)
+                and detalle.get("duplicado") is True
+            )
+            estado = "duplicado" if es_duplicado else "error"
+            resultados.append({"indice": indice, "estado": estado, "detalle": detalle})
     return {
         "total": len(archivos),
         "procesados": sum(x["estado"] == "ok" for x in resultados),
