@@ -289,6 +289,18 @@ async def importar_paquete_pdf(
                     documento.id,
                     {"documento_padre_id": str(paquete_original.id)},
                 )
+            # Las cotizaciones se leen como evidencia comercial sin crear ni
+            # asociar automáticamente un expediente fiscal.
+            if segmento.tipo == "COT" and settings.procesamiento_automatico:
+                try:
+                    lectura = procesar(
+                        subido.contenido,
+                        settings.max_extracted_chars,
+                        settings.max_ocr_pdf_pages,
+                    )
+                    guardar_procesamiento(session, documento, lectura.a_dict())
+                except DocumentoNoProcesable as exc:
+                    registrar_fallo(session, documento, str(exc))
             if (
                 segmento.tipo != "COT"
                 and settings.procesamiento_automatico
