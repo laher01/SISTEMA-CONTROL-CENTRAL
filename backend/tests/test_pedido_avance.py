@@ -68,3 +68,13 @@ def test_consolidado_vacio_o_invalido() -> None:
         calcular_avance_consolidado([])
     with pytest.raises(ValueError):
         calcular_avance_consolidado([(Decimal("10"), Decimal("-1"))])
+
+
+@pytest.mark.parametrize("invalido", ["NaN", "Infinity", "-Infinity"])
+def test_importes_no_finitos_rechazados(invalido: str) -> None:
+    with pytest.raises(ValueError):
+        calcular_avance_pedido(Decimal(invalido), Decimal("1"))
+    with pytest.raises(ValueError):
+        calcular_avance_pedido(Decimal("10"), Decimal(invalido))
+    with pytest.raises(ValueError):
+        calcular_avance_consolidado([(Decimal("10"), Decimal(invalido))])
