@@ -23,6 +23,14 @@ type Conciliacion = {
   importe_otros: string;
 };
 
+type Cobertura = {
+  expedientes: number;
+  con_documentos: number;
+  sin_documentos: number;
+  con_lineas: number;
+  sin_lineas: number;
+};
+
 export default function ContabilidadItems() {
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
@@ -40,6 +48,7 @@ export default function ContabilidadItems() {
   });
   const { datos, error, cargando, recargar } = useDatos<FilaItem[]>(ruta);
   const conciliacion = useDatos<Conciliacion[]>(conParametros("/api/v1/contabilidad-items/conciliacion", filtros));
+  const cobertura = useDatos<Cobertura>(conParametros("/api/v1/contabilidad-items/cobertura", filtros));
 
   return (
     <section aria-label="Contabilidad de ítems">
@@ -104,6 +113,23 @@ export default function ContabilidadItems() {
         </button>
       </p>
       {errorDescarga && <p role="alert">{errorDescarga}</p>}
+      <h3>Cobertura de extracción de productos</h3>
+      {cobertura.error && <p role="alert">No se pudo consultar cobertura: {cobertura.error}</p>}
+      {cobertura.cargando && <p>Calculando cobertura de expedientes…</p>}
+      {cobertura.datos && (
+        <div role="status" aria-live="polite">
+          <p>
+            Expedientes visibles: <strong>{cobertura.datos.expedientes}</strong>.
+            Con documentos: <strong>{cobertura.datos.con_documentos}</strong>.
+            Con líneas persistidas: <strong>{cobertura.datos.con_lineas}</strong>.
+            Sin líneas persistidas: <strong>{cobertura.datos.sin_lineas}</strong>.
+          </p>
+          <p>
+            Estos indicadores cuentan expedientes distintos dentro de su alcance.
+            No indican por sí solos si el XML está disponible o si procede un reprocesamiento.
+          </p>
+        </div>
+      )}
       <h3>Conciliación de comprobantes por moneda</h3>
       <p>Importe total = aprobado + observado + otros estados internos. Los valores corresponden a comprobantes, no a la suma de líneas de productos.</p>
       {conciliacion.error && <p role="alert">No se pudo conciliar: {conciliacion.error}</p>}
