@@ -151,3 +151,19 @@ def test_registrar_lote_xml_no_duplica_lineas_ni_altera_original(session: Sessio
     assert segundo[0].lineas_nuevas == 0
     assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 1
     assert almacen.leer(documento.ruta_storage) == XML
+
+
+def test_xml_que_supera_limite_es_rechazado_sin_registrar_items(session: Session, tmp_path: Path):
+    tenant = Tenant(nombre="tenant_xml_excede_limite")
+    session.add(tenant)
+    session.flush()
+    almacen = AlmacenLocal(tmp_path)
+    xml_grande = XML + b" " * (5 * 1024 * 1024)
+    documento = _guardar(session, almacen, tenant.id, xml_grande)
+
+    previa = previsualizar_pagina(session, almacen, tenant.id)
+    assert previa[0].estado == "EXCEDE_LIMITE"
+    lote = registrar_pagina_verificada(session, almacen, tenant.id)
+    assert lote[0].estado == "EXCEDE_LIMITE"
+    assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 0
+    assert almacen.leer(documento.ruta_storage) == xml_grande
