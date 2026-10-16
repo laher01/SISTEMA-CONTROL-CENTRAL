@@ -151,13 +151,10 @@ def cobertura_items(
     """
     if desde is not None and hasta is not None and desde > hasta:
         raise HTTPException(422, "La fecha inicial no puede ser posterior a la final")
-    documentos = (
-        select(Documento.id)
-        .where(
-            Documento.tenant_id == auth.tenant_id,
-            Documento.expediente_id == Expediente.id,
-            Documento.deleted_at.is_(None),
-        )
+    documentos = select(Documento.id).where(
+        Documento.tenant_id == auth.tenant_id,
+        Documento.expediente_id == Expediente.id,
+        Documento.deleted_at.is_(None),
     )
     lineas = (
         select(LineaComprobanteItem.id)
