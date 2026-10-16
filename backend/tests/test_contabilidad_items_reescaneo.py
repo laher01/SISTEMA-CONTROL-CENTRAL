@@ -167,3 +167,21 @@ def test_xml_que_supera_limite_es_rechazado_sin_registrar_items(session: Session
     assert lote[0].estado == "EXCEDE_LIMITE"
     assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 0
     assert almacen.leer(documento.ruta_storage) == xml_grande
+
+
+@pytest.mark.parametrize("contenido", [b"<Invoice>", b"<nota>Sin lineas</nota>"])
+def test_xml_invalido_o_sin_items_no_genera_lineas(
+    session: Session, tmp_path: Path, contenido: bytes
+):
+    tenant = Tenant(nombre="tenant_xml_sin_items_" + hashlib.sha256(contenido).hexdigest()[:8])
+    session.add(tenant)
+    session.flush()
+    almacen = AlmacenLocal(tmp_path)
+    _guardar(session, almacen, tenant.id, contenido)
+
+    previa = previsualizar_pagina(session, almacen, tenant.id)
+    assert len(previa) == 1
+    assert previa[0].estado == "SIN_ITEMS_UBL"
+    lote = registrar_pagina_verificada(session, almacen, tenant.id)
+    assert lote[0].estado == "SIN_ITEMS_UBL"
+    assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 0
