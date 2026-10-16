@@ -88,8 +88,7 @@ def test_tenant_distinto_no_se_trata_como_duplicado(factura: IdentidadFactura) -
 def test_importe_invalido_requiere_revision(factura: IdentidadFactura, importe: str) -> None:
     nueva = replace(factura, importe=importe)
     assert (
-        decidir_factura(nueva, None, confianza_suficiente=True)
-        == DecisionFiscal.REVISION_REQUERIDA
+        decidir_factura(nueva, None, confianza_suficiente=True) == DecisionFiscal.REVISION_REQUERIDA
     )
 
 
@@ -97,6 +96,5 @@ def test_importe_invalido_requiere_revision(factura: IdentidadFactura, importe: 
 def test_fecha_invalida_requiere_revision(factura: IdentidadFactura, fecha: str) -> None:
     nueva = replace(factura, fecha_emision=fecha)
     assert (
-        decidir_factura(nueva, None, confianza_suficiente=True)
-        == DecisionFiscal.REVISION_REQUERIDA
+        decidir_factura(nueva, None, confianza_suficiente=True) == DecisionFiscal.REVISION_REQUERIDA
     )
