@@ -22,7 +22,9 @@ class CambiarLanding(BaseModel):
 @router.get("/publico", response_model=EstadoLanding)
 def estado_publico(session: SessionDep) -> EstadoLanding:
     estado = session.get(ConfiguracionLandingGlobal, 1)
-    return EstadoLanding(activa=estado.activa, version=estado.version) if estado else EstadoLanding(activa=True, version=1)
+    if estado is None:
+        return EstadoLanding(activa=True, version=1)
+    return EstadoLanding(activa=estado.activa, version=estado.version)
 
 
 @router.get("", response_model=EstadoLanding)
@@ -43,7 +45,9 @@ def actualizar_estado(
     )
     if estado is None:
         if datos.version != 1:
-            raise HTTPException(status.HTTP_409_CONFLICT, "La configuración cambió; recargue")
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "La configuración cambió; recargue"
+            )
         estado = ConfiguracionLandingGlobal(id=1, activa=True, version=1)
         session.add(estado)
         session.flush()
@@ -70,4 +74,7 @@ def _exigir_superadmin(auth: object) -> None:
         getattr(auth, "rol", None) != "SUPERADMIN"
         or getattr(auth, "cambio_clave_obligatorio", True)
     ):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo SUPERADMIN puede administrar la página web")
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Solo SUPERADMIN puede administrar la página web",
+        )
