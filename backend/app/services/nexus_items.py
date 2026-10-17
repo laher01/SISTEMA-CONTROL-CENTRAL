@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import re
 import unicodedata
 from collections import defaultdict
-from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -29,7 +27,10 @@ def consulta_items_solicitada(mensaje: str) -> tuple[str, str] | None:
         return ("clientes", "")
     if "de que son" in normal and any(x in normal for x in ("factura", "comprobante")):
         return ("resumen", "")
-    if not any(x in normal for x in ("factura", "comprobante", "contiene", "contienen", "son de", "tiene", "tienen")):
+    if not any(
+        x in normal
+        for x in ("factura", "comprobante", "contiene", "contienen", "son de", "tiene", "tienen")
+    ):
         return None
     sinonimos = {
         "petroleo": ("petroleo", "diesel", "diésel", "combustible"),
@@ -37,13 +38,17 @@ def consulta_items_solicitada(mensaje: str) -> tuple[str, str] | None:
         "viveres": ("viveres", "víveres", "abarrotes"),
         "cuadernos": ("cuaderno", "cuadernos"),
     }
-    terminos = tuple(nombre for nombre, palabras in sinonimos.items() if any(p in normal for p in palabras))
+    terminos = tuple(
+        nombre for nombre, palabras in sinonimos.items() if any(p in normal for p in palabras)
+    )
     if terminos:
         return ("producto", ",".join(terminos))
     return None
 
 
-def responder_items(session: Session, auth: ContextoAcceso, tipo: str, busqueda: str) -> NexusChatOut:
+def responder_items(
+    session: Session, auth: ContextoAcceso, tipo: str, busqueda: str
+) -> NexusChatOut:
     """Toda unión comprueba tenant_id y el ámbito de expedientes del actor."""
     condiciones = condiciones_expedientes(session, auth)
     consulta = (
@@ -99,7 +104,9 @@ def responder_items(session: Session, auth: ContextoAcceso, tipo: str, busqueda:
         if not hallados:
             texto += " Esto no descarta facturas sin detalle de ítems extraído."
     elif tipo == "clientes":
-        clientes = sorted({cliente for clave, (_, cliente) in expedientes.items() if conceptos[clave]})
+        clientes = sorted(
+            {cliente for clave, (_, cliente) in expedientes.items() if conceptos[clave]}
+        )
         texto = (
             f"En los comprobantes con ítems registrados figuran {len(clientes)} clientes: "
             + (", ".join(clientes[:12]) if clientes else "ninguno identificado")
