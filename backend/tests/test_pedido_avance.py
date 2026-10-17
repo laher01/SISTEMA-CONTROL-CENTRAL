@@ -10,7 +10,6 @@ from fastapi import HTTPException
 
 from app.api.routes.pagos import agregar_asignacion_pedido, eliminar_asignacion_pedido
 from app.enums import RolMiembro
-
 from app.schemas import PedidoGerenciaOut
 from app.services.pedido_avance import (
     calcular_avance_consolidado,
