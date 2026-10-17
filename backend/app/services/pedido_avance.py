@@ -57,3 +57,21 @@ def requiere_alerta_exceso(
     """Alerta urgente solo por encima de 120 %, sin rechazar la operación real."""
     _, estado = calcular_avance_pedido(presupuesto, ejecutado)
     return estado == "ROJO"
+
+
+def validar_distribucion_presupuesto(
+    presupuesto: Decimal,
+    asignaciones: list[Decimal],
+) -> Decimal:
+    """Devuelve saldo distribuible sin crear pedidos ni limitar compras reales.
+
+    Las asignaciones son compromisos presupuestarios, no importes ejecutados.
+    """
+    if not presupuesto.is_finite() or presupuesto <= 0:
+        raise ValueError("El presupuesto debe ser positivo y finito")
+    if any(not monto.is_finite() or monto <= 0 for monto in asignaciones):
+        raise ValueError("Cada asignación debe ser positiva y finita")
+    total = sum(asignaciones, Decimal("0"))
+    if total > presupuesto:
+        raise ValueError("Las asignaciones exceden el presupuesto")
+    return presupuesto - total
