@@ -260,3 +260,14 @@ def test_administrador_no_accede_a_pedido_de_otro_tenant(operacion: str) -> None
         else:
             eliminar_asignacion_pedido(*args, asignacion_id=uuid4())
     assert exc.value.status_code == 404
+
+
+def test_bloqueo_del_pedido_antes_de_contabilizar_asignaciones() -> None:
+    """El candado debe tomarse antes de consultar otras asignaciones."""
+    ruta = Path(__file__).resolve().parents[1] / "app/api/routes/pagos.py"
+    codigo = ruta.read_text(encoding="utf-8")
+    alta = codigo.split("def agregar_asignacion_pedido(", 1)[1].split("@router.delete(", 1)[0]
+    bloqueo = alta.index("session.refresh(pedido, with_for_update=True)")
+    lectura = alta.index("consulta_montos = select(AsignacionPedidoGerencia.monto_asignado)")
+    validacion = alta.index("validar_distribucion_presupuesto(")
+    assert bloqueo < lectura < validacion
