@@ -3,7 +3,7 @@
 import pytest
 
 from app.core.config import Settings
-from app.services.nexus_knowledge import recuperar_conocimiento
+from app.services.nexus_knowledge import knowledge_disponible, recuperar_conocimiento
 
 
 def test_gestor_no_recibe_biblioteca_tecnica(settings: Settings) -> None:
@@ -68,3 +68,12 @@ def test_knowledge_inhabilitada_bloquea_tambien_admin(
     )
     assert conocimiento == ""
     assert fuentes == []
+
+
+@pytest.mark.parametrize("rol", ["GESTOR", "USUARIO", "RESPONSABLE", "GERENTE"])
+def test_estado_kb_no_anuncia_acceso_a_roles_restringidos(settings: Settings, rol: str) -> None:
+    assert knowledge_disponible(settings, rol=rol) is False
+
+
+def test_estado_kb_administrador_con_acceso(settings: Settings) -> None:
+    assert knowledge_disponible(settings, rol="ADMINISTRADOR") is True
