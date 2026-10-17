@@ -51,9 +51,14 @@ def recuperar_conocimiento(
     consulta: str,
     seccion: str,
     *,
+    rol: str,
     max_fragmentos: int = 6,
 ) -> tuple[str, list[NexusFuente]]:
     if not settings.nexus_knowledge_enabled:
+        return "", []
+    # Hasta disponer de documentos clasificados con ACL, negar el acceso
+    # a la biblioteca interna a roles operativos (fail-closed).
+    if rol.upper().split(".")[-1] not in {"ADMINISTRADOR", "SUPERADMIN"}:
         return "", []
 
     terminos = _terminos(consulta)
