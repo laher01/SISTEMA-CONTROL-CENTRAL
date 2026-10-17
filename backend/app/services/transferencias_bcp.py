@@ -6,17 +6,25 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 MESES = {
-    "ENERO": 1, "FEBRERO": 2, "MARZO": 3, "ABRIL": 4,
-    "MAYO": 5, "JUNIO": 6, "JULIO": 7, "AGOSTO": 8,
-    "SEPTIEMBRE": 9, "SETIEMBRE": 9, "OCTUBRE": 10,
-    "NOVIEMBRE": 11, "DICIEMBRE": 12,
+    "ENERO": 1,
+    "FEBRERO": 2,
+    "MARZO": 3,
+    "ABRIL": 4,
+    "MAYO": 5,
+    "JUNIO": 6,
+    "JULIO": 7,
+    "AGOSTO": 8,
+    "SEPTIEMBRE": 9,
+    "SETIEMBRE": 9,
+    "OCTUBRE": 10,
+    "NOVIEMBRE": 11,
+    "DICIEMBRE": 12,
 }
 
 
 def extraer_transferencia_bcp(texto: str) -> dict[str, tuple[str, str]]:
     normal = "".join(
-        c for c in unicodedata.normalize("NFKD", texto.upper())
-        if not unicodedata.combining(c)
+        c for c in unicodedata.normalize("NFKD", texto.upper()) if not unicodedata.combining(c)
     )
     if "BCP" not in normal or "TRANSFERENCIA EXITOSA" not in normal:
         return {}
@@ -44,9 +52,7 @@ def extraer_transferencia_bcp(texto: str) -> dict[str, tuple[str, str]]:
     )
     if fecha:
         try:
-            valor = date(
-                int(fecha.group(3)), MESES[fecha.group(2)], int(fecha.group(1))
-            )
+            valor = date(int(fecha.group(3)), MESES[fecha.group(2)], int(fecha.group(1)))
             campos["fecha_emision"] = (valor.isoformat(), fecha.group(0))
         except ValueError:
             pass
