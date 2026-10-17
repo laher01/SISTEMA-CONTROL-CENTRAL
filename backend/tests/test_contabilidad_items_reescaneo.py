@@ -187,9 +187,7 @@ def test_xml_invalido_o_sin_items_no_genera_lineas(
     assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 0
 
 
-def test_reescaneo_rechaza_travesia_relativa_dentro_de_tenant(
-    session: Session, tmp_path: Path
-):
+def test_reescaneo_rechaza_travesia_relativa_dentro_de_tenant(session: Session, tmp_path: Path):
     propietario = Tenant(nombre="tenant_travesia_ruta_a")
     ajeno = Tenant(nombre="tenant_travesia_ruta_b")
     session.add_all([propietario, ajeno])
