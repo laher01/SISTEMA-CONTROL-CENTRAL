@@ -36,9 +36,7 @@ def upgrade() -> None:
         sa.Column("documentos_procesados", sa.Integer(), nullable=False),
         sa.UniqueConstraint("tenant_id", "clave_idempotencia"),
     )
-    op.create_index(
-        "ix_trabajos_reescaneo_xml_tenant_id", "trabajos_reescaneo_xml", ["tenant_id"]
-    )
+    op.create_index("ix_trabajos_reescaneo_xml_tenant_id", "trabajos_reescaneo_xml", ["tenant_id"])
     op.create_table(
         "eventos_reescaneo_xml",
         sa.Column("id", sa.Uuid(), primary_key=True),
@@ -49,21 +47,15 @@ def upgrade() -> None:
         sa.Column(
             "trabajo_id", sa.Uuid(), sa.ForeignKey("trabajos_reescaneo_xml.id"), nullable=False
         ),
-        sa.Column(
-            "actor_cuenta_id", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id"), nullable=False
-        ),
+        sa.Column("actor_cuenta_id", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id"), nullable=False),
         sa.Column("estado_anterior", sa.String(30), nullable=False),
         sa.Column("estado_nuevo", sa.String(30), nullable=False),
         sa.Column("documento_id", sa.Uuid(), sa.ForeignKey("documentos.id")),
         sa.Column("cursor_documento_id", sa.Uuid(), sa.ForeignKey("documentos.id")),
         sa.Column("ocurrido_en", sa.DateTime(timezone=True), nullable=False),
     )
-    op.create_index(
-        "ix_eventos_reescaneo_xml_tenant_id", "eventos_reescaneo_xml", ["tenant_id"]
-    )
-    op.create_index(
-        "ix_eventos_reescaneo_xml_trabajo_id", "eventos_reescaneo_xml", ["trabajo_id"]
-    )
+    op.create_index("ix_eventos_reescaneo_xml_tenant_id", "eventos_reescaneo_xml", ["tenant_id"])
+    op.create_index("ix_eventos_reescaneo_xml_trabajo_id", "eventos_reescaneo_xml", ["trabajo_id"])
 
 
 def downgrade() -> None:
