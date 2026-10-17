@@ -25,7 +25,7 @@ function mesActual(): string {
 }
 
 export default function Pagos({ sesion }: { sesion: SesionActual }) {
-  const [pestana, setPestana] = useState<PestanaPagos>("PEDIDOS");
+  const [pestana, setPestana] = useState<PestanaPagos>(sesion.rol === "GERENTE" ? "RESPONSABLES" : "PEDIDOS");
   const [mesLiquidacion, setMesLiquidacion] = useState(mesActual());
   const [mes, setMes] = useState(mesActual());
   const [moneda, setMoneda] = useState<"PEN" | "USD">("PEN");
@@ -64,25 +64,26 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
 
   return (
     <>
-      <h2>Pagos ERP</h2>
+      <h2>{sesion.rol === "GERENTE" ? "Pago a Responsables" : "Pagos ERP"}</h2>
       <p className="tenue">
-        Pedidos de Gerencia, cartera de Clientes y liquidación de producción son procesos
-        independientes, pero comparten la misma fuente de verdad: los Expedientes procesados.
+        {sesion.rol === "GERENTE"
+          ? "Consulta y programa los pagos a Responsables según las comisiones de producción registradas. La producción no equivale a dinero transferido."
+          : "Pedidos, producción y liquidaciones son conceptos independientes. Los importes de documentos no representan pagos realizados."}
       </p>
 
       <div className="acciones">
-        <button
+        {sesion.rol !== "GERENTE" && <button
           className={pestana === "PEDIDOS" ? "activo" : undefined}
           onClick={() => setPestana("PEDIDOS")}
         >
           Pedidos de Gerencia
-        </button>
-        <button
+        </button>}
+        {sesion.rol !== "GERENTE" && <button
           className={pestana === "COBROS" ? "activo" : undefined}
           onClick={() => setPestana("COBROS")}
         >
           Consolidado
-        </button>
+        </button>}
         <button
           className={pestana === "RESPONSABLES" ? "activo" : undefined}
           onClick={() => setPestana("RESPONSABLES")}
@@ -151,7 +152,7 @@ export default function Pagos({ sesion }: { sesion: SesionActual }) {
         />
       )}
 
-      {pestana === "COBROS" && <ConsolidadoGerencia />}
+      {pestana === "COBROS" && sesion.rol !== "GERENTE" && <ConsolidadoGerencia />}
 
       {pestana === "RESPONSABLES" && <ComisionesResponsables sesion={sesion} />}
 
