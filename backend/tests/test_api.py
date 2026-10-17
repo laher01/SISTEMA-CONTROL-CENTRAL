@@ -328,6 +328,47 @@ def test_pdf_completo_crea_expediente_automaticamente(
     assert len(expediente(client, documento["expediente_id"])["documentos"]) == 1
 
 
+def test_reprocesar_factura_vinculada_detecta_identidad_ocr_distinta(
+    client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings.tenant_ruc = RECEPTOR
+    original = """FACTURA ELECTRÓNICA F001-00000123
+RUC EMISOR: 20500000002 CLIENTE RUC: 20100000001
+Fecha de emisión: 17/09/2026 Moneda: SOLES TOTAL S/ 2,500.40"""
+    distinto = original.replace("F001-00000123", "F001-00000999")
+    texto = [original]
+
+    def procesar_prueba(*_: object) -> ResultadoProcesamiento:
+        actual = texto[0]
+        return ResultadoProcesamiento(
+            texto=actual,
+            metodo="TEXTO_PDF",
+            motor="prueba",
+            paginas=1,
+            confianza=1.0,
+            sugerencia=sugerir_tipo(actual),
+        )
+
+    monkeypatch.setattr(documentos_routes, "procesar", procesar_prueba)
+    monkeypatch.setattr(
+        documentos_routes,
+        "procesar_con_cache",
+        lambda *args, **kwargs: args[5](),
+    )
+    documento = subir(client, "identidad.pdf", pdf_vacio())
+    original_id = documento["expediente_id"]
+    texto[0] = distinto
+
+    respuesta = client.post(f"/api/v1/documentos/{documento['id']}/procesar")
+    assert respuesta.status_code == 200, respuesta.text
+    actualizado = respuesta.json()
+    assert actualizado["expediente_id"] == original_id
+    estado = actualizado["datos_extraidos"]["automatizacion_documental"]
+    assert estado["estado"] == "REVISION_REQUERIDA"
+    assert "Identidad fiscal extraída diferente" in estado["motivos"][0]
+    assert len(expediente(client, original_id)["documentos"]) == 1
+
+
 def test_pdf_incompleto_queda_en_revision_con_motivo(
     client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
