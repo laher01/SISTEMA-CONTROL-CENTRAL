@@ -13,7 +13,7 @@ Unificar el significado de órdenes breves en los chats de desarrollo de FACT CE
 | --- | --- | --- |
 | `C` | Continuar el desarrollo ya acordado, corregir errores y ejecutar pruebas automáticas disponibles. | No fusionar ni desplegar. |
 | `S` | Verificar seguridad, permisos, aislamiento por tenant, base de datos, migraciones, respaldos y restauración. | No fusionar ni desplegar. |
-| `I` | Revisar PR aprobados y aptos para integración, comprobar conflictos y checks, y fusionar únicamente los PR pertinentes en `main`. | No desplegar salvo que la fusión active un flujo automático previamente autorizado; registrar el efecto y verificarlo. |
+| `I` | Revisar PR aprobados y aptos para integración, comprobar conflictos y checks, y fusionar únicamente los PR pertinentes en `main`. | Antes de fusionar, verificar si un push a `main` dispara despliegue automático. Si lo dispara y no existe autorización expresa vigente para ese despliegue, NO fusionar; documentar el bloqueo y solicitar autorización `D` o usar una separación segura previamente validada. Nunca dar por hecho que `I` autoriza publicar en producción. |
 | `D` | Desplegar la versión aprobada en la VPS antigua mediante el procedimiento seguro establecido y verificar su operación. | Bloquear ante ausencia de respaldos/restauración comprobados, falta de acceso o fallas críticas. |
 | `FINALIZAR` | Ejecutar el ciclo de desarrollo, pruebas, corrección y validación del trabajo en curso, hasta dejarlo preparado para integrar y desplegar. | No fusionar ni desplegar; emitir conclusión y recomendar el paso siguiente. |
 
@@ -23,7 +23,7 @@ Los comandos anteriores con tres puntos (`C...`, `S...`, `A...`, `D...`) se cons
 
 1. `C` y `FINALIZAR`: desarrollo/pruebas en rama aislada. El trabajo puede regresar a `C` si queda algo por corregir.
 2. `S`: auditar criterios de seguridad y recuperación. Si falla, recomendar `C` para corregir y repetir `S`.
-3. `I`: integrar solo PR expresamente aprobados y que hayan pasado controles. La fusión no demuestra despliegue.
+3. `I`: integrar solo PR expresamente aprobados y que hayan pasado controles. Verificar las reglas de protección y el efecto real de los workflows sobre `main`; si fusionar dispara producción sin autorización `D`, bloquear la fusión. La fusión no demuestra despliegue.
 4. `D`: antes de actuar, verificar acceso a la VPS, identidad de versión/commit, preflight, respaldo fresco y restauración aislada; después desplegar y comprobar el SHA instalado y salud de servicios.
 5. Si cualquier acción resulta inaccesible por herramientas, permisos o infraestructura, describirla como pendiente; nunca declararla ejecutada.
 
@@ -44,6 +44,8 @@ Si la interfaz admite controles interactivos, incluir un botón que envíe **sol
 
 - Respetar trabajo paralelo y límites entre módulos; no mezclar cambios de PR no relacionados ni sobrescribir ramas de terceros.
 - Prohibido forzar `main`, saltarse CI, omitir revisión de seguridad, desactivar preflight o simular verificaciones.
+- Auditoría documental de un PR NO certifica permisos reales de repositorio, branch protection, secretos de Actions, base de datos, respaldos ni acceso SSH. Esas comprobaciones requieren evidencia y herramientas apropiadas; marcar claramente «no verificado».
+- Antes de cualquier fusión, cotejar el SHA revisado con el SHA actual, los checks obligatorios, revisiones, conflictos y reglas de protección. Una actualización posterior invalida una aprobación anterior hasta repetir la comprobación.
 - Proteger secretos, PII, comprobantes y datos tributarios. No copiar credenciales ni ejemplos sensibles al repositorio.
 - Cualquier cambio de fórmula monetaria, aprobación contable, fiscal o permisos requiere criterio de negocio explícito y pruebas de regresión.
 - El rol documental del protocolo **no** equivale a un servicio que ejecute automáticamente comandos entre chats.
