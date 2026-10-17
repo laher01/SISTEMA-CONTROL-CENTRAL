@@ -52,7 +52,7 @@ from app.security import cuenta_administradora_responsable
 from app.services import auditoria
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.distribucion_jonatan import calcular_distribucion_jonatan
-from app.services.pedido_avance import calcular_avance_pedido
+from app.services.pedido_avance import calcular_avance_pedido, validar_distribucion_presupuesto
 
 router = APIRouter(prefix="/pagos", tags=["pagos"])
 
@@ -1322,6 +1322,23 @@ def agregar_asignacion_pedido(
             AsignacionPedidoGerencia.proveedor_id == datos.proveedor_id,
         )
     )
+    otros_montos = list(
+        session.scalars(
+            select(AsignacionPedidoGerencia.monto_asignado).where(
+                AsignacionPedidoGerencia.tenant_id == tenant_id,
+                AsignacionPedidoGerencia.pedido_id == pedido.id,
+                AsignacionPedidoGerencia.id != duplicada.id if duplicada is not None else True,
+            )
+        )
+    )
+    try:
+        validar_distribucion_presupuesto(
+            Decimal(pedido.monto_solicitado),
+            [Decimal(monto) for monto in otros_montos] + [datos.monto_asignado],
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+
     if duplicada is not None:
         duplicada.monto_asignado = datos.monto_asignado
         asignacion = duplicada
