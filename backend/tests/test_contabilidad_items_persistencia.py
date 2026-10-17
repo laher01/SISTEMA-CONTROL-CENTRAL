@@ -134,3 +134,34 @@ def test_concurrencia_mismo_tenant_un_catalogo_y_dos_lineas(engine):
     with fabrica() as comprobacion:
         assert comprobacion.scalar(select(func.count()).select_from(ProductoItem)) == 1
         assert comprobacion.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 2
+
+
+def test_concurrencia_mismo_documento_no_duplica_lineas(engine):
+    """Dos reprocesos simultáneos del mismo XML dejan una sola línea."""
+    if engine.dialect.name != "postgresql":
+        pytest.skip("La serialización por tenant requiere PostgreSQL")
+    fabrica = sessionmaker(engine, expire_on_commit=False)
+    with fabrica() as inicio:
+        tenant = Tenant(nombre="tenant_ubl_mismo_documento")
+        inicio.add(tenant)
+        inicio.flush()
+        documento = _documento(inicio, tenant.id)
+        tenant_id = tenant.id
+        documento_id = documento.id
+        inicio.commit()
+
+    barrera = Barrier(2)
+
+    def registrar() -> int:
+        with fabrica() as conexion:
+            barrera.wait(timeout=10)
+            nuevos = registrar_items_ubl(conexion, tenant_id, documento_id, XML)
+            conexion.commit()
+            return nuevos
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        resultados = [future.result(timeout=30) for future in [pool.submit(registrar) for _ in range(2)]]
+    assert sorted(resultados) == [0, 1]
+    with fabrica() as comprobacion:
+        assert comprobacion.scalar(select(func.count()).select_from(ProductoItem)) == 1
+        assert comprobacion.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 1
