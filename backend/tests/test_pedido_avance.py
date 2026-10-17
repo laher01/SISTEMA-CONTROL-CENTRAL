@@ -9,6 +9,7 @@ from app.services.pedido_avance import (
     calcular_avance_consolidado,
     calcular_avance_pedido,
     requiere_alerta_exceso,
+    validar_distribucion_presupuesto,
 )
 
 
@@ -117,3 +118,26 @@ def test_contrato_api_expone_semaforo() -> None:
     campo = PedidoGerenciaOut.model_fields["semaforo_avance"]
     assert campo.is_required()
     assert set(campo.annotation.__args__) == {"VERDE", "NARANJA", "ROJO"}
+
+
+def test_distribucion_parcial_y_completa() -> None:
+    assert validar_distribucion_presupuesto(
+        Decimal("1000"), [Decimal("200"), Decimal("300")]
+    ) == Decimal("500")
+    assert validar_distribucion_presupuesto(
+        Decimal("1000"), [Decimal("200"), Decimal("800")]
+    ) == Decimal("0")
+
+
+@pytest.mark.parametrize("monto", ["100.01", "-1", "0", "NaN", "Infinity"])
+def test_distribucion_rechaza_exceso_o_importes_invalidos(monto: str) -> None:
+    with pytest.raises(ValueError):
+        validar_distribucion_presupuesto(Decimal("100"), [Decimal(monto)])
+
+
+def test_presupuesto_distribucion_no_confunde_ejecucion_real() -> None:
+    saldo = validar_distribucion_presupuesto(Decimal("100"), [])
+    porcentaje, estado = calcular_avance_pedido(Decimal("100"), Decimal("125"))
+    assert saldo == Decimal("100")
+    assert porcentaje == Decimal("125")
+    assert estado == "ROJO"
