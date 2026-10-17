@@ -52,8 +52,8 @@ def extraer_transferencia_bcp(texto: str) -> dict[str, tuple[str, str]]:
     )
     if fecha:
         try:
-            valor = date(int(fecha.group(3)), MESES[fecha.group(2)], int(fecha.group(1)))
-            campos["fecha_emision"] = (valor.isoformat(), fecha.group(0))
+            fecha_valida = date(int(fecha.group(3)), MESES[fecha.group(2)], int(fecha.group(1)))
+            campos["fecha_emision"] = (fecha_valida.isoformat(), fecha.group(0))
         except ValueError:
             pass
     beneficiario = re.search(r"(?im)^\s*Enviado\s+a\s*:?\s*([^\n]+)", texto)
