@@ -143,3 +143,17 @@ def test_ticket_con_tipo_contradictorio_no_se_auto_vincula() -> None:
     assert documento.datos_extraidos["automatizacion_documental"]["estado"] == (
         "REVISION_REQUERIDA"
     )
+
+
+def test_ticket_real_salto_linea_en_boleta_requiere_revision() -> None:
+    texto = (
+        "F003-00004475\nFACTURA DE VENTA ELECTRÓNICA\n"
+        "SERVICENTRO JABSA S.A\nRUC : 20374914201\n"
+        "OP.GRAVADAS S/ 2959.32\n3492.00\n"
+        "Representación impresa de la BOLETA DE VENTA\n"
+        "ELECTRONICA puede ser consultada en"
+    )
+    datos = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert datos is not None
+    assert datos["requiere_revision"] is True
+    assert "TIPO_COMPROBANTE_CONFLICTIVO" in datos["alertas"]
