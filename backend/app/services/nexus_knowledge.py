@@ -40,8 +40,10 @@ class FragmentoConocimiento:
     puntaje: int
 
 
-def knowledge_disponible(settings: Settings) -> bool:
+def knowledge_disponible(settings: Settings, *, rol: str = "") -> bool:
     if not settings.nexus_knowledge_enabled:
+        return False
+    if rol.upper().split(".")[-1] not in {"ADMINISTRADOR", "SUPERADMIN"}:
         return False
     return bool(_biblioteca())
 
