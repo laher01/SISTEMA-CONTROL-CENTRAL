@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.codigos import codigo_automatico
 from app.enums import RolMiembro
-from app.models import Gestor, Miembro
+from app.models import CuentaAcceso, Gestor, Miembro
 from app.schemas import (
     AltaMiembroOut,
     CredencialTemporalOut,
@@ -121,6 +121,114 @@ def listar(
     if rol is not None:
         consulta = consulta.where(Miembro.rol == rol)
     return list(session.scalars(consulta.order_by(Miembro.rol, Miembro.codigo)))
+
+
+
+class EditarResponsablePropioIn(BaseModel):
+    nombre: str = Field(min_length=3, max_length=200)
+
+
+def _responsable_propio_secretaria(
+    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep, miembro_id: uuid.UUID
+) -> Miembro:
+    if auth.rol != RolMiembro.SECRETARIA:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Exclusivo de Secretaría")
+    miembro = session.get(Miembro, miembro_id)
+    if (
+        miembro is None
+        or miembro.tenant_id != tenant_id
+        or miembro.rol != RolMiembro.RESPONSABLE
+        or miembro.deleted_at is not None
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Responsable no encontrado")
+    if miembro.creado_por_cuenta_id != auth.cuenta_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo puede administrar sus propios Responsables")
+    return miembro
+
+
+@router.get("/responsables-operativos/directorio")
+def directorio_responsables_operativos(
+    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
+) -> list[dict[str, object]]:
+    if auth.rol not in (RolMiembro.SECRETARIA, RolMiembro.GERENTE, RolMiembro.ADMINISTRADOR):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin acceso al directorio")
+    registros = session.scalars(
+        select(Miembro).where(
+            Miembro.tenant_id == tenant_id,
+            Miembro.rol == RolMiembro.RESPONSABLE,
+            Miembro.deleted_at.is_(None),
+        ).order_by(Miembro.codigo)
+    )
+    resultado: list[dict[str, object]] = []
+    for miembro in registros:
+        cuenta = session.get(CuentaAcceso, miembro.creado_por_cuenta_id) if miembro.creado_por_cuenta_id else None
+        creador = session.get(Miembro, cuenta.miembro_id) if cuenta and cuenta.miembro_id else None
+        propio = miembro.creado_por_cuenta_id == auth.cuenta_id
+        resultado.append({
+            "id": str(miembro.id),
+            "codigo": miembro.codigo,
+            "nombre": miembro.nombre,
+            "activo": miembro.activo,
+            "creador": creador.nombre if creador else "Origen no identificado",
+            "rol_creador": creador.rol if creador else "DESCONOCIDO",
+            "puede_gestionar": auth.rol == RolMiembro.SECRETARIA and propio,
+        })
+    return resultado
+
+
+@router.patch("/responsables-operativos/{miembro_id}")
+def editar_responsable_propio(
+    miembro_id: uuid.UUID,
+    datos: EditarResponsablePropioIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str]:
+    miembro = _responsable_propio_secretaria(session, tenant_id, auth, miembro_id)
+    miembro.nombre = " ".join(datos.nombre.strip().split())
+    session.commit()
+    return {"id": str(miembro.id), "nombre": miembro.nombre}
+
+
+@router.post("/responsables-operativos/{miembro_id}/desactivar")
+def desactivar_responsable_propio(
+    miembro_id: uuid.UUID, session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
+) -> dict[str, str]:
+    miembro = _responsable_propio_secretaria(session, tenant_id, auth, miembro_id)
+    asignados = session.scalar(select(Miembro.id).where(
+        Miembro.tenant_id == tenant_id,
+        Miembro.rol == RolMiembro.USUARIO,
+        Miembro.responsable_id == miembro.id,
+        Miembro.deleted_at.is_(None),
+    ))
+    if asignados is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Reasigne los Usuarios antes de desactivar")
+    miembro.activo = False
+    for cuenta in session.scalars(select(CuentaAcceso).where(
+        CuentaAcceso.tenant_id == tenant_id,
+        CuentaAcceso.miembro_id == miembro.id,
+        CuentaAcceso.deleted_at.is_(None),
+    )):
+        cuenta.activo = False
+    session.commit()
+    return {"estado": "DESACTIVADO"}
+
+
+@router.post(
+    "/responsables-operativos/{miembro_id}/restablecer-acceso",
+    response_model=CredencialTemporalOut,
+)
+def nueva_clave_responsable_propio(
+    miembro_id: uuid.UUID, session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
+) -> CredencialTemporalOut:
+    miembro = _responsable_propio_secretaria(session, tenant_id, auth, miembro_id)
+    if not miembro.activo:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Responsable inactivo")
+    _, temporal = crear_o_restablecer_cuenta(
+        session, tenant_id, miembro.codigo, miembro_id=miembro.id
+    )
+    session.commit()
+    return CredencialTemporalOut(login=miembro.codigo, clave_temporal=temporal)
 
 
 class AltaResponsableOperativoIn(BaseModel):
