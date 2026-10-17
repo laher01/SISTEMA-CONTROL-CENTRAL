@@ -371,9 +371,10 @@ async def subir_sublote_imagenes(
     # el consumo permitido para un documento individual.
     limite_acumulado = settings.max_upload_mb * 1024 * 1024 * MAX_IMAGENES_POR_SUBLOTE
     tamanos = [getattr(archivo, "size", None) for archivo in archivos]
-    if all(isinstance(tamano, int) for tamano in tamanos) and sum(
-        tamano for tamano in tamanos if isinstance(tamano, int)
-    ) > limite_acumulado:
+    if (
+        all(isinstance(tamano, int) for tamano in tamanos)
+        and sum(tamano for tamano in tamanos if isinstance(tamano, int)) > limite_acumulado
+    ):
         raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Sublote demasiado grande")
     resultados: list[dict[str, object]] = []
     for indice, archivo in enumerate(archivos):
