@@ -1,12 +1,14 @@
 """Recovery pair auditor: offline tests with synthetic files only."""
 import hashlib
 import io
-import json
 import tarfile
+import sys
+from pathlib import Path
 
 import pytest
 
-from deploy.recovery_pair_audit import compare, digest, inspect_tar, relative_path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from deploy.recovery_pair_audit import compare, inspect_tar  # noqa: E402
 
 
 def archive(tmp_path, members):
