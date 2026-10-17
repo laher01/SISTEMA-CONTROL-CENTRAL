@@ -33,7 +33,7 @@ def leer_comprobante_especial(
     normal = _simple(texto).upper()
     campos: dict[str, tuple[str, str]] = {}
 
-    if "FACTURA ELECTRONICA" in normal:
+    if "FACTURA ELECTRONICA" in normal or "FACTURA DE VENTA ELECTRONICA" in normal:
         # F109 Nº 0016490, con o sin guion; no asumir siempre E001/F001.
         numero = re.search(
             r"(?im)\b([FE]\d{3})\s*(?:[-–—]|N\s*[°º.]?\s*[:.]?)\s*(\d{1,10})\b",
