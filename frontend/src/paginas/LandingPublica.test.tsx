@@ -45,12 +45,13 @@ describe("visibilidad pública de landing", () => {
     expect(html).toContain("/ingresar");
   });
 
-  it("no interrumpe la landing pública durante fallos de API", () => {
+  it("oculta conservadoramente la landing cuando falla la consulta pública", () => {
     mockUseDatos.mockReturnValue({
       datos: undefined,
       error: "No disponible",
       cargando: false,
     });
-    expect(mostrar()).toContain("Planes del servicio");
+    expect(mostrar()).toContain("La presentación comercial no está disponible");
+    expect(mostrar()).toContain("/ingresar");
   });
 });
