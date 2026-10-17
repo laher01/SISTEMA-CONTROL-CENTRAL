@@ -263,7 +263,7 @@ def extraer_campos(
         resultado["candidatos"] = candidatos
     # Un ticket que se denomina factura y boleta simultáneamente no
     # demuestra inequívocamente su tipo fiscal: obliga a revisión humana.
-    normalizado = _sin_tildes(texto).upper()
+    normalizado = " ".join(_sin_tildes(texto).upper().split())
     if (
         "FACTURA DE VENTA ELECTRONICA" in normalizado
         and "BOLETA DE VENTA ELECTRONICA" in normalizado
