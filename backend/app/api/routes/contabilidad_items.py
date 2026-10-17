@@ -45,7 +45,6 @@ def _alcance(auth: OperativeAuthDep) -> ColumnElement[bool]:
 
 
 
-
 @router.get("/reescaneo/vista-previa")
 def vista_previa_reescaneo(
     session: SessionDep,
@@ -68,6 +67,7 @@ def vista_previa_reescaneo(
         }
         for fila in filas
     ]
+
 
 @router.get("")
 def resumen(
