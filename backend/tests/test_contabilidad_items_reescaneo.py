@@ -203,3 +203,31 @@ def test_ruta_con_traversal_no_procesa_archivo_de_otro_tenant(session: Session, 
     lote = registrar_pagina_verificada(session, almacen, propietario.id)
     assert lote[0].estado == "RUTA_FUERA_TENANT"
     assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 0
+
+
+def test_reescaneo_registra_solo_items_del_tenant_solicitante(
+    session: Session, tmp_path: Path
+):
+    primero = Tenant(nombre="tenant_registro_aislado_a")
+    segundo = Tenant(nombre="tenant_registro_aislado_b")
+    session.add_all([primero, segundo])
+    session.flush()
+    almacen = AlmacenLocal(tmp_path)
+    documento_primero = _guardar(session, almacen, primero.id, XML)
+    documento_segundo = _guardar(session, almacen, segundo.id, XML + b"<!--b-->")
+
+    resultados = registrar_pagina_verificada(session, almacen, primero.id)
+    assert len(resultados) == 1
+    assert resultados[0].documento_id == documento_primero.id
+    assert resultados[0].estado == "PROCESADO"
+    assert session.scalar(
+        select(func.count()).select_from(LineaComprobanteItem).where(
+            LineaComprobanteItem.tenant_id == primero.id
+        )
+    ) == 1
+    assert session.scalar(
+        select(func.count()).select_from(LineaComprobanteItem).where(
+            LineaComprobanteItem.tenant_id == segundo.id
+        )
+    ) == 0
+    assert almacen.leer(documento_segundo.ruta_storage) == XML + b"<!--b-->"
