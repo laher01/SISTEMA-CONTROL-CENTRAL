@@ -171,12 +171,8 @@ def test_rutas_distribucion_exigen_responsable_asignado() -> None:
     """Regresión sobre ambos endpoints, sin ampliar el permiso general de pagos."""
     ruta = Path(__file__).resolve().parents[1] / "app/api/routes/pagos.py"
     codigo = ruta.read_text(encoding="utf-8")
-    alta = codigo.split("def agregar_asignacion_pedido(", 1)[1].split(
-        "@router.delete(", 1
-    )[0]
-    baja = codigo.split("def eliminar_asignacion_pedido(", 1)[1].split(
-        '@router.post("/planes"', 1
-    )[0]
+    alta = codigo.split("def agregar_asignacion_pedido(", 1)[1].split("@router.delete(", 1)[0]
+    baja = codigo.split("def eliminar_asignacion_pedido(", 1)[1].split('@router.post("/planes"', 1)[0]
     for bloque in (alta, baja):
         assert "RolMiembro.RESPONSABLE, RolMiembro.ADMINISTRADOR" in bloque
         assert "pedido.responsable_id != auth.miembro_id" in bloque
