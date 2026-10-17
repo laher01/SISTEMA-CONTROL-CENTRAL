@@ -81,7 +81,9 @@ def test_transicion_registra_auditoria_y_actualiza_version() -> None:
 def test_sin_cambio_no_genera_auditoria() -> None:
     session = MagicMock()
     session.scalar.return_value = SimpleNamespace(activa=False, version=2, actualizado_por=None)
-    resultado = actualizar_estado(CambiarLanding(activa=False, version=2), session, auth("SUPERADMIN"))
+    resultado = actualizar_estado(
+        CambiarLanding(activa=False, version=2), session, auth("SUPERADMIN")
+    )
     assert resultado.version == 2
     session.add.assert_not_called()
     session.commit.assert_called_once()
