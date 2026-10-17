@@ -92,3 +92,11 @@ def test_reescaneo_rechaza_documento_eliminado(session: Session):
         registrar_items_ubl(session, propietario.id, documento.id, XML)
 
     assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 0
+
+
+def test_reescaneo_rechaza_tenant_inexistente_sin_crear_lineas(session: Session):
+    with pytest.raises(ValueError, match="Tenant no encontrado"):
+        registrar_items_ubl(session, uuid.uuid4(), uuid.uuid4(), XML)
+
+    assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 0
+    assert session.scalar(select(func.count()).select_from(ProductoItem)) == 0
