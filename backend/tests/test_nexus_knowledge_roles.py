@@ -77,3 +77,31 @@ def test_estado_kb_no_anuncia_acceso_a_roles_restringidos(settings: Settings, ro
 
 def test_estado_kb_administrador_con_acceso(settings: Settings) -> None:
     assert knowledge_disponible(settings, rol="ADMINISTRADOR") is True
+
+
+def test_conocimiento_de_otro_tenant_no_esta_publicado_en_biblioteca_compartida(
+    settings: Settings,
+) -> None:
+    # La biblioteca compartida solo es documentacion del repositorio.
+    # No acepta tenant_id ni tiene fuentes privadas importadas: la consulta
+    # operativa debe seguir cerrada a roles no administrativos.
+    for rol in ("GESTOR", "USUARIO", "RESPONSABLE", "GERENTE"):
+        conocimiento, fuentes = recuperar_conocimiento(
+            settings,
+            "documentos privados datos empresa cliente",
+            "DOCUMENTOS",
+            rol=rol,
+        )
+        assert conocimiento == ""
+        assert fuentes == []
+
+
+def test_el_indicador_kb_no_habilita_acceso_por_su_cuenta(
+    settings: Settings,
+) -> None:
+    assert knowledge_disponible(settings, rol="GESTOR") is False
+    conocimiento, fuentes = recuperar_conocimiento(
+        settings, "dashboard", "DASHBOARD", rol="GESTOR"
+    )
+    assert conocimiento == ""
+    assert fuentes == []
