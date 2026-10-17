@@ -1313,6 +1313,9 @@ def agregar_asignacion_pedido(
                 "La empresa seleccionada no es un Proveedor activo",
             )
 
+    # Serializa las distribuciones del mismo pedido y evita sobreasignaciones simultáneas.
+    session.refresh(pedido, with_for_update=True)
+
     duplicada = session.scalar(
         select(AsignacionPedidoGerencia).where(
             AsignacionPedidoGerencia.tenant_id == tenant_id,
