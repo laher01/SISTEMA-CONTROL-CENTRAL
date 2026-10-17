@@ -632,6 +632,7 @@ class PedidoGerenciaOut(BaseModel):
     saldo_pendiente: Decimal
     exceso: Decimal
     avance_porcentaje: Decimal
+    semaforo_avance: Literal["VERDE", "NARANJA", "ROJO"]
     modalidad: str
     modo_distribucion: str
     estado: str
