@@ -57,3 +57,14 @@ def test_reject_manifest_hash_mismatch(tmp_path):
 def test_reject_empty_archive(tmp_path):
     with pytest.raises(ValueError):
         inspect_tar(archive(tmp_path, []))
+
+
+def test_reject_many_archive_members(tmp_path):
+    p = tmp_path / "many.tar.gz"
+    with tarfile.open(p, "w:gz") as output:
+        for i in range(10001):
+            info = tarfile.TarInfo(f"test/{i}.txt")
+            info.size = 1
+            output.addfile(info, io.BytesIO(b"x"))
+    with pytest.raises(ValueError, match="limits"):
+        inspect_tar(p)
