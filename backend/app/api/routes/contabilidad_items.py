@@ -13,11 +13,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import case, func, or_, select, true
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.api.deps import OperativeAuthDep, SessionDep
+from app.api.deps import AlmacenDep, OperativeAuthDep, SessionDep
 from app.item_models import AuditoriaFacturaItem, LineaComprobanteItem, ProductoItem
 from app.models import Documento, Expediente, Miembro
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.contabilidad_items_auditoria import registrar_decision, resolver_propuesta
+from app.services.contabilidad_items_reescaneo import previsualizar_pagina
 
 router = APIRouter(prefix="/contabilidad-items", tags=["contabilidad-items"])
 
@@ -41,6 +42,30 @@ def _alcance(auth: OperativeAuthDep) -> ColumnElement[bool]:
     if auth.rol == "GESTOR":
         return Expediente.gestor_id == auth.gestor_id
     raise HTTPException(403, "Rol sin acceso al módulo")
+
+
+@router.get("/reescaneo/vista-previa")
+def vista_previa_reescaneo(
+    session: SessionDep,
+    auth: OperativeAuthDep,
+    almacen: AlmacenDep,
+    despues_id: uuid.UUID | None = None,
+    limite: int = Query(50, ge=1, le=100),
+) -> list[dict[str, str | int]]:
+    """Solo administradores pueden examinar el lote histórico, nunca persistirlo."""
+    if auth.rol != "ADMINISTRADOR":
+        raise HTTPException(403, "Previsualización reservada al administrador del tenant")
+    filas = previsualizar_pagina(
+        session, almacen, auth.tenant_id, despues_id=despues_id, limite=limite
+    )
+    return [
+        {
+            "documento_id": str(fila.documento_id),
+            "estado": fila.estado,
+            "lineas_detectadas": fila.lineas_detectadas,
+        }
+        for fila in filas
+    ]
 
 
 @router.get("")
