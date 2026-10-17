@@ -53,3 +53,15 @@ def test_bcp_sin_identificador_no_crea_operacion() -> None:
     )
     assert resultado is not None
     assert "numero_operacion" not in resultado["campos"]
+
+
+def test_factura_con_mencion_de_transferencia_bcp_conserva_serie() -> None:
+    texto = (
+        "FACTURA ELECTRÓNICA\nF001-00000123\n"
+        "RUC EMISOR: 20616012739\nRUC RECEPTOR: 20538821374\n"
+        "FORMA DE PAGO: TRANSFERENCIA BCP\nIMPORTE TOTAL S/ 120.00"
+    )
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    assert resultado["campos"]["serie"]["valor"] == "F001"
+    assert resultado["campos"]["correlativo"]["valor"] == "123"
