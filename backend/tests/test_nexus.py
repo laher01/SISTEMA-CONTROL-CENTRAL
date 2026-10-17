@@ -101,13 +101,13 @@ def test_nexus_responde_con_contexto_de_pantalla_y_knowledge_base(
     )
     assert respuesta.status_code == 200, respuesta.text
     datos = respuesta.json()
-    assert datos["accion"] == "CONTEXTO_NEXUS"
+    assert datos["accion"] == "EXPLICAR_PANTALLA"
     assert datos["seccion"] == "EMPRESAS"
     assert datos["motor"] == "CONTEXTUAL"
     assert datos["llm_usado"] is False
     # El actor operativo no debe recibir documentación técnica interna.
     assert not any(fuente["tipo"] == "KNOWLEDGE_BASE" for fuente in datos["fuentes"])
-    assert "EMPRESAS" in datos["respuesta"]
+    assert "sección empresas" in datos["respuesta"]
 
 
 def test_nexus_motor_conversacional_recibe_contexto_historial_y_conocimiento(
