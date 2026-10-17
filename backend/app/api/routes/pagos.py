@@ -800,8 +800,8 @@ def _resumen_pedido(
     pedido: PedidoGerencia,
 ) -> PedidoGerenciaOut:
     cliente = session.get(Empresa, pedido.cliente_id)
-    if cliente is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "El Cliente del pedido ya no existe")
+    if cliente is None or cliente.tenant_id != tenant_id or cliente.deleted_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "El Cliente del pedido ya no está disponible")
 
     desde, hasta = _rango_mes(pedido.periodo_mes.strftime("%Y-%m"))
     base_filtros = (
