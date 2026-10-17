@@ -49,13 +49,13 @@ def leer_comprobante_especial(
         # Tickets tipo JABSA: el RUC del emisor precede la cabecera FACTURA.
         if not emisor and "FACTURA DE VENTA ELECTRONICA" in normal:
             encabezado = re.split(
-                r"(?i)FACTURA\\s+DE\\s+VENTA\\s+ELECTR[ÓO]NICA", texto, maxsplit=1
+                r"(?i)FACTURA\s+DE\s+VENTA\s+ELECTR[ÓO]NICA", texto, maxsplit=1
             )[0]
-            cabecera_ruc = re.search(r"(?i)\\bRUC\\s*:\\s*(\\d{11})\\b", encabezado)
+            cabecera_ruc = re.search(r"(?i)\bRUC\s*:\s*(\d{11})\b", encabezado)
             if cabecera_ruc:
                 campos["ruc_emisor"] = (cabecera_ruc.group(1), cabecera_ruc.group(0))
             receptor_ticket = re.search(
-                r"(?is)\\bCLIENTE\\s*:\\s*[^\\n]+\\n\\s*RUC\\s*:\\s*(\\d{11})\\b",
+                r"(?is)\bCLIENTE\s*:\s*[^\n]+\n\s*RUC\s*:\s*(\d{11})\b",
                 texto,
             )
             if receptor_ticket:
@@ -74,7 +74,7 @@ def leer_comprobante_especial(
         if total and (valor := _importe(total.group(1))) is not None:
             campos["importe_total"] = (valor, total.group(0))
         elif "FACTURA DE VENTA ELECTRONICA" in normal:
-            total_ticket = re.search(r"(?i)\\bTOTAL\\s+S/\\s*([\\d,]+\\.\\d{2})", texto)
+            total_ticket = re.search(r"(?i)\bTOTAL\s+S/\s*([\d,]+\.\d{2})", texto)
             if total_ticket and (valor := _importe(total_ticket.group(1))) is not None:
                 campos["importe_total"] = (valor, total_ticket.group(0))
         return campos
