@@ -185,3 +185,25 @@ def test_xml_invalido_o_sin_items_no_genera_lineas(
     lote = registrar_pagina_verificada(session, almacen, tenant.id)
     assert lote[0].estado == "SIN_ITEMS_UBL"
     assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 0
+
+
+def test_reescaneo_rechaza_travesia_relativa_dentro_de_tenant(
+    session: Session, tmp_path: Path
+):
+    propietario = Tenant(nombre="tenant_travesia_ruta_a")
+    ajeno = Tenant(nombre="tenant_travesia_ruta_b")
+    session.add_all([propietario, ajeno])
+    session.flush()
+    almacen = AlmacenLocal(tmp_path)
+    original = _guardar(session, almacen, propietario.id, XML)
+    otro = _guardar(session, almacen, ajeno.id, XML)
+    original.ruta_storage = f"{propietario.id}/../{otro.ruta_storage}"
+    session.flush()
+
+    previa = previsualizar_pagina(session, almacen, propietario.id)
+    assert len(previa) == 1
+    assert previa[0].estado == "RUTA_FUERA_TENANT"
+    lote = registrar_pagina_verificada(session, almacen, propietario.id)
+    assert len(lote) == 1
+    assert lote[0].estado == "RUTA_FUERA_TENANT"
+    assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 0
