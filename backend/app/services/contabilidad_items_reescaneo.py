@@ -56,6 +56,7 @@ def previsualizar_pagina(
             ruta_relativa.is_absolute()
             or not ruta_relativa.parts
             or ruta_relativa.parts[0] != str(tenant_id)
+            or ".." in ruta_relativa.parts
         ):
             resultados.append(ResultadoVistaPrevia(documento.id, "RUTA_FUERA_TENANT"))
             continue
@@ -122,6 +123,7 @@ def registrar_pagina_verificada(
                 ruta_relativa.is_absolute()
                 or not ruta_relativa.parts
                 or ruta_relativa.parts[0] != str(tenant_id)
+            or ".." in ruta_relativa.parts
             ):
                 resultados.append(ResultadoLote(item.documento_id, "RUTA_FUERA_TENANT"))
                 continue
