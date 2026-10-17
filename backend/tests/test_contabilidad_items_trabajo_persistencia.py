@@ -242,7 +242,7 @@ def test_reanudar_xml_pausado_con_limite_y_auditoria(engine):
         )
         assert cursor is None
         assert evento.estado_nuevo == "EJECUTANDO"
-        with pytest.raises(ValueError, match="Solo puede"):
+        with pytest.raises(ValueError, match="requiere pausa supervisada"):
             reanudar_trabajo_xml_supervisado(
                 sesion, *ids, max_documentos=50, ocurrido_en=datetime.now(UTC)
             )
