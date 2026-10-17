@@ -29,7 +29,11 @@ def consulta_items_solicitada(mensaje: str) -> tuple[str, str] | None:
         return ("resumen", "")
     if not any(
         x in normal
-        for x in ("factura", "comprobante", "contiene", "contienen", "son de", "tiene", "tienen")
+        for x in (
+            "factura", "comprobante", "contiene", "contienen",
+            "son de", "tiene", "tienen", "cuantos", "cuantas",
+            "alguno", "alguna",
+        )
     ):
         return None
     sinonimos = {
