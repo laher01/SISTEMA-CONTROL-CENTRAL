@@ -11,6 +11,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from app.services.facturas_estaciones import extraer_factura_estacion
+from app.services.transferencias_bcp import extraer_transferencia_bcp
 
 
 @dataclass(frozen=True)
@@ -170,7 +171,8 @@ def extraer_campos(
     factor = confianza_texto if confianza_texto is not None else 0.75
     campos: dict[str, dict[str, object]] = {}
 
-    referencia = REFERENCIA.search(texto)
+    es_bcp = bool(extraer_transferencia_bcp(texto))
+    referencia = None if es_bcp else REFERENCIA.search(texto)
     if referencia:
         evidencia = referencia.group(0)
         campos["serie"] = CampoExtraido(
@@ -250,6 +252,9 @@ def extraer_campos(
     # Perfiles de estaciones: solo sobrescribir con etiquetas verificables.
     # Cada valor mantiene evidencia, fuente y confirmación obligatoria.
     for nombre, (valor, evidencia) in extraer_factura_estacion(texto).items():
+        campos[nombre] = CampoExtraido(valor, min(0.96, 0.94 * factor), evidencia).a_dict(fuente)
+
+    for nombre, (valor, evidencia) in extraer_transferencia_bcp(texto).items():
         campos[nombre] = CampoExtraido(valor, min(0.96, 0.94 * factor), evidencia).a_dict(fuente)
 
     if not campos and not candidatos:
