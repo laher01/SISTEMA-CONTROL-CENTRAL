@@ -1,11 +1,13 @@
 """Prueba real SQLAlchemy/PostgreSQL: idempotencia y aislamiento multitenant."""
 
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.item_models import LineaComprobanteItem, ProductoItem
 from app.models import Documento, Tenant
@@ -100,3 +102,35 @@ def test_reescaneo_rechaza_tenant_inexistente_sin_crear_lineas(session: Session)
 
     assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 0
     assert session.scalar(select(func.count()).select_from(ProductoItem)) == 0
+
+
+def test_concurrencia_mismo_tenant_un_catalogo_y_dos_lineas(engine):
+    """Dos transacciones independientes no compiten al crear el mismo producto."""
+    if engine.dialect.name != "postgresql":
+        pytest.skip("Bloqueos SELECT FOR UPDATE requieren PostgreSQL")
+    fabrica = sessionmaker(engine, expire_on_commit=False)
+    with fabrica() as inicio:
+        tenant = Tenant(nombre="tenant_ubl_concurrente")
+        inicio.add(tenant)
+        inicio.flush()
+        primero = _documento(inicio, tenant.id)
+        segundo = _documento(inicio, tenant.id)
+        ids = (primero.id, segundo.id)
+        tenant_id = tenant.id
+        inicio.commit()
+
+    barrera = Barrier(2)
+
+    def registrar(documento_id: uuid.UUID) -> int:
+        with fabrica() as conexion:
+            barrera.wait(timeout=10)
+            nuevos = registrar_items_ubl(conexion, tenant_id, documento_id, XML)
+            conexion.commit()
+            return nuevos
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(registrar, documento_id) for documento_id in ids]
+        assert [f.result(timeout=30) for f in futures] == [1, 1]
+    with fabrica() as comprobacion:
+        assert comprobacion.scalar(select(func.count()).select_from(ProductoItem)) == 1
+        assert comprobacion.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 2
