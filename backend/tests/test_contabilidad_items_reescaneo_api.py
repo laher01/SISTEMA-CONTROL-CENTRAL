@@ -8,7 +8,6 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.item_models import LineaComprobanteItem
-from app.models import Documento
 
 
 RUTA = "/api/v1/contabilidad-items/reescaneo/vista-previa"
@@ -16,7 +15,9 @@ RUTA = "/api/v1/contabilidad-items/reescaneo/vista-previa"
 
 @pytest.mark.parametrize("rol", ["USUARIO", "GERENTE", "GESTOR", "RESPONSABLE"])
 def test_previsualizacion_deniega_roles_no_administradores(client: TestClient, auth_prueba, rol: str):
-    if rol == "GERENTE":
+    if rol == "USUARIO":
+        auth_prueba.como_usuario(uuid.uuid4())
+    elif rol == "GERENTE":
         auth_prueba.como_gerente()
     elif rol == "GESTOR":
         auth_prueba.como_gestor(uuid.uuid4(), uuid.uuid4())
