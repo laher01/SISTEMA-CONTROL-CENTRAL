@@ -98,3 +98,30 @@ def test_texto_pypdf_jabsa_desordenado() -> None:
     assert campos["ruc_receptor"]["valor"] == "20538821374"
     assert campos["fecha_emision"]["valor"] == "2026-10-15"
     assert campos["importe_total"]["valor"] == "3492.00"
+
+
+def test_ticket_con_factura_y_boleta_contradictorias_requiere_revision() -> None:
+    texto = (
+        "SERVICENTRO JABSA S.A\nRUC : 20374914201\n"
+        "FACTURA DE VENTA ELECTRÓNICA\nF003-00004475\n"
+        "Fecha Emision : 15/10/2026\n"
+        "Cliente : INVERSIONES Y NEGOCIACIONES MAREUF E.I\n"
+        "RUC : 20538821374 Placa :\n"
+        "OP.GRAVADAS S/ 2959.32\nIGV S/ 532.68\nTOTAL S/ 3492.00\n"
+        "Representación impresa de la BOLETA DE VENTA ELECTRONICA"
+    )
+    datos = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert datos is not None
+    assert datos["requiere_revision"] is True
+    assert "TIPO_COMPROBANTE_CONFLICTIVO" in datos["alertas"]
+
+
+def test_ticket_sin_contradiccion_no_genera_alerta() -> None:
+    texto = (
+        "SERVICENTRO JABSA S.A\nRUC : 20374914201\n"
+        "FACTURA DE VENTA ELECTRÓNICA\nF003-00004475\n"
+        "Fecha Emision : 15/10/2026\nTOTAL S/ 3492.00"
+    )
+    datos = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert datos is not None
+    assert "TIPO_COMPROBANTE_CONFLICTIVO" not in datos.get("alertas", [])
