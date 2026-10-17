@@ -190,3 +190,19 @@ def test_sublote_rechaza_tamano_total_declarado(
             )
         )
     assert error.value.status_code == 413
+
+
+def test_denegacion_por_permisos_no_expone_documentos_ajenos(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def denegar(**kwargs):
+        raise HTTPException(403, "Sin acceso al documento de otra empresa")
+
+    monkeypatch.setattr(documentos, "subir_documento", denegar)
+    sesion = SesionFalsa()
+    resultado = ejecutar([imagen_png(), imagen_png()], sesion)
+    assert resultado["procesados"] == 0
+    assert resultado["duplicados"] == 0
+    assert resultado["errores"] == 2
+    assert all("documento_id" not in fila for fila in resultado["resultados"])
+    assert sesion.reversiones == 2
