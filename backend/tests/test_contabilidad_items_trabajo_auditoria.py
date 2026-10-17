@@ -40,9 +40,7 @@ def test_ciclo_de_trabajo_permite_pausar_reanudar_y_completar():
         (EstadoTrabajoXML.PAUSADO, EstadoTrabajoXML.COMPLETADO),
     ],
 )
-def test_rechaza_transiciones_ilegales(
-    anterior: EstadoTrabajoXML, nuevo: EstadoTrabajoXML
-):
+def test_rechaza_transiciones_ilegales(anterior: EstadoTrabajoXML, nuevo: EstadoTrabajoXML):
     with pytest.raises(ValueError, match="Transición"):
         _evento(anterior, nuevo)
 
