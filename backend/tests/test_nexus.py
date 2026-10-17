@@ -159,3 +159,37 @@ def test_nexus_motor_conversacional_recibe_contexto_historial_y_conocimiento(
     assert any("CONTEXTO AUTORIZADO" in texto for texto in textos)
     assert any("BASE DE CONOCIMIENTO" in texto for texto in textos)
     assert any("Explícame los pedidos de Gerencia" in texto for texto in textos)
+
+
+def test_nexus_falla_llm_pero_conserva_contexto_autorizado(
+    client: TestClient,
+    settings: Settings,
+    monkeypatch,
+) -> None:
+    import urllib.error
+
+    monkeypatch.setattr(settings, "nexus_llm_url", "https://llm.example.test/chat")
+    monkeypatch.setattr(settings, "nexus_llm_model", "nexus-test")
+
+    def servicio_no_disponible(*args: object, **kwargs: object) -> dict[str, object]:
+        raise urllib.error.URLError("servicio de prueba temporalmente inaccesible")
+
+    monkeypatch.setattr(nexus_service, "_http_json", servicio_no_disponible)
+    respuesta = client.post(
+        "/api/v1/nexus/chat",
+        json={
+            "mensaje": "Explícame qué puedo revisar aquí",
+            "ruta": "/expedientes",
+            "expediente_id": None,
+            "historial": [],
+        },
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    datos = respuesta.json()
+    assert datos["accion"] == "CONTEXTO_NEXUS"
+    assert datos["motor"] == "CONTEXTUAL"
+    assert datos["llm_usado"] is False
+    assert datos["seccion"] == "EXPEDIENTES"
+    assert "no está disponible temporalmente" in datos["respuesta"]
+    assert "contexto autorizado" in datos["respuesta"]
+    assert "servicio de prueba temporalmente inaccesible" not in respuesta.text
