@@ -52,6 +52,7 @@ from app.security import cuenta_administradora_responsable
 from app.services import auditoria
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.distribucion_jonatan import calcular_distribucion_jonatan
+from app.services.pedido_avance import calcular_avance_pedido
 
 router = APIRouter(prefix="/pagos", tags=["pagos"])
 
@@ -890,11 +891,8 @@ def _resumen_pedido(
     diferencia = solicitado - ejecutado
     pendiente = max(diferencia, Decimal("0"))
     exceso = max(-diferencia, Decimal("0"))
-    avance = (
-        (ejecutado * Decimal("100") / solicitado).quantize(Decimal("0.01"))
-        if solicitado > 0
-        else Decimal("0")
-    )
+    avance_exacto, semaforo = calcular_avance_pedido(solicitado, ejecutado)
+    avance = avance_exacto.quantize(Decimal("0.01"))
 
     return PedidoGerenciaOut(
         id=pedido.id,
@@ -911,6 +909,7 @@ def _resumen_pedido(
         saldo_pendiente=pendiente,
         exceso=exceso,
         avance_porcentaje=avance,
+        semaforo_avance=semaforo,
         modalidad=pedido.modalidad,
         modo_distribucion=pedido.modo_distribucion,
         estado=pedido.estado,
