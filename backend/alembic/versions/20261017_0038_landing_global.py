@@ -23,6 +23,7 @@ def upgrade() -> None:
         sa.Column("actualizado_por", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id")),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     )
+    op.execute("INSERT INTO configuracion_landing_global (id, activa, version) VALUES (1, TRUE, 1)")
     op.create_table(
         "auditoria_landing_global",
         sa.Column("id", sa.Uuid(), primary_key=True),
