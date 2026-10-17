@@ -93,3 +93,21 @@ def test_bcp_con_factura_electronica_en_concepto_no_inventa_serie() -> None:
     assert resultado["campos"]["numero_operacion"]["valor"] == "03857359"
     assert "serie" not in resultado["campos"]
     assert "correlativo" not in resultado["campos"]
+
+
+def test_jabsa_ticket_extrae_rucs_y_total_con_etiquetas() -> None:
+    texto = (
+        "SERVICENTRO JABSA S.A\nRUC : 20374914201\n"
+        "FACTURA DE VENTA ELECTRONICA\nF003-00004475\n"
+        "Cliente : INVERSIONES Y NEGOCIACIONES MAREUF E.I\n"
+        "RUC : 20538821374 Placa :\n"
+        "OP.GRAVADAS S/ 2959.32\nIGV S/ 532.68\n"
+        "TOTAL S/ 3492.00\n"
+    )
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    campos = resultado["campos"]
+    assert campos["serie"]["valor"] == "F003"
+    assert campos["ruc_emisor"]["valor"] == "20374914201"
+    assert campos["ruc_receptor"]["valor"] == "20538821374"
+    assert campos["importe_total"]["valor"] == "3492.00"
