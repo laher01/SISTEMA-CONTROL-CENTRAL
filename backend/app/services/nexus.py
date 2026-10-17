@@ -78,6 +78,7 @@ def responder(
         settings,
         texto,
         contexto.seccion,
+        rol=str(auth.rol),
     )
 
     if expediente_id is not None and any(
