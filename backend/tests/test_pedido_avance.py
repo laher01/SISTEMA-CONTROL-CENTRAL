@@ -141,3 +141,26 @@ def test_presupuesto_distribucion_no_confunde_ejecucion_real() -> None:
     assert saldo == Decimal("100")
     assert porcentaje == Decimal("125")
     assert estado == "ROJO"
+
+
+def test_actualizar_asignacion_sin_contarla_dos_veces() -> None:
+    presupuesto = Decimal("1000")
+    otras_asignaciones = [Decimal("300"), Decimal("150")]
+    nuevo_monto_de_asignacion_existente = Decimal("400")
+    saldo = validar_distribucion_presupuesto(
+        presupuesto,
+        otras_asignaciones + [nuevo_monto_de_asignacion_existente],
+    )
+    assert saldo == Decimal("150")
+
+
+def test_reemplazo_excesivo_de_asignacion_se_rechaza() -> None:
+    with pytest.raises(ValueError, match="exceden"):
+        validar_distribucion_presupuesto(
+            Decimal("1000"),
+            [Decimal("650"), Decimal("400")],
+        )
+
+
+def test_distribucion_vacia_conserva_presupuesto_original() -> None:
+    assert validar_distribucion_presupuesto(Decimal("2500"), []) == Decimal("2500")
