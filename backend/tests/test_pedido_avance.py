@@ -240,3 +240,23 @@ def test_responsable_no_accede_a_pedido_de_otro_tenant(operacion: str) -> None:
         else:
             eliminar_asignacion_pedido(*args, asignacion_id=uuid4())
     assert exc.value.status_code == 404
+
+
+@pytest.mark.parametrize("operacion", ["alta", "baja"])
+def test_administrador_no_accede_a_pedido_de_otro_tenant(operacion: str) -> None:
+    tenant_actual, tenant_ajeno, pedido_id = uuid4(), uuid4(), uuid4()
+    auth = SimpleNamespace(rol=RolMiembro.ADMINISTRADOR, miembro_id=uuid4())
+    pedido = SimpleNamespace(tenant_id=tenant_ajeno, responsable_id=uuid4())
+
+    class SesionPedido:
+        def get(self, _modelo: object, identificador: object) -> object:
+            assert identificador == pedido_id
+            return pedido
+
+    args = (SesionPedido(), tenant_actual, auth, pedido_id)
+    with pytest.raises(HTTPException) as exc:
+        if operacion == "alta":
+            agregar_asignacion_pedido(*args, datos=None)
+        else:
+            eliminar_asignacion_pedido(*args, asignacion_id=uuid4())
+    assert exc.value.status_code == 404
