@@ -1,7 +1,5 @@
 """Persistencia transaccional de auditoría XML; no inicia ni ejecuta reprocesamientos."""
 
-import uuid
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
