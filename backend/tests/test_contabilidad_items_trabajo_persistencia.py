@@ -16,6 +16,7 @@ from app.services.contabilidad_items_trabajo_auditoria import (
 from app.services.contabilidad_items_trabajo_persistencia import (
     guardar_transicion_xml,
     obtener_o_crear_trabajo_xml,
+    recuperar_checkpoint_confirmado_xml,
 )
 
 
@@ -133,3 +134,62 @@ def test_checkpoint_se_revierte_con_evento_tras_rollback(engine):
         )
         assert estado == "PENDIENTE"
         assert session.scalar(select(func.count()).select_from(EventoReescaneoXML)) == 0
+
+
+def test_recuperacion_checkpoint_desde_otra_sesion(engine):
+    from sqlalchemy.orm import sessionmaker
+
+    fabrica = sessionmaker(engine, expire_on_commit=False)
+    with fabrica() as sesion:
+        tenant = Tenant(nombre="tenant_reinicio_checkpoint_xml")
+        sesion.add(tenant)
+        sesion.flush()
+        cuenta = CuentaAcceso(
+            tenant_id=tenant.id,
+            login="actor-recuperacion-xml",
+            password_hash="test",
+            activo=True,
+            cambio_clave_obligatorio=False,
+        )
+        sesion.add(cuenta)
+        sesion.flush()
+        trabajo, _ = obtener_o_crear_trabajo_xml(sesion, tenant.id, cuenta.id, "reinicio-1")
+        ids = (tenant.id, cuenta.id, trabajo.id)
+        guardar_transicion_xml(
+            sesion,
+            EventoAuditoriaXML(
+                trabajo_id=trabajo.id,
+                tenant_id=tenant.id,
+                actor_cuenta_id=cuenta.id,
+                estado_anterior=EstadoTrabajoXML.PENDIENTE,
+                estado_nuevo=EstadoTrabajoXML.EJECUTANDO,
+                ocurrido_en=datetime.now(UTC),
+            ),
+        )
+        guardar_transicion_xml(
+            sesion,
+            EventoAuditoriaXML(
+                trabajo_id=trabajo.id,
+                tenant_id=tenant.id,
+                actor_cuenta_id=cuenta.id,
+                estado_anterior=EstadoTrabajoXML.EJECUTANDO,
+                estado_nuevo=EstadoTrabajoXML.PAUSADO,
+                ocurrido_en=datetime.now(UTC),
+            ),
+        )
+        sesion.commit()
+
+    with fabrica() as sesion:
+        assert recuperar_checkpoint_confirmado_xml(sesion, *ids) == (
+            None,
+            EstadoTrabajoXML.PAUSADO,
+        )
+        with pytest.raises(ValueError, match="actor y tenant"):
+            recuperar_checkpoint_confirmado_xml(sesion, uuid.uuid4(), ids[1], ids[2])
+        trabajo = sesion.get(TrabajoReescaneoXML, ids[2])
+        assert trabajo is not None
+        trabajo.estado = "COMPLETADO"
+        sesion.flush()
+        with pytest.raises(ValueError, match="no coinciden"):
+            recuperar_checkpoint_confirmado_xml(sesion, *ids)
+        sesion.rollback()
