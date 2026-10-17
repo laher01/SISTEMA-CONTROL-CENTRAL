@@ -410,6 +410,7 @@ export interface PedidoGerencia {
   saldo_pendiente: string;
   exceso: string;
   avance_porcentaje: string;
+  semaforo_avance: "VERDE" | "NARANJA" | "ROJO";
   modalidad: "SIN_RESTRICCION" | "POR_PEDIDO";
   modo_distribucion: "MANUAL" | "SEMIASISTIDA" | "AUTOMATICA";
   estado: "ACTIVO" | "CERRADO" | "CANCELADO";
