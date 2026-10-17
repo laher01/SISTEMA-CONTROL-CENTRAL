@@ -37,3 +37,12 @@ def test_nexus_consulta_items_reales_del_xml(client: TestClient) -> None:
     assert datos["accion"] == "CONSULTAR_ITEMS"
     assert datos["motor"] == "ESPECIALISTA_ITEMS"
     assert "motor conversacional externo" not in datos["respuesta"]
+
+
+def test_consultas_escritas_con_errores_y_productos_nuevos() -> None:
+    assert consulta_items_solicitada("dime cuantas facrturas de petrpoleo tenemos") == (
+        "producto", "petroleo"
+    )
+    assert consulta_items_solicitada("y de llantas hay") == ("producto", "llantas")
+    assert consulta_items_solicitada("y agua y sporade") == ("producto", "agua,sporade")
+    assert consulta_items_solicitada("facturas de lubricantes") == ("libre", "lubricantes")
