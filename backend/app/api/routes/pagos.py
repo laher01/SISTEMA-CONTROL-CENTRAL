@@ -1322,15 +1322,13 @@ def agregar_asignacion_pedido(
             AsignacionPedidoGerencia.proveedor_id == datos.proveedor_id,
         )
     )
-    otros_montos = list(
-        session.scalars(
-            select(AsignacionPedidoGerencia.monto_asignado).where(
-                AsignacionPedidoGerencia.tenant_id == tenant_id,
-                AsignacionPedidoGerencia.pedido_id == pedido.id,
-                AsignacionPedidoGerencia.id != duplicada.id if duplicada is not None else True,
-            )
-        )
+    consulta_montos = select(AsignacionPedidoGerencia.monto_asignado).where(
+        AsignacionPedidoGerencia.tenant_id == tenant_id,
+        AsignacionPedidoGerencia.pedido_id == pedido.id,
     )
+    if duplicada is not None:
+        consulta_montos = consulta_montos.where(AsignacionPedidoGerencia.id != duplicada.id)
+    otros_montos = list(session.scalars(consulta_montos))
     try:
         validar_distribucion_presupuesto(
             Decimal(pedido.monto_solicitado),
