@@ -105,7 +105,8 @@ def test_nexus_responde_con_contexto_de_pantalla_y_knowledge_base(
     assert datos["seccion"] == "EMPRESAS"
     assert datos["motor"] == "CONTEXTUAL"
     assert datos["llm_usado"] is False
-    assert any(fuente["tipo"] == "KNOWLEDGE_BASE" for fuente in datos["fuentes"])
+    # El actor operativo no debe recibir documentación técnica interna.
+    assert not any(fuente["tipo"] == "KNOWLEDGE_BASE" for fuente in datos["fuentes"])
     assert "EMPRESAS" in datos["respuesta"]
 
 
