@@ -290,14 +290,13 @@ def test_postgres_impide_modificacion_simultanea_de_fila(engine: Engine) -> None
                 primera.execute(
                     text("SELECT id FROM prueba_bloqueo_gerencia WHERE id=1 FOR UPDATE")
                 )
-                with pytest.raises(OperationalError):
-                    with segunda.begin():
-                        segunda.execute(
-                            text(
-                                "SELECT id FROM prueba_bloqueo_gerencia "
-                                "WHERE id=1 FOR UPDATE NOWAIT"
-                            )
+                with pytest.raises(OperationalError), segunda.begin():
+                    segunda.execute(
+                        text(
+                            "SELECT id FROM prueba_bloqueo_gerencia "
+                            "WHERE id=1 FOR UPDATE NOWAIT"
                         )
+                    )
             with segunda.begin():
                 assert (
                     segunda.execute(
