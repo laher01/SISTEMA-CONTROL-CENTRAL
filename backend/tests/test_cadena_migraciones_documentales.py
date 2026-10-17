@@ -23,7 +23,9 @@ def _revisiones(archivo: str) -> tuple[str, str | None]:
 def test_cadena_referencias_y_relaciones_documentales() -> None:
     referencias = _revisiones("20261012_0030_referencias_gre.py")
     nexus = _revisiones("20261013_0031_nexus_formulas.py")
+    unicidad_nexus = _revisiones("20261013_0032_nexus_unique_aprobada.py")
     relaciones = _revisiones("20261013_0033_relaciones_documentos.py")
     assert referencias == ("0030", "0029")
     assert nexus == ("0031", "0030")
+    assert unicidad_nexus == ("0032", "0031")
     assert relaciones == ("0033", "0032")
