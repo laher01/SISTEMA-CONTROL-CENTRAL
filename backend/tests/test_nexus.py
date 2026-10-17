@@ -82,7 +82,7 @@ def test_nexus_estado_informa_integraciones_pendientes(client: TestClient) -> No
     assert datos["consulta_ruc_externa"] is False
     assert datos["busqueda_internet"] is False
     assert datos["motor_conversacional"] is False
-    assert datos["knowledge_base"] is True
+    assert datos["knowledge_base"] is False  # Actor operativo sin acceso a biblioteca técnica
     assert datos["fuente_oficial_preferida"] == "SUNAT"
 
 
@@ -105,7 +105,8 @@ def test_nexus_responde_con_contexto_de_pantalla_y_knowledge_base(
     assert datos["seccion"] == "EMPRESAS"
     assert datos["motor"] == "CONTEXTUAL"
     assert datos["llm_usado"] is False
-    assert any(fuente["tipo"] == "KNOWLEDGE_BASE" for fuente in datos["fuentes"])
+    # El actor operativo no debe recibir documentación técnica interna.
+    assert not any(fuente["tipo"] == "KNOWLEDGE_BASE" for fuente in datos["fuentes"])
     assert "EMPRESAS" in datos["respuesta"]
 
 
