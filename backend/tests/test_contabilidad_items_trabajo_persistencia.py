@@ -16,8 +16,8 @@ from app.services.contabilidad_items_trabajo_auditoria import (
 from app.services.contabilidad_items_trabajo_persistencia import (
     guardar_transicion_xml,
     obtener_o_crear_trabajo_xml,
-    recuperar_checkpoint_confirmado_xml,
     reanudar_trabajo_xml_supervisado,
+    recuperar_checkpoint_confirmado_xml,
 )
 
 
