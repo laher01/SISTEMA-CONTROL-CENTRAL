@@ -1275,14 +1275,13 @@ def agregar_asignacion_pedido(
     pedido_id: uuid.UUID,
     datos: AsignacionPedidoGerenciaIn,
 ) -> PedidoGerenciaOut:
-    _validar_acceso(auth.rol)
-    if auth.rol == RolMiembro.GERENTE:
+    if auth.rol not in (RolMiembro.RESPONSABLE, RolMiembro.ADMINISTRADOR):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Distribución reservada al Responsable")
     pedido = _pedido_valido(session, tenant_id, pedido_id, auth)
-    if pedido.responsable_id is not None:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN, "El pedido corresponde al Responsable asignado"
-        )
+    if auth.rol == RolMiembro.RESPONSABLE and (
+        auth.miembro_id is None or pedido.responsable_id != auth.miembro_id
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pedido no asignado al Responsable")
     usuario = _usuario_valido(session, tenant_id, datos.usuario_id)
 
     gestor = None
@@ -1385,10 +1384,13 @@ def eliminar_asignacion_pedido(
     pedido_id: uuid.UUID,
     asignacion_id: uuid.UUID,
 ) -> PedidoGerenciaOut:
-    _validar_acceso(auth.rol)
-    if auth.rol == RolMiembro.GERENTE:
+    if auth.rol not in (RolMiembro.RESPONSABLE, RolMiembro.ADMINISTRADOR):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Distribución reservada al Responsable")
     pedido = _pedido_valido(session, tenant_id, pedido_id, auth)
+    if auth.rol == RolMiembro.RESPONSABLE and (
+        auth.miembro_id is None or pedido.responsable_id != auth.miembro_id
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pedido no asignado al Responsable")
     asignacion = session.get(AsignacionPedidoGerencia, asignacion_id)
     if asignacion is None or asignacion.tenant_id != tenant_id or asignacion.pedido_id != pedido.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Asignación no encontrada")
