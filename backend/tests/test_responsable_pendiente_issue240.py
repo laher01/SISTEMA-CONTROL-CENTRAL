@@ -1,4 +1,4 @@
-"""Regresión aislada #240: expedientes pendientes no deben financiar liquidaciones.
+"""Regresión aislada #240: autorización de receptora y liquidaciones.
 
 No altera la función de cálculo compartida con PR #102.
 La prueba pendiente queda xfail estricto hasta corregir la regla de aprobación.
@@ -47,6 +47,7 @@ def test_cotizacion_excluye_expediente_pendiente(
         ruc="20987654321",
         razon_social="Receptor prueba",
         agente_retencion=False,
+        autorizada=not pendiente_aprobacion,
     )
     session.add_all([emisor, receptor])
     session.flush()
@@ -66,6 +67,7 @@ def test_cotizacion_excluye_expediente_pendiente(
         )
     )
     session.commit()
+    # El flag representa autorización de receptora, NO una aprobación financiera autónoma.
     respuesta = client.post(
         "/api/v1/responsable/pagos/cotizar",
         json={
