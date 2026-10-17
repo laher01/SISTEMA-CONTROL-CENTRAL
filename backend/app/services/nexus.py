@@ -74,6 +74,24 @@ def responder(
             motor="CONVERSACIONAL_LOCAL",
             seccion=contexto.seccion,
         )
+    # Respuestas de lectura de pantalla no dependen del proveedor LLM.
+    if any(
+        frase in normalizado
+        for frase in (
+            "qué ves",
+            "que ves",
+            "qué está pasando en esta pantalla",
+            "que esta pasando en esta pantalla",
+            "qué me quiere decir el resultado",
+            "que me quiere decir el resultado",
+            "qué significa el resultado",
+            "que significa el resultado",
+            "explica esta pantalla",
+            "explícame esta pantalla",
+        )
+    ):
+        return _explicar_pantalla(contexto)
+
     conocimiento, fuentes_conocimiento = recuperar_conocimiento(
         settings,
         texto,
@@ -185,6 +203,52 @@ def _enriquecer(
             "motor": motor,
             "seccion": contexto.seccion,
         }
+    )
+
+
+
+def _explicar_pantalla(contexto: ContextoNexus) -> NexusChatOut:
+    """Explicar únicamente los datos autorizados, sin simular visión del navegador."""
+    seccion = contexto.seccion
+    datos = contexto.datos
+    nombres = {
+        "DASHBOARD": "tu panel de inicio",
+        "REGISTROS": "la sección Registros",
+        "DOCUMENTOS": "la sección Documentos",
+        "EXPEDIENTES": "la sección Expedientes",
+    }
+    lugar = nombres.get(seccion, f"la sección {seccion.lower()}")
+    partes = [f"Estás en {lugar}. Puedo interpretar los datos autorizados de FACT CENTRAL, "
+              "pero no veo directamente los elementos visuales de tu navegador."]
+    mes = datos.get("mes_actual")
+    if isinstance(mes, dict):
+        compras = mes.get("compras")
+        if isinstance(compras, dict) and compras:
+            for moneda, info in compras.items():
+                if isinstance(info, dict):
+                    cantidad = info.get("expedientes", 0)
+                    importe = info.get("importe", "0")
+                    partes.append(
+                        f"En el mes actual figuran {cantidad} expedientes de compras "
+                        f"por {moneda} {importe}, dentro de tu acceso."
+                    )
+        else:
+            partes.append("No aparecen compras del mes en los datos disponibles para tu rol.")
+    estados = datos.get("expedientes_por_estado")
+    if isinstance(estados, dict) and estados:
+        resumen = ", ".join(f"{cantidad} en estado {estado}" for estado, cantidad in estados.items())
+        partes.append(f"En el conjunto de expedientes autorizado hay {resumen}. "
+                      "Estos estados corresponden al total visible, no necesariamente solo al mes.")
+        if int(estados.get("ROJO", 0)) > 0:
+            partes.append("Hay expedientes marcados en rojo que conviene revisar; "
+                          "el color por sí solo no permite identificar la causa.")
+    partes.append("Si seleccionas un expediente puedo indicarte los documentos que le faltan.")
+    return NexusChatOut(
+        respuesta=" ".join(partes),
+        accion="EXPLICAR_PANTALLA",
+        datos={"contexto": datos, "advertencias": contexto.advertencias},
+        motor="CONTEXTUAL",
+        seccion=seccion,
     )
 
 
