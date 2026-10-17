@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import OperationalError
 
-from app.api.routes.pagos import agregar_asignacion_pedido, eliminar_asignacion_pedido
+from app.api.routes.pagos import _resumen_pedido, agregar_asignacion_pedido, eliminar_asignacion_pedido
 from app.enums import RolMiembro
 from app.schemas import PedidoGerenciaOut
 from app.services.pedido_avance import (
@@ -322,3 +322,25 @@ def test_responsable_sin_identidad_no_distribuye(operacion: str) -> None:
         else:
             eliminar_asignacion_pedido(*args, asignacion_id=uuid4())
     assert exc.value.status_code == 404
+
+
+@pytest.mark.parametrize("cliente_invalido", ["otro_tenant", "eliminado", "inexistente"])
+def test_resumen_no_acepta_cliente_ajeno_o_eliminado(cliente_invalido: str) -> None:
+    tenant_id, cliente_id = uuid4(), uuid4()
+    cliente = SimpleNamespace(tenant_id=tenant_id, deleted_at=None)
+    if cliente_invalido == "otro_tenant":
+        cliente.tenant_id = uuid4()
+    elif cliente_invalido == "eliminado":
+        cliente.deleted_at = "2026-10-17"
+    elif cliente_invalido == "inexistente":
+        cliente = None
+
+    class Sesion:
+        def get(self, _modelo: object, identificador: object) -> object:
+            assert identificador == cliente_id
+            return cliente
+
+    pedido = SimpleNamespace(cliente_id=cliente_id)
+    with pytest.raises(HTTPException) as exc:
+        _resumen_pedido(Sesion(), tenant_id, pedido)
+    assert exc.value.status_code == 409
