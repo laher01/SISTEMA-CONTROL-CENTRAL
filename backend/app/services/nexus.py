@@ -206,7 +206,6 @@ def _enriquecer(
     )
 
 
-
 def _explicar_pantalla(contexto: ContextoNexus) -> NexusChatOut:
     """Explicar datos autorizados sin simular visión del navegador."""
     seccion = contexto.seccion
