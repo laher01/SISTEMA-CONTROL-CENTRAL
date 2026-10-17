@@ -100,8 +100,6 @@ def test_el_indicador_kb_no_habilita_acceso_por_su_cuenta(
     settings: Settings,
 ) -> None:
     assert knowledge_disponible(settings, rol="GESTOR") is False
-    conocimiento, fuentes = recuperar_conocimiento(
-        settings, "dashboard", "DASHBOARD", rol="GESTOR"
-    )
+    conocimiento, fuentes = recuperar_conocimiento(settings, "dashboard", "DASHBOARD", rol="GESTOR")
     assert conocimiento == ""
     assert fuentes == []
