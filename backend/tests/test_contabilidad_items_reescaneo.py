@@ -187,9 +187,7 @@ def test_xml_invalido_o_sin_items_no_genera_lineas(
     assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 0
 
 
-def test_ruta_con_traversal_no_procesa_archivo_de_otro_tenant(
-    session: Session, tmp_path: Path
-):
+def test_ruta_con_traversal_no_procesa_archivo_de_otro_tenant(session: Session, tmp_path: Path):
     propietario = Tenant(nombre="tenant_traversal_a")
     ajeno = Tenant(nombre="tenant_traversal_b")
     session.add_all([propietario, ajeno])
