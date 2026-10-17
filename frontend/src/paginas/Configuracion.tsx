@@ -1,4 +1,5 @@
 import InspeccionTenant from "./InspeccionTenant";
+import PanelPaginaWeb from "./PanelPaginaWeb";
 import { useMemo, useState, type FormEvent } from "react";
 
 import { eliminar, enviarJson, useDatos } from "../api";
@@ -22,7 +23,7 @@ const PERMISO = "ELIMINAR_REGISTROS";
 
 export default function Configuracion({ sesion }: { sesion: SesionActual }) {
   const [seccion, setSeccion] = useState<
-    "permisos" | "acceso" | "empresas" | "mantenimiento" | "administraciones" | "correos"
+    "permisos" | "acceso" | "empresas" | "mantenimiento" | "administraciones" | "correos" | "pagina-web"
   >(sesion.rol === "SUPERADMIN" ? "administraciones" : window.location.search.includes("seccion=correos") ? "correos" : "permisos");
   const { datos, error, cargando, recargar } = useDatos<PermisoConfigurado[]>(
     "/api/v1/configuracion/permisos",
@@ -52,7 +53,10 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
           </>
         )}
         {sesion.rol === "SUPERADMIN" && (
-          <button onClick={() => setSeccion("administraciones")}>Administraciones SaaS</button>
+          <>
+            <button onClick={() => setSeccion("administraciones")}>Administraciones SaaS</button>
+            <button onClick={() => setSeccion("pagina-web")}>Página web</button>
+          </>
         )}
       </div>
 
@@ -136,6 +140,7 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
       )}
 
       {seccion === "administraciones" && sesion.rol === "SUPERADMIN" && <AdministracionesPanel />}
+      {seccion === "pagina-web" && sesion.rol === "SUPERADMIN" && <PanelPaginaWeb />}
       {seccion === "acceso" && sesion.rol === "ADMINISTRADOR" && <ConfiguracionAccesoPanel />}
       {seccion === "empresas" && sesion.rol === "ADMINISTRADOR" && <EmpresasRegistradasPanel />}
       {seccion === "mantenimiento" && sesion.rol === "ADMINISTRADOR" && <MantenimientoPanel />}
