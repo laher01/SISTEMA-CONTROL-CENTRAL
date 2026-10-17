@@ -170,7 +170,11 @@ def extraer_campos(
     factor = confianza_texto if confianza_texto is not None else 0.75
     campos: dict[str, dict[str, object]] = {}
 
-    es_transferencia_bcp = "BCP" in texto.upper() and "TRANSFERENCIA" in texto.upper()
+    es_transferencia_bcp = (
+        "BCP" in texto.upper()
+        and "TRANSFERENCIA" in texto.upper()
+        and "FACTURA" not in texto.upper()
+    )
     referencia = REFERENCIA.search(texto) if not es_transferencia_bcp else None
     if referencia:
         evidencia = referencia.group(0)
