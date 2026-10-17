@@ -117,3 +117,51 @@ def test_diez_imagenes_se_procesan_en_orden(monkeypatch: pytest.MonkeyPatch) -> 
     assert resultado["procesados"] == 10
     assert [fila["indice"] for fila in resultado["resultados"]] == list(range(10))
     assert llamados == 10
+
+
+def test_sublote_conserva_tenant_y_auth_en_cada_imagen(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tenant = uuid.uuid4()
+    auth = object()
+    vistos: list[tuple[object, object]] = []
+
+    async def recibir(**kwargs):
+        vistos.append((kwargs["tenant_id"], kwargs["auth"]))
+        return SimpleNamespace(id=uuid.uuid4())
+
+    monkeypatch.setattr(documentos, "subir_documento", recibir)
+    resultado = asyncio.run(
+        documentos.subir_sublote_imagenes(
+            session=SesionFalsa(),
+            settings=None,
+            almacen=None,
+            hoy=None,
+            tenant_id=tenant,
+            auth=auth,
+            archivos=[imagen_png(), imagen_png()],
+        )
+    )
+    assert resultado["procesados"] == 2
+    assert vistos == [(tenant, auth), (tenant, auth)]
+
+
+def test_archivo_excesivo_no_interrumpe_restantes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    llamados = 0
+
+    async def recibir(**kwargs):
+        nonlocal llamados
+        llamados += 1
+        if llamados == 1:
+            raise HTTPException(413, "Archivo demasiado grande")
+        return SimpleNamespace(id=uuid.uuid4())
+
+    monkeypatch.setattr(documentos, "subir_documento", recibir)
+    sesion = SesionFalsa()
+    resultado = ejecutar([imagen_png(), imagen_png()], sesion)
+    assert resultado["procesados"] == 1
+    assert resultado["errores"] == 1
+    assert resultado["resultados"][0]["estado"] == "error"
+    assert sesion.reversiones == 1
