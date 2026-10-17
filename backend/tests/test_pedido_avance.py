@@ -280,9 +280,7 @@ def test_postgres_impide_modificacion_simultanea_de_fila(engine: Engine) -> None
     if engine.dialect.name != "postgresql":
         pytest.skip("La prueba de bloqueo requiere PostgreSQL")
     with engine.begin() as conexion:
-        conexion.execute(
-            text("CREATE TABLE prueba_bloqueo_gerencia (id int PRIMARY KEY)")
-        )
+        conexion.execute(text("CREATE TABLE prueba_bloqueo_gerencia (id int PRIMARY KEY)"))
         conexion.execute(text("INSERT INTO prueba_bloqueo_gerencia (id) VALUES (1)"))
     try:
         with engine.connect() as primera, engine.connect() as segunda:
@@ -292,10 +290,7 @@ def test_postgres_impide_modificacion_simultanea_de_fila(engine: Engine) -> None
                 )
                 with pytest.raises(OperationalError), segunda.begin():
                     segunda.execute(
-                        text(
-                            "SELECT id FROM prueba_bloqueo_gerencia "
-                            "WHERE id=1 FOR UPDATE NOWAIT"
-                        )
+                        text("SELECT id FROM prueba_bloqueo_gerencia WHERE id=1 FOR UPDATE NOWAIT")
                     )
             with segunda.begin():
                 assert (
