@@ -3,9 +3,7 @@
 A privileged staging runner must separately implement and authorize actual operations.
 """
 from dataclasses import dataclass
-from pathlib import Path
-
-from recovery_pair_audit import compare, inspect_tar
+from recovery_pair_audit import relative_path
 
 
 @dataclass(frozen=True)
@@ -25,6 +23,8 @@ def verify_references(entries: dict, references: list[DocumentReference]) -> dic
     for ref in references:
         if not ref.tenant or not ref.expediente or not ref.path:
             raise ValueError("Incomplete document relation")
+        if relative_path(ref.path) != ref.path or "/" in ref.tenant or ref.tenant in {".", ".."}:
+            raise ValueError("Unsafe tenant or document path")
         if not ref.path.startswith(ref.tenant + "/"):
             raise ValueError("Cross-tenant document path")
         if (ref.tenant, ref.expediente, ref.path) in seen:
