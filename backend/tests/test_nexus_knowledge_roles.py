@@ -43,9 +43,7 @@ def test_administrador_conserva_biblioteca(settings: Settings) -> None:
         "ADMINISTRADOR_EXTRA",
     ],
 )
-def test_roles_no_autorizados_no_reciben_archivos_internos(
-    settings: Settings, rol: str
-) -> None:
+def test_roles_no_autorizados_no_reciben_archivos_internos(settings: Settings, rol: str) -> None:
     conocimiento, fuentes = recuperar_conocimiento(
         settings, "configuracion permisos secretos arquitectura", "CONFIGURACION", rol=rol
     )
