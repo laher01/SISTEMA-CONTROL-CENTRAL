@@ -2,9 +2,8 @@
 
 import re
 import unicodedata
-from decimal import Decimal, InvalidOperation
 from datetime import date
-
+from decimal import Decimal, InvalidOperation
 
 MESES = {
     "ENERO": 1, "FEBRERO": 2, "MARZO": 3, "ABRIL": 4,
