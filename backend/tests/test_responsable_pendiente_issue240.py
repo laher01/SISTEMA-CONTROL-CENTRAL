@@ -79,4 +79,6 @@ def test_cotizacion_excluye_expediente_pendiente(
     )
     assert respuesta.status_code == 200, respuesta.text
     real = Decimal(respuesta.json()["produccion"])
+    bruto = Decimal(respuesta.json()["bruto"])
     assert real == produccion_esperada
+    assert bruto == (produccion_esperada * Decimal("0.02")).quantize(Decimal("0.01"))
