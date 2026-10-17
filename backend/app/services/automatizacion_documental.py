@@ -99,7 +99,10 @@ def aplicar_automaticamente(
         if isinstance(alertas, list) and "TIPO_COMPROBANTE_CONFLICTIVO" in alertas:
             return _revision(
                 documento,
-                ["El documento presenta factura y boleta contradictorias; revisión fiscal obligatoria"],
+                [
+                    "El documento presenta factura y boleta contradictorias; "
+                    "revisión fiscal obligatoria"
+                ],
             )
 
     if documento.expediente_id is not None:
