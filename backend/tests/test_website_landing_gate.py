@@ -1,4 +1,5 @@
 """El portal estático respeta la activación sin cambiar el dominio reservado."""
+
 from pathlib import Path
 
 
