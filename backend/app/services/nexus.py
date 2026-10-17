@@ -24,6 +24,7 @@ from app.services.nexus_context import (
     puede_ver_expediente,
 )
 from app.services.nexus_knowledge import recuperar_conocimiento
+from app.services.nexus_items import consulta_items_solicitada, responder_items
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,12 @@ def responder(
         )
     ):
         return _explicar_pantalla(contexto)
+
+    consulta_items = consulta_items_solicitada(texto)
+    if consulta_items is not None:
+        tipo, busqueda = consulta_items
+        salida = responder_items(session, auth, tipo, busqueda)
+        return _enriquecer(salida, contexto, [], "ESPECIALISTA_ITEMS")
 
     conocimiento, fuentes_conocimiento = recuperar_conocimiento(
         settings,
