@@ -173,7 +173,10 @@ def extraer_campos(
     es_transferencia_bcp = (
         "BCP" in texto.upper()
         and "TRANSFERENCIA" in texto.upper()
-        and not re.search(r"\bFACTURA\s+(?:ELECTR[ÓO]NICA|DE VENTA)\b", texto, re.I)
+        and not (
+            re.search(r"\bFACTURA\s+(?:ELECTR[ÓO]NICA|DE VENTA)\b", texto, re.I)
+            and re.search(r"\b[FE]\d{3}\s*[-–—]\s*\d{1,8}\b", texto, re.I)
+        )
     )
     referencia = REFERENCIA.search(texto) if not es_transferencia_bcp else None
     if referencia:
