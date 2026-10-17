@@ -87,3 +87,43 @@ def obtener_o_crear_trabajo_xml(
             raise ValueError("Clave XML reservada por otro actor") from None
         return existente, False
     return nuevo, True
+
+
+def recuperar_checkpoint_confirmado_xml(
+    session: Session,
+    tenant_id: uuid.UUID,
+    actor_cuenta_id: uuid.UUID,
+    trabajo_id: uuid.UUID,
+) -> tuple[uuid.UUID | None, EstadoTrabajoXML]:
+    """Relee el checkpoint persistido y verifica su último evento; no ejecuta lotes."""
+    trabajo = session.scalar(
+        select(TrabajoReescaneoXML).where(
+            TrabajoReescaneoXML.id == trabajo_id,
+            TrabajoReescaneoXML.tenant_id == tenant_id,
+            TrabajoReescaneoXML.solicitado_por_cuenta_id == actor_cuenta_id,
+        )
+    )
+    if trabajo is None:
+        raise ValueError("Trabajo XML no encontrado para actor y tenant")
+    ultimo = session.scalar(
+        select(EventoReescaneoXML)
+        .where(
+            EventoReescaneoXML.trabajo_id == trabajo_id,
+            EventoReescaneoXML.tenant_id == tenant_id,
+            EventoReescaneoXML.actor_cuenta_id == actor_cuenta_id,
+        )
+        .order_by(EventoReescaneoXML.created_at.desc(), EventoReescaneoXML.id.desc())
+        .limit(1)
+    )
+    if ultimo is None:
+        if trabajo.estado != EstadoTrabajoXML.PENDIENTE.value or trabajo.cursor_documento_id:
+            raise ValueError("Checkpoint XML sin auditoría consistente")
+    elif ultimo.estado_nuevo != trabajo.estado or (
+        ultimo.cursor_documento_id is not None
+        and ultimo.cursor_documento_id != trabajo.cursor_documento_id
+    ):
+        raise ValueError("Checkpoint XML y auditoría no coinciden")
+    estado = EstadoTrabajoXML(trabajo.estado)
+    if estado == EstadoTrabajoXML.EJECUTANDO:
+        raise ValueError("Trabajo XML ejecutándose; requiere pausa supervisada antes del reintento")
+    return trabajo.cursor_documento_id, estado
