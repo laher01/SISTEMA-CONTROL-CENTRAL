@@ -93,6 +93,18 @@ def aplicar_automaticamente(
     documento: Documento,
     procesamiento: dict[str, object],
 ) -> ResultadoAutomatizacion:
+    extraccion = procesamiento.get("extraccion_estructurada")
+    if isinstance(extraccion, dict):
+        alertas = extraccion.get("alertas")
+        if isinstance(alertas, list) and "TIPO_COMPROBANTE_CONFLICTIVO" in alertas:
+            return _revision(
+                documento,
+                [
+                    "El documento presenta factura y boleta contradictorias; "
+                    "revisión fiscal obligatoria"
+                ],
+            )
+
     if documento.expediente_id is not None:
         if documento.tipo_documento == TipoDocumento.FACT:
             previo = session.scalar(
