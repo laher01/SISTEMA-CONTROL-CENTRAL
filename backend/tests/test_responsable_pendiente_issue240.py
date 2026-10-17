@@ -17,7 +17,17 @@ from tests.conftest import AuthPrueba
 
 @pytest.mark.parametrize(
     ("pendiente_aprobacion", "produccion_esperada"),
-    [(False, Decimal("1000.00")), (True, Decimal("0.00"))],
+    [
+        (False, Decimal("1000.00")),
+        pytest.param(
+            True,
+            Decimal("0.00"),
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="Issue #240: producción pendiente incluida en la cotización",
+            ),
+        ),
+    ],
 )
 def test_cotizacion_excluye_expediente_pendiente(
     client: TestClient,
@@ -67,9 +77,4 @@ def test_cotizacion_excluye_expediente_pendiente(
     )
     assert respuesta.status_code == 200, respuesta.text
     real = Decimal(respuesta.json()["produccion"])
-    if pendiente_aprobacion:
-        # Fallo conocido #240: registrar sin bloquear el resto del CI.
-        with pytest.raises(AssertionError, match=".*"):
-            assert real == produccion_esperada
-        pytest.xfail("Issue #240: actualmente se contabiliza producción pendiente")
     assert real == produccion_esperada
