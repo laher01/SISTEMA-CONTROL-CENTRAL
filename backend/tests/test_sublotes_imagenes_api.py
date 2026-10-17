@@ -88,3 +88,32 @@ def test_sublote_rechaza_archivo_no_imagen(monkeypatch: pytest.MonkeyPatch) -> N
     resultado = ejecutar([archivo], SesionFalsa())
     assert resultado["procesados"] == 0
     assert resultado["errores"] == 1
+
+
+@pytest.mark.parametrize("cantidad", [0, 11])
+def test_sublote_limites_rechazan_sin_registrar(
+    monkeypatch: pytest.MonkeyPatch, cantidad: int
+) -> None:
+    async def no_subir(**kwargs):
+        pytest.fail("Un sublote inválido no debe registrar documentos")
+
+    monkeypatch.setattr(documentos, "subir_documento", no_subir)
+    with pytest.raises(HTTPException) as error:
+        ejecutar([imagen_png() for _ in range(cantidad)], SesionFalsa())
+    assert error.value.status_code == 422
+
+
+def test_diez_imagenes_se_procesan_en_orden(monkeypatch: pytest.MonkeyPatch) -> None:
+    llamados = 0
+
+    async def subir_simulado(**kwargs):
+        nonlocal llamados
+        llamados += 1
+        return SimpleNamespace(id=uuid.uuid4())
+
+    monkeypatch.setattr(documentos, "subir_documento", subir_simulado)
+    resultado = ejecutar([imagen_png() for _ in range(10)], SesionFalsa())
+    assert resultado["total"] == 10
+    assert resultado["procesados"] == 10
+    assert [fila["indice"] for fila in resultado["resultados"]] == list(range(10))
+    assert llamados == 10
