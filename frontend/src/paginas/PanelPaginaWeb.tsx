@@ -1,7 +1,4 @@
-/** Panel de inventario de la web comercial en SUPERADMIN.
- * La conmutación real requiere un endpoint global persistente y auditoría.
- * No fingir que un estado local modifica la publicación pública.
- */
+/** Control global de la landing, exclusivo de SUPERADMIN. */
 import { useState } from "react";
 import { enviarJson, useDatos } from "../api";
 
@@ -39,16 +36,16 @@ export default function PanelPaginaWeb() {
       </p>
       <div className="panel-configuracion">
         <h4>Publicación de la Landing Page</h4>
-        <p><strong>Estado:</strong> {cargando ? "Consultando…" : datos ? (datos.activa ? "Activada" : "Desactivada") : "No disponible"}</p>\n        {error && <p role="alert" className="error">{error}</p>}
+        <p><strong>Estado:</strong> {cargando ? "Consultando…" : datos ? (datos.activa ? "Activada" : "Desactivada") : "No disponible"}</p>
+        {error && <p role="alert" className="error">{error}</p>}
         <label className="bloque">
           <input type="checkbox" checked={datos?.activa ?? false} disabled={!datos || cargando || guardando} aria-describedby="landing-pendiente" onChange={(e) => void actualizar(e.target.checked)} />
           Activar o desactivar la página de aterrizaje
         </label>
         <p id="landing-pendiente" className="tenue">
-          El interruptor estará disponible cuando exista una configuración global
-          persistente, exclusiva de SUPERADMIN y con auditoría. Desactivarla no
-          deberá bloquear el login ni las páginas legales públicas.
+          Solo SUPERADMIN puede cambiar el estado global. El login y las páginas legales permanecen disponibles.
         </p>
+        {mensaje && <p role="status">{mensaje}</p>}
       </div>
       <div className="panel-configuracion">
         <h4>Secciones comerciales preparadas</h4>
