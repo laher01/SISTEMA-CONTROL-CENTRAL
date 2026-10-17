@@ -2,8 +2,14 @@
 
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
+
+from app.api.routes.pagos import agregar_asignacion_pedido, eliminar_asignacion_pedido
+from app.enums import RolMiembro
 
 from app.schemas import PedidoGerenciaOut
 from app.services.pedido_avance import (
@@ -178,3 +184,40 @@ def test_rutas_distribucion_exigen_responsable_asignado() -> None:
         assert "RolMiembro.RESPONSABLE, RolMiembro.ADMINISTRADOR" in bloque
         assert "pedido.responsable_id != auth.miembro_id" in bloque
         assert "RolMiembro.SUPERADMIN" not in bloque
+
+
+@pytest.mark.parametrize("rol", [RolMiembro.GERENTE, RolMiembro.USUARIO, RolMiembro.SUPERADMIN])
+@pytest.mark.parametrize("operacion", ["alta", "baja"])
+def test_distribucion_deniega_roles_no_autorizados(rol: RolMiembro, operacion: str) -> None:
+    class SinConsultas:
+        def get(self, *_args: object) -> None:
+            raise AssertionError("No se debe consultar la base de datos")
+
+    auth = SimpleNamespace(rol=rol, miembro_id=uuid4())
+    args = (SinConsultas(), uuid4(), auth, uuid4())
+    with pytest.raises(HTTPException) as exc:
+        if operacion == "alta":
+            agregar_asignacion_pedido(*args, datos=None)
+        else:
+            eliminar_asignacion_pedido(*args, asignacion_id=uuid4())
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.parametrize("operacion", ["alta", "baja"])
+def test_responsable_no_modifica_pedido_de_otro(operacion: str) -> None:
+    tenant_id, pedido_id = uuid4(), uuid4()
+    pedido = SimpleNamespace(tenant_id=tenant_id, responsable_id=uuid4())
+
+    class SesionPedido:
+        def get(self, _modelo: object, identificador: object) -> object:
+            assert identificador == pedido_id
+            return pedido
+
+    auth = SimpleNamespace(rol=RolMiembro.RESPONSABLE, miembro_id=uuid4())
+    args = (SesionPedido(), tenant_id, auth, pedido_id)
+    with pytest.raises(HTTPException) as exc:
+        if operacion == "alta":
+            agregar_asignacion_pedido(*args, datos=None)
+        else:
+            eliminar_asignacion_pedido(*args, asignacion_id=uuid4())
+    assert exc.value.status_code == 404
