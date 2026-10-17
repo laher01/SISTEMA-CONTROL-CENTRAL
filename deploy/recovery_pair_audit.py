@@ -28,6 +28,9 @@ def relative_path(name):
 
 def inspect_tar(path):
     entries = {}
+    max_files = 10000
+    max_total_bytes = 2 * 1024 * 1024 * 1024
+    total = 0
     with tarfile.open(path, mode="r:gz") as archive:
         for item in archive:
             name = relative_path(item.name.removeprefix("./"))
@@ -37,6 +40,9 @@ def inspect_tar(path):
                 raise ValueError("Non-regular archive entry")
             if name in entries:
                 raise ValueError("Duplicate archive path")
+            total += item.size
+            if len(entries) >= max_files or total > max_total_bytes:
+                raise ValueError("Archive exceeds audit limits")
             f = archive.extractfile(item)
             if f is None:
                 raise ValueError("Missing member")
