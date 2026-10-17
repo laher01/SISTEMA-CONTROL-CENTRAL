@@ -1,6 +1,7 @@
 """Pruebas de límites del semáforo de pedidos — Issue #242."""
 
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -164,3 +165,19 @@ def test_reemplazo_excesivo_de_asignacion_se_rechaza() -> None:
 
 def test_distribucion_vacia_conserva_presupuesto_original() -> None:
     assert validar_distribucion_presupuesto(Decimal("2500"), []) == Decimal("2500")
+
+
+def test_rutas_distribucion_exigen_responsable_asignado() -> None:
+    """Regresión sobre ambos endpoints, sin ampliar el permiso general de pagos."""
+    ruta = Path(__file__).resolve().parents[1] / "app/api/routes/pagos.py"
+    codigo = ruta.read_text(encoding="utf-8")
+    alta = codigo.split("def agregar_asignacion_pedido(", 1)[1].split(
+        "@router.delete(", 1
+    )[0]
+    baja = codigo.split("def eliminar_asignacion_pedido(", 1)[1].split(
+        '@router.post("/planes"', 1
+    )[0]
+    for bloque in (alta, baja):
+        assert "RolMiembro.RESPONSABLE, RolMiembro.ADMINISTRADOR" in bloque
+        assert "pedido.responsable_id != auth.miembro_id" in bloque
+        assert "RolMiembro.SUPERADMIN" not in bloque
