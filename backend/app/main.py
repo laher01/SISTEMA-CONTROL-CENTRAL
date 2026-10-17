@@ -25,6 +25,7 @@ from app.api.routes import (
     pagos,
     pagos_gestores,
     pagos_responsables,
+    pagina_web,
     produccion,
     registros,
     responsable,
@@ -76,6 +77,7 @@ for modulo in (
     responsable,
     configuracion,
     configuracion_acceso,
+    pagina_web,
     mantenimiento,
 ):
     api.include_router(modulo.router)
