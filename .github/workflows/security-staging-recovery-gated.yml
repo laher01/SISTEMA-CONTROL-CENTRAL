@@ -1,0 +1,42 @@
+name: security-staging-recovery-gated
+on:
+  workflow_dispatch:
+    inputs:
+      authorization:
+        description: "Exact approval text from security owner"
+        type: string
+        required: true
+      target:
+        description: "Target must be isolated staging, never production"
+        type: choice
+        options: [staging-isolated]
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: staging-recovery-isolated-review
+  cancel-in-progress: false
+jobs:
+  safety-gate:
+    if: ${{ inputs.authorization == 'REVIEWED-STAGING-ONLY' && inputs.target == 'staging-isolated' }}
+    runs-on: ubuntu-latest
+    environment: staging-recovery-manual-approval
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify separately reviewed operator approval
+        env:
+          ACK: ${{ inputs.authorization }}
+          TARGET: ${{ inputs.target }}
+        run: |
+          test "$ACK" = "REVIEWED-STAGING-ONLY"
+          test "$TARGET" = "staging-isolated"
+      - name: Validate recovery components offline
+        run: |
+          python3 -m py_compile deploy/recovery_pair_audit.py deploy/recovery_staging_preflight.py
+          echo "REMOTE_RECOVERY_NOT_ENABLED"
+          echo "REQUIRES_SEPARATE_APPROVED_STAGING_RUNNER_AND_SECRETS"
+      - name: Stop safely before remote actions
+        run: |
+          echo "NO_SSH_NO_DATABASE_NO_VOLUME_ACTIONS"
+          echo "GATE_REMAINS_BLOCKED_UNTIL_OPERATOR_VALIDATES_ISOLATION_AND_RESTORE_PLAN"
