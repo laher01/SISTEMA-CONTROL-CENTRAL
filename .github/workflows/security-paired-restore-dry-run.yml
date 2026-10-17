@@ -9,7 +9,7 @@ on:
   pull_request:
     paths:
       - "deploy/recovery_pair_audit.py"
-      - "backend/tests/test_recovery_pair_audit.py"
+      - "deploy/test_recovery_pair_audit.py"
       - ".github/workflows/security-paired-restore-dry-run.yml"
 permissions:
   contents: read
@@ -32,7 +32,7 @@ jobs:
       - name: Run synthetic safe archive tests without network or VPS
         run: |
           python3 -m pip install pytest
-          python3 -m pytest -q backend/tests/test_recovery_pair_audit.py
+          python3 -m pytest -q deploy/test_recovery_pair_audit.py
       - name: Explicit safety scope
         run: |
           echo "OFFLINE_SYNTHETIC_TESTS_ONLY"
