@@ -46,3 +46,18 @@ def test_synthetic_rbac_and_rollback_denial():
         verify_synthetic_rbac("tenant-a", "tenant-b", True)
     with pytest.raises(ValueError):
         verify_migration_transitions(["0038", "0039", "0039"])
+
+
+@pytest.mark.parametrize("bad_path", ["tenant-a/../secret", "/tenant-a/absolute", "tenant-a\\\\evil"])
+def test_unsafe_reference_path_rejected(bad_path):
+    files, rows = fixture()
+    rows[0] = DocumentReference("tenant-a", "exp-1", bad_path, "a" * 64)
+    with pytest.raises(ValueError):
+        verify_references(files, rows)
+
+
+def test_invalid_tenant_identifier_rejected():
+    files, rows = fixture()
+    rows[0] = DocumentReference("../tenant-a", "exp-1", "tenant-a/factura.xml", "a" * 64)
+    with pytest.raises(ValueError):
+        verify_references(files, rows)
