@@ -128,8 +128,8 @@ def test_checkpoint_se_revierte_con_evento_tras_rollback(engine):
         )
         session.rollback()
     with fabrica() as session:
-        estado = session.scalar(select(TrabajoReescaneoXML.estado).where(
-            TrabajoReescaneoXML.id == trabajo_id
-        ))
+        estado = session.scalar(
+            select(TrabajoReescaneoXML.estado).where(TrabajoReescaneoXML.id == trabajo_id)
+        )
         assert estado == "PENDIENTE"
         assert session.scalar(select(func.count()).select_from(EventoReescaneoXML)) == 0
