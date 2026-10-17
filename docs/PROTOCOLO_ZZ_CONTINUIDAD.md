@@ -49,6 +49,22 @@ Si `main` avanza:
 3. Solo plantear una ejecución nueva si no existe una actualización válida en curso o finalizada y los preflights pasan.
 4. Tras instalar: verificar `alembic_version`, salud backend, contenedores, login, landing y permisos de SUPERADMIN.
 
+
+## Certificación de la VPS tras una carrera de commits
+
+Para el caso concreto de `deploy-staging` (VPS antigua autorizada):
+
+- Si el job muestra `El destino main cambió, no actualizar`, marcar **DESPLIEGUE BLOQUEADO POR SHA OBSOLETO**, no `DESPLIEGUE CORRECTO`. Los checks previos y una restauración de prueba no certifican la migración ni los contenedores.
+- Comprobar la ejecución `push` o `workflow_dispatch` del SHA vigente de `main`, no reutilizar resultados de PR ni el SHA antiguo.
+- En el job remoto, comprobar la salida **`Commit VPS verificado: <SHA>`** y resultado `success`. Si falta, no afirmar instalación.
+- Tras comprobar el SHA, obtener evidencias de `docker compose ps`, `/health`, `alembic current` y rutas de login/landing; separar cada estado en la matriz `COMPROBADO / NO COMPROBADO / FALLIDO`.
+- No crear otro `workflow_dispatch` mientras un deploy de `main` esté en ejecución. Evitar repetir respaldos/migraciones por desconocimiento del estado.
+- El propio merge a `main` dispara `deploy-staging`: comprobar esa consecuencia incluso al fusionar cambios de documentación.
+
+### Escalamiento
+
+Si el conector GitHub solo muestra ejecuciones de `pull_request`, no deducir el estado de `push` a partir de una lista vacía. Pedir el **log o captura del job concreto** o una lectura autorizada de la VPS antes de certificar, conservando los secretos ocultos.
+
 ## Informe breve
 
 `Estado`: terminado / pendiente / bloqueado.
