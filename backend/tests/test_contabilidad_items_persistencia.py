@@ -160,7 +160,8 @@ def test_concurrencia_mismo_documento_no_duplica_lineas(engine):
             return nuevos
 
     with ThreadPoolExecutor(max_workers=2) as pool:
-        resultados = [future.result(timeout=30) for future in [pool.submit(registrar) for _ in range(2)]]
+        futures = [pool.submit(registrar) for _ in range(2)]
+        resultados = [future.result(timeout=30) for future in futures]
     assert sorted(resultados) == [0, 1]
     with fabrica() as comprobacion:
         assert comprobacion.scalar(select(func.count()).select_from(ProductoItem)) == 1
