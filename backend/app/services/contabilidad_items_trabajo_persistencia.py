@@ -7,9 +7,7 @@ from app.item_models import EventoReescaneoXML, TrabajoReescaneoXML
 from app.services.contabilidad_items_trabajo_auditoria import EventoAuditoriaXML
 
 
-def guardar_transicion_xml(
-    session: Session, evento: EventoAuditoriaXML
-) -> EventoReescaneoXML:
+def guardar_transicion_xml(session: Session, evento: EventoAuditoriaXML) -> EventoReescaneoXML:
     """Bloquea el trabajo y registra transición + checkpoint en la MISMA transacción.
 
     El llamador debe confirmar o revertir la transacción. Nunca realiza commit aquí.
