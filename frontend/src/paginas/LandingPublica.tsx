@@ -10,9 +10,8 @@ export default function LandingPublica() {
   if (cargando) {
     return <main className="contenido"><p>Consultando presentación…</p></main>;
   }
-  // Disponibilidad heredada si el backend aún no tiene esta versión, sin bloquear el login.
-  if (error) return <Presentacion />;
-  if (datos?.activa === false) {
+  // Falla cerrada cuando no se puede comprobar la autorización de publicación.
+  if (error || datos?.activa === false) {
     return (
       <main className="contenido">
         <h1>FACT CENTRAL</h1>
