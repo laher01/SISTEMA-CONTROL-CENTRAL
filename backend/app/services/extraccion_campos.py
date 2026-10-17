@@ -261,6 +261,15 @@ def extraer_campos(
     }
     if candidatos:
         resultado["candidatos"] = candidatos
+    # Un ticket que se denomina factura y boleta simultáneamente no
+    # demuestra inequívocamente su tipo fiscal: obliga a revisión humana.
+    normalizado = _sin_tildes(texto).upper()
+    if (
+        "FACTURA DE VENTA ELECTRONICA" in normalizado
+        and "BOLETA DE VENTA ELECTRONICA" in normalizado
+    ):
+        resultado["alertas"] = ["TIPO_COMPROBANTE_CONFLICTIVO"]
+        resultado["requiere_revision"] = True
     return resultado
 
 
