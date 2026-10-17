@@ -17,7 +17,7 @@ def estado(settings: SettingsDep, auth: OperativeAuthDep) -> NexusEstadoOut:
         consulta_ruc_externa=bool(settings.nexus_ruc_url_template),
         busqueda_internet=bool(settings.nexus_search_url),
         motor_conversacional=bool(settings.nexus_llm_url),
-        knowledge_base=knowledge_disponible(settings),
+        knowledge_base=knowledge_disponible(settings, rol=str(auth.rol)),
         fuente_oficial_preferida="SUNAT",
     )
 
