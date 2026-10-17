@@ -125,3 +125,21 @@ def test_ticket_sin_contradiccion_no_genera_alerta() -> None:
     datos = extraer_campos(texto, "TEXTO_PDF", 1.0)
     assert datos is not None
     assert "TIPO_COMPROBANTE_CONFLICTIVO" not in datos.get("alertas", [])
+
+
+def test_ticket_con_tipo_contradictorio_no_se_auto_vincula() -> None:
+    from types import SimpleNamespace
+
+    from app.services.automatizacion_documental import aplicar_automaticamente
+
+    documento = SimpleNamespace(datos_extraidos={}, expediente_id=None)
+    procesamiento = {
+        "extraccion_estructurada": {
+            "alertas": ["TIPO_COMPROBANTE_CONFLICTIVO"],
+        }
+    }
+    resultado = aplicar_automaticamente(None, None, None, documento, procesamiento)
+    assert resultado.estado == "REVISION_REQUERIDA"
+    assert documento.datos_extraidos["automatizacion_documental"]["estado"] == (
+        "REVISION_REQUERIDA"
+    )
