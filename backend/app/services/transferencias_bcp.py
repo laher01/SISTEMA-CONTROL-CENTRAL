@@ -2,8 +2,8 @@
 
 import re
 import unicodedata
-from datetime import date
 from decimal import Decimal, InvalidOperation
+from datetime import date
 
 
 MESES = {
