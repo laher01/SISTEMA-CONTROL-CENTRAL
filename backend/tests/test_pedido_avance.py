@@ -302,3 +302,23 @@ def test_postgres_impide_modificacion_simultanea_de_fila(engine: Engine) -> None
     finally:
         with engine.begin() as conexion:
             conexion.execute(text("DROP TABLE prueba_bloqueo_gerencia"))
+
+
+@pytest.mark.parametrize("operacion", ["alta", "baja"])
+def test_responsable_sin_identidad_no_distribuye(operacion: str) -> None:
+    tenant_id, pedido_id = uuid4(), uuid4()
+    pedido = SimpleNamespace(tenant_id=tenant_id, responsable_id=uuid4())
+
+    class SesionPedido:
+        def get(self, _modelo: object, identificador: object) -> object:
+            assert identificador == pedido_id
+            return pedido
+
+    auth = SimpleNamespace(rol=RolMiembro.RESPONSABLE, miembro_id=None)
+    args = (SesionPedido(), tenant_id, auth, pedido_id)
+    with pytest.raises(HTTPException) as exc:
+        if operacion == "alta":
+            agregar_asignacion_pedido(*args, datos=None)
+        else:
+            eliminar_asignacion_pedido(*args, asignacion_id=uuid4())
+    assert exc.value.status_code == 404
