@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 20
     services:
       postgres:
-        image: postgres:17
+        image: postgres:16
         env:
           POSTGRES_USER: fact
           POSTGRES_PASSWORD: fact
@@ -39,7 +39,7 @@ jobs:
       - name: Install PostgreSQL client and isolated backend requirements
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client-17
+          sudo apt-get install -y postgresql-client
           cd backend
           uv sync --locked
       - name: Prepare source at revision 0038
