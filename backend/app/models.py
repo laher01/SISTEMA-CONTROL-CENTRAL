@@ -874,3 +874,29 @@ class EliminacionArchivoPendiente(ConId, ConTenant, ConCreacion, Base):
     intentos: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     ultimo_error: Mapped[str | None] = mapped_column(String(500))
     completado_at: Mapped[datetime | None]
+
+
+class ConfiguracionLandingGlobal(Base):
+    """Estado único de la landing pública, ajeno a los tenants."""
+
+    __tablename__ = "configuracion_landing_global"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    activa: Mapped[bool] = mapped_column(default=True, server_default="true")
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    actualizado_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cuentas_acceso.id"))
+    updated_at: Mapped[datetime] = mapped_column(
+        default=ahora, onupdate=ahora, server_default=func.now()
+    )
+
+
+class AuditoriaLandingGlobal(ConId, Base):
+    """Bitácora inmutable de transiciones de publicación."""
+
+    __tablename__ = "auditoria_landing_global"
+
+    cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
+    anterior: Mapped[bool] = mapped_column()
+    nuevo: Mapped[bool] = mapped_column()
+    version: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(default=ahora, server_default=func.now())

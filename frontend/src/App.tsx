@@ -18,6 +18,7 @@ import ExpedienteDetalle from "./paginas/ExpedienteDetalle";
 import Expedientes from "./paginas/Expedientes";
 import { CambiarClave, Login } from "./paginas/Login";
 import Presentacion from "./paginas/Presentacion";
+import LandingPublica from "./paginas/LandingPublica";
 import PaginaLegal from "./paginas/PaginasPublicas";
 import Organizacion from "./paginas/Organizacion";
 import MiEquipoResponsable from "./paginas/MiEquipoResponsable";
@@ -141,7 +142,7 @@ export default function App() {
 
   if (window.location.pathname === "/privacidad") return <PaginaLegal tipo="privacidad" />;
   if (window.location.pathname === "/terminos") return <PaginaLegal tipo="terminos" />;
-  if (window.location.pathname === "/bienvenida") return <Presentacion />;
+  if (window.location.pathname === "/bienvenida") return <LandingPublica />;
   // /ingresar es una ruta de autenticación, nunca una landing pública.
   // Priorizarla explícitamente para evitar regresiones en cambios de portada.
   if (window.location.pathname.replace(/\/+$/, "") === "/ingresar") {
