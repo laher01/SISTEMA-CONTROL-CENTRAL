@@ -17,6 +17,7 @@ from app.services.contabilidad_items_trabajo_persistencia import (
     guardar_transicion_xml,
     obtener_o_crear_trabajo_xml,
     recuperar_checkpoint_confirmado_xml,
+    reanudar_trabajo_xml_supervisado,
 )
 
 
@@ -193,3 +194,62 @@ def test_recuperacion_checkpoint_desde_otra_sesion(engine):
         with pytest.raises(ValueError, match="no coinciden"):
             recuperar_checkpoint_confirmado_xml(sesion, *ids)
         sesion.rollback()
+
+
+def test_reanudar_xml_pausado_con_limite_y_auditoria(engine):
+    from sqlalchemy.orm import sessionmaker
+
+    fabrica = sessionmaker(engine, expire_on_commit=False)
+    with fabrica() as sesion:
+        tenant = Tenant(nombre="tenant_reanudar_supervisado")
+        sesion.add(tenant)
+        sesion.flush()
+        actor = CuentaAcceso(
+            tenant_id=tenant.id,
+            login="actor-reanudar-xml",
+            password_hash="test",
+            activo=True,
+            cambio_clave_obligatorio=False,
+        )
+        sesion.add(actor)
+        sesion.flush()
+        trabajo, _ = obtener_o_crear_trabajo_xml(sesion, tenant.id, actor.id, "reanudar-1")
+        ids = tenant.id, actor.id, trabajo.id
+        for anterior, nuevo in (
+            (EstadoTrabajoXML.PENDIENTE, EstadoTrabajoXML.EJECUTANDO),
+            (EstadoTrabajoXML.EJECUTANDO, EstadoTrabajoXML.PAUSADO),
+        ):
+            guardar_transicion_xml(
+                sesion,
+                EventoAuditoriaXML(
+                    trabajo_id=trabajo.id,
+                    tenant_id=tenant.id,
+                    actor_cuenta_id=actor.id,
+                    estado_anterior=anterior,
+                    estado_nuevo=nuevo,
+                    ocurrido_en=datetime.now(UTC),
+                ),
+            )
+        sesion.commit()
+
+    with fabrica() as sesion:
+        with pytest.raises(ValueError, match="Límite"):
+            reanudar_trabajo_xml_supervisado(
+                sesion, *ids, max_documentos=101, ocurrido_en=datetime.now(UTC)
+            )
+        cursor, evento = reanudar_trabajo_xml_supervisado(
+            sesion, *ids, max_documentos=50, ocurrido_en=datetime.now(UTC)
+        )
+        assert cursor is None
+        assert evento.estado_nuevo == "EJECUTANDO"
+        with pytest.raises(ValueError, match="Solo puede"):
+            reanudar_trabajo_xml_supervisado(
+                sesion, *ids, max_documentos=50, ocurrido_en=datetime.now(UTC)
+            )
+        sesion.rollback()
+    with fabrica() as sesion:
+        assert recuperar_checkpoint_confirmado_xml(sesion, *ids) == (
+            None,
+            EstadoTrabajoXML.PAUSADO,
+        )
+        assert sesion.scalar(select(func.count()).select_from(EventoReescaneoXML)) == 2
