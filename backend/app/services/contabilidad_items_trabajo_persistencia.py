@@ -112,7 +112,7 @@ def recuperar_checkpoint_confirmado_xml(
             EventoReescaneoXML.tenant_id == tenant_id,
             EventoReescaneoXML.actor_cuenta_id == actor_cuenta_id,
         )
-        .order_by(EventoReescaneoXML.created_at.desc(), EventoReescaneoXML.id.desc())
+        .order_by(EventoReescaneoXML.ocurrido_en.desc(), EventoReescaneoXML.id.desc())
         .limit(1)
     )
     if ultimo is None:
