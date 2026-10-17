@@ -30,7 +30,7 @@ def ejecutar(archivos: list[UploadFile], sesion: SesionFalsa):
     return asyncio.run(
         documentos.subir_sublote_imagenes(
             session=sesion,
-            settings=None,
+            settings=SimpleNamespace(max_upload_mb=10),
             almacen=None,
             hoy=None,
             tenant_id=uuid.uuid4(),
@@ -134,7 +134,7 @@ def test_sublote_conserva_tenant_y_auth_en_cada_imagen(
     resultado = asyncio.run(
         documentos.subir_sublote_imagenes(
             session=SesionFalsa(),
-            settings=None,
+            settings=SimpleNamespace(max_upload_mb=10),
             almacen=None,
             hoy=None,
             tenant_id=tenant,
@@ -165,3 +165,28 @@ def test_archivo_excesivo_no_interrumpe_restantes(
     assert resultado["errores"] == 1
     assert resultado["resultados"][0]["estado"] == "error"
     assert sesion.reversiones == 1
+
+
+def test_sublote_rechaza_tamano_total_declarado(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def no_subir(**kwargs):
+        pytest.fail("Un sublote demasiado grande no debe registrar documentos")
+
+    monkeypatch.setattr(documentos, "subir_documento", no_subir)
+    archivos = [imagen_png() for _ in range(10)]
+    for archivo in archivos:
+        archivo.size = 2 * 1024 * 1024
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(
+            documentos.subir_sublote_imagenes(
+                session=SesionFalsa(),
+                settings=SimpleNamespace(max_upload_mb=1),
+                almacen=None,
+                hoy=None,
+                tenant_id=uuid.uuid4(),
+                auth=None,
+                archivos=archivos,
+            )
+        )
+    assert error.value.status_code == 413
