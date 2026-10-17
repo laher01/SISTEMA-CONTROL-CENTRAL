@@ -13,7 +13,10 @@ from app.services.contabilidad_items_trabajo_auditoria import (
     EstadoTrabajoXML,
     EventoAuditoriaXML,
 )
-from app.services.contabilidad_items_trabajo_persistencia import guardar_transicion_xml
+from app.services.contabilidad_items_trabajo_persistencia import (
+    guardar_transicion_xml,
+    obtener_o_crear_trabajo_xml,
+)
 
 
 def test_checkpoint_xml_atómico_por_tenant_y_actor(session: Session):
@@ -63,3 +66,70 @@ def test_checkpoint_xml_atómico_por_tenant_y_actor(session: Session):
             ),
         )
     assert session.scalar(select(func.count()).select_from(EventoReescaneoXML)) == 1
+
+
+def test_solicitud_xml_idempotente_y_aislada_por_actor(session: Session):
+    tenant = Tenant(nombre="tenant_solicitud_xml")
+    session.add(tenant)
+    session.flush()
+    actores = [
+        CuentaAcceso(
+            tenant_id=tenant.id,
+            login=f"actor-xml-{i}",
+            password_hash="test",
+            activo=True,
+            cambio_clave_obligatorio=False,
+        )
+        for i in range(2)
+    ]
+    session.add_all(actores)
+    session.flush()
+    creado, es_nuevo = obtener_o_crear_trabajo_xml(session, tenant.id, actores[0].id, "carga-1")
+    repetido, otra_vez = obtener_o_crear_trabajo_xml(session, tenant.id, actores[0].id, "carga-1")
+    assert es_nuevo is True
+    assert otra_vez is False
+    assert creado.id == repetido.id
+    with pytest.raises(ValueError, match="otro actor"):
+        obtener_o_crear_trabajo_xml(session, tenant.id, actores[1].id, "carga-1")
+    assert session.scalar(select(func.count()).select_from(TrabajoReescaneoXML)) == 1
+
+
+def test_checkpoint_se_revierte_con_evento_tras_rollback(engine):
+    from sqlalchemy.orm import sessionmaker
+
+    fabrica = sessionmaker(engine, expire_on_commit=False)
+    with fabrica() as session:
+        tenant = Tenant(nombre="tenant_rollback_xml")
+        session.add(tenant)
+        session.flush()
+        actor = CuentaAcceso(
+            tenant_id=tenant.id,
+            login="actor-rollback-xml",
+            password_hash="test",
+            activo=True,
+            cambio_clave_obligatorio=False,
+        )
+        session.add(actor)
+        session.flush()
+        trabajo, _ = obtener_o_crear_trabajo_xml(session, tenant.id, actor.id, "rollback-1")
+        tenant_id, actor_id, trabajo_id = tenant.id, actor.id, trabajo.id
+        session.commit()
+    with fabrica() as session:
+        guardar_transicion_xml(
+            session,
+            EventoAuditoriaXML(
+                trabajo_id=trabajo_id,
+                tenant_id=tenant_id,
+                actor_cuenta_id=actor_id,
+                estado_anterior=EstadoTrabajoXML.PENDIENTE,
+                estado_nuevo=EstadoTrabajoXML.EJECUTANDO,
+                ocurrido_en=datetime.now(UTC),
+            ),
+        )
+        session.rollback()
+    with fabrica() as session:
+        estado = session.scalar(select(TrabajoReescaneoXML.estado).where(
+            TrabajoReescaneoXML.id == trabajo_id
+        ))
+        assert estado == "PENDIENTE"
+        assert session.scalar(select(func.count()).select_from(EventoReescaneoXML)) == 0
