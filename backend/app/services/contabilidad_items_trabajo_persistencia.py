@@ -1,10 +1,13 @@
 """Persistencia transaccional de auditoría XML; no inicia ni ejecuta reprocesamientos."""
 
+import uuid
+
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.item_models import EventoReescaneoXML, TrabajoReescaneoXML
-from app.services.contabilidad_items_trabajo_auditoria import EventoAuditoriaXML
+from app.services.contabilidad_items_trabajo_auditoria import EventoAuditoriaXML, EstadoTrabajoXML
 
 
 def guardar_transicion_xml(session: Session, evento: EventoAuditoriaXML) -> EventoReescaneoXML:
@@ -41,3 +44,46 @@ def guardar_transicion_xml(session: Session, evento: EventoAuditoriaXML) -> Even
     session.add(registro)
     session.flush()
     return registro
+
+
+def obtener_o_crear_trabajo_xml(
+    session: Session,
+    tenant_id: uuid.UUID,
+    actor_cuenta_id: uuid.UUID,
+    clave_idempotencia: str,
+) -> tuple[TrabajoReescaneoXML, bool]:
+    """Registra solicitud idempotente y devuelve existente tras choque concurrente.
+
+    La clave pertenece al tenant, no al usuario: un actor distinto no puede
+    recuperar ni suplantar una solicitud previamente registrada.
+    """
+    if not clave_idempotencia or len(clave_idempotencia) > 100:
+        raise ValueError("Clave de idempotencia XML inválida")
+    consulta = select(TrabajoReescaneoXML).where(
+        TrabajoReescaneoXML.tenant_id == tenant_id,
+        TrabajoReescaneoXML.clave_idempotencia == clave_idempotencia,
+    )
+    existente = session.scalar(consulta)
+    if existente is not None:
+        if existente.solicitado_por_cuenta_id != actor_cuenta_id:
+            raise ValueError("Clave XML reservada por otro actor")
+        return existente, False
+    nuevo = TrabajoReescaneoXML(
+        tenant_id=tenant_id,
+        solicitado_por_cuenta_id=actor_cuenta_id,
+        clave_idempotencia=clave_idempotencia,
+        estado=EstadoTrabajoXML.PENDIENTE.value,
+        documentos_procesados=0,
+    )
+    try:
+        with session.begin_nested():
+            session.add(nuevo)
+            session.flush()
+    except IntegrityError:
+        existente = session.scalar(consulta)
+        if existente is None:
+            raise
+        if existente.solicitado_por_cuenta_id != actor_cuenta_id:
+            raise ValueError("Clave XML reservada por otro actor") from None
+        return existente, False
+    return nuevo, True
