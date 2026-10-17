@@ -7,6 +7,8 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import Engine, text
+from sqlalchemy.exc import OperationalError
 
 from app.api.routes.pagos import agregar_asignacion_pedido, eliminar_asignacion_pedido
 from app.enums import RolMiembro
@@ -271,3 +273,38 @@ def test_bloqueo_del_pedido_antes_de_contabilizar_asignaciones() -> None:
     lectura = alta.index("consulta_montos = select(AsignacionPedidoGerencia.monto_asignado)")
     validacion = alta.index("validar_distribucion_presupuesto(")
     assert bloqueo < lectura < validacion
+
+
+def test_postgres_impide_modificacion_simultanea_de_fila(engine: Engine) -> None:
+    """Verifica con dos conexiones el bloqueo usado al repartir presupuesto."""
+    if engine.dialect.name != "postgresql":
+        pytest.skip("La prueba de bloqueo requiere PostgreSQL")
+    with engine.begin() as conexion:
+        conexion.execute(
+            text("CREATE TABLE prueba_bloqueo_gerencia (id int PRIMARY KEY)")
+        )
+        conexion.execute(text("INSERT INTO prueba_bloqueo_gerencia (id) VALUES (1)"))
+    try:
+        with engine.connect() as primera, engine.connect() as segunda:
+            with primera.begin():
+                primera.execute(
+                    text("SELECT id FROM prueba_bloqueo_gerencia WHERE id=1 FOR UPDATE")
+                )
+                with pytest.raises(OperationalError):
+                    with segunda.begin():
+                        segunda.execute(
+                            text(
+                                "SELECT id FROM prueba_bloqueo_gerencia "
+                                "WHERE id=1 FOR UPDATE NOWAIT"
+                            )
+                        )
+            with segunda.begin():
+                assert (
+                    segunda.execute(
+                        text("SELECT id FROM prueba_bloqueo_gerencia WHERE id=1 FOR UPDATE")
+                    ).scalar_one()
+                    == 1
+                )
+    finally:
+        with engine.begin() as conexion:
+            conexion.execute(text("DROP TABLE prueba_bloqueo_gerencia"))
