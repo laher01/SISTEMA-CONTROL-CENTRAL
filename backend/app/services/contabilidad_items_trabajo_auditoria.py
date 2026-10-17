@@ -18,15 +18,11 @@ class EstadoTrabajoXML(StrEnum):
 
 
 TRANSICIONES_PERMITIDAS: dict[EstadoTrabajoXML, frozenset[EstadoTrabajoXML]] = {
-    EstadoTrabajoXML.PENDIENTE: frozenset(
-        {EstadoTrabajoXML.EJECUTANDO, EstadoTrabajoXML.FALLIDO}
-    ),
+    EstadoTrabajoXML.PENDIENTE: frozenset({EstadoTrabajoXML.EJECUTANDO, EstadoTrabajoXML.FALLIDO}),
     EstadoTrabajoXML.EJECUTANDO: frozenset(
         {EstadoTrabajoXML.PAUSADO, EstadoTrabajoXML.COMPLETADO, EstadoTrabajoXML.FALLIDO}
     ),
-    EstadoTrabajoXML.PAUSADO: frozenset(
-        {EstadoTrabajoXML.EJECUTANDO, EstadoTrabajoXML.FALLIDO}
-    ),
+    EstadoTrabajoXML.PAUSADO: frozenset({EstadoTrabajoXML.EJECUTANDO, EstadoTrabajoXML.FALLIDO}),
     EstadoTrabajoXML.COMPLETADO: frozenset(),
     EstadoTrabajoXML.FALLIDO: frozenset(),
 }
@@ -48,8 +44,5 @@ class EventoAuditoriaXML:
             raise ValueError("Transición de trabajo XML no permitida")
         if self.ocurrido_en.tzinfo is None or self.ocurrido_en.utcoffset() is None:
             raise ValueError("La auditoría necesita fecha con zona horaria")
-        if any(
-            ident.int == 0
-            for ident in (self.trabajo_id, self.tenant_id, self.actor_cuenta_id)
-        ):
+        if any(ident.int == 0 for ident in (self.trabajo_id, self.tenant_id, self.actor_cuenta_id)):
             raise ValueError("Identificadores de auditoría XML inválidos")
