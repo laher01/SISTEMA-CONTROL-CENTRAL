@@ -5,7 +5,6 @@ from decimal import Decimal
 import pytest
 
 from app.schemas import PedidoGerenciaOut
-
 from app.services.pedido_avance import (
     calcular_avance_consolidado,
     calcular_avance_pedido,
