@@ -41,7 +41,8 @@ def test_nexus_consulta_items_reales_del_xml(client: TestClient) -> None:
 
 def test_consultas_escritas_con_errores_y_productos_nuevos() -> None:
     assert consulta_items_solicitada("dime cuantas facrturas de petrpoleo tenemos") == (
-        "producto", "petroleo"
+        "producto",
+        "petroleo",
     )
     assert consulta_items_solicitada("y de llantas hay") == ("producto", "llantas")
     assert consulta_items_solicitada("y agua y sporade") == ("producto", "agua,sporade")
