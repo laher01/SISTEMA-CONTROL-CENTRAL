@@ -20,3 +20,9 @@ Estado: **BLOQUEADO PARA INTEGRAR / DESPLEGAR**. Esta rama se creó desde `main`
 6. Sólo tras nueva evidencia y aprobación explícita para `I` considerar merge; `D` requiere una orden posterior y su propio preflight, respaldo, healthchecks y reversión.
 
 Ninguna operación `I` ni `D` se ejecutó en este análisis.
+
+## Inspección adicional de conciliación (17/10)
+- Comparación de archivos cambiados desde las dos perspectivas: 13 rutas modificadas por #208 frente a 27 por main; **intersección de rutas: 0**. No demuestra ausencia de conflictos semánticos ni equivalencia de build.
+- Se identificaron herramientas GitHub para crear árboles y commits multipadre, pero no acceso de lectura verificado a árboles completos de commits; no se construyó un árbol de fusión a ciegas. No existe commit de conciliación ni CI sobre uno nuevo.
+- El checkout aislado continúa anclado a main con este informe. Para conciliar, usar un Git real en entorno autorizado con `git merge --no-ff` sobre rama aislada, inspeccionar estado y ejecutar CI. **Nunca apuntar main al resultado sin aprobación I explícita.**
+- Validación real de respaldo y restauración de datos/documentos: no ejecutada; se revisaron workflows y script preflight, pero eso solo acredita existencia de mecanismos, no resultado de recuperación.
