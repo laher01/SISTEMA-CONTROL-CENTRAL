@@ -10,6 +10,9 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
+from app.services.facturas_estaciones import extraer_factura_estacion
+from app.services.transferencias_bcp import extraer_transferencia_bcp
+
 
 @dataclass(frozen=True)
 class CampoExtraido:
@@ -168,7 +171,8 @@ def extraer_campos(
     factor = confianza_texto if confianza_texto is not None else 0.75
     campos: dict[str, dict[str, object]] = {}
 
-    referencia = REFERENCIA.search(texto)
+    es_bcp = bool(extraer_transferencia_bcp(texto))
+    referencia = None if es_bcp else REFERENCIA.search(texto)
     if referencia:
         evidencia = referencia.group(0)
         campos["serie"] = CampoExtraido(
@@ -196,6 +200,8 @@ def extraer_campos(
         _aplicar_parser_especializado(texto, formato, rucs, campos, fuente, factor)
 
     _extraer_razones_vinculadas_a_ruc(texto, campos, fuente, factor)
+    if re.search(r"COTIZACI[OÓ]N", texto, re.I):
+        _ajustar_partes_cotizacion(texto, campos, fuente, factor)
 
     fecha_match = FECHA_ETIQUETADA.search(texto)
     fecha_literal = FECHA_LITERAL_ES.search(texto) if fecha_match is None else None
@@ -233,7 +239,14 @@ def extraer_campos(
             moneda[0], min(0.95, moneda[1] * factor), moneda[2]
         ).a_dict(fuente)
 
-    total_match = TOTAL.search(texto)
+    es_cotizacion = bool(re.search(r"COTIZACI[OÓ]N", texto, re.I))
+    total_cotizacion = _total_cotizacion(texto) if es_cotizacion else None
+    total_match = TOTAL.search(texto) if not es_cotizacion else None
+    if total_cotizacion is not None:
+        importe_comercial, evidencia = total_cotizacion
+        campos["importe_total"] = CampoExtraido(
+            format(importe_comercial, ".2f"), min(0.97, 0.96 * factor), evidencia
+        ).a_dict(fuente)
     if total_match and (importe := _normalizar_importe(total_match.group(1))) is not None:
         campos["importe_total"] = CampoExtraido(
             format(importe, ".2f"), min(0.96, 0.94 * factor), total_match.group(0)
@@ -245,6 +258,14 @@ def extraer_campos(
             operacion.group(1).upper(), min(0.94, 0.9 * factor), operacion.group(0)
         ).a_dict(fuente)
 
+    # Perfiles de estaciones: solo sobrescribir con etiquetas verificables.
+    # Cada valor mantiene evidencia, fuente y confirmación obligatoria.
+    for nombre, (valor, evidencia) in extraer_factura_estacion(texto).items():
+        campos[nombre] = CampoExtraido(valor, min(0.96, 0.94 * factor), evidencia).a_dict(fuente)
+
+    for nombre, (valor, evidencia) in extraer_transferencia_bcp(texto).items():
+        campos[nombre] = CampoExtraido(valor, min(0.96, 0.94 * factor), evidencia).a_dict(fuente)
+
     if not campos and not candidatos:
         return None
     resultado: dict[str, object] = {
@@ -254,6 +275,13 @@ def extraer_campos(
     }
     if candidatos:
         resultado["candidatos"] = candidatos
+    normalizado = " ".join(_sin_tildes(texto).upper().split())
+    if (
+        "FACTURA DE VENTA ELECTRONICA" in normalizado
+        and "BOLETA DE VENTA ELECTRONICA" in normalizado
+    ):
+        resultado["alertas"] = ["TIPO_COMPROBANTE_CONFLICTIVO"]
+        resultado["requiere_revision"] = True
     return resultado
 
 
@@ -1180,3 +1208,116 @@ def _sin_tildes(valor: str) -> str:
         for caracter in unicodedata.normalize("NFKD", valor)
         if not unicodedata.combining(caracter)
     )
+
+
+def _total_cotizacion(texto: str) -> tuple[Decimal, str] | None:
+    """Lee el resumen de importes sin inferirlos de las cantidades."""
+    montos: dict[str, tuple[Decimal, str]] = {}
+    patron = re.compile(
+        r"^\s*(SUB\s*TOTAL|SUBTOTAL|I\.?G\.?V\.?\s*(?:18\s*%)?|"
+        r"TOTAL\s*(?:A\s*PAGAR)?)\s*[:=]?\s*(?:S/\.?\s*)?"
+        r"([0-9][0-9.,]*)\s*$",
+        re.IGNORECASE,
+    )
+    for linea in texto.splitlines():
+        coincidencia = patron.fullmatch(linea.strip())
+        if coincidencia is None:
+            continue
+        etiqueta = re.sub(r"[^A-Z]", "", coincidencia.group(1).upper())
+        nombre = (
+            "subtotal"
+            if etiqueta.startswith("SUBTOTAL")
+            else ("igv" if etiqueta.startswith("IGV") else "total")
+        )
+        valor = _normalizar_importe(coincidencia.group(2))
+        if valor is not None and valor >= 0:
+            montos[nombre] = (valor, linea.strip())
+    total = montos.get("total")
+    if total is None and re.search(r"COTIZACI[OÓ]N", texto, re.I):
+        # PDFs COMPOSTELA/JADAL pueden ordenar las columnas antes de los rótulos.
+        # Aceptar solo tres importes aislados (subtotal, IGV, total) seguidos
+        # inmediatamente de la nota comercial y con aritmética consistente.
+        lineas = [linea.strip() for linea in texto.splitlines() if linea.strip()]
+        if "CANT UND COSTO TOTAL" in texto.upper() and all(
+            re.search(rf"(?m)^\s*{etiqueta}\s*$", texto, re.I)
+            for etiqueta in ("SUB TOTAL", "IGV 18%", "TOTAL")
+        ):
+            patron_monto = re.compile(r"^([0-9][0-9,.]*)S/\s*$")
+            for indice, linea in enumerate(lineas):
+                if not linea.upper().startswith("NOTA:") or indice < 3:
+                    continue
+                candidatos = [patron_monto.fullmatch(x) for x in lineas[indice - 3 : indice]]
+                if not all(candidatos):
+                    continue
+                importes = [
+                    _normalizar_importe(coincidencia.group(1))
+                    for coincidencia in candidatos
+                    if coincidencia is not None
+                ]
+                if len(importes) != 3 or any(importe is None for importe in importes):
+                    continue
+                subtotal, impuesto, total_comercial = importes
+                if (
+                    subtotal is not None
+                    and impuesto is not None
+                    and total_comercial is not None
+                    and subtotal > 0
+                    and abs(subtotal + impuesto - total_comercial) <= Decimal("0.02")
+                    and abs(subtotal * Decimal("0.18") - impuesto) <= Decimal("0.03")
+                ):
+                    evidencia = " | ".join(lineas[indice - 3 : indice])
+                    total = (total_comercial, evidencia)
+                    break
+    if total is None:
+        return None
+    subtotal_etiquetado = montos.get("subtotal")
+    igv_etiquetado = montos.get("igv")
+    if (
+        subtotal_etiquetado is not None
+        and igv_etiquetado is not None
+        and abs(subtotal_etiquetado[0] + igv_etiquetado[0] - total[0])
+    ):
+        return None
+    return total
+
+
+def _ajustar_partes_cotizacion(
+    texto: str,
+    campos: dict[str, dict[str, object]],
+    fuente: str,
+    factor: float,
+) -> None:
+    """No atribuir el RUC del cliente al proveedor de una cotización."""
+    patron = re.compile(
+        r"\b(?:CLIENTE|RUC\s+(?:DEL\s+)?CLIENTE|RUC\s+RECEPTOR)"
+        r"\s*(?:RUC)?\s*[:=-]?\s*(\d{11})\b",
+        re.IGNORECASE,
+    )
+    clientes = {coincidencia.group(1) for coincidencia in patron.finditer(texto)}
+    if len(clientes) != 1:
+        return
+    cliente = clientes.pop()
+    campos["ruc_receptor"] = CampoExtraido(
+        cliente, min(0.95, 0.94 * factor), _contexto(texto, cliente)
+    ).a_dict(fuente)
+    emisor = campos.get("ruc_emisor")
+    if emisor is not None and str(emisor["valor"]) == cliente:
+        campos.pop("ruc_emisor", None)
+        campos.pop("razon_social_emisor", None)
+    # Aceptar razones sociales solo si la línea indica expresamente su función.
+    # No inferir la razón social del proveedor a partir de un encabezado ambiguo.
+    for campo, etiqueta in (
+        ("razon_social_receptor", "CLIENTE"),
+        ("razon_social_emisor", "PROVEEDOR"),
+    ):
+        coincidencias = re.findall(rf"(?im)^\s*{etiqueta}\s*:\s*([^\n]+)$", texto)
+        nombres = {
+            _recortar_razon(nombre)
+            for nombre in coincidencias
+            if _razon_social_valida(_recortar_razon(nombre))
+        }
+        if len(nombres) == 1:
+            nombre = nombres.pop()
+            campos[campo] = CampoExtraido(
+                nombre, min(0.88, 0.86 * factor), f"{etiqueta}: {nombre}"
+            ).a_dict(fuente)
