@@ -43,6 +43,4 @@ def acceso_conocimiento(actor: ActorConocimiento, recurso: PermisoConocimiento) 
         return actor.usuario_id == recurso.propietario_id
     if recurso.visibilidad == Visibilidad.ROL:
         return actor.rol in recurso.roles_permitidos
-    if recurso.visibilidad == Visibilidad.TENANT:
-        return True
-    return False
+    return recurso.visibilidad == Visibilidad.TENANT
