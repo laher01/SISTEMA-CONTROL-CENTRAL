@@ -1,6 +1,7 @@
 """Persistencia transaccional de auditoría XML; no inicia ni ejecuta reprocesamientos."""
 
 import uuid
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -127,3 +128,51 @@ def recuperar_checkpoint_confirmado_xml(
     if estado == EstadoTrabajoXML.EJECUTANDO:
         raise ValueError("Trabajo XML ejecutándose; requiere pausa supervisada antes del reintento")
     return trabajo.cursor_documento_id, estado
+
+
+def reanudar_trabajo_xml_supervisado(
+    session: Session,
+    tenant_id: uuid.UUID,
+    actor_cuenta_id: uuid.UUID,
+    trabajo_id: uuid.UUID,
+    *,
+    max_documentos: int,
+    ocurrido_en: datetime,
+) -> tuple[uuid.UUID | None, EventoReescaneoXML]:
+    """Autoriza una transición PAUSADO->EJECUTANDO sin procesar documentos.
+
+    El límite se valida ahora; un futuro worker tendrá que respetarlo también.
+    No hace commit: estado, checkpoint y evento son atómicos para el llamador.
+    """
+    if not 1 <= max_documentos <= 100:
+        raise ValueError("Límite de reintento XML fuera de rango")
+    # Lock before validating state to avoid concurrent supervisors resuming twice.
+    trabajo = session.scalar(
+        select(TrabajoReescaneoXML)
+        .where(
+            TrabajoReescaneoXML.id == trabajo_id,
+            TrabajoReescaneoXML.tenant_id == tenant_id,
+            TrabajoReescaneoXML.solicitado_por_cuenta_id == actor_cuenta_id,
+        )
+        .with_for_update()
+    )
+    if trabajo is None:
+        raise ValueError("Trabajo XML no encontrado para actor y tenant")
+    cursor, estado = recuperar_checkpoint_confirmado_xml(
+        session, tenant_id, actor_cuenta_id, trabajo_id
+    )
+    if estado != EstadoTrabajoXML.PAUSADO:
+        raise ValueError("Solo puede reanudarse un trabajo XML pausado")
+    registro = guardar_transicion_xml(
+        session,
+        EventoAuditoriaXML(
+            trabajo_id=trabajo_id,
+            tenant_id=tenant_id,
+            actor_cuenta_id=actor_cuenta_id,
+            estado_anterior=EstadoTrabajoXML.PAUSADO,
+            estado_nuevo=EstadoTrabajoXML.EJECUTANDO,
+            ocurrido_en=ocurrido_en,
+            cursor_documento_id=cursor,
+        ),
+    )
+    return cursor, registro
