@@ -176,3 +176,22 @@ def test_ticket_contradictorio_asociado_no_se_confirma_automaticamente() -> None
     assert resultado.estado == "REVISION_REQUERIDA"
     assert resultado.expediente_id is None
     assert documento.expediente_id == expediente_preexistente
+
+
+@pytest.mark.parametrize("metodo", ["TEXTO_PDF", "OCR_TESSERACT"])
+def test_ticket_contradictorio_requiere_revision_en_pdf_y_ocr(metodo: str) -> None:
+    texto = (
+        "SERVICENTRO JABSA S.A.\n"
+        "RUC : 20374914201\n"
+        "FACTURA DE VENTA ELECTRONICA\n"
+        "F003-00004475\n"
+        "Cliente : INVERSIONES Y NEGOCIACIONES MAREUF E.I\n"
+        "RUC : 20538821374 Placa :\n"
+        "TOTAL S/ 3492.00\n"
+        "Representación impresa de la BOLETA DE VENTA\n"
+        "ELECTRONICA puede ser consultada en"
+    )
+    datos = extraer_campos(texto, metodo, 1.0)
+    assert datos is not None
+    assert datos["requiere_revision"] is True
+    assert datos["alertas"] == ["TIPO_COMPROBANTE_CONFLICTIVO"]
