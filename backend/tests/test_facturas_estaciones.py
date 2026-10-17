@@ -157,3 +157,24 @@ def test_ticket_real_salto_linea_en_boleta_requiere_revision() -> None:
     assert datos is not None
     assert datos["requiere_revision"] is True
     assert "TIPO_COMPROBANTE_CONFLICTIVO" in datos["alertas"]
+
+
+def test_ticket_contradictorio_asociado_no_se_confirma_automaticamente() -> None:
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from app.services.automatizacion_documental import aplicar_automaticamente
+
+    expediente_preexistente = uuid4()
+    documento = SimpleNamespace(
+        datos_extraidos={}, expediente_id=expediente_preexistente
+    )
+    procesamiento = {
+        "extraccion_estructurada": {
+            "alertas": ["TIPO_COMPROBANTE_CONFLICTIVO"],
+        }
+    }
+    resultado = aplicar_automaticamente(None, None, None, documento, procesamiento)
+    assert resultado.estado == "REVISION_REQUERIDA"
+    assert resultado.expediente_id is None
+    assert documento.expediente_id == expediente_preexistente
