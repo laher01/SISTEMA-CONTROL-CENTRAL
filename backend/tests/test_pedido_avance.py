@@ -4,6 +4,8 @@ from decimal import Decimal
 
 import pytest
 
+from app.schemas import PedidoGerenciaOut
+
 from app.services.pedido_avance import (
     calcular_avance_consolidado,
     calcular_avance_pedido,
@@ -110,3 +112,9 @@ def test_alerta_exceso_respeta_umbral(ejecutado: str, alerta: bool) -> None:
 def test_alerta_exceso_no_oculta_importes_invalidos() -> None:
     with pytest.raises(ValueError):
         requiere_alerta_exceso(Decimal("0"), Decimal("1"))
+
+
+def test_contrato_api_expone_semaforo() -> None:
+    campo = PedidoGerenciaOut.model_fields["semaforo_avance"]
+    assert campo.is_required()
+    assert set(campo.annotation.__args__) == {"VERDE", "NARANJA", "ROJO"}
