@@ -80,5 +80,25 @@ def test_cotizacion_excluye_expediente_pendiente(
     assert respuesta.status_code == 200, respuesta.text
     real = Decimal(respuesta.json()["produccion"])
     bruto = Decimal(respuesta.json()["bruto"])
+    programacion = client.post(
+        "/api/v1/responsable/pagos/programar",
+        json={
+            "usuario_id": str(usuario.id),
+            "desde": "2026-09-01",
+            "hasta": "2026-09-30",
+            "moneda": "PEN",
+        },
+    )
+    assert programacion.status_code == 201, programacion.text
+    liquidaciones = client.get(
+        "/api/v1/responsable/pagos/liquidaciones",
+        params={"usuario_id": str(usuario.id)},
+    )
+    assert liquidaciones.status_code == 200, liquidaciones.text
+    pago = liquidaciones.json()[0]
+    esperado_bruto = (produccion_esperada * Decimal("0.02")).quantize(Decimal("0.01"))
     assert real == produccion_esperada
-    assert bruto == (produccion_esperada * Decimal("0.02")).quantize(Decimal("0.01"))
+    assert bruto == esperado_bruto
+    assert Decimal(pago["produccion_total"]) == produccion_esperada
+    assert Decimal(pago["bruto"]) == esperado_bruto
+    assert Decimal(pago["saldo"]) == esperado_bruto
