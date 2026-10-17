@@ -3,7 +3,6 @@
 import argparse
 import hashlib
 import json
-import os
 import pathlib
 import sys
 import tarfile
@@ -69,10 +68,12 @@ def main():
     manifest = json.loads(pathlib.Path(args.manifest).read_text(encoding="utf-8"))
     if manifest.get("batch") != args.batch:
         raise ValueError("Unmatched backup batch")
-    if manifest.get("database_sha256") != digest(open(args.dump, "rb")):
-        raise ValueError("Database hash mismatch")
-    if manifest.get("archive_sha256") != digest(open(args.archive, "rb")):
-        raise ValueError("Archive hash mismatch")
+    with open(args.dump, "rb") as database:
+        if manifest.get("database_sha256") != digest(database):
+            raise ValueError("Database hash mismatch")
+    with open(args.archive, "rb") as documents:
+        if manifest.get("archive_sha256") != digest(documents):
+            raise ValueError("Archive hash mismatch")
     compare(manifest, inspect_tar(args.archive))
     print("BACKUP_PAIR_HASHES_AND_FILES_VERIFIED")
     print("NOT_A_DATABASE_RESTORE_OR_TENANT_RBAC_TEST")
