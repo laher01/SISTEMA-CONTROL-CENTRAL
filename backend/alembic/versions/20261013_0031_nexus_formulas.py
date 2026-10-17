@@ -60,6 +60,15 @@ def upgrade() -> None:
             name="ck_nexus_estado_valido",
         ),
     )
+    # La base de datos impide dos fórmulas aprobadas para el mismo usuario
+    # del mismo tenant, incluso ante aprobaciones simultáneas.
+    op.create_index(
+        "uq_nexus_formula_aprobada_usuario",
+        "formulas_pago_nexus",
+        ["tenant_id", "usuario_id"],
+        unique=True,
+        postgresql_where=sa.text("estado = 'APROBADA'"),
+    )
     for columna in ("tenant_id", "responsable_id", "usuario_id"):
         op.create_index(
             f"ix_formulas_pago_nexus_{columna}",
@@ -69,6 +78,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_index(
+        "uq_nexus_formula_aprobada_usuario",
+        table_name="formulas_pago_nexus",
+    )
     for columna in ("usuario_id", "responsable_id", "tenant_id"):
         op.drop_index(f"ix_formulas_pago_nexus_{columna}", table_name="formulas_pago_nexus")
     op.drop_table("formulas_pago_nexus")

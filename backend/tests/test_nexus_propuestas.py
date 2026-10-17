@@ -129,3 +129,29 @@ def test_no_aprobar_dos_veces_una_formula() -> None:
             responsable_id="r1",
             propuesta=propuesta,
         )
+
+
+def test_migracion_impide_aprobaciones_duplicadas_por_tenant_usuario() -> None:
+    """La base de datos protege aprobaciones concurrentes de borradores distintos."""
+    from pathlib import Path
+
+    migration = (
+        Path(__file__).resolve().parents[1] / "alembic/versions/20261013_0031_nexus_formulas.py"
+    ).read_text(encoding="utf-8")
+    assert '"uq_nexus_formula_aprobada_usuario"' in migration
+    assert "postgresql_where=sa.text(\"estado = 'APROBADA'\")" in migration
+    assert '["tenant_id", "usuario_id"]' in migration
+
+
+def test_aprobacion_traduce_colision_concurrente_a_conflicto() -> None:
+    from pathlib import Path
+
+    route = (Path(__file__).resolve().parents[1] / "app/api/routes/responsable.py").read_text(
+        encoding="utf-8"
+    )
+    approval = route.split("def aprobar_formula_nexus(", 1)[1].split(
+        '@router.post("/pagos/formulas/{formula_id}/revocar")', 1
+    )[0]
+    assert "except IntegrityError as exc:" in approval
+    assert "session.rollback()" in approval
+    assert "status.HTTP_409_CONFLICT" in approval
