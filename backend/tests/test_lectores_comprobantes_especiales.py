@@ -79,3 +79,17 @@ def test_bcp_con_concepto_pago_factura_no_inventa_serie() -> None:
     assert resultado["campos"]["numero_operacion"]["valor"] == "03857359"
     assert "serie" not in resultado["campos"]
     assert "correlativo" not in resultado["campos"]
+
+
+def test_bcp_con_factura_electronica_en_concepto_no_inventa_serie() -> None:
+    texto = (
+        "BCP\nTransferencia exitosa\nS/ 120.00\n"
+        "Domingo, 20 Septiembre 2026 - 06:23 p.m.\n"
+        "Concepto: pago de factura electrónica del proveedor\n"
+        "Número de operación\n03857359\n"
+    )
+    resultado = extraer_campos(texto, "OCR", 1.0)
+    assert resultado is not None
+    assert resultado["campos"]["numero_operacion"]["valor"] == "03857359"
+    assert "serie" not in resultado["campos"]
+    assert "correlativo" not in resultado["campos"]
