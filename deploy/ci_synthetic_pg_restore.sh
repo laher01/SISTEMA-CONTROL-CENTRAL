@@ -36,7 +36,7 @@ for key,name in [("database_sha256","database.dump"),("archive_sha256","docs.tar
  manifest[key]=hashlib.sha256((p/name).read_bytes()).hexdigest()
 (p/"manifest.json").write_text(json.dumps(manifest))
 PY
-python3 deploy/recovery_pair_audit.py --archive "$work/docs.tar.gz" --dump "$work/database.dump" --manifest "$work/manifest.json" --batch synthetic-ci
+python3 ../deploy/recovery_pair_audit.py --archive "$work/docs.tar.gz" --dump "$work/database.dump" --manifest "$work/manifest.json" --batch synthetic-ci
 createdb "$restoredb"
 pg_restore --exit-on-error --no-owner --no-acl --dbname="$restoredb" "$work/database.dump"
 test "$(psql -XAt -d "$restoredb" -c 'SELECT version_num FROM alembic_version')" = 0038
