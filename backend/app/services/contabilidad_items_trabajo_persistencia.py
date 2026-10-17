@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.item_models import EventoReescaneoXML, TrabajoReescaneoXML
-from app.services.contabilidad_items_trabajo_auditoria import EventoAuditoriaXML, EstadoTrabajoXML
+from app.services.contabilidad_items_trabajo_auditoria import EstadoTrabajoXML, EventoAuditoriaXML
 
 
 def guardar_transicion_xml(session: Session, evento: EventoAuditoriaXML) -> EventoReescaneoXML:
