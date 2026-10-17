@@ -67,6 +67,7 @@ export default function ContabilidadItems() {
         setErrorFiltros("");
         setFiltros({ desde, hasta, emisor_id: emisorId.trim(), receptor_id: receptorId.trim() });
         recargar();
+        cobertura.recargar();
       }}>
         <label htmlFor="items-desde">Desde</label>
         <input id="items-desde" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
