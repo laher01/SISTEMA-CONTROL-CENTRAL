@@ -208,7 +208,7 @@ def _enriquecer(
 
 
 def _explicar_pantalla(contexto: ContextoNexus) -> NexusChatOut:
-    """Explicar únicamente los datos autorizados, sin simular visión del navegador."""
+    """Explicar datos autorizados sin simular visión del navegador."""
     seccion = contexto.seccion
     datos = contexto.datos
     nombres = {
@@ -218,8 +218,12 @@ def _explicar_pantalla(contexto: ContextoNexus) -> NexusChatOut:
         "EXPEDIENTES": "la sección Expedientes",
     }
     lugar = nombres.get(seccion, f"la sección {seccion.lower()}")
-    partes = [f"Estás en {lugar}. Puedo interpretar los datos autorizados de FACT CENTRAL, "
-              "pero no veo directamente los elementos visuales de tu navegador."]
+    partes = [
+        (
+            f"Estás en {lugar}. Puedo interpretar los datos autorizados de FACT CENTRAL, "
+            "pero no veo directamente los elementos visuales de tu navegador."
+        )
+    ]
     mes = datos.get("mes_actual")
     if isinstance(mes, dict):
         compras = mes.get("compras")
@@ -236,12 +240,18 @@ def _explicar_pantalla(contexto: ContextoNexus) -> NexusChatOut:
             partes.append("No aparecen compras del mes en los datos disponibles para tu rol.")
     estados = datos.get("expedientes_por_estado")
     if isinstance(estados, dict) and estados:
-        resumen = ", ".join(f"{cantidad} en estado {estado}" for estado, cantidad in estados.items())
-        partes.append(f"En el conjunto de expedientes autorizado hay {resumen}. "
-                      "Estos estados corresponden al total visible, no necesariamente solo al mes.")
+        resumen = ", ".join(
+            f"{cantidad} en estado {estado}" for estado, cantidad in estados.items()
+        )
+        partes.append(
+            f"En el conjunto de expedientes autorizado hay {resumen}. "
+            "Estos estados corresponden al total visible, no necesariamente solo al mes."
+        )
         if int(estados.get("ROJO", 0)) > 0:
-            partes.append("Hay expedientes marcados en rojo que conviene revisar; "
-                          "el color por sí solo no permite identificar la causa.")
+            partes.append(
+                "Hay expedientes marcados en rojo que conviene revisar; "
+                "el color por sí solo no permite identificar la causa."
+            )
     partes.append("Si seleccionas un expediente puedo indicarte los documentos que le faltan.")
     return NexusChatOut(
         respuesta=" ".join(partes),
