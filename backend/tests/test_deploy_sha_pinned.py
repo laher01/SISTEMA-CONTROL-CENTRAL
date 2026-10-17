@@ -6,7 +6,7 @@ from pathlib import Path
 def test_deploy_fija_sha_validado_antes_de_actualizar() -> None:
     script = (Path(__file__).resolve().parents[2] / "deploy" / "deploy.sh").read_text()
     assert 'if [ -n "${EXPECTED_COMMIT:-}" ]; then' in script
-    assert 'git rev-parse origin/main' in script
+    assert "git rev-parse origin/main" in script
     assert 'git merge --ff-only "$EXPECTED_COMMIT"' in script
     assert 'current_commit="$(git rev-parse HEAD)"' in script
     assert (
