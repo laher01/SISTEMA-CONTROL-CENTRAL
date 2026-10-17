@@ -1,4 +1,5 @@
 """Control global de publicación comercial. Sin acceso cruzado a tenants."""
+
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -34,9 +35,7 @@ def estado_admin(session: SessionDep, auth: AuthDep) -> EstadoLanding:
 
 
 @router.put("", response_model=EstadoLanding)
-def actualizar_estado(
-    datos: CambiarLanding, session: SessionDep, auth: AuthDep
-) -> EstadoLanding:
+def actualizar_estado(datos: CambiarLanding, session: SessionDep, auth: AuthDep) -> EstadoLanding:
     _exigir_superadmin(auth)
     estado = session.scalar(
         select(ConfiguracionLandingGlobal)
@@ -45,9 +44,7 @@ def actualizar_estado(
     )
     if estado is None:
         if datos.version != 1:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT, "La configuración cambió; recargue"
-            )
+            raise HTTPException(status.HTTP_409_CONFLICT, "La configuración cambió; recargue")
         estado = ConfiguracionLandingGlobal(id=1, activa=True, version=1)
         session.add(estado)
         session.flush()
@@ -70,9 +67,8 @@ def actualizar_estado(
 
 
 def _exigir_superadmin(auth: object) -> None:
-    if (
-        getattr(auth, "rol", None) != "SUPERADMIN"
-        or getattr(auth, "cambio_clave_obligatorio", True)
+    if getattr(auth, "rol", None) != "SUPERADMIN" or getattr(
+        auth, "cambio_clave_obligatorio", True
     ):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
