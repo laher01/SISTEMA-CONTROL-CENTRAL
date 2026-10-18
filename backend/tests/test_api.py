@@ -1362,31 +1362,55 @@ def test_superadmin_no_puede_retirar_documento_por_delete(
     auth_prueba.como_admin()
     assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
 
-def test_ambitos_documentales_cinco_roles(client: TestClient, auth_prueba: AuthPrueba, session: Session) -> None:
+def test_ambitos_documentales_cinco_roles(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
     from dataclasses import replace
     from uuid import uuid4
 
     from fastapi import HTTPException
+
     from app.models import Documento, Miembro
 
     datos = subir(client, "ambitos-roles.pdf", b"%PDF-1.7 prueba ambitos")
     documento = session.get(Documento, datos["id"])
     assert documento is not None
     admin = auth_prueba.contexto
-    supervisor = Miembro(tenant_id=admin.tenant_id, codigo="RESP-A", nombre="Responsable A", rol="RESPONSABLE", activo=True)
+    supervisor = Miembro(
+        tenant_id=admin.tenant_id,
+        codigo="RESP-A",
+        nombre="Responsable A",
+        rol="RESPONSABLE",
+        activo=True,
+    )
     session.add(supervisor)
     session.flush()
-    usuario = Miembro(tenant_id=admin.tenant_id, codigo="USER-A", nombre="Usuario A", rol="USUARIO", responsable_id=supervisor.id, activo=True)
+    usuario = Miembro(
+        tenant_id=admin.tenant_id,
+        codigo="USER-A",
+        nombre="Usuario A",
+        rol="USUARIO",
+        responsable_id=supervisor.id,
+        activo=True,
+    )
     session.add(usuario)
     session.flush()
     documento.usuario_id = usuario.id
     documento.gestor_id = uuid4()
     session.flush()
 
-    documentos_routes._validar_ambito_documento(replace(admin, rol="USUARIO", usuario_id=usuario.id), documento, session)
-    documentos_routes._validar_ambito_documento(replace(admin, rol="GESTOR", gestor_id=documento.gestor_id), documento, session)
-    documentos_routes._validar_ambito_documento(replace(admin, rol="RESPONSABLE", miembro_id=supervisor.id), documento, session)
-    documentos_routes._validar_ambito_documento(replace(admin, rol="SECRETARIA"), documento, session)
+    documentos_routes._validar_ambito_documento(
+        replace(admin, rol="USUARIO", usuario_id=usuario.id), documento, session
+    )
+    documentos_routes._validar_ambito_documento(
+        replace(admin, rol="GESTOR", gestor_id=documento.gestor_id), documento, session
+    )
+    documentos_routes._validar_ambito_documento(
+        replace(admin, rol="RESPONSABLE", miembro_id=supervisor.id), documento, session
+    )
+    documentos_routes._validar_ambito_documento(
+        replace(admin, rol="SECRETARIA"), documento, session
+    )
     for contexto in (
         replace(admin, rol="USUARIO", usuario_id=uuid4()),
         replace(admin, rol="GESTOR", gestor_id=uuid4()),
