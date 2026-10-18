@@ -9,9 +9,7 @@ url = os.environ.get("FC_DATABASE_URL", "")
 if (
     os.getenv("GITHUB_ACTIONS") != "true"
     or os.getenv("FC_RECOVERY_SYNTHETIC_ONLY") != "YES"
-    or not url.startswith(
-        "postgresql+psycopg://fact:fact@localhost:5432/fact_restore_synthetic_"
-    )
+    or not url.startswith("postgresql+psycopg://fact:fact@localhost:5432/fact_restore_synthetic_")
 ):
     raise SystemExit("Restored disposable CI database required")
 
