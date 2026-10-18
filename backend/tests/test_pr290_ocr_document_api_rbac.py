@@ -45,6 +45,8 @@ def test_cross_tenant_ocr_document_operations_denied(client, session: Session, a
         estado="NARANJA",
         usuario_id=member_b.id,
     )
+    session.add(dossier)
+    session.flush()
     document = Documento(
         tenant_id=tenant_b.id,
         expediente_id=dossier.id,
