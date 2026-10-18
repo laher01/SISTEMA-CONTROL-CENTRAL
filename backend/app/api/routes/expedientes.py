@@ -47,8 +47,8 @@ from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 from app.services.reparacion_escorpio import (
     ReparacionBloqueada,
     aplicar_lote_verificado,
-    vista_previa as vista_previa_escorpio,
 )
+from app.services.reparacion_escorpio import vista_previa as vista_previa_escorpio
 
 NUMERO_RE = re.compile(r"^([a-z0-9]{4})-0*(\d+)$")
 NUMERO_RHE_RE = re.compile(r"^rhe-([a-z0-9]{4})-0*(\d+)$")
