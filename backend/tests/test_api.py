@@ -1135,3 +1135,43 @@ def test_restaurar_documento_retirado_conserva_original(
 def test_restaurar_sin_documento_retirado_devuelve_404(client: TestClient) -> None:
     respuesta = client.post("/api/v1/documentos/00000000-0000-0000-0000-000000000001/restaurar")
     assert respuesta.status_code == 404
+
+
+def test_restauracion_denegada_a_superadmin(
+    client: TestClient, auth_prueba: AuthPrueba,
+) -> None:
+    documento = subir(client, "privado.pdf", b"%PDF-1.7 solo tenant")
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/documentos/{documento['id']}").status_code == 204
+    auth_prueba.como_superadmin()
+    assert client.post(f"/api/v1/documentos/{documento['id']}/restaurar").status_code == 403
+
+
+def test_restauracion_rechaza_original_ausente(
+    client: TestClient, auth_prueba: AuthPrueba, settings: Settings,
+) -> None:
+    documento = subir(client, "ausente.pdf", b"%PDF-1.7 archivo de prueba")
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/documentos/{documento['id']}").status_code == 204
+    original = settings.storage_dir / str(auth_prueba.contexto.tenant_id) / documento["sha256"][:2] / documento["sha256"]
+    original.unlink()
+    respuesta = client.post(f"/api/v1/documentos/{documento['id']}/restaurar")
+    assert respuesta.status_code == 409
+    assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 404
+
+
+def test_restauracion_rechaza_tenant_ajeno(
+    client: TestClient, auth_prueba: AuthPrueba,
+) -> None:
+    from dataclasses import replace
+    from uuid import uuid4
+
+    documento = subir(client, "tenant.pdf", b"%PDF-1.7 prueba tenant")
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/documentos/{documento['id']}").status_code == 204
+    original = auth_prueba.contexto
+    auth_prueba.contexto = replace(original, tenant_id=uuid4())
+    try:
+        assert client.post(f"/api/v1/documentos/{documento['id']}/restaurar").status_code == 404
+    finally:
+        auth_prueba.contexto = original
