@@ -44,8 +44,27 @@ echo "Respaldo PostgreSQL creado: $backup"
 
 previous_commit="$(git rev-parse HEAD)"
 git fetch origin main
-git checkout main
-git pull --ff-only origin main
+if [ -n "${EXPECTED_COMMIT:-}" ]; then
+  # No hacer git pull de un main que puede avanzar durante el despliegue.
+  # El bootstrap ya validó el SHA objetivo; reafirmarlo justo antes del checkout.
+  case "$EXPECTED_COMMIT" in
+    *[!0-9a-fA-F]*|"") echo "SHA esperado inválido" >&2; exit 1 ;;
+  esac
+  if [ "$(git rev-parse origin/main)" != "$EXPECTED_COMMIT" ]; then
+    echo "El destino main cambió; no desplegar SHA obsoleto" >&2
+    exit 1
+  fi
+  if ! git merge-base --is-ancestor HEAD "$EXPECTED_COMMIT"; then
+    echo "Historial divergente; cancelar despliegue" >&2
+    exit 1
+  fi
+  git checkout main
+  git merge --ff-only "$EXPECTED_COMMIT"
+else
+  # Compatibilidad con ejecuciones operativas anteriores sin SHA fijado.
+  git checkout main
+  git pull --ff-only origin main
+fi
 current_commit="$(git rev-parse HEAD)"
 
 if [ -n "${EXPECTED_COMMIT:-}" ] && [ "$current_commit" != "$EXPECTED_COMMIT" ]; then
