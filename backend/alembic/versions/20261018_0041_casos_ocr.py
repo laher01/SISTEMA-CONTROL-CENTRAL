@@ -39,7 +39,11 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("nombre", sa.String(100), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False),
-        sa.Column("definicion", sa.JSON().with_variant(postgresql.JSONB(), "postgresql"), nullable=False),
+        sa.Column(
+            "definicion",
+            sa.JSON().with_variant(postgresql.JSONB(), "postgresql"),
+            nullable=False,
+        ),
         sa.Column("estado", sa.String(20), nullable=False, server_default="BORRADOR"),
         sa.Column("aprobada_por", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id")),
         sa.Column("aprobada_at", sa.DateTime(timezone=True)),
