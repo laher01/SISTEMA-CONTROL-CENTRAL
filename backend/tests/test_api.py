@@ -620,6 +620,18 @@ def test_archivo_vigente_sigue_rechazando_duplicados_tras_reingreso(
     assert duplicado.json()["detail"]["duplicado"] is True
 
 
+
+def test_superadmin_no_puede_eliminar_archivos_huerfanos(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    documento = subir(client, "no_asignado.pdf", b"%PDF-1.7 sin asignar para seguridad")
+    auth_prueba.como_superadmin()
+
+    respuesta = client.delete(f"/api/v1/documentos/{documento['id']}")
+    assert respuesta.status_code == 403, respuesta.text
+    assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
+
+
 def test_reprocesamiento_masivo_repara_razones_sociales(
     client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
