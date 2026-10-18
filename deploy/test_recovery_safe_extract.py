@@ -139,3 +139,23 @@ def test_extract_denies_conflicting_parent_file(tmp_path):
     with pytest.raises(ValueError, match="Destination not empty"):
         extract(archive, manifest, target)
     assert (target / "tenant-a").read_text() == "existing"
+
+
+def test_rollback_failure_is_explicit_quarantine_signal(tmp_path, monkeypatch):
+    import recovery_safe_extract as subject
+
+    archive, manifest, target = make_pair(tmp_path)
+    original = subject._open_directory
+
+    def injected(root_fd, parts, created_dirs, *, create=True):
+        if create and parts:
+            raise PermissionError("injected race")
+        return original(root_fd, parts, created_dirs, create=create)
+
+    def failed_rollback(*args):
+        raise PermissionError("injected rollback conflict")
+
+    monkeypatch.setattr(subject, "_open_directory", injected)
+    monkeypatch.setattr(subject, "_rollback", failed_rollback)
+    with pytest.raises(RuntimeError, match="quarantine target"):
+        extract(archive, manifest, target)
