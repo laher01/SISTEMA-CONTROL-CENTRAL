@@ -91,6 +91,35 @@ export default function Pendientes() {
   const [procesandoLote, setProcesandoLote] = useState(false);
   const [resultadoLote, setResultadoLote] = useState<ResultadoLote>();
   const [errorLote, setErrorLote] = useState("");
+  const [seleccionados, setSeleccionados] = useState<string[]>([]);
+  const [retirandoSeleccionados, setRetirandoSeleccionados] = useState(false);
+  const [resultadoRetirada, setResultadoRetirada] = useState("");
+  const [errorRetirada, setErrorRetirada] = useState("");
+
+  const retirarSeleccionados = async () => {
+    const visibles = (datos ?? []).filter((d) => seleccionados.includes(d.id));
+    if (!visibles.length || retirandoSeleccionados) return;
+    if (!window.confirm(`¿Retirar ${visibles.length} documentos pendientes? Los originales se conservarán.`)) return;
+    setRetirandoSeleccionados(true);
+    setErrorRetirada("");
+    setResultadoRetirada("");
+    const retirados: string[] = [];
+    const errores: string[] = [];
+    for (const documento of visibles) {
+      try {
+        await eliminar(`/api/v1/documentos/${documento.id}`);
+        retirados.push(documento.id);
+      } catch (error) {
+        errores.push(`${documento.nombre_original}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    setSeleccionados((actual) => actual.filter((id) => !retirados.includes(id)));
+    setResultadoRetirada(`${retirados.length} de ${visibles.length} documentos retirados.`);
+    setErrorRetirada(errores.join(" | "));
+    setRetirandoSeleccionados(false);
+    recargar();
+    recargarProvisionales();
+  };
 
   const procesarAutomaticamente = async () => {
     setProcesandoLote(true);
@@ -110,8 +139,10 @@ export default function Pendientes() {
     }
   };
 
-  const cambiar = (siguienteEstado: string, siguientePagina: number) =>
+  const cambiar = (siguienteEstado: string, siguientePagina: number) => {
+    setSeleccionados([]);
     setParametros({ estado: siguienteEstado, pagina: String(siguientePagina) });
+  };
 
   return (
     <>
@@ -169,10 +200,20 @@ export default function Pendientes() {
         </p>
       )}
       {errorLote && <p className="error">{errorLote}</p>}
+      <div className="acciones-documento">
+        <strong>{(datos ?? []).filter((d) => seleccionados.includes(d.id)).length} pendientes seleccionados</strong>
+        <button className="peligro" disabled={retirandoSeleccionados || !(datos ?? []).some((d) => seleccionados.includes(d.id))} onClick={() => void retirarSeleccionados()}>
+          {retirandoSeleccionados ? "Retirando…" : "Eliminar seleccionados"}
+        </button>
+        <button className="secundario" disabled={retirandoSeleccionados || !seleccionados.length} onClick={() => setSeleccionados([])}>Limpiar selección</button>
+      </div>
+      {resultadoRetirada && <p role="status">{resultadoRetirada}</p>}
+      {errorRetirada && <p role="alert" className="error">{errorRetirada}</p>}
       <Estado cargando={cargando} error={error} vacio={datos?.length === 0}>
         <table>
           <thead>
             <tr>
+              <th><input type="checkbox" aria-label="Seleccionar pendientes visibles" checked={(datos?.length ?? 0) > 0 && (datos ?? []).every((d) => seleccionados.includes(d.id))} onChange={(e) => setSeleccionados(e.target.checked ? (datos ?? []).map((d) => d.id) : [])} /></th>
               <th>Archivo</th>
               <th>Subido</th>
               <th>Lectura</th>
@@ -181,7 +222,7 @@ export default function Pendientes() {
             </tr>
           </thead>
           <tbody>
-            {datos?.map((d) => <FilaPendiente key={d.id} documento={d} alVincular={recargar} />)}
+            {datos?.map((d) => <FilaPendiente key={d.id} documento={d} alVincular={recargar} seleccionado={seleccionados.includes(d.id)} alSeleccionar={(activo) => setSeleccionados((actual) => activo ? [...new Set([...actual, d.id])] : actual.filter((id) => id !== d.id))} />)}
           </tbody>
         </table>
       </Estado>
@@ -197,9 +238,13 @@ export default function Pendientes() {
 function FilaPendiente({
   documento,
   alVincular,
+  seleccionado,
+  alSeleccionar,
 }: {
   documento: Documento;
   alVincular: () => void;
+  seleccionado: boolean;
+  alSeleccionar: (activo: boolean) => void;
 }) {
   const [seleccion, setSeleccion] = useState<SeleccionSugerida>();
   const [eliminando, setEliminando] = useState(false);
@@ -221,6 +266,7 @@ function FilaPendiente({
   };
   return (
     <tr>
+      <td><input type="checkbox" aria-label={`Seleccionar ${documento.nombre_original}`} checked={seleccionado} onChange={(e) => alSeleccionar(e.target.checked)} /></td>
       <td>
         <a href={urlArchivo(documento.id)} target="_blank" rel="noreferrer">
           {documento.nombre_original}
