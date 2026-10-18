@@ -1267,6 +1267,10 @@ def eliminar_documento(
             ) from None
         return
     _validar_ambito_documento(auth, documento, session)
+    raise HTTPException(
+        status.HTTP_409_CONFLICT,
+        "Documento asociado a expediente: eliminación integral pendiente de implementación segura",
+    )
     if not permiso_habilitado(
         session,
         tenant_id,
