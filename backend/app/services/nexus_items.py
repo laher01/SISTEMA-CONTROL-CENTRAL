@@ -43,7 +43,9 @@ def consulta_items_solicitada(mensaje: str) -> tuple[str, str] | None:
         "sporade": ("sporade", "sporada"),
     }
     encontrados = [
-        clave for clave, variantes in conceptos.items() if any(_contiene_termino(normal, v) for v in variantes)
+        clave
+        for clave, variantes in conceptos.items()
+        if any(_contiene_termino(normal, v) for v in variantes)
     ]
     if encontrados:
         return ("producto", ",".join(encontrados))
