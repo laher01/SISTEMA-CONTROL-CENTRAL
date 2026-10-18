@@ -3,6 +3,7 @@
 No tomar números del nombre del archivo como prueba fiscal: se contrastan
 con el texto interno del PDF, su hash SHA256 y el emisor/receptor.
 """
+
 import hashlib
 import io
 from dataclasses import asdict, dataclass
@@ -55,9 +56,7 @@ def evaluar_identidad(
     serie = campos.get("serie", ("", ""))[0]
     emisor = campos.get("ruc_emisor", ("", ""))[0]
     receptor = campos.get("ruc_receptor", ("", ""))[0]
-    if (serie, numero, emisor, receptor) != (
-        "F109", esperado, RUC_ESCORPIO, receptor_ruc
-    ):
+    if (serie, numero, emisor, receptor) != ("F109", esperado, RUC_ESCORPIO, receptor_ruc):
         return "BLOQUEADO", "Identidad fiscal no confirmada dentro del PDF"
     if (actual_serie, actual_correlativo) == ("F109", str(int(esperado))):
         return "YA_CORREGIDO", "La clave fiscal ya coincide"
@@ -141,13 +140,20 @@ def diagnosticar(session: Session, almacen: AlmacenLocal, tenant_id) -> list[Dia
         despues = f"F109-{esperado}" if estado == "CANDIDATO" else None
         resultados.append(
             Diagnostico(
-                expediente_id=str(expediente.id), documento_id=documento_id,
-                receptor_ruc=receptor_ruc, antes=antes, despues=despues,
-                evidencia=evidencia, estado=estado, motivo=motivo,
+                expediente_id=str(expediente.id),
+                documento_id=documento_id,
+                receptor_ruc=receptor_ruc,
+                antes=antes,
+                despues=despues,
+                evidencia=evidencia,
+                estado=estado,
+                motivo=motivo,
                 auditoria_propuesta={
                     "accion": "ESCORPIO_CORRECCION_HISTORICA_P0",
-                    "antes": antes, "despues": despues or "",
-                    "pdf_sha256": evidencia, "documento_id": documento_id or "",
+                    "antes": antes,
+                    "despues": despues or "",
+                    "pdf_sha256": evidencia,
+                    "documento_id": documento_id or "",
                 },
             )
         )
@@ -223,8 +229,11 @@ def aplicar_lote_verificado(
         e.correlativo = str(int(OBJETIVOS[p.receptor_ruc]))
         e.correlativo_original = OBJETIVOS[p.receptor_ruc]
         auditoria.registrar(
-            session, tenant_id, "ESCORPIO_CORRECCION_HISTORICA_P0",
-            "expediente", e.id,
+            session,
+            tenant_id,
+            "ESCORPIO_CORRECCION_HISTORICA_P0",
+            "expediente",
+            e.id,
             {**p.auditoria_propuesta, "correlativo_normalizado": e.correlativo},
         )
     session.flush()  # violaciones de unicidad abortan la transacción
