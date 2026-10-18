@@ -3,7 +3,6 @@
 from fastapi.testclient import TestClient
 
 from app.schemas import NexusMensajeHistorial
-
 from app.services.nexus_items import (
     _contiene_termino,
     _diesel_en_factura_procesada,
