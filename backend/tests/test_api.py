@@ -1114,3 +1114,24 @@ Fecha de emisión"""
         assert detalle["importe_total"] == "1500.00"
         ids.add(str(documento["expediente_id"]))
     assert len(ids) == 3
+
+
+def test_restaurar_documento_retirado_conserva_original(
+    client: TestClient, auth_prueba: AuthPrueba,
+) -> None:
+    documento = subir(client, "restaurable.pdf", b"%PDF-1.7 restauracion de prueba")
+    auth_prueba.como_admin()
+    ruta = f"/api/v1/documentos/{documento['id']}"
+    assert client.delete(ruta).status_code == 204
+    assert client.get(ruta).status_code == 404
+
+    restaurado = client.post(ruta + "/restaurar")
+    assert restaurado.status_code == 200, restaurado.text
+    assert restaurado.json()["id"] == documento["id"]
+    assert client.get(ruta).status_code == 200
+    assert client.post(ruta + "/restaurar").status_code == 409
+
+
+def test_restaurar_sin_documento_retirado_devuelve_404(client: TestClient) -> None:
+    respuesta = client.post("/api/v1/documentos/00000000-0000-0000-0000-000000000001/restaurar")
+    assert respuesta.status_code == 404
