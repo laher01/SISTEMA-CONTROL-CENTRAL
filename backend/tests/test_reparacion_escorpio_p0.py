@@ -1,4 +1,5 @@
 """Pruebas de validación fiscal para vista previa histórica SCORPIO."""
+
 import pytest
 
 from app.services.reparacion_escorpio import evaluar_identidad
