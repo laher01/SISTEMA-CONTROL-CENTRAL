@@ -15,11 +15,15 @@ permissions:
   contents: read
 jobs:
   pg-restore:
+    strategy:
+      fail-fast: false
+      matrix:
+        pg_major: ["16", "17"]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
       postgres:
-        image: postgres:16
+        image: postgres:${{ matrix.pg_major }}
         env:
           POSTGRES_USER: fact
           POSTGRES_PASSWORD: fact
@@ -46,6 +50,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-client
+          echo "Using version-matched PostgreSQL client via postgres container"
           cd backend
           uv sync --locked
       - name: Prepare source at revision 0038
