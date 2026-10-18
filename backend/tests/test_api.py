@@ -1185,3 +1185,22 @@ def test_restauracion_rechaza_tenant_ajeno(
         assert client.post(f"/api/v1/documentos/{documento['id']}/restaurar").status_code == 404
     finally:
         auth_prueba.contexto = original
+
+
+def test_listar_retirados_respeta_estado_y_permiso(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
+    primero = subir(client, "primero.pdf", b"%PDF-1.7 primer original")
+    segundo = subir(client, "segundo.pdf", b"%PDF-1.7 segundo original")
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/documentos/{primero['id']}").status_code == 204
+
+    resultado = client.get("/api/v1/documentos/retirados")
+    assert resultado.status_code == 200, resultado.text
+    ids = {documento["id"] for documento in resultado.json()}
+    assert primero["id"] in ids
+    assert segundo["id"] not in ids
+
+    auth_prueba.como_superadmin()
+    assert client.get("/api/v1/documentos/retirados").status_code == 403
