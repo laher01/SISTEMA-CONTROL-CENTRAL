@@ -1232,17 +1232,25 @@ def eliminar_documento(
             RolMiembro.ADMINISTRADOR,
         ):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Rol no autorizado")
-        dependencias = (
-            session.scalar(select(RelacionDocumento.id).where(
-                or_(RelacionDocumento.origen_id == documento_id, RelacionDocumento.destino_id == documento_id)
-            ).limit(1)),
-            session.scalar(select(ReferenciaGRE.id).where(ReferenciaGRE.documento_id == documento_id).limit(1)),
-            session.scalar(select(CorreccionIA.id).where(CorreccionIA.documento_id == documento_id).limit(1)),
-            session.scalar(select(PagoERP.id).where(PagoERP.voucher_documento_id == documento_id).limit(1)),
-            session.scalar(select(LineaComprobanteItem.id).where(LineaComprobanteItem.documento_id == documento_id).limit(1)),
+        referencias = (
+            select(RelacionDocumento.id).where(
+                or_(
+                    RelacionDocumento.origen_id == documento_id,
+                    RelacionDocumento.destino_id == documento_id,
+                )
+            ),
+            select(ReferenciaGRE.id).where(ReferenciaGRE.documento_id == documento_id),
+            select(CorreccionIA.id).where(CorreccionIA.documento_id == documento_id),
+            select(PagoERP.id).where(PagoERP.voucher_documento_id == documento_id),
+            select(LineaComprobanteItem.id).where(
+                LineaComprobanteItem.documento_id == documento_id
+            ),
         )
-        if any(dep is not None for dep in dependencias):
-            raise HTTPException(status.HTTP_409_CONFLICT, "Documento con referencias; requiere eliminación integral")
+        if any(session.scalar(consulta.limit(1)) is not None for consulta in referencias):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Documento con referencias; requiere eliminación integral",
+            )
         ruta = documento.ruta_storage
         # Validar ámbito físico antes de liberar el registro y el hash.
         if not ruta.startswith(f"{tenant_id}/") or ".." in ruta.split("/"):
