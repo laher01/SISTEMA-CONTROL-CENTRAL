@@ -1288,6 +1288,20 @@ def eliminar_documento(
         if not ruta.startswith(f"{tenant_id}/") or ".." in ruta.split("/"):
             raise HTTPException(status.HTTP_409_CONFLICT, "Ruta del documento inválida")
         archivo = almacen.ruta_absoluta(ruta)
+        raiz_tenant = (almacen.base / str(tenant_id)).resolve()
+        if not archivo.is_relative_to(raiz_tenant):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "Original fuera del almacenamiento del tenant"
+            )
+        compartido = session.scalar(
+            select(Documento.id)
+            .where(Documento.ruta_storage == ruta, Documento.id != documento.id)
+            .limit(1)
+        )
+        if compartido is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "Original todavía referenciado por otro documento"
+            )
         # Apartar el original ANTES de liberar el hash para que una recarga
         # concurrente no pierda el contenido recién importado.
         temporal = archivo.with_name(f".eliminando-{documento.id}")
