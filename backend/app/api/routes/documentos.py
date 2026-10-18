@@ -75,7 +75,11 @@ from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.lotes_imagenes import MAX_IMAGENES_POR_SUBLOTE
 from app.services.metadatos_documento import metadatos_individuales
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
-from app.services.recuperacion_eliminaciones import reconciliar_intento, registrar_intento
+from app.services.recuperacion_eliminaciones import (
+    reconciliar_intento,
+    registrar_intento,
+    sincronizar_movimientos,
+)
 from app.services.relaciones_documentales import sugerir_relaciones
 from app.services.separador_pdf import analizar_paquete, extraer_fragmento
 from app.services.ubl import UblInvalido, parece_xml, parse_ubl
@@ -1318,6 +1322,7 @@ def eliminar_documento(
         diario = registrar_intento(almacen, tenant_id, [(documento.id, archivo, temporal)])
         try:
             archivo.replace(temporal)
+            sincronizar_movimientos([(archivo, temporal)])
         except OSError:
             reconciliar_intento(session, almacen, tenant_id, diario)
             raise HTTPException(
