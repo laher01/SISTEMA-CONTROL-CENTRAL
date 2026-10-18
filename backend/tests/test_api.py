@@ -1429,3 +1429,24 @@ def test_ambitos_documentales_cinco_roles(
         with pytest.raises(HTTPException) as error:
             documentos_routes._validar_ambito_documento(contexto, documento, session)
         assert error.value.status_code == 404
+
+def test_retirada_y_restauracion_recalculan_expediente_y_alertas(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
+    documento = subir(client, "factura-restaurable.xml", factura())
+    expediente_id = documento["expediente_id"]
+    antes = expediente(client, expediente_id)
+    alertas_antes = alertas_abiertas(antes)
+    auth_prueba.como_admin()
+
+    retirado = client.delete(f"/api/v1/documentos/{documento['id']}")
+    assert retirado.status_code == 204, retirado.text
+    durante = expediente(client, expediente_id)
+    assert all(item["id"] != documento["id"] for item in durante["documentos"])
+
+    recuperado = client.post(f"/api/v1/documentos/{documento['id']}/restaurar")
+    assert recuperado.status_code == 200, recuperado.text
+    despues = expediente(client, expediente_id)
+    assert any(item["id"] == documento["id"] for item in despues["documentos"])
+    assert alertas_abiertas(despues) == alertas_antes
