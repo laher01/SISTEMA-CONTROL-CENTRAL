@@ -56,6 +56,10 @@ from app.services.automatizacion_documental import (
     registrar_fallo,
 )
 from app.services.cache_ocr import procesar_con_cache
+from app.services.eliminacion_expediente_gestor import (
+    EliminacionNoSegura,
+    eliminar_expediente_del_gestor,
+)
 from app.services.expedientes import buscar_expediente
 from app.services.identidad_cotizaciones import identidad_cotizacion
 from app.services.ingesta import (
@@ -1320,11 +1324,24 @@ def eliminar_documento(
                 "Registro eliminado; original pendiente de limpieza física",
             ) from None
         return
-    _validar_ambito_documento(auth, documento, session)
-    raise HTTPException(
-        status.HTTP_409_CONFLICT,
-        "Documento asociado a expediente: eliminación integral pendiente de implementación segura",
-    )
+    if auth.rol != "GESTOR" or auth.gestor_id is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Solo el gestor propietario puede eliminar documentos de su expediente",
+        )
+    # Eliminar la factura principal retira integralmente su expediente y anexos.
+    # Para una guía/voucher con expediente se exige una operación específica posterior.
+    if documento.tipo_documento != TipoDocumento.FACT:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Eliminar anexos individualmente requiere conciliación documental",
+        )
+    try:
+        eliminar_expediente_del_gestor(
+            session, almacen, tenant_id, documento.expediente_id, auth.gestor_id
+        )
+    except EliminacionNoSegura as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
 
 
 MIME_EN_LINEA = frozenset(
