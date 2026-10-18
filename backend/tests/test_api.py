@@ -839,6 +839,37 @@ def test_borrado_huerfano_respeta_cuarentena_existente(
     assert session.get(Documento, registro.id) is not None
 
 
+
+def test_fallo_al_apartar_original_no_elimina_registro(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    session: Session,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archivo = subir(client, "fallo-storage.pdf", b"%PDF-1.7 comprobante ante fallo")
+    registro = session.get(Documento, archivo["id"])
+    assert registro is not None
+    from app.storage import AlmacenLocal
+
+    original = AlmacenLocal(settings.storage_dir).ruta_absoluta(registro.ruta_storage)
+    from pathlib import Path
+
+    mover_original = Path.replace
+
+    def falla_movimiento(self: Path, destino: Path) -> Path:
+        if self == original:
+            raise OSError("almacenamiento no disponible")
+        return mover_original(self, destino)
+
+    monkeypatch.setattr(Path, "replace", falla_movimiento)
+    auth_prueba.como_admin()
+    respuesta = client.delete(f"/api/v1/documentos/{registro.id}")
+    assert respuesta.status_code == 503, respuesta.text
+    assert original.is_file()
+    assert session.get(Documento, registro.id) is not None
+
+
 def test_reprocesamiento_masivo_repara_razones_sociales(
     client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
