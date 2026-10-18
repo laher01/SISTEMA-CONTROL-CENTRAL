@@ -7,6 +7,7 @@ No altera filas existentes ni su estado editorial.
 """
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "0041"
