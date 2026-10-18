@@ -10,6 +10,8 @@ on:
     paths:
       - "deploy/recovery_pair_audit.py"
       - "deploy/recovery_safe_extract.py"
+      - "deploy/recovery_orphan_cleanup.py"
+      - "deploy/test_recovery_orphan_cleanup.py"
       - "deploy/test_recovery_safe_extract.py"
       - "deploy/recovery_staging_preflight.py"
       - "deploy/recovery_drill_offline.py"
@@ -35,11 +37,11 @@ jobs:
           fi
       - uses: actions/checkout@v4
       - name: Verify local auditor syntax
-        run: python3 -m py_compile deploy/recovery_pair_audit.py deploy/recovery_staging_preflight.py deploy/recovery_drill_offline.py
+        run: python3 -m py_compile deploy/recovery_pair_audit.py deploy/recovery_staging_preflight.py deploy/recovery_drill_offline.py deploy/recovery_safe_extract.py deploy/recovery_orphan_cleanup.py
       - name: Run synthetic safe archive tests without network or VPS
         run: |
           python3 -m pip install pytest
-          python3 -m pytest -q deploy/test_recovery_pair_audit.py deploy/test_recovery_staging_preflight.py deploy/test_recovery_drill_offline.py deploy/test_recovery_safe_extract.py
+          python3 -m pytest -q deploy/test_recovery_pair_audit.py deploy/test_recovery_staging_preflight.py deploy/test_recovery_drill_offline.py deploy/test_recovery_safe_extract.py deploy/test_recovery_orphan_cleanup.py
       - name: Explicit safety scope
         run: |
           echo "OFFLINE_SYNTHETIC_TESTS_ONLY"
