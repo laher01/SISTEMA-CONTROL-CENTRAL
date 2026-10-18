@@ -819,6 +819,26 @@ def test_eliminacion_integral_no_borra_original_compartido(
     assert session.get(Documento, ajeno["id"]) is not None
 
 
+
+def test_borrado_huerfano_respeta_cuarentena_existente(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session, settings: Settings
+) -> None:
+    archivo = subir(client, "cuarentena-previa.pdf", b"%PDF-1.7 cuarentena vigente")
+    registro = session.get(Documento, archivo["id"])
+    assert registro is not None
+    from app.storage import AlmacenLocal
+
+    original = AlmacenLocal(settings.storage_dir).ruta_absoluta(registro.ruta_storage)
+    temporal = original.with_name(f".eliminando-{registro.id}")
+    temporal.write_bytes(b"pendiente de recuperacion")
+    auth_prueba.como_admin()
+    respuesta = client.delete(f"/api/v1/documentos/{registro.id}")
+    assert respuesta.status_code == 409, respuesta.text
+    assert original.is_file()
+    assert temporal.read_bytes() == b"pendiente de recuperacion"
+    assert session.get(Documento, registro.id) is not None
+
+
 def test_reprocesamiento_masivo_repara_razones_sociales(
     client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
