@@ -115,3 +115,27 @@ def test_descriptor_directory_lookup_rejects_symlink(tmp_path):
             _open_directory(root_fd, ("linked",), [], create=False)
     finally:
         os.close(root_fd)
+
+
+def test_rollback_directory_cleanup_does_not_recreate_parents(tmp_path):
+    import os
+
+    from recovery_safe_extract import _rollback
+
+    target = tmp_path / "root"
+    target.mkdir()
+    fd = os.open(target, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        with pytest.raises(FileNotFoundError):
+            _rollback(fd, [], [("gone", "child")])
+        assert not (target / "gone").exists()
+    finally:
+        os.close(fd)
+
+
+def test_extract_denies_conflicting_parent_file(tmp_path):
+    archive, manifest, target = make_pair(tmp_path)
+    (target / "tenant-a").write_text("existing")
+    with pytest.raises(ValueError, match="Destination not empty"):
+        extract(archive, manifest, target)
+    assert (target / "tenant-a").read_text() == "existing"
