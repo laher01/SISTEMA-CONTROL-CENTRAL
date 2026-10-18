@@ -93,6 +93,8 @@ def reconciliar_intento(
         if otro_documento is not None:
             raise ValueError("Original compartido o reingresado: conciliación manual")
         # Todas las validaciones antes de actuar: un conflicto requiere revisión.
+        if vigente is None and original.exists():
+            raise ValueError("Ruta ocupada: posible reingesta concurrente")
         if vigente is not None and original.exists() and cuarentena.exists():
             raise ValueError("Conflicto entre original vigente y cuarentena")
         if vigente is not None and not original.exists() and not cuarentena.exists():
@@ -104,6 +106,7 @@ def reconciliar_intento(
                 cuarentena.replace(original)
         elif cuarentena.exists():
             cuarentena.unlink()
+        _sincronizar_directorio(original.parent)
     diario.unlink()
     _sincronizar_directorio(directorio)
     return "RECONCILIADO"
@@ -132,3 +135,9 @@ def reconciliar_pendientes(
         else:
             correctos += 1
     return correctos, errores
+
+
+def sincronizar_movimientos(pares: list[tuple[Path, Path]]) -> None:
+    """Persistir cambios de directorio antes de confirmar la transacción SQL."""
+    for directorio in sorted({origen.parent for origen, _ in pares}):
+        _sincronizar_directorio(directorio)
