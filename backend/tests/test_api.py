@@ -573,11 +573,14 @@ def test_documento_eliminado_puede_reingresarse_con_mismo_hash(
     client: TestClient, auth_prueba: AuthPrueba
 ) -> None:
     contenido = b"%PDF-1.7 documento de prueba para reingreso"
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
     original = subir(client, "original.pdf", contenido)
     auth_prueba.como_admin()
 
     respuesta = client.delete(f"/api/v1/documentos/{original['id']}")
     assert respuesta.status_code == 204, respuesta.text
+    auth_prueba.como_usuario(usuario_id)
 
     recarga = client.post("/api/v1/documentos", files={"archivo": ("recargado.pdf", contenido)})
     assert recarga.status_code == 201, recarga.text
@@ -601,9 +604,12 @@ def test_archivo_vigente_sigue_rechazando_duplicados_tras_reingreso(
     client: TestClient, auth_prueba: AuthPrueba
 ) -> None:
     contenido = b"%PDF-1.7 control de duplicado activo tras recarga"
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
     inicial = subir(client, "inicial.pdf", contenido)
     auth_prueba.como_admin()
     assert client.delete(f"/api/v1/documentos/{inicial['id']}").status_code == 204
+    auth_prueba.como_usuario(usuario_id)
 
     recargado = subir(client, "nuevo.pdf", contenido)
     assert recargado["id"] != inicial["id"]
