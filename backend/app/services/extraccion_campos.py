@@ -179,7 +179,7 @@ def extraer_campos(
             referencia.group(1).upper(), min(0.98, 0.96 * factor), evidencia
         ).a_dict(fuente)
         campos["correlativo"] = CampoExtraido(
-            str(int(referencia.group(2))), min(0.98, 0.96 * factor), evidencia
+            referencia.group(2), min(0.98, 0.96 * factor), evidencia
         ).a_dict(fuente)
 
     rucs = _rucs_en_texto(texto)
@@ -709,7 +709,7 @@ def _extraer_campos_fiscales_rhe(
             serie_numero.group(1).upper(), min(0.98, 0.98 * factor), evidencia
         ).a_dict(fuente)
         campos["correlativo"] = CampoExtraido(
-            str(int(serie_numero.group(2))), min(0.98, 0.98 * factor), evidencia
+            serie_numero.group(2), min(0.98, 0.98 * factor), evidencia
         ).a_dict(fuente)
 
     # Mes escrito con nombre: SUNAT también puede colocar la etiqueta al
