@@ -85,8 +85,8 @@ def reconciliar_intento(
         if vigente is not None and not original.exists() and not cuarentena.exists():
             raise ValueError("Falta original de documento vigente")
         operaciones.append((vigente is not None, original, cuarentena))
-    for vigente, original, cuarentena in operaciones:
-        if vigente:
+    for existe_en_bd, original, cuarentena in operaciones:
+        if existe_en_bd:
             if cuarentena.exists():
                 cuarentena.replace(original)
         elif cuarentena.exists():
