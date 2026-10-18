@@ -312,7 +312,15 @@ def resumen_empresas_por_rol(
                 Empresa.razon_social,
                 Expediente.moneda,
                 func.count(Expediente.id),
-                func.coalesce(func.sum(Expediente.importe_total), 0),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (Expediente.pendiente_aprobacion.is_(False), Expediente.importe_total),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
             )
             .join(Empresa, (Empresa.id == campo) & (Empresa.tenant_id == tenant_id))
             .where(*condiciones)
