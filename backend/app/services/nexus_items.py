@@ -9,6 +9,7 @@ from collections import defaultdict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.enums import TipoDocumento
 from app.item_models import LineaComprobanteItem
 from app.models import Documento, Empresa, Expediente
 from app.schemas import NexusChatOut
@@ -78,6 +79,27 @@ def _grupos_coincidentes(
     ]
 
 
+def _diesel_en_factura_procesada(datos: object) -> bool:
+    """Solo evidencias de una línea de venta, nunca menciones aisladas de combustible."""
+    if not isinstance(datos, dict):
+        return False
+    procesamiento = datos.get("procesamiento_documental")
+    if not isinstance(procesamiento, dict):
+        return False
+    texto = procesamiento.get("texto")
+    if not isinstance(texto, str):
+        return False
+    compacto = " ".join(_normalizar(texto).split())
+    if "factura" not in compacto:
+        return False
+    return bool(
+        re.search(
+            r"\\b(?:gll|gal|galones)\\s+(?:[a-z0-9-]+\\s+){0,3}diesel\\s+b5\\s+s50\\b",
+            compacto,
+        )
+    )
+
+
 def responder_items(
     session: Session, auth: ContextoAcceso, tipo: str, busqueda: str
 ) -> NexusChatOut:
@@ -127,6 +149,33 @@ def responder_items(
         else:
             conceptos[numero].add(descripcion)
 
+    evidencias_pdf: set[str] = set()
+    if tipo == "producto" and "petroleo" in grupos:
+        # Solo documentos FACT ya vinculados a expedientes autorizados.
+        pendientes = (
+            select(Expediente, Empresa.razon_social, Documento.datos_extraidos)
+            .join(Documento, Documento.expediente_id == Expediente.id)
+            .join(Empresa, Empresa.id == Expediente.receptor_id)
+            .where(
+                Expediente.tenant_id == auth.tenant_id,
+                Documento.tenant_id == auth.tenant_id,
+                Empresa.tenant_id == auth.tenant_id,
+                Documento.tipo_documento == TipoDocumento.FACT,
+                Expediente.deleted_at.is_(None),
+                Documento.deleted_at.is_(None),
+                *condiciones,
+            )
+        )
+        for expediente, cliente, datos in session.execute(pendientes):
+            numero = str(expediente.id)
+            if numero in por_grupo["petroleo"]:
+                continue
+            if _diesel_en_factura_procesada(datos):
+                expedientes[numero] = (expediente, cliente)
+                conceptos[numero].add("DIESEL B5 S50 (evidencia PDF/OCR)")
+                por_grupo["petroleo"].add(numero)
+                evidencias_pdf.add(numero)
+
     if tipo in {"producto", "libre"}:
         hallados = {k: v for k, v in conceptos.items() if v}
         ejemplos = [
@@ -140,6 +189,9 @@ def responder_items(
         if len(grupos) > 1:
             desglose = ", ".join(f"{grupo}: {len(por_grupo[grupo])}" for grupo in grupos)
             texto += f" Desglose por producto: {desglose}. Un comprobante puede contener varios."
+        if evidencias_pdf:
+            texto += (f" {len(evidencias_pdf)} coincidencia(s) provienen de texto PDF/OCR "
+                      "y requieren confirmar el ítem antes de consolidar contabilidad.")
         if ejemplos:
             texto += " Ejemplos: " + ", ".join(ejemplos) + "."
         if not hallados:
@@ -166,6 +218,7 @@ def responder_items(
         datos={
             "comprobantes_con_items": len(expedientes),
             "coincidencias": len(conceptos),
+            "evidencias_pdf_pendientes_confirmacion": len(evidencias_pdf),
             "coincidencias_por_producto": {k: len(v) for k, v in por_grupo.items()},
         },
     )
