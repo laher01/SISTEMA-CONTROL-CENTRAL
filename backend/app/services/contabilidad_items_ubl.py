@@ -152,12 +152,15 @@ def registrar_items_pdf_estacion(
         return 0
     if not (cantidad.is_finite() and cantidad > 0 and importe.is_finite() and importe > 0):
         return 0
-    if session.scalar(
-        select(LineaComprobanteItem.id).where(
+    existente = session.scalar(
+        select(LineaComprobanteItem.id)
+        .where(
             LineaComprobanteItem.tenant_id == tenant_id,
             LineaComprobanteItem.documento_id == documento_id,
-        ).limit(1)
-    ) is not None:
+        )
+        .limit(1)
+    )
+    if existente is not None:
         return 0
     descripcion = "DIESEL B5 S50"
     unidad = linea.group(2).upper()
