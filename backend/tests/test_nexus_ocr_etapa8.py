@@ -29,9 +29,7 @@ def test_referencia_chat_no_expone_datos_privados() -> None:
 
 
 def test_regla_aprobable_tiene_gramatica_restringida() -> None:
-    regla = validar_definicion(
-        {"campo": "serie", "patron": "FACTURA ELECTRONICA", "valor": "F109"}
-    )
+    regla = validar_definicion({"campo": "serie", "patron": "FACTURA ELECTRONICA", "valor": "F109"})
     assert vista_previa_regla(regla, "FACTURA ELECTRONICA F109") == {
         "campo": "serie",
         "valor_propuesto": "F109",
@@ -43,9 +41,7 @@ def test_regla_rechaza_comandos_o_campos_no_fiscales() -> None:
     import pytest
 
     with pytest.raises(ValueError):
-        validar_definicion(
-            {"campo": "__import__", "patron": "FACTURA", "valor": "F109"}
-        )
+        validar_definicion({"campo": "__import__", "patron": "FACTURA", "valor": "F109"})
     with pytest.raises(ValueError):
         validar_definicion(
             {"campo": "serie", "patron": "FACTURA", "valor": "F109", "script": "DROP"}
