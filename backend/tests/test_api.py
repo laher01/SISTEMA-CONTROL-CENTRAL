@@ -1247,3 +1247,49 @@ def test_previsualizar_retirada_no_filtra_identificadores_ajenos(
         assert respuesta.json()["resultados"][0]["estado"] == "NO_DISPONIBLE"
     finally:
         auth_prueba.contexto = anterior
+
+
+def test_retirar_lote_informa_fallos_y_no_borra_archivos(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    settings: Settings,
+) -> None:
+    primero = subir(client, "lote-uno.pdf", b"%PDF-1.7 primer lote")
+    segundo = subir(client, "lote-dos.pdf", b"%PDF-1.7 segundo lote")
+    auth_prueba.como_admin()
+    respuesta = client.post(
+        "/api/v1/documentos/retirar-lote",
+        json={"documentos_ids": [primero["id"], segundo["id"]]},
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["retirados"] == 2
+    for documento in (primero, segundo):
+        assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 404
+        original = (
+            settings.storage_dir
+            / str(auth_prueba.contexto.tenant_id)
+            / documento["sha256"][:2]
+            / documento["sha256"]
+        )
+        assert original.is_file()
+
+    repetido = client.post(
+        "/api/v1/documentos/retirar-lote",
+        json={"documentos_ids": [primero["id"], segundo["id"]]},
+    )
+    assert repetido.status_code == 200
+    assert repetido.json()["retirados"] == 0
+    assert all(fila["estado"] == "NO_RETIRADO" for fila in repetido.json()["resultados"])
+
+
+def test_retirar_lote_no_autoriza_superadmin(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
+    documento = subir(client, "superadmin-lote.pdf", b"%PDF-1.7 lote seguro")
+    auth_prueba.como_superadmin()
+    respuesta = client.post(
+        "/api/v1/documentos/retirar-lote",
+        json={"documentos_ids": [documento["id"]]},
+    )
+    assert respuesta.status_code == 403
