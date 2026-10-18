@@ -1,13 +1,17 @@
 """Prueba real SQLAlchemy/PostgreSQL: idempotencia y aislamiento multitenant."""
 
 import uuid
+from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.item_models import LineaComprobanteItem, ProductoItem
 from app.models import Documento, Tenant
-from app.services.contabilidad_items_ubl import registrar_items_ubl
+from app.services.contabilidad_items_ubl import (
+    registrar_items_pdf_estacion,
+    registrar_items_ubl,
+)
 
 XML = b"""<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
 xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
@@ -50,3 +54,40 @@ def test_items_ubl_idempotentes_y_separados_por_tenant(session: Session):
     assert session.scalar(select(func.count()).select_from(ProductoItem)) == 2
     productos = list(session.scalars(select(ProductoItem)))
     assert productos[0].tenant_id != productos[1].tenant_id
+
+
+TEXTO_ESCORPIO = (
+    "www.facturacion.jadal.pe FACTURA ELECTRÓNICA F109 Nº 0016494 "
+    "CANTIDAD CÓDIGO U.M DESCRIPCIÓN VALOR UNITARIO PRECIO UNITARIO IMPORTE "
+    "49.499 09 GLL DIESEL B5 S50 20.31 23.96 1,005.08"
+)
+
+
+def test_pdf_escorpio_persiste_items_sin_duplicar(session: Session) -> None:
+    tenant = Tenant(nombre="empresa_pdf")
+    session.add(tenant)
+    session.flush()
+    documento = _documento(session, tenant.id)
+    assert registrar_items_pdf_estacion(session, tenant.id, documento.id, TEXTO_ESCORPIO) == 1
+    session.flush()
+    assert registrar_items_pdf_estacion(session, tenant.id, documento.id, TEXTO_ESCORPIO) == 0
+    linea = session.scalar(
+        select(LineaComprobanteItem).where(LineaComprobanteItem.documento_id == documento.id)
+    )
+    assert linea is not None
+    assert linea.descripcion_original == "DIESEL B5 S50"
+    assert linea.cantidad == Decimal("49.499")
+    assert linea.unidad == "GLL"
+    assert linea.importe_linea == Decimal("1005.08")
+
+
+def test_pdf_no_registra_si_no_es_factura_escorpio(session: Session) -> None:
+    tenant = Tenant(nombre="empresa_control")
+    session.add(tenant)
+    session.flush()
+    documento = _documento(session, tenant.id)
+    assert registrar_items_pdf_estacion(session, tenant.id, documento.id, "GLL DIESEL B5 S50") == 0
+    guia = TEXTO_ESCORPIO.replace("FACTURA", "GUIA")
+    assert registrar_items_pdf_estacion(session, tenant.id, documento.id, guia) == 0
+    duplicado = TEXTO_ESCORPIO + " " + TEXTO_ESCORPIO
+    assert registrar_items_pdf_estacion(session, tenant.id, documento.id, duplicado) == 0
