@@ -6,10 +6,12 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
+from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.enums import RolMiembro
 from app.models import CasoOcr, Documento, ReglaOcr, ahora
 from app.services import auditoria
+from app.services.ingesta import ComprobanteYaRegistrado
+from app.services.procesamiento_documental import DocumentoNoProcesable
 from app.services.casos_ocr import clave_diagnostico, registrar_caso, serializar_caso
 from app.services.reglas_ocr import validar_definicion
 
@@ -186,3 +188,72 @@ def diagnostico_nexus(
         "diagnostico": "Revisar extracción dentro de sesión autorizada",
         "exportable_a_github": False,
     }
+
+
+class ReprocesarCasoIn(BaseModel):
+    confirmacion: str
+
+
+@router.post("/casos/{caso_id}/reprocesar")
+def reprocesar_caso(
+    caso_id: uuid.UUID,
+    datos: ReprocesarCasoIn,
+    session: SessionDep,
+    settings: SettingsDep,
+    almacen: AlmacenDep,
+    hoy: HoyDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, object]:
+    """Reintento manual controlado: usa el mismo motor y el mismo documento original."""
+    _admin(auth)
+    if datos.confirmacion != "AUTORIZO REPROCESAR OCR":
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Confirmación requerida")
+    caso = session.scalar(
+        select(CasoOcr)
+        .where(CasoOcr.tenant_id == tenant_id, CasoOcr.id == caso_id)
+        .with_for_update()
+    )
+    if caso is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Caso no encontrado")
+    if caso.estado == "REPROCESADO":
+        return {"id": str(caso.id), "estado": caso.estado, "idempotente": True}
+    if caso.intentos >= 3:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Límite de reintentos alcanzado")
+    documento = session.scalar(
+        select(Documento).where(
+            Documento.tenant_id == tenant_id,
+            Documento.id == caso.documento_id,
+            Documento.deleted_at.is_(None),
+        )
+    )
+    if documento is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Documento no encontrado")
+    if documento.expediente_id is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Documento ya vinculado a expediente")
+    # Se reutiliza el pipeline de producción; no se crea motor OCR alterno.
+    from app.api.routes.documentos import _procesar_y_aplicar
+
+    try:
+        resultado = _procesar_y_aplicar(
+            session, settings, almacen, hoy, documento,
+            reutilizar=False, forzar_cache=True,
+        )
+    except DocumentoNoProcesable:
+        session.rollback()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "OCR no procesable")
+    except ComprobanteYaRegistrado:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Identidad fiscal duplicada")
+    caso.intentos += 1
+    caso.estado = "REPROCESADO" if resultado.relacionado else "VALIDACION"
+    caso.ultimo_resultado = {
+        "estado": resultado.estado,
+        "relacionado": resultado.relacionado,
+    }
+    auditoria.registrar(
+        session, tenant_id, "CASO_OCR_REPROCESADO", "documento", documento.id,
+        {"caso_id": str(caso.id), "estado": caso.estado, "intentos": caso.intentos},
+    )
+    session.commit()
+    return {"id": str(caso.id), "estado": caso.estado, "idempotente": False}
