@@ -8,8 +8,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0040"
-down_revision = "0039"
+revision: str = "0040"
+down_revision: str | None = "0039"
 branch_labels = None
 depends_on = None
 
