@@ -66,6 +66,9 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
     offset: String(pagina * POR_PAGINA),
   });
   const { datos, error, cargando, recargar } = useDatos<Documento[]>(ruta);
+  const { datos: capacidades } = useDatos<{ puede_retirar: boolean; puede_restaurar: boolean }>(
+    "/api/v1/documentos/capacidades",
+  );
   const { datos: resumen } = useDatos<{
     total_documentos: number;
     total_expedientes: number;
@@ -252,7 +255,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
         <strong>{seleccionVisible.length} seleccionados en esta página</strong>
         <button
           className="peligro"
-          disabled={!seleccionVisible.length || eliminandoLote}
+          disabled={!capacidades?.puede_retirar || !seleccionVisible.length || eliminandoLote}
           onClick={eliminarSeleccionados}
         >
           {eliminandoLote ? "Retirando documentos…" : "Eliminar seleccionados"}
@@ -263,7 +266,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
           onClick={() => setSeleccionados([])}
         >Limpiar selección</button>
       </div>
-      <section aria-label="Documentos retirados">
+      {capacidades?.puede_restaurar && <section aria-label="Documentos retirados">
         <button
           className="secundario"
           type="button"
@@ -296,7 +299,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
             ))}
           </div>
         )}
-      </section>
+      </section>}
       {resultadoEliminacion && <p role="status">{resultadoEliminacion}</p>}
       {errorEliminacion && <p role="alert" className="error">{errorEliminacion}</p>}
 
