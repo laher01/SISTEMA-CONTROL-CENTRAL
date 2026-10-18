@@ -1,6 +1,9 @@
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from app.models import Expediente
 
 from tests.conftest import AuthPrueba
 from tests.xml import factura
@@ -58,3 +61,26 @@ def test_eliminar_documento_actualiza_resumen_sin_eliminar_otras_facturas(
     posterior = client.get("/api/v1/documentos/resumen")
     assert posterior.status_code == 200, posterior.text
     assert posterior.json()["total_documentos"] == 1
+
+
+def test_dashboard_no_suma_expediente_con_cliente_pendiente(
+    client: TestClient, session: Session
+) -> None:
+    respuesta = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("cliente-pendiente.xml", factura(numero="F001-00000998", importe="750.00"))},
+    )
+    assert respuesta.status_code == 201, respuesta.text
+    expediente = session.get(Expediente, respuesta.json()["expediente_id"])
+    assert expediente is not None
+    expediente.pendiente_aprobacion = True
+    session.commit()
+
+    panel = client.get("/api/v1/dashboard/resumen")
+    assert panel.status_code == 200, panel.text
+    resumen = panel.json()
+    assert resumen["pendientes_aprobacion"] >= 1
+    assert all(
+        Decimal(fila["bancarizable"]) + Decimal(fila["no_bancarizable"]) == 0
+        for fila in resumen["montos"]
+    )
