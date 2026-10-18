@@ -1193,6 +1193,23 @@ def provisionales_gre(
     ]
 
 
+@router.get("/capacidades")
+def capacidades_documentales(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, bool]:
+    """Permisos generales efectivos; el ámbito individual se valida en cada acción."""
+    permitido = auth.rol != RolMiembro.SUPERADMIN and permiso_habilitado(
+        session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS
+    )
+    return {
+        "puede_retirar": permitido,
+        "puede_restaurar": permitido,
+        "puede_eliminar_definitivamente": False,
+    }
+
+
 class PrevisualizacionRetiradaIn(BaseModel):
     documentos_ids: list[uuid.UUID] = Field(min_length=1, max_length=100)
 
