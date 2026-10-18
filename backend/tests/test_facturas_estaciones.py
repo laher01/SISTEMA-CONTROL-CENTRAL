@@ -55,7 +55,7 @@ def test_jabsa_ticket_factura_y_total() -> None:
     )
     campos = extraer_campos(texto, "TEXTO_PDF", 1.0)["campos"]
     assert campos["serie"]["valor"] == "F003"
-    assert campos["correlativo"]["valor"] == "4475"
+    assert campos["correlativo"]["valor"] == "00004475"
     assert campos["ruc_emisor"]["valor"] == "20374914201"
     assert campos["ruc_receptor"]["valor"] == "20538821374"
     assert campos["importe_total"]["valor"] == "3492.00"
