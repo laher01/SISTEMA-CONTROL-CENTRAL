@@ -8,6 +8,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 from pypdf import PdfReader
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -1190,6 +1191,44 @@ def provisionales_gre(
         }
         for ref, empresa in session.execute(consulta)
     ]
+
+
+class PrevisualizacionRetiradaIn(BaseModel):
+    documentos_ids: list[uuid.UUID] = Field(min_length=1, max_length=100)
+
+
+@router.post("/previsualizar-retirada")
+def previsualizar_retirada(
+    datos: PrevisualizacionRetiradaIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, object]:
+    """Verifica retiradas sin modificar estado ni exponer documentos fuera del ámbito."""
+    if auth.rol == RolMiembro.SUPERADMIN or not permiso_habilitado(
+        session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No tiene permiso para retirar registros")
+    if len(set(datos.documentos_ids)) != len(datos.documentos_ids):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "IDs repetidos en el lote")
+    resultados: list[dict[str, str]] = []
+    for documento_id in datos.documentos_ids:
+        documento = session.get(Documento, documento_id)
+        if documento is None or documento.tenant_id != tenant_id or documento.deleted_at:
+            resultados.append({"id": str(documento_id), "estado": "NO_DISPONIBLE"})
+            continue
+        try:
+            _validar_ambito_documento(auth, documento, session)
+        except HTTPException:
+            resultados.append({"id": str(documento_id), "estado": "NO_DISPONIBLE"})
+            continue
+        resultados.append({"id": str(documento_id), "estado": "APTO_RETIRADA"})
+    return {
+        "total": len(resultados),
+        "aptos": sum(fila["estado"] == "APTO_RETIRADA" for fila in resultados),
+        "resultados": resultados,
+        "solo_previsualizacion": True,
+    }
 
 
 @router.get("/retirados", response_model=list[DocumentoOut])
