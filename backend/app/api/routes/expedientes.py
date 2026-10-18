@@ -95,6 +95,7 @@ def crear(
             tipo_comprobante=datos.tipo_comprobante,
             serie=datos.serie,
             correlativo=datos.correlativo,
+            correlativo_original=datos.correlativo,
             fecha_emision=datos.fecha_emision,
             moneda=datos.moneda,
             importe_total=datos.importe_total,
