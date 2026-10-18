@@ -6,6 +6,7 @@ import json
 import os
 import pathlib
 import sys
+import stat
 import tarfile
 import tempfile
 
@@ -42,7 +43,7 @@ def _rollback(root_fd, created_files, created_dirs):
         fd = _open_directory(root_fd, parts[:-1], [], create=False)
         try:
             info = os.stat(parts[-1], dir_fd=fd, follow_symlinks=False)
-            if (info.st_dev, info.st_ino) != identity or not __import__('stat').S_ISREG(info.st_mode):
+            if (info.st_dev, info.st_ino) != identity or not stat.S_ISREG(info.st_mode):
                 raise ValueError('Rollback inode changed; preserve foreign file and quarantine')
             os.unlink(parts[-1], dir_fd=fd)
         finally:
