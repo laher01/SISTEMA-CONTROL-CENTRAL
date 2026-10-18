@@ -1319,7 +1319,6 @@ def test_retirar_lote_no_elimina_documento_de_otro_tenant(
     assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
 
 
-
 def test_diagnostico_documental_es_solo_lectura_y_de_administrador(
     client: TestClient,
     auth_prueba: AuthPrueba,
