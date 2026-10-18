@@ -1117,7 +1117,8 @@ Fecha de emisión"""
 
 
 def test_restaurar_documento_retirado_conserva_original(
-    client: TestClient, auth_prueba: AuthPrueba,
+    client: TestClient,
+    auth_prueba: AuthPrueba,
 ) -> None:
     documento = subir(client, "restaurable.pdf", b"%PDF-1.7 restauracion de prueba")
     auth_prueba.como_admin()
@@ -1138,7 +1139,8 @@ def test_restaurar_sin_documento_retirado_devuelve_404(client: TestClient) -> No
 
 
 def test_restauracion_denegada_a_superadmin(
-    client: TestClient, auth_prueba: AuthPrueba,
+    client: TestClient,
+    auth_prueba: AuthPrueba,
 ) -> None:
     documento = subir(client, "privado.pdf", b"%PDF-1.7 solo tenant")
     auth_prueba.como_admin()
@@ -1148,14 +1150,18 @@ def test_restauracion_denegada_a_superadmin(
 
 
 def test_restauracion_rechaza_original_ausente(
-    client: TestClient, auth_prueba: AuthPrueba, settings: Settings,
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    settings: Settings,
 ) -> None:
     documento = subir(client, "ausente.pdf", b"%PDF-1.7 archivo de prueba")
     auth_prueba.como_admin()
     assert client.delete(f"/api/v1/documentos/{documento['id']}").status_code == 204
     original = (
-        settings.storage_dir / str(auth_prueba.contexto.tenant_id)
-        / documento["sha256"][:2] / documento["sha256"]
+        settings.storage_dir
+        / str(auth_prueba.contexto.tenant_id)
+        / documento["sha256"][:2]
+        / documento["sha256"]
     )
     original.unlink()
     respuesta = client.post(f"/api/v1/documentos/{documento['id']}/restaurar")
@@ -1164,7 +1170,8 @@ def test_restauracion_rechaza_original_ausente(
 
 
 def test_restauracion_rechaza_tenant_ajeno(
-    client: TestClient, auth_prueba: AuthPrueba,
+    client: TestClient,
+    auth_prueba: AuthPrueba,
 ) -> None:
     from dataclasses import replace
     from uuid import uuid4
