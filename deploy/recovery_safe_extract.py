@@ -71,7 +71,7 @@ def extract(archive_path, manifest_path, target):
                 h.update(chunk)
                 dst.write(chunk)
         if h.hexdigest() != manifest["archive_sha256"]:
-            raise ValueError("Archive hash mismatch")
+            raise ValueError("Archive checksum mismatch")
         compare(manifest, inspect_tar(frozen))
         root_fd = os.open(root, DIR_FLAGS)
         created_files, created_dirs = [], []
