@@ -100,7 +100,9 @@ def _diesel_en_factura_procesada(datos: object) -> bool:
     )
 
 
-def seguimiento_proveedor(mensaje: str, historial: list[NexusMensajeHistorial]) -> tuple[str, str] | None:
+def seguimiento_proveedor(
+    mensaje: str, historial: list[NexusMensajeHistorial]
+) -> tuple[str, str] | None:
     """Recupera el último filtro de producto del historial de esta solicitud."""
     normal = _normalizar(mensaje)
     coincide = re.search(r"(?:cuantas?|cuantos?|cuales?)\s+(?:son\s+)?de\s+([\w ]+)", normal)
