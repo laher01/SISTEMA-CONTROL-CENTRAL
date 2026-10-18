@@ -99,6 +99,24 @@ export default function Pendientes() {
   const retirarSeleccionados = async () => {
     const visibles = (datos ?? []).filter((d) => seleccionados.includes(d.id));
     if (!visibles.length || retirandoSeleccionados) return;
+    try {
+      const vista = await enviarJson<{
+        total: number;
+        aptos: number;
+        resultados: { id: string; estado: string }[];
+      }>("/api/v1/documentos/previsualizar-retirada", "POST", {
+        documentos_ids: visibles.map((d) => d.id),
+      });
+      if (vista.aptos !== visibles.length) {
+        setErrorRetirada(
+          `Solo ${vista.aptos} de ${visibles.length} documentos tienen autorización para retirarse. Actualice la bandeja.`,
+        );
+        return;
+      }
+    } catch (error) {
+      setErrorRetirada(error instanceof Error ? error.message : String(error));
+      return;
+    }
     if (!window.confirm(`¿Retirar ${visibles.length} documentos pendientes? Los originales se conservarán.`)) return;
     setRetirandoSeleccionados(true);
     setErrorRetirada("");
