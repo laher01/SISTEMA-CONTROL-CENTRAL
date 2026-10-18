@@ -107,9 +107,7 @@ def test_reintento_no_procesa_dos_veces(session: Session, tmp_path) -> None:
     assert listar_intentos(almacen, tenant_id) == []
 
 
-def test_reingesta_mismo_sha_impide_purgar_cuarentena_antigua(
-    session: Session, tmp_path
-) -> None:
+def test_reingesta_mismo_sha_impide_purgar_cuarentena_antigua(session: Session, tmp_path) -> None:
     tenant = Tenant(nombre="tenant_reingesta_concurrente_280")
     session.add(tenant)
     session.flush()
