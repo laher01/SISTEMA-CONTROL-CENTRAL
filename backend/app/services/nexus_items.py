@@ -190,8 +190,10 @@ def responder_items(
             desglose = ", ".join(f"{grupo}: {len(por_grupo[grupo])}" for grupo in grupos)
             texto += f" Desglose por producto: {desglose}. Un comprobante puede contener varios."
         if evidencias_pdf:
-            texto += (f" {len(evidencias_pdf)} coincidencia(s) provienen de texto PDF/OCR "
-                      "y requieren confirmar el ítem antes de consolidar contabilidad.")
+            texto += (
+                f" {len(evidencias_pdf)} coincidencia(s) provienen de texto PDF/OCR "
+                "y requieren confirmar el ítem antes de consolidar contabilidad."
+            )
         if ejemplos:
             texto += " Ejemplos: " + ", ".join(ejemplos) + "."
         if not hallados:
