@@ -697,6 +697,8 @@ def test_gestor_propietario_elimina_factura_integral_y_reingresa_mismo_xml(
     recargado = subir(client, "integral-otra-vez.xml", contenido)
     assert recargado["id"] != documento["id"]
     assert recargado["expediente_id"] != expediente_id
+    voucher_nuevo = subir(client, "voucher-mismo-pdf.pdf", b"%PDF-1.7 pago relacionado")
+    assert voucher_nuevo["id"] != voucher["id"]
 
 
 def test_otro_gestor_no_elimina_factura_ajena(
