@@ -90,6 +90,22 @@ def eliminar_expediente_del_gestor(
     if referencia_externa is not None:
         raise EliminacionNoSegura("Referencia GRE de otro documento")
 
+    # Una referencia física compartida nunca debe borrarse junto con este expediente.
+    # Restringir por tenant y comprobar además el resto de registros activos.
+    rutas = [d.ruta_storage for d in documentos]
+    if len(set(rutas)) != len(rutas):
+        raise EliminacionNoSegura("Original compartido por documentos del expediente")
+    referencia_archivo = session.scalar(
+        select(Documento.id)
+        .where(
+            Documento.ruta_storage.in_(rutas),
+            Documento.id.not_in(ids),
+        )
+        .limit(1)
+    )
+    if referencia_archivo is not None:
+        raise EliminacionNoSegura("Original referenciado por otro documento")
+
     # Solo rutas por SHA bajo la raíz del tenant y sin vínculos físicos externos.
     pares = []
     for doc in documentos:
