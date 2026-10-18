@@ -1204,3 +1204,46 @@ def test_listar_retirados_respeta_estado_y_permiso(
 
     auth_prueba.como_superadmin()
     assert client.get("/api/v1/documentos/retirados").status_code == 403
+
+
+
+def test_previsualizar_retirada_no_cambia_documentos(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
+    documento = subir(client, "previsualizar.pdf", b"%PDF-1.7 vista previa")
+    auth_prueba.como_admin()
+    ruta = "/api/v1/documentos/previsualizar-retirada"
+    respuesta = client.post(ruta, json={"documentos_ids": [documento["id"]]})
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["aptos"] == 1
+    assert respuesta.json()["solo_previsualizacion"] is True
+    assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
+    assert client.post(
+        ruta, json={"documentos_ids": [documento["id"], documento["id"]]}
+    ).status_code == 422
+    auth_prueba.como_superadmin()
+    assert client.post(ruta, json={"documentos_ids": [documento["id"]]}).status_code == 403
+
+
+def test_previsualizar_retirada_no_filtra_identificadores_ajenos(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
+    from dataclasses import replace
+    from uuid import uuid4
+
+    documento = subir(client, "preview-ajeno.pdf", b"%PDF-1.7 documento ajeno")
+    auth_prueba.como_admin()
+    anterior = auth_prueba.contexto
+    auth_prueba.contexto = replace(anterior, tenant_id=uuid4())
+    try:
+        respuesta = client.post(
+            "/api/v1/documentos/previsualizar-retirada",
+            json={"documentos_ids": [documento["id"]]},
+        )
+        assert respuesta.status_code == 200, respuesta.text
+        assert respuesta.json()["aptos"] == 0
+        assert respuesta.json()["resultados"][0]["estado"] == "NO_DISPONIBLE"
+    finally:
+        auth_prueba.contexto = anterior
