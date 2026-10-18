@@ -2,6 +2,7 @@
 
 La recuperación se ejecuta explícitamente; nunca borra un archivo vigente.
 """
+
 import json
 import os
 import uuid
