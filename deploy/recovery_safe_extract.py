@@ -3,6 +3,9 @@
 import argparse
 import hashlib
 import json
+import os
+import stat
+import tempfile
 import pathlib
 import sys
 import tarfile
@@ -22,6 +25,19 @@ def extract(archive_path, manifest_path, target):
         archive_hash = hashlib.file_digest(inp, "sha256").hexdigest()
     if manifest["archive_sha256"] != archive_hash:
         raise ValueError("Archive checksum mismatch")
+    # Freeze a private copy so subsequent reads cannot follow a mutable source path.
+    with tempfile.TemporaryDirectory(prefix='fc-audit-') as private:
+        frozen = pathlib.Path(private) / 'backup.tar.gz'
+        with archive.open('rb') as source, frozen.open('xb') as dest:
+            while part := source.read(1048576):
+                dest.write(part)
+        with frozen.open('rb') as source:
+            if hashlib.file_digest(source, 'sha256').hexdigest() != archive_hash:
+                raise ValueError('Backup changed during inspection')
+        return _extract_frozen(frozen, manifest, target)
+
+
+def _extract_frozen(archive, manifest, target):
     entries = inspect_tar(archive)
     compare(manifest, entries)
     # Read from the same archived path after audit and re-verify each extracted byte.
@@ -34,6 +50,8 @@ def extract(archive_path, manifest_path, target):
                 expected = manifest["files"][name]
                 dest = target.joinpath(*name.split("/"))
                 dest.parent.mkdir(parents=True, exist_ok=True)
+                if any(p.is_symlink() for p in (dest.parent, *dest.parent.parents)):
+                    raise ValueError('Symlink in extracted destination')
                 if dest.exists() or dest.is_symlink():
                     raise ValueError("Output conflict")
                 content = tf.extractfile(member)
@@ -51,7 +69,12 @@ def extract(archive_path, manifest_path, target):
                 if total != expected["size"] or h.hexdigest() != expected["sha256"]:
                     raise ValueError("Extracted file checksum mismatch")
     except Exception:
-        # Caller owns cleanup of disposable directory; never promote partial contents.
+        # On failure remove only generated contents inside the disposable target.
+        for candidate in sorted(target.rglob('*'), key=lambda p: len(p.parts), reverse=True):
+            if candidate.is_symlink() or candidate.is_file():
+                candidate.unlink()
+            elif candidate.is_dir():
+                candidate.rmdir()
         raise
     print("SAFE_SYNTHETIC_EXTRACTION_VERIFIED")
 
