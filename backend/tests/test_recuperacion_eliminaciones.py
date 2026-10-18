@@ -1,4 +1,5 @@
 """Recuperación durable de archivos tras interrupción de eliminación."""
+
 import uuid
 
 import pytest
@@ -14,9 +15,7 @@ from app.services.recuperacion_eliminaciones import (
 from app.storage import AlmacenLocal
 
 
-def test_recupera_original_si_documento_permanece_en_bd(
-    session: Session, tmp_path
-) -> None:
+def test_recupera_original_si_documento_permanece_en_bd(session: Session, tmp_path) -> None:
     tenant = Tenant(nombre="tenant_recuperacion_280")
     session.add(tenant)
     session.flush()
@@ -46,9 +45,7 @@ def test_recupera_original_si_documento_permanece_en_bd(
     assert listar_intentos(almacen, tenant.id) == []
 
 
-def test_limpia_cuarentena_si_documento_ya_no_existe(
-    session: Session, tmp_path
-) -> None:
+def test_limpia_cuarentena_si_documento_ya_no_existe(session: Session, tmp_path) -> None:
     tenant_id = uuid.uuid4()
     almacen = AlmacenLocal(tmp_path)
     contenido = b"%PDF prueba eliminada"
@@ -63,9 +60,7 @@ def test_limpia_cuarentena_si_documento_ya_no_existe(
     assert not diario.exists()
 
 
-def test_no_sobrescribe_original_si_hay_conflicto(
-    session: Session, tmp_path
-) -> None:
+def test_no_sobrescribe_original_si_hay_conflicto(session: Session, tmp_path) -> None:
     tenant = Tenant(nombre="tenant_conflicto_280")
     session.add(tenant)
     session.flush()
@@ -95,9 +90,7 @@ def test_no_sobrescribe_original_si_hay_conflicto(
     assert diario.exists()
 
 
-def test_reintento_no_procesa_dos_veces(
-    session: Session, tmp_path
-) -> None:
+def test_reintento_no_procesa_dos_veces(session: Session, tmp_path) -> None:
     tenant_id = uuid.uuid4()
     almacen = AlmacenLocal(tmp_path)
     ruta = almacen.guardar(tenant_id, "d" * 64, b"historico")
