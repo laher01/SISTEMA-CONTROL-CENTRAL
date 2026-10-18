@@ -29,15 +29,10 @@ def cleanup(root, *, now, ttl, dry_run=True):
         if data.get("kind") != "factcentral-ci-ephemeral" or data.get("name") != candidate.name:
             continue
         pid = data.get("pid")
-        if type(pid) is int and pid > 0:
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
-                pass
-            except PermissionError:
-                continue
-            else:
-                continue
+        # Do not act on PID-marked resources: reused PIDs cannot prove ownership.
+        # A future authenticated lease/reconciler must decide their disposition.
+        if pid is not None:
+            continue
         if any(os.path.ismount(p) for p in (candidate, *candidate.rglob("*"))):
             continue
         if any(p.is_symlink() for p in candidate.rglob("*")):
