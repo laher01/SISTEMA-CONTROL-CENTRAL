@@ -4,7 +4,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models import Expediente
-
 from tests.conftest import AuthPrueba
 from tests.xml import factura
 
@@ -68,7 +67,12 @@ def test_dashboard_no_suma_expediente_con_cliente_pendiente(
 ) -> None:
     respuesta = client.post(
         "/api/v1/documentos",
-        files={"archivo": ("cliente-pendiente.xml", factura(numero="F001-00000998", importe="750.00"))},
+        files={
+            "archivo": (
+                "cliente-pendiente.xml",
+                factura(numero="F001-00000998", importe="750.00"),
+            )
+        },
     )
     assert respuesta.status_code == 201, respuesta.text
     expediente = session.get(Expediente, respuesta.json()["expediente_id"])
