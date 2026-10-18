@@ -62,7 +62,7 @@ def diagnostico_escorpio_p0(
     almacen: AlmacenDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
-) -> list[dict]:
+) -> list[dict[str, object]]:
     """Solo lectura: requiere administrador, sin aplicar modificaciones."""
     if auth.rol not in (RolMiembro.ADMINISTRADOR, RolMiembro.SUPERADMIN):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo administradores")
