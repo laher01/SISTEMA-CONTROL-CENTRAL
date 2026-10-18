@@ -71,3 +71,15 @@ def test_desglose_de_productos_sin_contar_subcadenas() -> None:
     assert _grupos_coincidentes("AGUA SPORADE", grupos, catalogo) == grupos
     assert _grupos_coincidentes("AGUARDIENTE", grupos, catalogo) == []
     assert _grupos_coincidentes("SPORADE", grupos, catalogo) == ["sporade"]
+
+
+def test_consulta_libre_elimina_muletillas_sin_perder_producto() -> None:
+    assert consulta_items_solicitada("¿Y de tornillos hay?") == ("libre", "tornillos")
+    assert consulta_items_solicitada("¿Facturas de lubricantes tenemos?") == (
+        "libre",
+        "lubricantes",
+    )
+    assert consulta_items_solicitada("¿Facturas de sal industrial?") == (
+        "libre",
+        "sal industrial",
+    )
