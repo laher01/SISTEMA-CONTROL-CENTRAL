@@ -4,10 +4,8 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
-from sqlalchemy.orm import sessionmaker
-
 import pytest
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import Documento, Tenant
 from app.services.recuperacion_eliminaciones import (
