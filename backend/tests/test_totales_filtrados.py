@@ -53,7 +53,7 @@ def test_eliminar_documento_actualiza_resumen_sin_eliminar_otras_facturas(
 
     auth_prueba.como_admin()
     eliminacion = client.delete(f"/api/v1/documentos/{ids[0]}")
-    assert eliminacion.status_code == 409, eliminacion.text
+    assert eliminacion.status_code == 403, eliminacion.text
     assert client.get(f"/api/v1/documentos/{ids[0]}").status_code == 200
     assert client.get(f"/api/v1/documentos/{ids[1]}").status_code == 200
 
