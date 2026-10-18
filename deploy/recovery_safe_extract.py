@@ -16,17 +16,18 @@ DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 FILE_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
 
 
-def _open_directory(root_fd, parts, created_dirs):
+def _open_directory(root_fd, parts, created_dirs, *, create=True):
     fd = os.dup(root_fd)
     try:
         path = []
         for part in parts:
             path.append(part)
-            try:
-                os.mkdir(part, 0o700, dir_fd=fd)
-                created_dirs.append(tuple(path))
-            except FileExistsError:
-                pass
+            if create:
+                try:
+                    os.mkdir(part, 0o700, dir_fd=fd)
+                    created_dirs.append(tuple(path))
+                except FileExistsError:
+                    pass
             next_fd = os.open(part, DIR_FLAGS, dir_fd=fd)
             os.close(fd)
             fd = next_fd
@@ -38,7 +39,7 @@ def _open_directory(root_fd, parts, created_dirs):
 
 def _rollback(root_fd, created_files, created_dirs):
     for parts in reversed(created_files):
-        fd = _open_directory(root_fd, parts[:-1], [])
+        fd = _open_directory(root_fd, parts[:-1], [], create=False)
         try:
             os.unlink(parts[-1], dir_fd=fd)
         finally:
