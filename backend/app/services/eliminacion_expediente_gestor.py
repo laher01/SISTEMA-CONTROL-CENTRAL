@@ -17,6 +17,7 @@ from app.models import (
     RelacionDocumento,
 )
 from app.services import auditoria
+from app.services.bloqueo_documental import bloquear_tenant_documental
 from app.services.recuperacion_eliminaciones import (
     reconciliar_intento,
     registrar_intento,
@@ -41,6 +42,7 @@ def eliminar_expediente_del_gestor(
     Rechaza vínculos externos, pagos ERP asociados y dueños desconocidos.
     No borra expedientes ajenos ni documentos de otros gestores.
     """
+    bloquear_tenant_documental(session, tenant_id)
     expediente = session.scalar(
         select(Expediente)
         .where(Expediente.id == expediente_id, Expediente.tenant_id == tenant_id)
