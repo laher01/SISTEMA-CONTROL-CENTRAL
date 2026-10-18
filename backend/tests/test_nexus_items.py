@@ -113,7 +113,5 @@ def test_seguimiento_proveedor_conserva_producto_anterior() -> None:
         "escorpio",
     )
     assert seguimiento_proveedor("¿Cuántas son de Escorpio?", []) is None
-    assert seguimiento_proveedor(
-        "¿Cuántas son de Escorpio?",
-        [NexusMensajeHistorial(autor="usuario", texto="hola")],
-    ) is None
+    historial_sin_producto = [NexusMensajeHistorial(autor="usuario", texto="hola")]
+    assert seguimiento_proveedor("¿Cuántas son de Escorpio?", historial_sin_producto) is None
