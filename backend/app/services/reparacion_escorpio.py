@@ -82,7 +82,9 @@ def diagnosticar(session: Session, almacen: AlmacenLocal, tenant_id) -> list[Dia
     )
     resultados = []
     for expediente in expedientes:
-        receptor_ruc = session.scalar(\n            select(Empresa.ruc).where(Empresa.id == expediente.receptor_id)\n        )
+        receptor_ruc = session.scalar(
+            select(Empresa.ruc).where(Empresa.id == expediente.receptor_id)
+        )
         if receptor_ruc not in OBJETIVOS:
             continue
         esperado = OBJETIVOS[receptor_ruc]
