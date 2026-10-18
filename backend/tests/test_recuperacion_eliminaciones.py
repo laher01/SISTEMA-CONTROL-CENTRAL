@@ -48,7 +48,10 @@ def test_recupera_original_si_documento_permanece_en_bd(session: Session, tmp_pa
 
 
 def test_limpia_cuarentena_si_documento_ya_no_existe(session: Session, tmp_path) -> None:
-    tenant_id = uuid.uuid4()
+    tenant = Tenant(nombre=f"tenant_diario_{uuid.uuid4()}")
+    session.add(tenant)
+    session.flush()
+    tenant_id = tenant.id
     almacen = AlmacenLocal(tmp_path)
     contenido = b"%PDF prueba eliminada"
     ruta = almacen.guardar(tenant_id, "b" * 64, contenido)
@@ -93,7 +96,10 @@ def test_no_sobrescribe_original_si_hay_conflicto(session: Session, tmp_path) ->
 
 
 def test_reintento_no_procesa_dos_veces(session: Session, tmp_path) -> None:
-    tenant_id = uuid.uuid4()
+    tenant = Tenant(nombre=f"tenant_diario_{uuid.uuid4()}")
+    session.add(tenant)
+    session.flush()
+    tenant_id = tenant.id
     almacen = AlmacenLocal(tmp_path)
     ruta = almacen.guardar(tenant_id, "d" * 64, b"historico")
     original = almacen.ruta_absoluta(ruta)
@@ -145,7 +151,10 @@ def test_reingesta_mismo_sha_impide_purgar_cuarentena_antigua(session: Session, 
 def test_reconciliacion_no_borra_cuarentena_con_ruta_ocupada_sin_commit(
     session: Session, tmp_path
 ) -> None:
-    tenant_id = uuid.uuid4()
+    tenant = Tenant(nombre=f"tenant_diario_{uuid.uuid4()}")
+    session.add(tenant)
+    session.flush()
+    tenant_id = tenant.id
     almacen = AlmacenLocal(tmp_path)
     ruta = almacen.guardar(tenant_id, "f" * 64, b"archivo original")
     original = almacen.ruta_absoluta(ruta)
@@ -236,7 +245,10 @@ def test_recuperacion_multitenant_no_toca_diario_ajeno(engine, session: Session,
 def test_fallo_intermedio_conserva_diario_para_reintento(
     session: Session, tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    tenant_id = uuid.uuid4()
+    tenant = Tenant(nombre=f"tenant_diario_{uuid.uuid4()}")
+    session.add(tenant)
+    session.flush()
+    tenant_id = tenant.id
     almacen = AlmacenLocal(tmp_path)
     ruta = almacen.guardar(tenant_id, "3" * 64, b"pendiente de limpieza")
     original = almacen.ruta_absoluta(ruta)
