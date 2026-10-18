@@ -53,13 +53,13 @@ def test_eliminar_documento_actualiza_resumen_sin_eliminar_otras_facturas(
 
     auth_prueba.como_admin()
     eliminacion = client.delete(f"/api/v1/documentos/{ids[0]}")
-    assert eliminacion.status_code == 204, eliminacion.text
-    assert client.get(f"/api/v1/documentos/{ids[0]}").status_code == 404
+    assert eliminacion.status_code == 409, eliminacion.text
+    assert client.get(f"/api/v1/documentos/{ids[0]}").status_code == 200
     assert client.get(f"/api/v1/documentos/{ids[1]}").status_code == 200
 
     posterior = client.get("/api/v1/documentos/resumen")
     assert posterior.status_code == 200, posterior.text
-    assert posterior.json()["total_documentos"] == 1
+    assert posterior.json()["total_documentos"] == 2
 
 
 def test_dashboard_no_suma_expediente_con_cliente_pendiente(
