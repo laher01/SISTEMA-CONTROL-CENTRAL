@@ -2,11 +2,14 @@
 
 from fastapi.testclient import TestClient
 
+from app.schemas import NexusMensajeHistorial
+
 from app.services.nexus_items import (
     _contiene_termino,
     _diesel_en_factura_procesada,
     _grupos_coincidentes,
     consulta_items_solicitada,
+    seguimiento_proveedor,
 )
 from tests.xml import factura
 
@@ -99,3 +102,19 @@ def test_diesel_en_pdf_procesado_requiere_linea_y_tipo_factura() -> None:
         {"procesamiento_documental": {"texto": "GLL DIESEL B5 S50"}}
     )
     assert not _diesel_en_factura_procesada({})
+
+
+def test_seguimiento_proveedor_conserva_producto_anterior() -> None:
+    historial = [
+        NexusMensajeHistorial(autor="usuario", texto="¿Cuántas facturas tienen DIESEL?"),
+        NexusMensajeHistorial(autor="nexus", texto="Encontré seis coincidencias."),
+    ]
+    assert seguimiento_proveedor("¿Cuántas son de Escorpio?", historial) == (
+        "petroleo",
+        "escorpio",
+    )
+    assert seguimiento_proveedor("¿Cuántas son de Escorpio?", []) is None
+    assert seguimiento_proveedor(
+        "¿Cuántas son de Escorpio?",
+        [NexusMensajeHistorial(autor="usuario", texto="hola")],
+    ) is None
