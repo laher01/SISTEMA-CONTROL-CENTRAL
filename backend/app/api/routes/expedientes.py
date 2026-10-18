@@ -941,7 +941,7 @@ def eliminar(
         raise no_encontrado("Expediente")
     if not _visible_para_auth(expediente, auth, session):
         raise no_encontrado("Expediente")
-    if not permiso_habilitado(
+    if auth.rol == RolMiembro.SUPERADMIN or not permiso_habilitado(
         session,
         tenant_id,
         auth.rol,
