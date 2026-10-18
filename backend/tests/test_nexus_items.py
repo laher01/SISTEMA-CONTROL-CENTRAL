@@ -2,7 +2,7 @@
 
 from fastapi.testclient import TestClient
 
-from app.services.nexus_items import consulta_items_solicitada
+from app.services.nexus_items import _contiene_termino, consulta_items_solicitada
 from tests.xml import factura
 
 
@@ -47,3 +47,15 @@ def test_consultas_escritas_con_errores_y_productos_nuevos() -> None:
     assert consulta_items_solicitada("y de llantas hay") == ("producto", "llantas")
     assert consulta_items_solicitada("y agua y sporade") == ("producto", "agua,sporade")
     assert consulta_items_solicitada("facturas de lubricantes") == ("libre", "lubricantes")
+
+
+def test_busqueda_no_confunde_palabras_compuestas() -> None:
+    assert consulta_items_solicitada("¿Cuántas facturas de aguardiente?") == (
+        "libre",
+        "aguardiente",
+    )
+    assert _contiene_termino("aguardiente mineral", "agua") is False
+    assert _contiene_termino("agua mineral", "agua") is True
+    assert _contiene_termino("aceite para neumáticos", "neumatico") is False
+    assert _contiene_termino("neumaticos", "neumatico") is False
+    assert consulta_items_solicitada("¿Y agua y Sporade?") == ("producto", "agua,sporade")
