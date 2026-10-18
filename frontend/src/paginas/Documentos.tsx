@@ -163,14 +163,24 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
     setResultadoEliminacion("");
     const retirados: string[] = [];
     const fallos: string[] = [];
-    for (const documento of elegidos) {
-      try {
-        await eliminar(`/api/v1/documentos/${documento.id}`);
-        retirados.push(documento.id);
-      } catch (error) {
-        const detalle = error instanceof Error ? error.message : String(error);
-        fallos.push(`${documento.nombre_original}: ${detalle}`);
+    try {
+      const resultado = await enviarJson<{
+        retirados: number;
+        resultados: { id: string; estado: string; codigo?: string }[];
+      }>("/api/v1/documentos/retirar-lote", "POST", {
+        documentos_ids: elegidos.map((d) => d.id),
+      });
+      for (const fila of resultado.resultados) {
+        if (fila.estado === "RETIRADO") retirados.push(fila.id);
+        else {
+          const documento = elegidos.find((d) => d.id === fila.id);
+          fallos.push(`${documento?.nombre_original ?? fila.id}: error ${fila.codigo ?? "desconocido"}`);
+        }
       }
+    } catch (error) {
+      setErrorEliminacion(error instanceof Error ? error.message : String(error));
+      setEliminandoLote(false);
+      return;
     }
     setSeleccionados((actual) => actual.filter((id) => !retirados.includes(id)));
     setResultadoEliminacion(`${retirados.length} documento(s) retirado(s) de ${elegidos.length}.`);
