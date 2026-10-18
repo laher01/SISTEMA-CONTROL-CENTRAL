@@ -1451,3 +1451,48 @@ def test_retirada_y_restauracion_recalculan_expediente_y_alertas(
     despues = expediente(client, expediente_id)
     assert any(item["id"] == documento["id"] for item in despues["documentos"])
     assert alertas_abiertas(despues) == alertas_antes
+
+
+def test_retirada_restauracion_conserva_gre_y_pago_voucher(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    session: Session,
+) -> None:
+    from uuid import UUID
+
+    from app.models import PagoERP, ReferenciaGRE
+
+    documento = subir(client, "vinculos.pdf", b"%PDF-1.7 documento referenciado")
+    doc_id = UUID(str(documento["id"]))
+    tenant_id = auth_prueba.contexto.tenant_id
+    referencia = ReferenciaGRE(
+        tenant_id=tenant_id,
+        documento_id=doc_id,
+        serie="F001",
+        correlativo="25",
+        emisor_ruc="20123456789",
+        receptor_ruc="20987654321",
+    )
+    pago = PagoERP(
+        tenant_id=tenant_id,
+        usuario_id=auth_prueba.contexto.miembro_id,
+        periodo_desde=date(2026, 9, 1),
+        periodo_hasta=date(2026, 9, 30),
+        moneda="PEN",
+        produccion_total=Decimal("150.00"),
+        porcentaje=Decimal("10.00"),
+        bruto=Decimal("15.00"),
+        saldo=Decimal("15.00"),
+        voucher_documento_id=doc_id,
+    )
+    session.add_all([referencia, pago])
+    session.commit()
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/documentos/{doc_id}").status_code == 204
+    session.expire_all()
+    assert session.get(ReferenciaGRE, referencia.id).documento_id == doc_id
+    assert session.get(PagoERP, pago.id).voucher_documento_id == doc_id
+    assert client.post(f"/api/v1/documentos/{doc_id}/restaurar").status_code == 200
+    session.expire_all()
+    assert session.get(ReferenciaGRE, referencia.id).documento_id == doc_id
+    assert session.get(PagoERP, pago.id).voucher_documento_id == doc_id
