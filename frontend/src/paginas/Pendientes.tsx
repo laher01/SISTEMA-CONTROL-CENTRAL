@@ -123,13 +123,24 @@ export default function Pendientes() {
     setResultadoRetirada("");
     const retirados: string[] = [];
     const errores: string[] = [];
-    for (const documento of visibles) {
-      try {
-        await eliminar(`/api/v1/documentos/${documento.id}`);
-        retirados.push(documento.id);
-      } catch (error) {
-        errores.push(`${documento.nombre_original}: ${error instanceof Error ? error.message : String(error)}`);
+    try {
+      const resultado = await enviarJson<{
+        retirados: number;
+        resultados: { id: string; estado: string; codigo?: string }[];
+      }>("/api/v1/documentos/retirar-lote", "POST", {
+        documentos_ids: visibles.map((d) => d.id),
+      });
+      for (const fila of resultado.resultados) {
+        if (fila.estado === "RETIRADO") retirados.push(fila.id);
+        else {
+          const documento = visibles.find((d) => d.id === fila.id);
+          errores.push(`${documento?.nombre_original ?? fila.id}: error ${fila.codigo ?? "desconocido"}`);
+        }
       }
+    } catch (error) {
+      setErrorRetirada(error instanceof Error ? error.message : String(error));
+      setRetirandoSeleccionados(false);
+      return;
     }
     setSeleccionados((actual) => actual.filter((id) => !retirados.includes(id)));
     setResultadoRetirada(`${retirados.length} de ${visibles.length} documentos retirados.`);
