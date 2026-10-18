@@ -12,9 +12,7 @@ from app.services.ingesta import registrar_referencia_gre
 from app.services.referencias_gre import ReferenciaFacturaGRE
 
 
-def test_gre_provisional_does_not_invent_factura_or_economic_items(
-    session: Session, auth_prueba
-):
+def test_gre_provisional_does_not_invent_factura_or_economic_items(session: Session, auth_prueba):
     tenant_id = auth_prueba.contexto.tenant_id
     guide = Documento(
         tenant_id=tenant_id,
@@ -29,7 +27,9 @@ def test_gre_provisional_does_not_invent_factura_or_economic_items(
     session.add(guide)
     session.flush()
     reference = ReferenciaFacturaGRE(
-        serie="F001", correlativo="900", emisor_ruc="20611111001",
+        serie="F001",
+        correlativo="900",
+        emisor_ruc="20611111001",
         receptor_ruc="20611111002",
     )
     first = registrar_referencia_gre(session, guide, reference)
@@ -39,23 +39,38 @@ def test_gre_provisional_does_not_invent_factura_or_economic_items(
     session.commit()
 
     assert second.id == first_id
-    assert session.scalar(
-        select(func.count()).select_from(ReferenciaGRE).where(
+    assert (
+        session.scalar(
+            select(func.count())
+            .select_from(ReferenciaGRE)
+            .where(
             ReferenciaGRE.tenant_id == tenant_id,
             ReferenciaGRE.documento_id == guide.id,
+            )
         )
-    ) == 1
-    assert session.scalar(
-        select(func.count()).select_from(Expediente).where(
+        == 1
+    )
+    assert (
+        session.scalar(
+            select(func.count())
+            .select_from(Expediente)
+            .where(
             Expediente.tenant_id == tenant_id,
             Expediente.tipo_comprobante == "FACT",
+            )
         )
-    ) == 0
-    assert session.scalar(
-        select(func.count()).select_from(LineaComprobanteItem).where(
+        == 0
+    )
+    assert (
+        session.scalar(
+            select(func.count())
+            .select_from(LineaComprobanteItem)
+            .where(
             LineaComprobanteItem.tenant_id == tenant_id
+            )
         )
-    ) == 0
+        == 0
+    )
     assert session.get(Documento, guide.id).expediente_id is None
 
 
@@ -100,13 +115,18 @@ def test_factura_and_guide_same_tenant_do_not_multiply_invoice_amount(
             )
         )
     session.commit()
-    assert session.scalar(
-        select(func.count()).select_from(Expediente).where(
+    assert (
+        session.scalar(
+            select(func.count())
+            .select_from(Expediente)
+            .where(
             Expediente.tenant_id == tenant_id,
             Expediente.serie == "F001",
             Expediente.correlativo == "900",
+            )
         )
-    ) == 1
+        == 1
+    )
     assert session.scalar(
         select(Expediente.importe_total).where(Expediente.id == dossier.id)
     ) == Decimal("150.00")
