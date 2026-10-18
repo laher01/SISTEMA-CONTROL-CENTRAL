@@ -3,6 +3,7 @@
 Revision ID: 0040
 Revises: 0039
 """
+
 import sqlalchemy as sa
 
 from alembic import op
@@ -16,10 +17,12 @@ depends_on = None
 def upgrade() -> None:
     for tabla in ("expedientes", "referencias_gre"):
         op.alter_column(
-            tabla, "correlativo", existing_type=sa.String(length=8),
-            type_=sa.String(length=32), existing_nullable=False,
+            tabla,
+            "correlativo",
+            existing_type=sa.String(length=8),
+            type_=sa.String(length=32),
+            existing_nullable=False,
         )
-
 
     op.add_column(
         "expedientes", sa.Column("correlativo_original", sa.String(length=32), nullable=True)
@@ -38,6 +41,9 @@ def downgrade() -> None:
                 f"No se puede reducir {tabla}.correlativo: hay valores de más de 8 caracteres"
             )
         op.alter_column(
-            tabla, "correlativo", existing_type=sa.String(length=32),
-            type_=sa.String(length=8), existing_nullable=False,
+            tabla,
+            "correlativo",
+            existing_type=sa.String(length=32),
+            type_=sa.String(length=8),
+            existing_nullable=False,
         )
