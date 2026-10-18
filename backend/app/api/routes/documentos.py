@@ -1276,7 +1276,9 @@ def restaurar_documento(
         raise HTTPException(status.HTTP_409_CONFLICT, "El expediente asociado no está activo")
     original = almacen.ruta_absoluta(documento.ruta_storage)
     if not original.is_file():
-        raise HTTPException(status.HTTP_409_CONFLICT, "No existe el archivo original para restaurar")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "No existe el archivo original para restaurar"
+        )
     if hashlib.sha256(original.read_bytes()).hexdigest() != documento.sha256:
         raise HTTPException(status.HTTP_409_CONFLICT, "La huella del archivo original no coincide")
     colision = session.scalar(
