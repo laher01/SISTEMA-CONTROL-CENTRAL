@@ -140,3 +140,22 @@ def test_reingesta_mismo_sha_impide_purgar_cuarentena_antigua(
     assert original.read_bytes() == contenido
     assert cuarentena.exists()
     assert diario.exists()
+
+
+def test_reconciliacion_no_borra_cuarentena_con_ruta_ocupada_sin_commit(
+    session: Session, tmp_path
+) -> None:
+    tenant_id = uuid.uuid4()
+    almacen = AlmacenLocal(tmp_path)
+    ruta = almacen.guardar(tenant_id, "f" * 64, b"archivo original")
+    original = almacen.ruta_absoluta(ruta)
+    antiguo_id = uuid.uuid4()
+    cuarentena = original.with_name(f".eliminando-{antiguo_id}")
+    diario = registrar_intento(almacen, tenant_id, [(antiguo_id, original, cuarentena)])
+    original.replace(cuarentena)
+    original.write_bytes(b"ingesta en progreso")
+    with pytest.raises(ValueError, match="Ruta ocupada"):
+        reconciliar_intento(session, almacen, tenant_id, diario)
+    assert original.read_bytes() == b"ingesta en progreso"
+    assert cuarentena.read_bytes() == b"archivo original"
+    assert diario.exists()
