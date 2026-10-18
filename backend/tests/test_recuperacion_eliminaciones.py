@@ -8,6 +8,7 @@ from app.models import Documento, Tenant
 from app.services.recuperacion_eliminaciones import (
     listar_intentos,
     reconciliar_intento,
+    reconciliar_pendientes,
     registrar_intento,
 )
 from app.storage import AlmacenLocal
@@ -92,3 +93,22 @@ def test_no_sobrescribe_original_si_hay_conflicto(
     assert original.read_bytes() == b"original nuevo"
     assert temporal.read_bytes() == b"original previo"
     assert diario.exists()
+
+
+def test_reintento_no_procesa_dos_veces(
+    session: Session, tmp_path
+) -> None:
+    tenant_id = uuid.uuid4()
+    almacen = AlmacenLocal(tmp_path)
+    ruta = almacen.guardar(tenant_id, "d" * 64, b"historico")
+    original = almacen.ruta_absoluta(ruta)
+    documento_id = uuid.uuid4()
+    temporal = original.with_name(f".eliminando-{documento_id}")
+    registrar_intento(almacen, tenant_id, [(documento_id, original, temporal)])
+    original.replace(temporal)
+
+    primera = reconciliar_pendientes(session, almacen, tenant_id)
+    segunda = reconciliar_pendientes(session, almacen, tenant_id)
+    assert primera == (1, [])
+    assert segunda == (0, [])
+    assert listar_intentos(almacen, tenant_id) == []
