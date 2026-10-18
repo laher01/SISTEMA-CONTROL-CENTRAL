@@ -12,8 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.enums import TipoComprobante
-from app.services import auditoria
 from app.models import Documento, Empresa, Expediente
+from app.services import auditoria
 from app.services.facturas_estaciones import extraer_factura_estacion
 from app.storage import AlmacenLocal
 
@@ -82,7 +82,7 @@ def diagnosticar(session: Session, almacen: AlmacenLocal, tenant_id) -> list[Dia
     )
     resultados = []
     for expediente in expedientes:
-        receptor_ruc = session.scalar(select(Empresa.ruc).where(Empresa.id == expediente.receptor_id))
+        receptor_ruc = session.scalar(\n            select(Empresa.ruc).where(Empresa.id == expediente.receptor_id)\n        )
         if receptor_ruc not in OBJETIVOS:
             continue
         esperado = OBJETIVOS[receptor_ruc]
