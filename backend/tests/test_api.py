@@ -534,11 +534,31 @@ def test_documentos_filtran_por_tipo_y_emisor(client: TestClient) -> None:
 def test_eliminar_expediente_oculta_documentos_en_todos_los_modulos(
     client: TestClient,
     auth_prueba: AuthPrueba,
+    session: Session,
 ) -> None:
     archivo = subir(client, "comprobante.xml", factura(numero="F001-00009987"))
     expediente_id = archivo["expediente_id"]
     assert expediente_id is not None
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+    gestor = Gestor(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="GESTOR-EXPEDIENTE-280",
+        nombre="Gestor titular",
+    )
+    session.add(gestor)
+    session.flush()
+    doc = session.get(Documento, archivo["id"])
+    exp = session.get(Expediente, expediente_id)
+    assert doc is not None and exp is not None
+    doc.gestor_id = gestor.id
+    exp.gestor_id = gestor.id
+    session.commit()
+
     auth_prueba.como_admin()
+    denegado = client.delete(f"/api/v1/expedientes/{expediente_id}")
+    assert denegado.status_code == 403
+    auth_prueba.como_gestor(gestor.id, usuario_id)
 
     respuesta = client.delete(f"/api/v1/expedientes/{expediente_id}")
     assert respuesta.status_code == 204, respuesta.text
