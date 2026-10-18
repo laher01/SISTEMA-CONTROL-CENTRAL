@@ -68,3 +68,29 @@ def test_reject_many_archive_members(tmp_path):
             output.addfile(info, io.BytesIO(b"x"))
     with pytest.raises(ValueError, match="limits"):
         inspect_tar(p)
+
+
+def test_pair_audit_rejects_tenant_file_substitution_even_if_size_matches(tmp_path):
+    """An equally sized document from another tenant is not the paired backup."""
+    a = b"tenant-A-invoice"
+    b = b"tenant-B-invoice"
+    assert len(a) == len(b)
+    name = "tenant-a/invoice.pdf"
+    expected = {name: {"size": len(a), "sha256": hashlib.sha256(a).hexdigest()}}
+    substituted = archive(tmp_path, [(name, b, "file")])
+    with pytest.raises(ValueError, match="hash/size mismatch"):
+        compare({"files": expected}, inspect_tar(substituted))
+
+
+def test_pair_audit_rejects_tenant_path_reassignment(tmp_path):
+    """Same document bytes must not silently migrate to a different tenant path."""
+    payload = b"same-file"
+    path = archive(tmp_path, [("tenant-b/invoice.pdf", payload, "file")])
+    expected = {
+        "tenant-a/invoice.pdf": {
+            "size": len(payload),
+            "sha256": hashlib.sha256(payload).hexdigest(),
+        }
+    }
+    with pytest.raises(ValueError, match="inventory mismatch"):
+        compare({"files": expected}, inspect_tar(path))
