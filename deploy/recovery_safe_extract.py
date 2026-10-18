@@ -38,9 +38,12 @@ def _open_directory(root_fd, parts, created_dirs, *, create=True):
 
 
 def _rollback(root_fd, created_files, created_dirs):
-    for parts in reversed(created_files):
+    for parts, identity in reversed(created_files):
         fd = _open_directory(root_fd, parts[:-1], [], create=False)
         try:
+            info = os.stat(parts[-1], dir_fd=fd, follow_symlinks=False)
+            if (info.st_dev, info.st_ino) != identity or not __import__('stat').S_ISREG(info.st_mode):
+                raise ValueError('Rollback inode changed; preserve foreign file and quarantine')
             os.unlink(parts[-1], dir_fd=fd)
         finally:
             os.close(fd)
@@ -94,7 +97,8 @@ def extract(archive_path, manifest_path, target):
                         if source is None:
                             raise ValueError("Missing file payload")
                         fd = os.open(parts[-1], FILE_FLAGS, 0o600, dir_fd=parent_fd)
-                        created_files.append(parts)
+                        file_info = os.fstat(fd)
+                        created_files.append((parts, (file_info.st_dev, file_info.st_ino)))
                         total = 0
                         digest = hashlib.sha256()
                         with source, os.fdopen(fd, "wb") as out:
