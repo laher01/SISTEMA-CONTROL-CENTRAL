@@ -64,8 +64,11 @@ def test_dos_transacciones_ubl_no_duplican_lineas(engine, auth_prueba):
         assert len(lineas) == 1
         assert lineas[0].importe_linea == Decimal("27.00")
         assert lineas[0].cantidad == Decimal("3")
-        assert session.scalar(
-            select(func.count()).select_from(LineaComprobanteItem).where(
-                LineaComprobanteItem.documento_id == doc_id
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(LineaComprobanteItem)
+                .where(LineaComprobanteItem.documento_id == doc_id)
             )
-        ) == 1
+            == 1
+        )
