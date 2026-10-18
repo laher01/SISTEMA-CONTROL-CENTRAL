@@ -58,3 +58,13 @@ def test_symlink_child_never_cleaned(tmp_path):
     (p / "link").symlink_to(outside, target_is_directory=True)
     assert cleanup(tmp_path, now=time.time(), ttl=3600, dry_run=False) == []
     assert outside.exists() and p.exists()
+
+
+def test_pid_marker_without_live_process_still_preserved(tmp_path):
+    p = fixture(tmp_path, "old_pid", 7200)
+    marker = p / MARKER
+    data = json.loads(marker.read_text())
+    data["pid"] = 999999999
+    marker.write_text(json.dumps(data))
+    assert cleanup(tmp_path, now=time.time(), ttl=3600, dry_run=False) == []
+    assert p.exists()
