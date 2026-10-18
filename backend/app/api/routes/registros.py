@@ -271,7 +271,7 @@ def listar(
         .offset(offset)
     )
 
-    puede_eliminar_rol = permiso_habilitado(
+    puede_eliminar_rol = auth.rol != RolMiembro.SUPERADMIN and permiso_habilitado(
         session,
         tenant_id,
         auth.rol,
