@@ -9,9 +9,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.services.bloqueo_documental import bloquear_tenant_documental
-
 from app.models import Documento, Tenant
+from app.services.bloqueo_documental import bloquear_tenant_documental
 from app.services.recuperacion_eliminaciones import (
     listar_intentos,
     reconciliar_intento,
