@@ -4,8 +4,6 @@
 This script intentionally does not connect to databases, hosts or volumes.
 """
 import argparse
-import ipaddress
-import os
 import pathlib
 import sys
 
@@ -17,12 +15,22 @@ def verify(args):
         raise ValueError("Only staging source and ephemeral target allowed")
     if args.source_database == args.target_database:
         raise ValueError("Source and target databases must differ")
-    src = pathlib.Path(args.source_documents).resolve(strict=True)
-    dst = pathlib.Path(args.target_documents).resolve(strict=True)
+    if not args.source_database.strip() or not args.target_database.strip():
+        raise ValueError("Database identifiers required")
+    source = pathlib.Path(args.source_documents)
+    target = pathlib.Path(args.target_documents)
+    if source.is_symlink() or target.is_symlink():
+        raise ValueError("Symlink document root forbidden")
+    if any(p.is_symlink() for p in (*source.parents, *target.parents)):
+        raise ValueError("Symlink document parent forbidden")
+    src = source.resolve(strict=True)
+    dst = target.resolve(strict=True)
     if src == dst or src in dst.parents or dst in src.parents:
         raise ValueError("Document volumes overlap")
     if not dst.is_dir() or any(dst.iterdir()):
         raise ValueError("Target directory must be empty")
+    if not args.expected_host.strip() or not args.actual_host.strip():
+        raise ValueError("Host identifiers required")
     if args.expected_host != args.actual_host:
         raise ValueError("Host authorization mismatch")
     if not args.expected_host or args.expected_host.lower() in {"localhost", "production", "prod"}:
