@@ -789,6 +789,37 @@ def test_eliminacion_integral_rechaza_relaciones_con_facturas_ajenas(
     assert session.get(Documento, externo["id"]) is not None
 
 
+
+def test_eliminacion_integral_no_borra_original_compartido(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+    propio = subir(client, "original-dueno.xml", factura(numero="F001-00000896"))
+    ajeno = subir(client, "original-ajeno.xml", factura(numero="F001-00000897"))
+    gestor = Gestor(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="GESTOR-BLOB-COMPARTIDO",
+        nombre="Gestor propietario de blob",
+    )
+    session.add(gestor)
+    session.flush()
+    documento = session.get(Documento, propio["id"])
+    otro = session.get(Documento, ajeno["id"])
+    expediente = session.get(Expediente, propio["expediente_id"])
+    assert documento is not None and otro is not None and expediente is not None
+    documento.gestor_id = gestor.id
+    expediente.gestor_id = gestor.id
+    otro.ruta_storage = documento.ruta_storage
+    session.commit()
+
+    auth_prueba.como_gestor(gestor.id, usuario_id)
+    respuesta = client.delete(f"/api/v1/documentos/{propio['id']}")
+    assert respuesta.status_code == 409, respuesta.text
+    assert session.get(Documento, propio["id"]) is not None
+    assert session.get(Documento, ajeno["id"]) is not None
+
+
 def test_reprocesamiento_masivo_repara_razones_sociales(
     client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
