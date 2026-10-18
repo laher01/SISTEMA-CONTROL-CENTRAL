@@ -55,7 +55,9 @@ def test_factura_identity_unique_during_two_concurrent_transactions(engine, auth
     assert sorted(results) == ["created", "duplicate"]
     with Session(engine) as session:
         count = session.scalar(
-            select(func.count()).select_from(Expediente).where(
+            select(func.count())
+            .select_from(Expediente)
+            .where(
                 Expediente.tenant_id == tenant_id,
                 Expediente.emisor_id == emisor_id,
                 Expediente.receptor_id == receptor_id,
