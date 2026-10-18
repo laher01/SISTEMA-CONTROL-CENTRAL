@@ -45,7 +45,7 @@ def _rollback(root_fd, created_files, created_dirs):
         finally:
             os.close(fd)
     for parts in sorted(set(created_dirs), key=len, reverse=True):
-        fd = _open_directory(root_fd, parts[:-1], [])
+        fd = _open_directory(root_fd, parts[:-1], [], create=False)
         try:
             os.rmdir(parts[-1], dir_fd=fd)
         finally:
