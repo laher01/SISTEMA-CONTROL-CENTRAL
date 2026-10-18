@@ -789,7 +789,6 @@ def test_eliminacion_integral_rechaza_relaciones_con_facturas_ajenas(
     assert session.get(Documento, externo["id"]) is not None
 
 
-
 def test_eliminacion_integral_no_borra_original_compartido(
     client: TestClient, auth_prueba: AuthPrueba, session: Session
 ) -> None:
