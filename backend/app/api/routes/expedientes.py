@@ -97,7 +97,9 @@ def reparar_escorpio_p0(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Confirmación incorrecta")
     try:
         ids = aplicar_lote_verificado(
-            session, almacen, tenant_id,
+            session,
+            almacen,
+            tenant_id,
             [a.model_dump() for a in solicitud.aprobaciones],
         )
         session.commit()
