@@ -17,6 +17,7 @@ from app.models import (
     RelacionDocumento,
 )
 from app.services import auditoria
+from app.services.recuperacion_eliminaciones import reconciliar_intento, registrar_intento
 from app.storage import AlmacenLocal
 
 
@@ -121,6 +122,9 @@ def eliminar_expediente_del_gestor(
             raise EliminacionNoSegura("Eliminación anterior pendiente de revisión")
         pares.append((original, temporal))
 
+    diario = registrar_intento(
+        almacen, tenant_id, [(d.id, orig, temp) for d, (orig, temp) in zip(documentos, pares)]
+    )
     movidos = []
     try:
         for original, temporal in pares:
@@ -167,8 +171,8 @@ def eliminar_expediente_del_gestor(
         session.commit()
     except Exception:
         session.rollback()
-        for original, temporal in reversed(movidos):
-            temporal.replace(original)
+        # Si falla la restauración, el diario queda para recuperación posterior.
+        reconciliar_intento(session, almacen, tenant_id, diario)
         raise
-    for _, temporal in movidos:
-        temporal.unlink(missing_ok=True)
+    session.expire_all()
+    reconciliar_intento(session, almacen, tenant_id, diario)
