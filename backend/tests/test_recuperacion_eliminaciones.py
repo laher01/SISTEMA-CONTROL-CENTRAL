@@ -5,7 +5,11 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
 import pytest
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
+
+from app.services.bloqueo_documental import bloquear_tenant_documental
 
 from app.models import Documento, Tenant
 from app.services.recuperacion_eliminaciones import (
@@ -273,3 +277,33 @@ def test_fallo_intermedio_conserva_diario_para_reintento(
     assert primero[0] == 0 and len(primero[1]) == 1
     assert segundo == (1, [])
     assert not diario.exists() and not temporal.exists()
+
+
+def test_bloqueo_documental_serializa_dos_sesiones_postgresql(engine, session: Session) -> None:
+    tenant = Tenant(nombre="tenant_bloqueo_serial_280")
+    session.add(tenant)
+    session.commit()
+    fabrica = sessionmaker(engine, expire_on_commit=False)
+    with fabrica() as primero, fabrica() as segundo:
+        bloquear_tenant_documental(primero, tenant.id)
+        segundo.execute(text("SET LOCAL lock_timeout = '200ms'"))
+        with pytest.raises(OperationalError):
+            bloquear_tenant_documental(segundo, tenant.id)
+        segundo.rollback()
+        primero.commit()
+        bloquear_tenant_documental(segundo, tenant.id)
+        segundo.commit()
+
+
+def test_bloqueo_documental_no_bloquea_tenant_diferente(engine, session: Session) -> None:
+    primero = Tenant(nombre="tenant_bloqueo_uno_280")
+    segundo = Tenant(nombre="tenant_bloqueo_dos_280")
+    session.add_all([primero, segundo])
+    session.commit()
+    fabrica = sessionmaker(engine, expire_on_commit=False)
+    with fabrica() as conexion_a, fabrica() as conexion_b:
+        bloquear_tenant_documental(conexion_a, primero.id)
+        conexion_b.execute(text("SET LOCAL lock_timeout = '200ms'"))
+        bloquear_tenant_documental(conexion_b, segundo.id)
+        conexion_b.commit()
+        conexion_a.commit()
