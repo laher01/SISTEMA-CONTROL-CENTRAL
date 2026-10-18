@@ -65,3 +65,12 @@ H5. Conexión de propuestas técnicas desde NEXUS a GitHub y despliegue protegid
 - Evitar duplicar PR activos; registrar en Issue #302 la evidencia, bloqueos y siguiente paso.
 - Entre turnos/chats no existe ejecución autónoma continua por este solo comando. Los cambios se ejecutan al invocarlo en ChatGPT, salvo capacidad persistente expresamente habilitada.
 - En H1, partir de PR #289 (cola privada OCR), #290 (aislamiento/idempotencia), #275 (OCR consolidado), #292 (retirada documental) y verificar ramas y pruebas antes de integrar.
+
+## COMANDO HITO NEXUS — separación obligatoria de responsabilidades
+- NEXUS es la inteligencia artificial transversal de TODO FACT CENTRAL: observa eventos de cada módulo, interpreta resultados, valida coherencia y duplicados, explica anomalías, consulta información autorizada, mantiene conversación y coordina tareas/aprobaciones.
+- El chat/equipo OCR es el ÚNICO responsable de ingestión y lectura de PDF individual o empaquetado, RAR, fotografías, imágenes pegadas o cargadas, extracción, nuevos formatos, lectores y plantillas de reconocimiento.
+- NEXUS recibe resultados estructurados, estados, evidencias y eventos del OCR por contrato de integración; **no implementa ni modifica el motor OCR**.
+- Cuando una petición invada la competencia OCR, advertir expresamente: «Ese tema lo estamos desarrollando en el otro chat de OCR; aquí trabajamos la inteligencia de NEXUS». Registrar la dependencia y continuar con el trabajo de NEXUS.
+- Flujo: OCR recibe/procesa → emite resultado y evidencia → NEXUS valida empresa/rol, documento, duplicidad, coherencia y relaciones → propone correcciones o pendiente de revisión → coordina aprobación/autorización → informa al usuario, sin eliminar originales ni contabilizar datos inciertos.
+- Orden de hitos exclusivos: N1 conversación y contexto; N2 memoria/tareas entre pantallas; N3 supervisión y alertas; N4 coordinación documental y aprobaciones; N5 Knowledge Bridge y evolución GitHub/VPS supervisada.
+- Al recibir «HITO NEXUS» ejecutar ciclos de revisión, desarrollo, pruebas y corrección sobre componentes NEXUS, con integración/despliegue solo si controles existentes lo permiten. No intervenir PR del motor OCR.
