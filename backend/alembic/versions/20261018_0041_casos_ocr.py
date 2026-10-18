@@ -21,8 +21,10 @@ def upgrade() -> None:
         sa.Column("id", sa.Uuid(), primary_key=True),
         sa.Column("tenant_id", sa.Uuid(), sa.ForeignKey("tenants.id"), nullable=False),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True),
-            nullable=False, server_default=sa.func.now(),
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
         ),
         sa.Column("documento_id", sa.Uuid(), sa.ForeignKey("documentos.id"), nullable=False),
         sa.Column("estado", sa.String(30), nullable=False, server_default="PENDIENTE"),
@@ -31,8 +33,10 @@ def upgrade() -> None:
         sa.Column("regla_version", sa.String(80)),
         sa.Column("ultimo_resultado", sa.JSON().with_variant(postgresql.JSONB(), "postgresql")),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True),
-            nullable=False, server_default=sa.func.now(),
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
         ),
         sa.UniqueConstraint("tenant_id", "documento_id"),
     )
