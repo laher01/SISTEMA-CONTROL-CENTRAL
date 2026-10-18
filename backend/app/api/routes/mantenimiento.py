@@ -339,6 +339,18 @@ def _intentar_eliminar_archivo(
 ) -> bool:
     """Reintento idempotente: si el archivo ya no existe se marca completado."""
     pendiente.intentos += 1
+    # Una retirada por SHA puede compartir archivo con otro documento; ni siquiera
+    # un registro retirado lógicamente debe perder su original restaurable.
+    referencias = session.scalar(
+        select(Documento.id).where(
+            Documento.tenant_id == pendiente.tenant_id,
+            Documento.ruta_storage == pendiente.ruta_storage,
+        ).limit(1)
+    )
+    if referencias is not None:
+        pendiente.estado = "BLOQUEADO"
+        pendiente.ultimo_error = "Archivo todavía referenciado por un documento"
+        return False
     try:
         archivo = almacen.ruta_absoluta(pendiente.ruta_storage)
         encontrado = archivo.exists()
