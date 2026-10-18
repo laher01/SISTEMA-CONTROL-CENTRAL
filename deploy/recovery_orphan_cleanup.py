@@ -61,8 +61,11 @@ def main():
     args = p.parse_args()
     if args.ttl_seconds < 3600:
         raise ValueError("TTL too short")
-    if args.apply and (sys.platform != "linux" or not pathlib.Path("/proc/self").exists()):
-        raise ValueError("Cleanup apply requires Linux")
+    if args.apply:
+        if sys.platform != "linux" or not pathlib.Path("/proc/self").exists():
+            raise ValueError("Cleanup apply requires Linux")
+        if not (os.environ.get("CI") == "true" and os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("FC_RECOVERY_SYNTHETIC_ONLY") == "YES"):
+            raise ValueError("Cleanup apply restricted to synthetic GitHub Actions CI")
     print(json.dumps({"candidates": cleanup(args.root, now=time.time(), ttl=args.ttl_seconds,
                                            dry_run=not args.apply), "dry_run": not args.apply}))
 
