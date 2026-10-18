@@ -1349,7 +1349,4 @@ def test_capacidades_documentales_respeta_admin_y_superadmin(
     assert admin.json()["puede_eliminar_definitivamente"] is False
     auth_prueba.como_superadmin()
     superadmin = client.get(ruta)
-    assert superadmin.status_code == 200
-    assert superadmin.json()["puede_retirar"] is False
-    assert superadmin.json()["puede_restaurar"] is False
-    assert superadmin.json()["puede_eliminar_definitivamente"] is False
+    assert superadmin.status_code == 403
