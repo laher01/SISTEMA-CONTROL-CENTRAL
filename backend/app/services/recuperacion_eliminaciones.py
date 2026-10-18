@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Documento
+from app.services.bloqueo_documental import bloquear_tenant_documental
 from app.storage import AlmacenLocal
 
 
@@ -61,6 +62,7 @@ def reconciliar_intento(
 
     No sobreescribir originales existentes y no procesar diarios de otro tenant.
     """
+    bloquear_tenant_documental(session, tenant_id)
     raiz = (almacen.base / str(tenant_id)).resolve()
     directorio = raiz / "_eliminaciones_pendientes"
     diario = manifiesto.resolve()
