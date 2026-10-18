@@ -4,7 +4,6 @@ import argparse
 import hashlib
 import json
 import os
-import stat
 import tempfile
 import pathlib
 import sys
@@ -63,7 +62,7 @@ def _extract_frozen(archive, manifest, target):
                     raise ValueError("Missing archive file")
                 total = 0
                 h = hashlib.sha256()
-                with content, dest.open("xb") as out:
+                with content, os.fdopen(os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600), "wb") as out:
                     while part := content.read(1048576):
                         total += len(part)
                         if total > expected["size"]:
