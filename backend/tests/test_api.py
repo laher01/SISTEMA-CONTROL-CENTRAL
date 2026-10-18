@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.routes import documentos as documentos_routes
 from app.core.config import Settings
-from app.models import Documento, Empresa, Expediente, Gestor
+from app.models import Documento, Empresa, Expediente, Gestor, RelacionDocumento
 from app.services import procesamiento_documental
 from app.services.procesamiento_documental import ResultadoProcesamiento, sugerir_tipo
 from tests.conftest import AuthPrueba, Reloj
@@ -750,6 +750,44 @@ def test_otro_gestor_no_elimina_factura_ajena(
     respuesta = client.delete(f"/api/v1/documentos/{doc['id']}")
     assert respuesta.status_code == 409, respuesta.text
     assert session.get(Documento, doc["id"]) is not None
+
+
+
+def test_eliminacion_integral_rechaza_relaciones_con_facturas_ajenas(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+    objetivo = subir(client, "exp-externo-1.xml", factura(numero="F001-00000891"))
+    externo = subir(client, "exp-externo-2.xml", factura(numero="F001-00000892"))
+    gestor = Gestor(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="GESTOR-REFERENCIA-EXTERNA",
+        nombre="Gestor con referencia externa",
+    )
+    session.add(gestor)
+    session.flush()
+    doc = session.get(Documento, objetivo["id"])
+    exp = session.get(Expediente, objetivo["expediente_id"])
+    assert doc is not None and exp is not None
+    doc.gestor_id = gestor.id
+    exp.gestor_id = gestor.id
+    session.add(
+        RelacionDocumento(
+            tenant_id=auth_prueba.contexto.tenant_id,
+            origen_id=doc.id,
+            destino_id=externo["id"],
+            tipo="REFERENCIA",
+            evidencia="Prueba de relación externa",
+        )
+    )
+    session.commit()
+
+    auth_prueba.como_gestor(gestor.id, usuario_id)
+    denegado = client.delete(f"/api/v1/documentos/{doc.id}")
+    assert denegado.status_code == 409, denegado.text
+    assert session.get(Documento, doc.id) is not None
+    assert session.get(Documento, externo["id"]) is not None
 
 
 def test_reprocesamiento_masivo_repara_razones_sociales(
