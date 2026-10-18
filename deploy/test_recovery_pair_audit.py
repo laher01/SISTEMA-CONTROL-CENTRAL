@@ -120,3 +120,21 @@ def test_same_document_name_allowed_when_tenant_paths_are_distinct(tmp_path):
     entries = inspect_tar(path)
     assert set(entries) == {"tenant-a/invoice.pdf", "tenant-b/invoice.pdf"}
     compare({"files": entries}, entries)
+
+
+def test_repeated_audit_is_idempotent_and_does_not_modify_archive(tmp_path):
+    """An audit replay must be read-only and yield identical inventory."""
+    payload = b"tenant-synthetic"
+    tar_path = archive(tmp_path, [("tenant-a/doc.pdf", payload, "file")])
+    before = hashlib.sha256(tar_path.read_bytes()).hexdigest()
+    first = inspect_tar(tar_path)
+    second = inspect_tar(tar_path)
+    compare({"files": first}, second)
+    assert first == second
+    assert hashlib.sha256(tar_path.read_bytes()).hexdigest() == before
+
+
+def test_manifest_fails_when_file_inventory_is_empty_but_archive_is_not(tmp_path):
+    path = archive(tmp_path, [("tenant-a/doc.pdf", b"data", "file")])
+    with pytest.raises(ValueError, match="inventory mismatch"):
+        compare({"files": {}}, inspect_tar(path))
