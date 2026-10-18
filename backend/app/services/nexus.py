@@ -23,7 +23,11 @@ from app.services.nexus_context import (
     puede_ver_empresa,
     puede_ver_expediente,
 )
-from app.services.nexus_items import consulta_items_solicitada, responder_items, seguimiento_proveedor
+from app.services.nexus_items import (
+    consulta_items_solicitada,
+    responder_items,
+    seguimiento_proveedor,
+)
 from app.services.nexus_knowledge import recuperar_conocimiento
 
 
