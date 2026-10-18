@@ -1249,21 +1249,40 @@ def eliminar_documento(
         if not ruta.startswith(f"{tenant_id}/") or ".." in ruta.split("/"):
             raise HTTPException(status.HTTP_409_CONFLICT, "Ruta del documento inválida")
         archivo = almacen.ruta_absoluta(ruta)
-        auditoria.registrar(
-            session, tenant_id, "DOCUMENTO_ELIMINADO_DEFINITIVAMENTE",
-            "documento", documento.id, {"sha256": documento.sha256}
-        )
-        session.delete(documento)
-        session.commit()
-        # La limpieza del contenido se hace después del COMMIT. Si falla,
-        # la huella ya está liberada y el archivo sigue localizable para recuperación.
+        # Apartar el original ANTES de liberar el hash para que una recarga
+        # concurrente no pierda el contenido recién importado.
+        temporal = archivo.with_name(f".eliminando-{documento.id}")
+        if not archivo.is_file():
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "Original no disponible para eliminación completa"
+            )
         try:
-            archivo.unlink(missing_ok=True)
+            archivo.replace(temporal)
         except OSError:
-            # No se informa borrado completo cuando el almacenamiento falló.
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE, "No se pudo preparar la eliminación física"
+            ) from None
+        try:
+            auditoria.registrar(
+                session,
+                tenant_id,
+                "DOCUMENTO_ELIMINADO_DEFINITIVAMENTE",
+                "documento",
+                documento.id,
+                {"sha256": documento.sha256},
+            )
+            session.delete(documento)
+            session.commit()
+        except Exception:
+            session.rollback()
+            temporal.replace(archivo)
+            raise
+        try:
+            temporal.unlink(missing_ok=True)
+        except OSError:
             raise HTTPException(
                 status.HTTP_503_SERVICE_UNAVAILABLE,
-                "Registro eliminado; limpieza física pendiente por incidencia del almacenamiento",
+                "Registro eliminado; original pendiente de limpieza física",
             ) from None
         return
     _validar_ambito_documento(auth, documento, session)
