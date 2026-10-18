@@ -14,7 +14,10 @@ spec.loader.exec_module(module)
 
 
 def test_detects_old_batch_signature_and_locking():
-    delete_src = "def eliminar_documento(session, settings, hoy, tenant_id, auth, almacen, documento_id):\n    pass\n"
+    delete_src = (
+        "def eliminar_documento(session, settings, hoy, tenant_id, auth, almacen, documento_id):\n"
+        "    pass\n"
+    )
     trash_src = (
         "def capacidades_documentales():\n    return {}\n"
         "def restaurar_documento():\n    pass\n"
