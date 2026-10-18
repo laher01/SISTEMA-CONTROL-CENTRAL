@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, aliased
 from app.enums import TipoDocumento
 from app.item_models import LineaComprobanteItem
 from app.models import Documento, Empresa, Expediente
-from app.schemas import NexusChatOut
+from app.schemas import NexusChatOut, NexusMensajeHistorial
 from app.security import ContextoAcceso
 from app.services.nexus_context import condiciones_expedientes
 
@@ -100,7 +100,7 @@ def _diesel_en_factura_procesada(datos: object) -> bool:
     )
 
 
-def seguimiento_proveedor(mensaje: str, historial: list[object]) -> tuple[str, str] | None:
+def seguimiento_proveedor(mensaje: str, historial: list[NexusMensajeHistorial]) -> tuple[str, str] | None:
     """Recupera el último filtro de producto del historial de esta solicitud."""
     normal = _normalizar(mensaje)
     coincide = re.search(r"(?:cuantas?|cuantos?|cuales?)\s+(?:son\s+)?de\s+([\w ]+)", normal)
