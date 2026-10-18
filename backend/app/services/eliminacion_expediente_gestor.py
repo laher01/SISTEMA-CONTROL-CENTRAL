@@ -129,7 +129,11 @@ def eliminar_expediente_del_gestor(
             )
         # Sincronizar colección ORM para evitar que el flush intente desvincular
         # documentos eliminados por DELETE a nivel SQL.
-        session.execute(delete(Documento).where(Documento.tenant_id == tenant_id, Documento.id.in_(ids)))
+        session.execute(
+            delete(Documento).where(
+                Documento.tenant_id == tenant_id, Documento.id.in_(ids)
+            )
+        )
         session.execute(
             delete(Expediente).where(
                 Expediente.tenant_id == tenant_id, Expediente.id == expediente_id
