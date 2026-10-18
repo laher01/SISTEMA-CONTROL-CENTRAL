@@ -1,6 +1,7 @@
 """Extracción UBL de ítems y persistencia idempotente en catálogos por tenant."""
 
 import hashlib
+import re
 import uuid
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
@@ -122,3 +123,72 @@ def registrar_items_ubl(
         )
         registrados += 1
     return registrados
+
+
+def registrar_items_pdf_estacion(
+    session: Session, tenant_id: uuid.UUID, documento_id: uuid.UUID, texto: str
+) -> int:
+    """Registra solamente líneas inequívocas de diésel de factura SCORPIO.
+
+    No infiere importes, no sustituye UBL y evita duplicados ante reprocesamientos.
+    """
+    normal = " ".join(texto.split())
+    if "FACTURA" not in normal.upper() or "FACTURACION.JADAL.PE" not in normal.upper():
+        return 0
+    patron = re.compile(
+        r"(?<!\d)(\d{1,6}[.,]\d{1,3})\s+\d{1,5}\s+"
+        r"(GLL|GAL)\s+(DIESEL\s+B5\s+S50)\s+"
+        r"([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)(?!\d)",
+        re.I,
+    )
+    coincidencias = list(patron.finditer(normal))
+    if len(coincidencias) != 1:
+        return 0
+    linea = coincidencias[0]
+    try:
+        cantidad = Decimal(linea.group(1).replace(",", "."))
+        importe = Decimal(linea.group(6).replace(",", ""))
+    except InvalidOperation:
+        return 0
+    if not (cantidad.is_finite() and cantidad > 0 and importe.is_finite() and importe > 0):
+        return 0
+    if session.scalar(
+        select(LineaComprobanteItem.id).where(
+            LineaComprobanteItem.tenant_id == tenant_id,
+            LineaComprobanteItem.documento_id == documento_id,
+        ).limit(1)
+    ) is not None:
+        return 0
+    descripcion = "DIESEL B5 S50"
+    unidad = linea.group(2).upper()
+    clave = hashlib.sha256(f"{texto_normalizado(descripcion)}|{unidad}".encode()).hexdigest()
+    producto = session.scalar(
+        select(ProductoItem).where(
+            ProductoItem.tenant_id == tenant_id,
+            ProductoItem.clave_catalogo == clave,
+        )
+    )
+    if producto is None:
+        producto = ProductoItem(
+            tenant_id=tenant_id,
+            clave_catalogo=clave,
+            descripcion=descripcion,
+            categoria=sugerir_categoria(descripcion),
+            clasificacion_confirmada=False,
+            activo=True,
+        )
+        session.add(producto)
+        session.flush()
+    session.add(
+        LineaComprobanteItem(
+            tenant_id=tenant_id,
+            documento_id=documento_id,
+            producto_id=producto.id,
+            numero_linea=1,
+            descripcion_original=descripcion,
+            cantidad=cantidad,
+            unidad=unidad,
+            importe_linea=importe,
+        )
+    )
+    return 1
