@@ -52,7 +52,7 @@ def test_cross_tenant_ocr_document_operations_denied(client, session: Session, a
         expediente_id=dossier.id,
         usuario_id=member_b.id,
         tipo_documento="OTRO",
-        estado="PENDIENTE",
+        estado="PENDIENTE_RELACION",
         sha256="f" * 64,
         nombre_original="ocr-evidencia.pdf",
         mime_type="application/pdf",
