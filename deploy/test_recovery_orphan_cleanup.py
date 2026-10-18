@@ -87,3 +87,28 @@ def test_cleanup_keeps_nonfinite_marker_timestamp(tmp_path):
     marker.write_text(json.dumps(data))
     assert cleanup(tmp_path, now=time.time(), ttl=3600, dry_run=False) == []
     assert p.exists()
+
+
+def test_cli_apply_rejected_without_synthetic_ci_environment(tmp_path, monkeypatch):
+    import sys
+    import pytest
+    from recovery_orphan_cleanup import main
+
+    fixture(tmp_path, "protected", 7200)
+    monkeypatch.setenv("CI", "false")
+    monkeypatch.delenv("FC_RECOVERY_SYNTHETIC_ONLY", raising=False)
+    monkeypatch.setattr(sys, "argv", ["cleanup", "--root", str(tmp_path), "--apply"])
+    with pytest.raises(ValueError, match="restricted to synthetic"):
+        main()
+    assert (tmp_path / "protected").exists()
+
+
+def test_cli_default_is_dry_run(tmp_path, monkeypatch, capsys):
+    import sys
+    from recovery_orphan_cleanup import main
+
+    fixture(tmp_path, "stale", 7200)
+    monkeypatch.setattr(sys, "argv", ["cleanup", "--root", str(tmp_path)])
+    main()
+    assert '"dry_run": true' in capsys.readouterr().out
+    assert (tmp_path / "stale").exists()
