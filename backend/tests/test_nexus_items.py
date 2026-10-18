@@ -91,9 +91,7 @@ def test_diesel_en_pdf_procesado_requiere_linea_y_tipo_factura() -> None:
         "FACTURA ELECTRÓNICA F109 Nº 0016494 CANTIDAD CODIGO U.M DESCRIPCION "
         "49.499 09 GLL DIESEL B5 S50 20.31 23.96 1005.08"
     )
-    assert _diesel_en_factura_procesada(
-        {"procesamiento_documental": {"texto": texto}}
-    )
+    assert _diesel_en_factura_procesada({"procesamiento_documental": {"texto": texto}})
     assert not _diesel_en_factura_procesada(
         {"procesamiento_documental": {"texto": "FACTURA combustibles DIESEL B5 S50"}}
     )
