@@ -38,20 +38,14 @@ def test_jabsa_texto_pypdf_real_identidad_fecha_montos_y_alerta() -> None:
 
 
 def test_jabsa_fecha_invertida_separada_por_espacios() -> None:
-    texto = (
-        "SERVICENTRO JABSA S.A FACTURA F003-00004475\n"
-        "15/10/2026   Fecha Emision\n"
-    )
+    texto = "SERVICENTRO JABSA S.A FACTURA F003-00004475\n15/10/2026   Fecha Emision\n"
     resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
     assert resultado is not None
     assert resultado["campos"]["fecha_emision"]["valor"] == "2026-10-15"
 
 
 def test_formato_ajeno_no_se_interpreta_como_jabsa() -> None:
-    texto = (
-        "OTRA EMPRESA FACTURA F001-00000123\n"
-        "Fecha Emision : 16/10/2026\n"
-    )
+    texto = "OTRA EMPRESA FACTURA F001-00000123\nFecha Emision : 16/10/2026\n"
     resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
     assert resultado is not None
     assert resultado["campos"]["fecha_emision"]["valor"] == "2026-10-16"
