@@ -45,6 +45,20 @@ describe("visibilidad pública de landing", () => {
     expect(html).toContain("/ingresar");
   });
 
+  it("no publica sin confirmación explícita aunque no exista error de red", () => {
+    mockUseDatos.mockReturnValue({
+      datos: undefined,
+      error: undefined,
+      cargando: false,
+    });
+    const html = mostrar();
+    expect(html).toContain("La presentación comercial no está disponible");
+    expect(html).toContain("/ingresar");
+    expect(html).toContain("/privacidad");
+    expect(html).toContain("/terminos");
+    expect(html).not.toContain("Planes del servicio");
+  });
+
   it("oculta conservadoramente la landing cuando falla la consulta pública", () => {
     mockUseDatos.mockReturnValue({
       datos: undefined,
