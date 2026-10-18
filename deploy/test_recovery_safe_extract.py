@@ -159,3 +159,13 @@ def test_rollback_failure_is_explicit_quarantine_signal(tmp_path, monkeypatch):
     monkeypatch.setattr(subject, "_rollback", failed_rollback)
     with pytest.raises(RuntimeError, match="quarantine target"):
         extract(archive, manifest, target)
+
+
+def test_compressed_archive_quota_fails_before_extraction(tmp_path, monkeypatch):
+    import recovery_safe_extract as subject
+
+    archive, manifest, target = make_pair(tmp_path)
+    monkeypatch.setattr(subject, "MAX_COMPRESSED", 4)
+    with pytest.raises(ValueError, match="Compressed archive too large"):
+        extract(archive, manifest, target)
+    assert list(target.iterdir()) == []
