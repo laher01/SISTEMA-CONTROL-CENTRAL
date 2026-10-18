@@ -28,6 +28,8 @@ manifest={"batch":"synthetic-ci","files":{name:{"size":len(data),"sha256":sha(da
 PY
 # Source DB already migrated by the dedicated job: snapshot before restoring anywhere else.
 uv run python ../deploy/seed_recovery_relations_ci.py
+psql -X -v ON_ERROR_STOP=1 -c "CREATE TABLE synthetic_restore_marker(id integer primary key, tenant text not null)"
+psql -X -v ON_ERROR_STOP=1 -c "INSERT INTO synthetic_restore_marker VALUES (1, 'tenant-alpha'), (2, 'tenant-beta')"
 docker run --rm --network host --user "$(id -u):$(id -g)" -e PGPASSWORD=fact -v "$work:/backup" "postgres:${FC_CI_PG_MAJOR:?}" pg_dump -h localhost -U fact -d fact_central -Fc -f /backup/database.dump
 python3 - "$work" <<'PY'
 import hashlib,json,sys
@@ -41,6 +43,7 @@ python3 ../deploy/recovery_pair_audit.py --archive "$work/docs.tar.gz" --dump "$
 createdb "$restoredb"
 docker run --rm --network host -e PGPASSWORD=fact -v "$work:/backup:ro" "postgres:${FC_CI_PG_MAJOR:?}" pg_restore -h localhost -U fact --exit-on-error --no-owner --no-acl -d "$restoredb" /backup/database.dump
 test "$(psql -XAt -d "$restoredb" -c 'SELECT version_num FROM alembic_version')" = 0038
+test "$(psql -XAt -d "$restoredb" -c "SELECT COUNT(*) FROM synthetic_restore_marker")" = 2
 FC_DATABASE_URL="postgresql+psycopg://fact:fact@localhost:5432/$restoredb" uv run python ../deploy/validate_restored_relations.py
 # Check document bytes after safe inspection; tar extraction targets disposable empty directory.
 mkdir "$work/restored-docs"
@@ -64,6 +67,7 @@ test "$(psql -XAt -d "$restoredb" -c 'SELECT version_num FROM alembic_version')"
 uv run alembic upgrade 0039
 test "$(psql -XAt -d "$restoredb" -c 'SELECT version_num FROM alembic_version')" = 0039
 echo "EPHEMERAL_POSTGRES_AND_DOCUMENTS_RESTORE_OK"
+test "$(psql -XAt -d "$restoredb" -c "SELECT COUNT(*) FROM synthetic_restore_marker")" = 2
 echo "ALEMBIC_0039_REAL_ROUNDTRIP_OK"
 export FC_E2E_ISOLATED=true
 PYTHONPATH=. uv run python scripts/seed_roles_e2e.py
