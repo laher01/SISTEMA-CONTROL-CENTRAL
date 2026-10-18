@@ -139,6 +139,20 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
   const eliminarSeleccionados = async () => {
     const elegidos = seleccionVisible;
     if (!elegidos.length || eliminandoLote) return;
+    try {
+      const vista = await enviarJson<{ aptos: number }>(
+        "/api/v1/documentos/previsualizar-retirada",
+        "POST",
+        { documentos_ids: elegidos.map((d) => d.id) },
+      );
+      if (vista.aptos !== elegidos.length) {
+        setErrorEliminacion("La selección contiene documentos no disponibles. Actualice la bandeja.");
+        return;
+      }
+    } catch (error) {
+      setErrorEliminacion(error instanceof Error ? error.message : String(error));
+      return;
+    }
     const confirmado = window.confirm(
       `¿Retirar ${elegidos.length} documento(s) de esta página? ` +
       "Se registrará una auditoría por cada archivo. Los originales no se borran físicamente.",
