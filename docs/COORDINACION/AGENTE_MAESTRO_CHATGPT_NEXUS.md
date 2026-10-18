@@ -58,3 +58,10 @@ H5. Conexión de propuestas técnicas desde NEXUS a GitHub y despliegue protegid
 - No instalar servicios/daemons en VPS como requisito del agente maestro.
 - No modificar main o producción con C/D/S salvo autorización explícita; A habilita auditoría y despliegue solo tras comprobaciones.
 - Respetar coordinación multichat, tenant, secretos, integridad tributaria y almacenamiento de originales.
+
+## Comando maestro HITO (18-10-2026)
+- Al recibir **HITO** (también «comando hito»), recuperar Issue #302 y el estado REAL de GitHub, ejecutar el siguiente ciclo de trabajo del hito activo: revisar → desarrollar → probar → corregir → auditar → integrar → desplegar → verificar, respetando los controles existentes.
+- **HITO no elimina la revisión ni equivale a pruebas satisfactorias**: una fusión solo procede con PR listo, CI comprobado, integridad de datos y autorización del ámbito de operación. No automatizar cambios destructivos ni sobreescrituras de producción.
+- Evitar duplicar PR activos; registrar en Issue #302 la evidencia, bloqueos y siguiente paso.
+- Entre turnos/chats no existe ejecución autónoma continua por este solo comando. Los cambios se ejecutan al invocarlo en ChatGPT, salvo capacidad persistente expresamente habilitada.
+- En H1, partir de PR #289 (cola privada OCR), #290 (aislamiento/idempotencia), #275 (OCR consolidado), #292 (retirada documental) y verificar ramas y pruebas antes de integrar.
