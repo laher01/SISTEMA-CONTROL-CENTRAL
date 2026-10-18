@@ -1305,6 +1305,11 @@ def eliminar_documento(
         # Apartar el original ANTES de liberar el hash para que una recarga
         # concurrente no pierda el contenido recién importado.
         temporal = archivo.with_name(f".eliminando-{documento.id}")
+        if temporal.exists():
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Existe una eliminación anterior pendiente de recuperación",
+            )
         if not archivo.is_file():
             raise HTTPException(
                 status.HTTP_409_CONFLICT, "Original no disponible para eliminación completa"
