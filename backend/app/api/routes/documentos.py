@@ -1539,6 +1539,7 @@ def crear_expediente_asistido(
         tipo_comprobante=solicitud.tipo_comprobante,
         serie=serie,
         correlativo=correlativo,
+        correlativo_original=str(campos["correlativo"]),
         fecha_emision=date.fromisoformat(str(campos["fecha_emision"])),
         moneda=Moneda(str(campos["moneda"])),
         importe_total=Decimal(str(campos["importe_total"])),
