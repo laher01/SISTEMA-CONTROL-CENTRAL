@@ -17,8 +17,10 @@ def _pdf(numero: str, ruc_receptor: str = "20605535098") -> str:
 
 def test_acepta_identidad_verificada_y_expediente_mal_clasificado() -> None:
     estado, _ = evaluar_identidad(
-        actual_serie="2026", actual_correlativo="10",
-        esperado="0016490", receptor_ruc="20605535098",
+        actual_serie="2026",
+        actual_correlativo="10",
+        esperado="0016490",
+        receptor_ruc="20605535098",
         texto_pdf=_pdf("0016490"),
     )
     assert estado == "CANDIDATO"
@@ -37,14 +39,17 @@ def test_bloquea_documentos_que_no_acreditan_la_factura(
 ) -> None:
     estado, _ = evaluar_identidad(
         actual_serie="2026", actual_correlativo="10",
-        esperado=esperado, receptor_ruc=receptor, texto_pdf=pdf,
+        esperado=esperado,
+        receptor_ruc=receptor,
+        texto_pdf=pdf,
     )
     assert estado == "BLOQUEADO"
 
 
 def test_no_reescribe_identidad_ya_corregida() -> None:
     estado, _ = evaluar_identidad(
-        actual_serie="F109", actual_correlativo="16490",
+        actual_serie="F109",
+        actual_correlativo="16490",
         esperado="0016490", receptor_ruc="20605535098",
         texto_pdf=_pdf("0016490"),
     )
@@ -53,7 +58,8 @@ def test_no_reescribe_identidad_ya_corregida() -> None:
 
 def test_bloquea_otros_valores_anteriores() -> None:
     estado, _ = evaluar_identidad(
-        actual_serie="F001", actual_correlativo="999",
+        actual_serie="F001",
+        actual_correlativo="999",
         esperado="0016490", receptor_ruc="20605535098",
         texto_pdf=_pdf("0016490"),
     )
