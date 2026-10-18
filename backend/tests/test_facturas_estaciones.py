@@ -35,7 +35,7 @@ def test_escorpio_serie_ruc_cliente_y_total(
     assert datos is not None
     c = datos["campos"]
     assert c["serie"]["valor"] == "F109"
-    assert c["correlativo"]["valor"] == str(int(numero))
+    assert c["correlativo"]["valor"] == numero
     assert c["ruc_emisor"]["valor"] == "20516453835"
     assert c["ruc_receptor"]["valor"] == ruc_cliente
     assert c["razon_social_receptor"]["valor"] == receptor
@@ -78,7 +78,7 @@ def test_texto_pypdf_escorpio_fragmentado() -> None:
     )
     campos = extraer_campos(texto, "TEXTO_PDF", 1.0)["campos"]
     assert campos["serie"]["valor"] == "F109"
-    assert campos["correlativo"]["valor"] == "16490"
+    assert campos["correlativo"]["valor"] == "0016490"
     assert campos["ruc_receptor"]["valor"] == "20605535098"
     assert campos["razon_social_receptor"]["valor"] == "INVERSIONES BORISO E.I.R.L."
     assert campos["importe_total"]["valor"] == "1750.00"
