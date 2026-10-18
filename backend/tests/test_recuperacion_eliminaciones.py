@@ -28,6 +28,8 @@ def test_recupera_original_si_documento_permanece_en_bd(
         sha256=sha,
         nombre_original="restaurar.pdf",
         ruta_storage=ruta,
+        mime_type="application/pdf",
+        tamano_bytes=len(contenido),
         tipo_documento="OTRO",
         estado="PENDIENTE_CLASIFICACION",
     )
@@ -74,6 +76,8 @@ def test_no_sobrescribe_original_si_hay_conflicto(
         sha256=sha,
         nombre_original="original.pdf",
         ruta_storage=ruta,
+        mime_type="application/pdf",
+        tamano_bytes=len(b"original nuevo"),
         tipo_documento="OTRO",
         estado="PENDIENTE_CLASIFICACION",
     )
