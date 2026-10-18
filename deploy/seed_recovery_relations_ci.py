@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Insert synthetic relational data into CI's ephemeral source PostgreSQL."""
 import os
+import hashlib
 import uuid
 from sqlalchemy import create_engine, text
 
@@ -24,7 +25,9 @@ with engine.begin() as c:
           {"id":expedition,"t":tenant,"r":company2,"e":company1,"n":f"000{idx}"})
         c.execute(text("""INSERT INTO documentos
           (id,tenant_id,expediente_id,estado,sha256,nombre_original,mime_type,tamano_bytes,ruta_storage)
-          VALUES (:id,:t,:e,'RECIBIDO',:hash,:name,'application/pdf',10,:path)"""),
-          {"id":document,"t":tenant,"e":expedition,"hash":f"{idx}"*64,
-           "name":"sample.pdf","path":f"synthetic-{idx}/sample.pdf"})
+          VALUES (:id,:t,:e,'RECIBIDO',:hash,:name,'application/pdf',:size,:path)"""),
+          {"id":document,"t":tenant,"e":expedition,
+           "hash":hashlib.sha256((b"<Invoice>synthetic</Invoice>" if idx == 1 else b"%PDF-1.4 synthetic")).hexdigest(),
+           "size":(len(b"<Invoice>synthetic</Invoice>") if idx == 1 else len(b"%PDF-1.4 synthetic")),
+           "name":"sample.pdf","path":("tenant-a/factura.xml" if idx == 1 else "tenant-b/guia.pdf")})
 print("SYNTHETIC_RELATIONAL_FIXTURES_READY")
