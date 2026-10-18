@@ -247,6 +247,7 @@ class ExpedienteOut(Orm):
     tipo_comprobante: TipoComprobante
     serie: str
     correlativo: str
+    correlativo_original: str | None = None
     fecha_emision: date
     moneda: Moneda
     importe_total: Decimal
