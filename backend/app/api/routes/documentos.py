@@ -26,6 +26,8 @@ from app.models import (
     Miembro,
     ReferenciaGRE,
     RelacionDocumento,
+    CorreccionIA,
+    PagoERP,
     SolicitudCargaEmisor,
     ahora,
 )
@@ -73,6 +75,7 @@ from app.services.procesamiento_documental import DocumentoNoProcesable, procesa
 from app.services.relaciones_documentales import sugerir_relaciones
 from app.services.separador_pdf import analizar_paquete, extraer_fragmento
 from app.services.ubl import UblInvalido, parece_xml, parse_ubl
+from app.item_models import LineaComprobanteItem
 from app.storage import AlmacenLocal
 
 router = APIRouter(prefix="/documentos", tags=["documentos"])
@@ -1211,9 +1214,58 @@ def eliminar_documento(
     hoy: HoyDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
+    almacen: AlmacenDep,
     documento_id: uuid.UUID,
 ) -> None:
+    # Se autoriza únicamente un archivo sin cliente/expediente y sin dependencias:
+    # documentos asociados requieren una operación de eliminación integral distinta.
     documento = _documento(session, tenant_id, documento_id)
+    if auth.rol == RolMiembro.SUPERADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin autorización para eliminar")
+    if documento.expediente_id is None:
+        # Todo rol operativo del tenant puede eliminar documentos huérfanos.
+        if auth.rol not in (
+            "GESTOR",
+            RolMiembro.USUARIO,
+            RolMiembro.RESPONSABLE,
+            RolMiembro.SECRETARIA,
+            RolMiembro.GERENTE,
+            RolMiembro.ADMINISTRADOR,
+        ):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Rol no autorizado")
+        dependencias = (
+            session.scalar(select(RelacionDocumento.id).where(
+                or_(RelacionDocumento.origen_id == documento_id, RelacionDocumento.destino_id == documento_id)
+            ).limit(1)),
+            session.scalar(select(ReferenciaGRE.id).where(ReferenciaGRE.documento_id == documento_id).limit(1)),
+            session.scalar(select(CorreccionIA.id).where(CorreccionIA.documento_id == documento_id).limit(1)),
+            session.scalar(select(PagoERP.id).where(PagoERP.voucher_documento_id == documento_id).limit(1)),
+            session.scalar(select(LineaComprobanteItem.id).where(LineaComprobanteItem.documento_id == documento_id).limit(1)),
+        )
+        if any(dep is not None for dep in dependencias):
+            raise HTTPException(status.HTTP_409_CONFLICT, "Documento con referencias; requiere eliminación integral")
+        ruta = documento.ruta_storage
+        # Validar ámbito físico antes de liberar el registro y el hash.
+        if not ruta.startswith(f"{tenant_id}/") or ".." in ruta.split("/"):
+            raise HTTPException(status.HTTP_409_CONFLICT, "Ruta del documento inválida")
+        archivo = almacen.ruta_absoluta(ruta)
+        auditoria.registrar(
+            session, tenant_id, "DOCUMENTO_ELIMINADO_DEFINITIVAMENTE",
+            "documento", documento.id, {"sha256": documento.sha256}
+        )
+        session.delete(documento)
+        session.commit()
+        # La limpieza del contenido se hace después del COMMIT. Si falla,
+        # la huella ya está liberada y el archivo sigue localizable para recuperación.
+        try:
+            archivo.unlink(missing_ok=True)
+        except OSError:
+            # No se informa borrado completo cuando el almacenamiento falló.
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "Registro eliminado; limpieza física pendiente por incidencia del almacenamiento",
+            ) from None
+        return
     _validar_ambito_documento(auth, documento, session)
     if not permiso_habilitado(
         session,
