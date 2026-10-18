@@ -13,9 +13,7 @@ from app.models import CuentaAcceso, Documento, Miembro, Tenant
 from app.security import hash_clave
 
 
-def test_cookie_sessions_cannot_read_other_tenants_documents(
-    engine, settings, reloj, auth_prueba
-):
+def test_cookie_sessions_cannot_read_other_tenants_documents(engine, settings, reloj, auth_prueba):
     """Exercise real login and cookie resolution, not the mocked identity fixture."""
     factory = sessionmaker(engine, expire_on_commit=False)
     with factory() as session:
@@ -83,9 +81,10 @@ def test_cookie_sessions_cannot_read_other_tenants_documents(
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_hoy] = lambda: reloj.hoy
     try:
-        with TestClient(app, base_url="https://testserver") as first, TestClient(
-            app, base_url="https://testserver"
-        ) as second:
+        with (
+            TestClient(app, base_url="https://testserver") as first,
+            TestClient(app, base_url="https://testserver") as second,
+        ):
             login_a = first.post(
                 "/api/v1/auth/login",
                 json={
