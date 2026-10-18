@@ -55,8 +55,8 @@ from app.services.automatizacion_documental import (
     guardar_procesamiento,
     registrar_fallo,
 )
-from app.services.cache_ocr import procesar_con_cache
 from app.services.bloqueo_documental import bloquear_tenant_documental
+from app.services.cache_ocr import procesar_con_cache
 from app.services.eliminacion_expediente_gestor import (
     EliminacionNoSegura,
     eliminar_expediente_del_gestor,
