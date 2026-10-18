@@ -17,6 +17,7 @@ from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, Setti
 from app.api.errores import no_encontrado
 from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, RolMiembro, TipoDocumento
+from app.item_models import LineaComprobanteItem
 from app.models import (
     AlertaManual,
     CorreccionIA,
@@ -29,9 +30,7 @@ from app.models import (
     ReferenciaGRE,
     RelacionDocumento,
     SolicitudCargaEmisor,
-    ahora,
 )
-from app.item_models import LineaComprobanteItem
 from app.schemas import (
     DocumentoOut,
     DocumentoVincular,
