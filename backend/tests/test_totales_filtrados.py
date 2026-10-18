@@ -97,3 +97,34 @@ def test_dashboard_no_suma_expediente_con_cliente_pendiente(
         Decimal(fila["bancarizable"]) + Decimal(fila["no_bancarizable"]) == 0
         for fila in resumen["montos"]
     )
+
+
+def test_gerencia_aprueba_cliente_y_activa_sumas_sin_recargar_documentos(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+    respuesta = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("aprobacion.xml", factura(numero="F001-00000999", importe="850.00"))},
+    )
+    assert respuesta.status_code == 201, respuesta.text
+    exp = session.get(Expediente, respuesta.json()["expediente_id"])
+    assert exp is not None and exp.pendiente_aprobacion is True
+    receptor_id = exp.receptor_id
+
+    auth_prueba.como_superadmin()
+    prohibido = client.patch(f"/api/v1/empresas/{receptor_id}", json={"autorizada": True})
+    assert prohibido.status_code == 403, prohibido.text
+
+    auth_prueba.como_gerente()
+    permitido = client.patch(f"/api/v1/empresas/{receptor_id}", json={"autorizada": True})
+    assert permitido.status_code == 200, permitido.text
+    session.expire_all()
+    exp = session.get(Expediente, respuesta.json()["expediente_id"])
+    assert exp is not None and exp.pendiente_aprobacion is False
+
+    auth_prueba.como_usuario(usuario_id)
+    resumen = client.get("/api/v1/expedientes/resumen")
+    assert resumen.status_code == 200, resumen.text
+    assert Decimal(resumen.json()["total_pen"]) == Decimal("850.00")
