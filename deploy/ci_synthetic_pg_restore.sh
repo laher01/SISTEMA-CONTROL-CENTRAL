@@ -65,3 +65,6 @@ uv run alembic upgrade 0039
 test "$(psql -XAt -d "$restoredb" -c 'SELECT version_num FROM alembic_version')" = 0039
 echo "EPHEMERAL_POSTGRES_AND_DOCUMENTS_RESTORE_OK"
 echo "ALEMBIC_0039_REAL_ROUNDTRIP_OK"
+export FC_E2E_ISOLATED=true
+uv run python scripts/seed_roles_e2e.py
+uv run python scripts/test_restored_rbac_ci.py
