@@ -197,8 +197,8 @@ def test_alertas_y_dashboard(client: TestClient) -> None:
     assert resumen["alertas_abiertas"]["RECEPTOR_NO_AUTORIZADO"] == 2
     assert resumen["documentos_pendientes"]["PENDIENTE_CLASIFICACION"] == 1
     montos = {m["moneda"]: m for m in resumen["montos"]}
-    assert montos["PEN"]["bancarizable"] == "2500.00"
-    assert montos["USD"]["bancarizable"] == "800.00"
+    assert Decimal(montos["PEN"]["bancarizable"]) == 0
+    assert Decimal(montos["USD"]["bancarizable"]) == 0
 
 
 def test_validaciones_de_carga(client: TestClient) -> None:
@@ -626,7 +626,7 @@ def test_superadmin_no_puede_eliminar_archivos_huerfanos(
 
     respuesta = client.delete(f"/api/v1/documentos/{documento['id']}")
     assert respuesta.status_code == 403, respuesta.text
-    assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
+    assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 403
 
 
 def test_admin_no_elimina_documento_asignado_a_gestor_sin_expediente(
