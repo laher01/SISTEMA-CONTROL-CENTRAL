@@ -5,6 +5,7 @@ Never reads GitHub/VPS credentials and never deletes a database.
 """
 import argparse
 import json
+import os
 import pathlib
 import shutil
 import sys
@@ -26,6 +27,20 @@ def cleanup(root, *, now, ttl, dry_run=True):
             continue
         data = json.loads(marker.read_text(encoding="utf-8"))
         if data.get("kind") != "factcentral-ci-ephemeral" or data.get("name") != candidate.name:
+            continue
+        pid = data.get("pid")
+        if type(pid) is int and pid > 0:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                pass
+            except PermissionError:
+                continue
+            else:
+                continue
+        if any(os.path.ismount(p) for p in (candidate, *candidate.rglob("*"))):
+            continue
+        if any(p.is_symlink() for p in candidate.rglob("*")):
             continue
         created = data.get("created_at")
         if type(created) not in (int, float) or created > now or now - created < ttl:
