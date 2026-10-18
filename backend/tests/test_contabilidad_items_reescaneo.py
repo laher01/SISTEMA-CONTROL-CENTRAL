@@ -205,9 +205,7 @@ def test_ruta_con_traversal_no_procesa_archivo_de_otro_tenant(session: Session, 
     assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 0
 
 
-def test_reescaneo_registra_solo_items_del_tenant_solicitante(
-    session: Session, tmp_path: Path
-):
+def test_reescaneo_registra_solo_items_del_tenant_solicitante(session: Session, tmp_path: Path):
     primero = Tenant(nombre="tenant_registro_aislado_a")
     segundo = Tenant(nombre="tenant_registro_aislado_b")
     session.add_all([primero, segundo])
@@ -220,14 +218,12 @@ def test_reescaneo_registra_solo_items_del_tenant_solicitante(
     assert len(resultados) == 1
     assert resultados[0].documento_id == documento_primero.id
     assert resultados[0].estado == "PROCESADO"
-    assert session.scalar(
-        select(func.count()).select_from(LineaComprobanteItem).where(
-            LineaComprobanteItem.tenant_id == primero.id
-        )
-    ) == 1
-    assert session.scalar(
-        select(func.count()).select_from(LineaComprobanteItem).where(
-            LineaComprobanteItem.tenant_id == segundo.id
-        )
-    ) == 0
+    conteos = dict(
+        session.execute(
+            select(LineaComprobanteItem.tenant_id, func.count())
+            .group_by(LineaComprobanteItem.tenant_id)
+        ).all()
+    )
+    assert conteos.get(primero.id, 0) == 1
+    assert conteos.get(segundo.id, 0) == 0
     assert almacen.leer(documento_segundo.ruta_storage) == XML + b"<!--b-->"
