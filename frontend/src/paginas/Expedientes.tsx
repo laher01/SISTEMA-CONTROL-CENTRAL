@@ -316,8 +316,8 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
                 <td>
                   <Link to={`/expedientes/${e.id}`}>
                     {e.tipo_comprobante === "RHE"
-                      ? numeroExpediente(e.tipo_comprobante, e.serie, e.correlativo)
-                      : "FACT " + numeroExpediente(e.tipo_comprobante, e.serie, e.correlativo)}
+                      ? numeroExpediente(e.tipo_comprobante, e.serie, e.correlativo_original ?? e.correlativo)
+                      : "FACT " + numeroExpediente(e.tipo_comprobante, e.serie, e.correlativo_original ?? e.correlativo)}
                   </Link>
                 </td>
                 <td>{formatearFecha(e.fecha_emision)}</td>
