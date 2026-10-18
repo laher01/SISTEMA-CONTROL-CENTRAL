@@ -21,6 +21,11 @@ def _normalizar(texto: str) -> str:
     return "".join(c for c in texto if unicodedata.category(c) != "Mn")
 
 
+def _contiene_termino(texto: str, termino: str) -> bool:
+    """Evita falsos positivos como 'agua' dentro de 'aguardiente'."""
+    return re.search(r"(?<!\w)" + re.escape(termino) + r"(?:s|es)?(?!\w)", texto) is not None
+
+
 def consulta_items_solicitada(mensaje: str) -> tuple[str, str] | None:
     """Reconocer conceptos comerciales con tolerancia a errores frecuentes."""
     normal = _normalizar(mensaje)
@@ -38,7 +43,9 @@ def consulta_items_solicitada(mensaje: str) -> tuple[str, str] | None:
         "sporade": ("sporade", "sporada"),
     }
     encontrados = [
-        clave for clave, variantes in conceptos.items() if any(v in normal for v in variantes)
+        clave
+        for clave, variantes in conceptos.items()
+        if any(_contiene_termino(normal, v) for v in variantes)
     ]
     if encontrados:
         return ("producto", ",".join(encontrados))
@@ -97,7 +104,7 @@ def responder_items(
         texto = _normalizar(descripcion)
         if tipo in {"producto", "libre"}:
             palabras = (p for grupo in grupos for p in sinonimos.get(grupo, (grupo,)))
-            if any(p in texto for p in palabras):
+            if any(_contiene_termino(texto, p) for p in palabras):
                 conceptos[numero].add(descripcion)
         else:
             conceptos[numero].add(descripcion)
