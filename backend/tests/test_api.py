@@ -1,5 +1,4 @@
 import io
-import uuid
 from datetime import date
 from decimal import Decimal
 
@@ -11,7 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.routes import documentos as documentos_routes
 from app.core.config import Settings
-from app.models import Documento, Empresa, Expediente
+from app.models import Documento, Empresa, Expediente, Gestor
 from app.services import procesamiento_documental
 from app.services.procesamiento_documental import ResultadoProcesamiento, sugerir_tipo
 from tests.conftest import AuthPrueba, Reloj
@@ -637,7 +636,14 @@ def test_admin_no_elimina_documento_asignado_a_gestor_sin_expediente(
     documento = subir(client, "asignado-sin-expediente.pdf", b"%PDF-1.7 asignado a gestor")
     registro = session.get(Documento, documento["id"])
     assert registro is not None
-    registro.gestor_id = uuid.uuid4()
+    gestor = Gestor(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="DUENO-280",
+        nombre="Gestor propietario",
+    )
+    session.add(gestor)
+    session.flush()
+    registro.gestor_id = gestor.id
     session.commit()
     auth_prueba.como_admin()
 
