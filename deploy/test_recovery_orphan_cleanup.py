@@ -68,3 +68,22 @@ def test_pid_marker_without_live_process_still_preserved(tmp_path):
     marker.write_text(json.dumps(data))
     assert cleanup(tmp_path, now=time.time(), ttl=3600, dry_run=False) == []
     assert p.exists()
+
+
+def test_cleanup_rejects_unsafe_ttl_even_via_python_api(tmp_path):
+    import pytest
+    p = fixture(tmp_path, "owned", 7200)
+    for ttl in (0, -1, 3599, float("nan"), float("inf")):
+        with pytest.raises(ValueError, match="TTL"):
+            cleanup(tmp_path, now=time.time(), ttl=ttl, dry_run=False)
+        assert p.exists()
+
+
+def test_cleanup_keeps_nonfinite_marker_timestamp(tmp_path):
+    p = fixture(tmp_path, "invalid_marker", 7200)
+    marker = p / MARKER
+    data = json.loads(marker.read_text())
+    data["created_at"] = float("nan")
+    marker.write_text(json.dumps(data))
+    assert cleanup(tmp_path, now=time.time(), ttl=3600, dry_run=False) == []
+    assert p.exists()
