@@ -40,6 +40,7 @@ from app.services.expedientes import (
     recalcular_expedientes,
 )
 from app.services.ingesta import crear_expediente
+from app.services.reparacion_escorpio import vista_previa as vista_previa_escorpio
 from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.pdf_consolidado import pdf_con_documentos
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
@@ -48,6 +49,19 @@ NUMERO_RE = re.compile(r"^([a-z0-9]{4})-0*(\d+)$")
 NUMERO_RHE_RE = re.compile(r"^rhe-([a-z0-9]{4})-0*(\d+)$")
 
 router = APIRouter(prefix="/expedientes", tags=["expedientes"])
+
+
+@router.get("/diagnostico-escorpio-p0")
+def diagnostico_escorpio_p0(
+    session: SessionDep,
+    almacen: AlmacenDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> list[dict]:
+    """Solo lectura: requiere administrador, sin aplicar modificaciones."""
+    if auth.rol not in (RolMiembro.ADMINISTRADOR, RolMiembro.SUPERADMIN):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo administradores")
+    return vista_previa_escorpio(session, almacen, tenant_id)
 
 
 @router.post("", response_model=ExpedienteOut, status_code=status.HTTP_201_CREATED)
