@@ -308,6 +308,7 @@ def aplicar_automaticamente(
             tipo_comprobante=tipo_comprobante,
             serie=serie,
             correlativo=correlativo,
+            correlativo_original=campos["correlativo"],
             fecha_emision=fecha_emision,
             moneda=moneda,
             importe_total=importe_total,
