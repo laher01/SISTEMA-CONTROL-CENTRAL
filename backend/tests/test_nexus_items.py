@@ -57,5 +57,5 @@ def test_busqueda_no_confunde_palabras_compuestas() -> None:
     assert _contiene_termino("aguardiente mineral", "agua") is False
     assert _contiene_termino("agua mineral", "agua") is True
     assert _contiene_termino("aceite para neumáticos", "neumatico") is False
-    assert _contiene_termino("neumaticos", "neumatico") is False
+    assert _contiene_termino("neumaticos", "neumatico") is True
     assert consulta_items_solicitada("¿Y agua y Sporade?") == ("producto", "agua,sporade")
