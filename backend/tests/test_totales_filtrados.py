@@ -84,6 +84,15 @@ def test_dashboard_no_suma_expediente_con_cliente_pendiente(
     assert panel.status_code == 200, panel.text
     resumen = panel.json()
     assert resumen["pendientes_aprobacion"] >= 1
+    documentos = client.get("/api/v1/documentos/resumen")
+    expedientes = client.get("/api/v1/expedientes/resumen")
+    assert documentos.status_code == 200, documentos.text
+    assert expedientes.status_code == 200, expedientes.text
+    assert documentos.json()["total_documentos"] == 1
+    assert expedientes.json()["total_expedientes"] == 1
+    assert Decimal(documentos.json()["total_pen"]) == 0
+    assert Decimal(expedientes.json()["total_pen"]) == 0
+
     assert all(
         Decimal(fila["bancarizable"]) + Decimal(fila["no_bancarizable"]) == 0
         for fila in resumen["montos"]
