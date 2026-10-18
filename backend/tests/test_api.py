@@ -585,6 +585,18 @@ def test_documento_eliminado_puede_reingresarse_con_mismo_hash(
     assert client.get(f"/api/v1/documentos/{original['id']}").status_code == 404
 
 
+def test_no_permitir_borrado_parcial_de_documento_con_expediente(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    documento = subir(client, "factura-vinculada.xml", factura(numero="F001-00000789"))
+    assert documento["expediente_id"] is not None
+    auth_prueba.como_admin()
+
+    respuesta = client.delete(f"/api/v1/documentos/{documento['id']}")
+    assert respuesta.status_code == 409, respuesta.text
+    assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
+
+
 def test_reprocesamiento_masivo_repara_razones_sociales(
     client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
