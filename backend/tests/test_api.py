@@ -613,9 +613,7 @@ def test_archivo_vigente_sigue_rechazando_duplicados_tras_reingreso(
 
     recargado = subir(client, "nuevo.pdf", contenido)
     assert recargado["id"] != inicial["id"]
-    duplicado = client.post(
-        "/api/v1/documentos", files={"archivo": ("tercero.pdf", contenido)}
-    )
+    duplicado = client.post("/api/v1/documentos", files={"archivo": ("tercero.pdf", contenido)})
     assert duplicado.status_code == 409
     assert duplicado.json()["detail"]["duplicado"] is True
 
