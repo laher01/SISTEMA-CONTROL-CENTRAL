@@ -187,13 +187,13 @@ def responder_items(
             select(Expediente, Empresa.razon_social, Documento.datos_extraidos)
             .join(Documento, Documento.expediente_id == Expediente.id)
             .join(Empresa, Empresa.id == Expediente.receptor_id)
-        .join(Emisor, Emisor.id == Expediente.emisor_id)
+            .join(Emisor, Emisor.id == Expediente.emisor_id)
             .where(
                 Expediente.tenant_id == auth.tenant_id,
                 Documento.tenant_id == auth.tenant_id,
                 Empresa.tenant_id == auth.tenant_id,
-            Emisor.tenant_id == auth.tenant_id,
-            *filtro_emisor,
+                Emisor.tenant_id == auth.tenant_id,
+                *filtro_emisor,
                 Documento.tipo_documento == TipoDocumento.FACT,
                 Expediente.deleted_at.is_(None),
                 Documento.deleted_at.is_(None),
