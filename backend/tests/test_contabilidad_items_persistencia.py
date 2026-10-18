@@ -86,9 +86,7 @@ def test_pdf_no_registra_si_no_es_factura_escorpio(session: Session) -> None:
     session.flush()
     documento = _documento(session, tenant.id)
     assert registrar_items_pdf_estacion(session, tenant.id, documento.id, "GLL DIESEL B5 S50") == 0
-    assert registrar_items_pdf_estacion(
-        session, tenant.id, documento.id, TEXTO_ESCORPIO.replace("FACTURA", "GUIA")
-    ) == 0
-    assert registrar_items_pdf_estacion(
-        session, tenant.id, documento.id, TEXTO_ESCORPIO + " " + TEXTO_ESCORPIO
-    ) == 0
+    guia = TEXTO_ESCORPIO.replace("FACTURA", "GUIA")
+    assert registrar_items_pdf_estacion(session, tenant.id, documento.id, guia) == 0
+    duplicado = TEXTO_ESCORPIO + " " + TEXTO_ESCORPIO
+    assert registrar_items_pdf_estacion(session, tenant.id, documento.id, duplicado) == 0
