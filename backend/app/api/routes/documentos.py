@@ -1192,6 +1192,26 @@ def provisionales_gre(
     ]
 
 
+@router.get("/retirados", response_model=list[DocumentoOut])
+def listar_documentos_retirados(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> list[Documento]:
+    """Consulta de retirados en el ámbito autorizado, sin exponer originales ajenos."""
+    if auth.rol == RolMiembro.SUPERADMIN or not permiso_habilitado(
+        session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No tiene permiso para restaurar documentos")
+    consulta = select(Documento).where(
+        Documento.tenant_id == tenant_id,
+        Documento.deleted_at.is_not(None),
+    )
+    consulta = _aplicar_ambito_documentos(consulta, auth)
+    return list(session.scalars(consulta.order_by(Documento.deleted_at.desc()).limit(limit)))
+
+
 @router.get("/{documento_id}", response_model=DocumentoOut)
 def obtener_documento(
     session: SessionDep,
