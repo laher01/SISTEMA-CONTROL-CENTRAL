@@ -1,6 +1,10 @@
 """Recuperación durable de archivos tras interrupción de eliminación."""
 
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
+
+from sqlalchemy.orm import sessionmaker
 
 import pytest
 from sqlalchemy.orm import Session
@@ -156,4 +160,74 @@ def test_reconciliacion_no_borra_cuarentena_con_ruta_ocupada_sin_commit(
         reconciliar_intento(session, almacen, tenant_id, diario)
     assert original.read_bytes() == b"ingesta en progreso"
     assert cuarentena.read_bytes() == b"archivo original"
+    assert diario.exists()
+
+
+def test_sesiones_postgresql_aislan_reingesta_no_confirmada(
+    engine, session: Session, tmp_path
+) -> None:
+    """La reconciliación no puede purgar una ruta ocupada por otra transacción."""
+    tenant = Tenant(nombre="tenant_concurrencia_real_280")
+    session.add(tenant)
+    session.commit()
+    almacen = AlmacenLocal(tmp_path)
+    ruta = almacen.guardar(tenant.id, "1" * 64, b"antiguo")
+    original = almacen.ruta_absoluta(ruta)
+    antiguo_id = uuid.uuid4()
+    cuarentena = original.with_name(f".eliminando-{antiguo_id}")
+    diario = registrar_intento(almacen, tenant.id, [(antiguo_id, original, cuarentena)])
+    original.replace(cuarentena)
+    listo = Event()
+    liberar = Event()
+
+    def cargar_sin_confirmar() -> None:
+        with sessionmaker(engine, expire_on_commit=False)() as carga:
+            original.write_bytes(b"nuevo pendiente")
+            nuevo = Documento(
+                tenant_id=tenant.id,
+                sha256="1" * 64,
+                nombre_original="nuevo.pdf",
+                mime_type="application/pdf",
+                tamano_bytes=15,
+                ruta_storage=ruta,
+                tipo_documento="OTRO",
+                estado="PENDIENTE_CLASIFICACION",
+            )
+            carga.add(nuevo)
+            carga.flush()
+            listo.set()
+            assert liberar.wait(10)
+            carga.rollback()
+
+    with ThreadPoolExecutor(max_workers=1) as ejecutor:
+        futuro = ejecutor.submit(cargar_sin_confirmar)
+        try:
+            assert listo.wait(10)
+            with sessionmaker(engine, expire_on_commit=False)() as recuperacion:
+                with pytest.raises(ValueError, match="Ruta ocupada"):
+                    reconciliar_intento(recuperacion, almacen, tenant.id, diario)
+        finally:
+            liberar.set()
+            futuro.result(timeout=10)
+    assert original.read_bytes() == b"nuevo pendiente"
+    assert cuarentena.read_bytes() == b"antiguo"
+
+
+def test_recuperacion_multitenant_no_toca_diario_ajeno(
+    engine, session: Session, tmp_path
+) -> None:
+    tenant_a = Tenant(nombre="tenant_a_recovery_280")
+    tenant_b = Tenant(nombre="tenant_b_recovery_280")
+    session.add_all([tenant_a, tenant_b])
+    session.commit()
+    almacen = AlmacenLocal(tmp_path)
+    ruta = almacen.guardar(tenant_a.id, "2" * 64, b"privado")
+    original = almacen.ruta_absoluta(ruta)
+    temporal = original.with_name(".eliminando-ajeno")
+    diario = registrar_intento(almacen, tenant_a.id, [(uuid.uuid4(), original, temporal)])
+    original.replace(temporal)
+    with sessionmaker(engine, expire_on_commit=False)() as otra_sesion:
+        with pytest.raises(ValueError, match="fuera del tenant"):
+            reconciliar_intento(otra_sesion, almacen, tenant_b.id, diario)
+    assert temporal.read_bytes() == b"privado"
     assert diario.exists()
