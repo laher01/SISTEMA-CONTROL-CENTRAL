@@ -5,6 +5,7 @@ Never reads GitHub/VPS credentials and never deletes a database.
 """
 import argparse
 import json
+import math
 import os
 import pathlib
 import shutil
@@ -15,6 +16,10 @@ MARKER = ".factcentral-synthetic-restore.json"
 
 
 def cleanup(root, *, now, ttl, dry_run=True):
+    if not isinstance(ttl, (int, float)) or not math.isfinite(ttl) or ttl < 3600:
+        raise ValueError('Cleanup TTL must be at least 3600 seconds')
+    if not isinstance(now, (int, float)) or not math.isfinite(now):
+        raise ValueError('Invalid current timestamp')
     root = pathlib.Path(root)
     if root.is_symlink() or not root.is_dir():
         raise ValueError("Invalid cleanup root")
@@ -38,7 +43,7 @@ def cleanup(root, *, now, ttl, dry_run=True):
         if any(p.is_symlink() for p in candidate.rglob("*")):
             continue
         created = data.get("created_at")
-        if type(created) not in (int, float) or created > now or now - created < ttl:
+        if type(created) not in (int, float) or not math.isfinite(created) or created > now or now - created < ttl:
             continue
         if not candidate.resolve().is_relative_to(root.resolve()):
             raise ValueError("Candidate escapes root")
