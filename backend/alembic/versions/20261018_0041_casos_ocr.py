@@ -46,7 +46,7 @@ def upgrade() -> None:
         "reglas_ocr",
         sa.Column("id", sa.Uuid(), primary_key=True),
         sa.Column("tenant_id", sa.Uuid(), sa.ForeignKey("tenants.id"), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("nombre", sa.String(100), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False),
         sa.Column(
