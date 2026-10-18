@@ -651,6 +651,76 @@ def test_admin_no_elimina_documento_asignado_a_gestor_sin_expediente(
     assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
 
 
+
+def test_gestor_propietario_elimina_factura_integral_y_reingresa_mismo_xml(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+    contenido = factura(numero="F001-00000871", importe="230.00")
+    documento = subir(client, "integral-original.xml", contenido)
+    expediente_id = documento["expediente_id"]
+    assert expediente_id is not None
+    ajeno = subir(client, "otra-factura.xml", factura(numero="F001-00000872"))
+
+    gestor = Gestor(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="GESTOR-ELIMINACION-INTEGRAL",
+        nombre="Gestor titular",
+    )
+    session.add(gestor)
+    session.flush()
+    doc = session.get(Documento, documento["id"])
+    exp = session.get(Expediente, expediente_id)
+    assert doc is not None and exp is not None
+    doc.gestor_id = gestor.id
+    exp.gestor_id = gestor.id
+    session.commit()
+
+    auth_prueba.como_gestor(gestor.id, usuario_id)
+    borrado = client.delete(f"/api/v1/documentos/{documento['id']}")
+    assert borrado.status_code == 204, borrado.text
+    assert session.get(Documento, documento["id"]) is None
+    assert session.get(Expediente, expediente_id) is None
+    assert session.get(Documento, ajeno["id"]) is not None
+
+    auth_prueba.como_usuario(usuario_id)
+    recargado = subir(client, "integral-otra-vez.xml", contenido)
+    assert recargado["id"] != documento["id"]
+    assert recargado["expediente_id"] != expediente_id
+
+
+def test_otro_gestor_no_elimina_factura_ajena(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+    doc = subir(client, "ajena.xml", factura(numero="F001-00000875"))
+    propietario = Gestor(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="GESTOR-PROPIETARIO-280",
+        nombre="Propietario",
+    )
+    otro = Gestor(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="GESTOR-AJENO-280",
+        nombre="Gestor sin permiso",
+    )
+    session.add_all([propietario, otro])
+    session.flush()
+    registro = session.get(Documento, doc["id"])
+    expediente = session.get(Expediente, doc["expediente_id"])
+    assert registro is not None and expediente is not None
+    registro.gestor_id = propietario.id
+    expediente.gestor_id = propietario.id
+    session.commit()
+
+    auth_prueba.como_gestor(otro.id, usuario_id)
+    respuesta = client.delete(f"/api/v1/documentos/{doc['id']}")
+    assert respuesta.status_code == 409, respuesta.text
+    assert session.get(Documento, doc["id"]) is not None
+
+
 def test_reprocesamiento_masivo_repara_razones_sociales(
     client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
