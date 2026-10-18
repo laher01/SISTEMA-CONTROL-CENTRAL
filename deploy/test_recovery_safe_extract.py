@@ -127,7 +127,7 @@ def test_rollback_directory_cleanup_does_not_recreate_parents(tmp_path):
     fd = os.open(target, os.O_RDONLY | os.O_DIRECTORY)
     try:
         with pytest.raises(FileNotFoundError):
-            _rollback(fd, [], [("gone", "child")])
+            _rollback(fd, [], [(("gone", "child"), (1, 2))])
         assert not (target / "gone").exists()
     finally:
         os.close(fd)
@@ -206,5 +206,27 @@ def test_rollback_removes_unchanged_owned_inode(tmp_path):
     try:
         _rollback(fd, [(("owned.txt",), (info.st_dev, info.st_ino))], [])
         assert not own.exists()
+    finally:
+        os.close(fd)
+
+
+def test_rollback_preserves_replaced_directory_inode(tmp_path):
+    import os
+    from recovery_safe_extract import _rollback
+
+    root = tmp_path / "root"
+    root.mkdir()
+    owned = root / "tenant-a"
+    owned.mkdir()
+    identity = (owned.stat().st_dev, owned.stat().st_ino)
+    owned.rename(root / "moved-owned")
+    replacement = root / "tenant-a"
+    replacement.mkdir()
+    (replacement / "foreign.txt").write_text("leave untouched")
+    fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        with pytest.raises(ValueError, match="directory changed"):
+            _rollback(fd, [], [(("tenant-a",), identity)])
+        assert (replacement / "foreign.txt").read_text() == "leave untouched"
     finally:
         os.close(fd)
