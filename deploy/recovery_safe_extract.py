@@ -26,10 +26,13 @@ def _open_directory(root_fd, parts, created_dirs, *, create=True):
             if create:
                 try:
                     os.mkdir(part, 0o700, dir_fd=fd)
-                    created_dirs.append(tuple(path))
+                    created_dirs.append((tuple(path), None))
                 except FileExistsError:
                     pass
             next_fd = os.open(part, DIR_FLAGS, dir_fd=fd)
+            if create and created_dirs and created_dirs[-1][0] == tuple(path) and created_dirs[-1][1] is None:
+                metadata = os.fstat(next_fd)
+                created_dirs[-1] = (tuple(path), (metadata.st_dev, metadata.st_ino))
             os.close(fd)
             fd = next_fd
         return fd
@@ -48,9 +51,12 @@ def _rollback(root_fd, created_files, created_dirs):
             os.unlink(parts[-1], dir_fd=fd)
         finally:
             os.close(fd)
-    for parts in sorted(set(created_dirs), key=len, reverse=True):
+    for parts, identity in sorted(created_dirs, key=lambda item: len(item[0]), reverse=True):
         fd = _open_directory(root_fd, parts[:-1], [], create=False)
         try:
+            metadata = os.stat(parts[-1], dir_fd=fd, follow_symlinks=False)
+            if identity is None or (metadata.st_dev, metadata.st_ino) != identity or not stat.S_ISDIR(metadata.st_mode):
+                raise ValueError('Rollback directory changed; quarantine target')
             os.rmdir(parts[-1], dir_fd=fd)
         finally:
             os.close(fd)
