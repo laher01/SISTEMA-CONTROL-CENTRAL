@@ -18,6 +18,7 @@ from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, TipoComprobante, TipoDocumento
 from app.models import Documento, Empresa, Expediente
 from app.services import auditoria
+from app.services.contabilidad_items_ubl import registrar_items_pdf_estacion
 from app.services.expedientes import buscar_expediente, obtener_o_crear_empresa
 from app.services.extraccion_campos import razon_social_confiable
 from app.services.ingesta import (
@@ -86,6 +87,16 @@ def registrar_fallo(
     return ResultadoAutomatizacion("FALLIDO", motivos=(motivo,))
 
 
+def _registrar_items_factura_pdf(
+    session: Session, documento: Documento, procesamiento: dict[str, object]
+) -> None:
+    if documento.tipo_documento != TipoDocumento.FACT or documento.expediente_id is None:
+        return
+    texto = procesamiento.get("texto")
+    if isinstance(texto, str):
+        registrar_items_pdf_estacion(session, documento.tenant_id, documento.id, texto)
+
+
 def aplicar_automaticamente(
     session: Session,
     settings: Settings,
@@ -125,6 +136,7 @@ def aplicar_automaticamente(
             "COMPLETADO", relacionado=True, expediente_id=documento.expediente_id
         )
         _guardar_estado(documento, resultado.estado, expediente_id=documento.expediente_id)
+        _registrar_items_factura_pdf(session, documento, procesamiento)
         return resultado
 
     sugerencia = procesamiento.get("clasificacion_sugerida")
@@ -337,6 +349,7 @@ def aplicar_automaticamente(
     }
     documento.datos_extraidos = datos
     vincular_documento(session, settings, hoy, documento, expediente.id, tipo)
+    _registrar_items_factura_pdf(session, documento, procesamiento)
     _guardar_estado(documento, "COMPLETADO", expediente_id=expediente.id, creado=creado)
     auditoria.registrar(
         session,
