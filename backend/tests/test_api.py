@@ -1334,3 +1334,23 @@ def test_diagnostico_documental_es_solo_lectura_y_de_administrador(
     assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
     auth_prueba.como_superadmin()
     assert client.get(ruta).status_code == 403
+
+
+
+def test_capacidades_documentales_respeta_admin_y_superadmin(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
+    ruta = "/api/v1/documentos/capacidades"
+    auth_prueba.como_admin()
+    admin = client.get(ruta)
+    assert admin.status_code == 200
+    assert admin.json()["puede_retirar"] is True
+    assert admin.json()["puede_restaurar"] is True
+    assert admin.json()["puede_eliminar_definitivamente"] is False
+    auth_prueba.como_superadmin()
+    superadmin = client.get(ruta)
+    assert superadmin.status_code == 200
+    assert superadmin.json()["puede_retirar"] is False
+    assert superadmin.json()["puede_restaurar"] is False
+    assert superadmin.json()["puede_eliminar_definitivamente"] is False
