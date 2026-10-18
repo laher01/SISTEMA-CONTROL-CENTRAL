@@ -297,6 +297,14 @@ def aplicar_automaticamente(
         receptor_ruc,
     )
     creado = expediente is None
+    # Cuando un documento histórico vuelve a procesarse, recuperar su formato
+    # original únicamente si la identidad fiscal normalizada coincide.
+    if (
+        expediente is not None
+        and expediente.correlativo_original is None
+        and str(int(campos["correlativo"])) == expediente.correlativo
+    ):
+        expediente.correlativo_original = campos["correlativo"]
     if expediente is None:
         expediente = crear_expediente(
             session,
