@@ -419,9 +419,7 @@ def test_cartera_clientes_suma_saldo_anterior_abonos_y_mes(
     clientes = client.get("/api/v1/pagos/clientes")
     assert clientes.status_code == 200, clientes.text
     cliente = next(item for item in clientes.json() if item["codigo"] == "20100000001")
-    aprobado = client.patch(
-        f"/api/v1/empresas/{cliente['id']}", json={"autorizada": True}
-    )
+    aprobado = client.patch(f"/api/v1/empresas/{cliente['id']}", json={"autorizada": True})
     assert aprobado.status_code == 200, aprobado.text
 
     abono = client.post(
