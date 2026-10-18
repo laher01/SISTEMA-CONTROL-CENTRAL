@@ -169,3 +169,41 @@ def test_compressed_archive_quota_fails_before_extraction(tmp_path, monkeypatch)
     with pytest.raises(ValueError, match="Compressed archive too large"):
         extract(archive, manifest, target)
     assert list(target.iterdir()) == []
+
+def test_rollback_preserves_replaced_inode(tmp_path):
+    import os
+
+    from recovery_safe_extract import _rollback
+
+    target = tmp_path / "root"
+    target.mkdir()
+    original = target / "invoice.txt"
+    original.write_text("owned")
+    info = original.stat()
+    original.unlink()
+    original.write_text("foreign")
+    fd = os.open(target, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        with pytest.raises(ValueError, match="inode changed"):
+            _rollback(fd, [(("invoice.txt",), (info.st_dev, info.st_ino))], [])
+        assert original.read_text() == "foreign"
+    finally:
+        os.close(fd)
+
+
+def test_rollback_removes_unchanged_owned_inode(tmp_path):
+    import os
+
+    from recovery_safe_extract import _rollback
+
+    target = tmp_path / "root"
+    target.mkdir()
+    own = target / "owned.txt"
+    own.write_text("owned")
+    info = own.stat()
+    fd = os.open(target, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        _rollback(fd, [(("owned.txt",), (info.st_dev, info.st_ino))], [])
+        assert not own.exists()
+    finally:
+        os.close(fd)
