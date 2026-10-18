@@ -10,6 +10,8 @@ on:
       - "deploy/validate_restored_relations.py"
       - "deploy/verify_recovered_storage_ci.py"
       - "deploy/recovery_pair_audit.py"
+      - "deploy/recovery_safe_extract.py"
+      - "deploy/test_recovery_safe_extract.py"
       - ".github/workflows/security-synthetic-postgres-restore-ci.yml"
 permissions:
   contents: read
