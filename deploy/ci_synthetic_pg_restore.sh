@@ -28,7 +28,7 @@ manifest={"batch":"synthetic-ci","files":{name:{"size":len(data),"sha256":sha(da
 PY
 # Source DB already migrated by the dedicated job: snapshot before restoring anywhere else.
 uv run python ../deploy/seed_recovery_relations_ci.py
-pg_dump --format=custom --file="$work/database.dump"
+docker run --rm --network host --user "$(id -u):$(id -g)" -e PGPASSWORD=fact -v "$work:/backup" "postgres:${FC_CI_PG_MAJOR:?}" pg_dump -h localhost -U fact -d fact_central -Fc -f /backup/database.dump
 python3 - "$work" <<'PY'
 import hashlib,json,sys
 from pathlib import Path
@@ -39,7 +39,7 @@ for key,name in [("database_sha256","database.dump"),("archive_sha256","docs.tar
 PY
 python3 ../deploy/recovery_pair_audit.py --archive "$work/docs.tar.gz" --dump "$work/database.dump" --manifest "$work/manifest.json" --batch synthetic-ci
 createdb "$restoredb"
-pg_restore --exit-on-error --no-owner --no-acl --dbname="$restoredb" "$work/database.dump"
+docker run --rm --network host -e PGPASSWORD=fact -v "$work:/backup:ro" "postgres:${FC_CI_PG_MAJOR:?}" pg_restore -h localhost -U fact --exit-on-error --no-owner --no-acl -d "$restoredb" /backup/database.dump
 test "$(psql -XAt -d "$restoredb" -c 'SELECT version_num FROM alembic_version')" = 0038
 FC_DATABASE_URL="postgresql+psycopg://fact:fact@localhost:5432/$restoredb" uv run python ../deploy/validate_restored_relations.py
 # Check document bytes after safe inspection; tar extraction targets disposable empty directory.
