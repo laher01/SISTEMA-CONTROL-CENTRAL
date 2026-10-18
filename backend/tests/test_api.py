@@ -1336,7 +1336,6 @@ def test_diagnostico_documental_es_solo_lectura_y_de_administrador(
     assert client.get(ruta).status_code == 403
 
 
-
 def test_capacidades_documentales_respeta_admin_y_superadmin(
     client: TestClient,
     auth_prueba: AuthPrueba,
