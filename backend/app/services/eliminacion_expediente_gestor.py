@@ -17,7 +17,11 @@ from app.models import (
     RelacionDocumento,
 )
 from app.services import auditoria
-from app.services.recuperacion_eliminaciones import reconciliar_intento, registrar_intento
+from app.services.recuperacion_eliminaciones import (
+    reconciliar_intento,
+    registrar_intento,
+    sincronizar_movimientos,
+)
 from app.storage import AlmacenLocal
 
 
@@ -132,6 +136,7 @@ def eliminar_expediente_del_gestor(
         for original, temporal in pares:
             original.replace(temporal)
             movidos.append((original, temporal))
+        sincronizar_movimientos(movidos)
         session.execute(
             delete(RelacionDocumento).where(
                 RelacionDocumento.tenant_id == tenant_id,
