@@ -2,7 +2,11 @@
 
 from fastapi.testclient import TestClient
 
-from app.services.nexus_items import _contiene_termino, consulta_items_solicitada
+from app.services.nexus_items import (
+    _contiene_termino,
+    _grupos_coincidentes,
+    consulta_items_solicitada,
+)
 from tests.xml import factura
 
 
@@ -59,3 +63,11 @@ def test_busqueda_no_confunde_palabras_compuestas() -> None:
     assert _contiene_termino("aceite para neumáticos", "neumatico") is False
     assert _contiene_termino("neumaticos", "neumatico") is True
     assert consulta_items_solicitada("¿Y agua y Sporade?") == ("producto", "agua,sporade")
+
+
+def test_desglose_de_productos_sin_contar_subcadenas() -> None:
+    catalogo = {"agua": ("agua",), "sporade": ("sporade",)}
+    grupos = ["agua", "sporade"]
+    assert _grupos_coincidentes("AGUA SPORADE", grupos, catalogo) == grupos
+    assert _grupos_coincidentes("AGUARDIENTE", grupos, catalogo) == []
+    assert _grupos_coincidentes("SPORADE", grupos, catalogo) == ["sporade"]
