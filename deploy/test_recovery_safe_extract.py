@@ -73,3 +73,13 @@ def test_extract_denies_symlink_destination(tmp_path):
     target.symlink_to(tmp_path, target_is_directory=True)
     with pytest.raises(ValueError):
         extract(archive, manifest, target)
+
+
+def test_partial_output_removed_on_late_hash_failure(tmp_path):
+    archive, manifest, target = make_pair(tmp_path)
+    data = json.loads(manifest.read_text())
+    data["files"]["tenant-a/invoice.txt"]["sha256"] = "0" * 64
+    manifest.write_text(json.dumps(data))
+    with pytest.raises(ValueError):
+        extract(archive, manifest, target)
+    assert list(target.rglob("*")) == []
