@@ -27,6 +27,7 @@ manifest={"batch":"synthetic-ci","files":{name:{"size":len(data),"sha256":sha(da
 (p/"manifest.json").write_text(json.dumps(manifest))
 PY
 # Source DB already migrated by the dedicated job: snapshot before restoring anywhere else.
+python3 ../deploy/seed_recovery_relations_ci.py
 pg_dump --format=custom --file="$work/database.dump"
 python3 - "$work" <<'PY'
 import hashlib,json,sys
@@ -40,6 +41,7 @@ python3 ../deploy/recovery_pair_audit.py --archive "$work/docs.tar.gz" --dump "$
 createdb "$restoredb"
 pg_restore --exit-on-error --no-owner --no-acl --dbname="$restoredb" "$work/database.dump"
 test "$(psql -XAt -d "$restoredb" -c 'SELECT version_num FROM alembic_version')" = 0038
+FC_DATABASE_URL="postgresql+psycopg://fact:fact@localhost:5432/$restoredb" python3 ../deploy/validate_restored_relations.py
 # Check document bytes after safe inspection; tar extraction targets disposable empty directory.
 mkdir "$work/restored-docs"
 tar -xzf "$work/docs.tar.gz" -C "$work/restored-docs" --no-same-owner --no-same-permissions
