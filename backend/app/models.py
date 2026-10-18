@@ -235,6 +235,7 @@ class Expediente(ConId, ConTenant, ConCreacion, Base):
     tipo_comprobante: Mapped[str] = mapped_column(String(4))
     serie: Mapped[str] = mapped_column(String(4))
     correlativo: Mapped[str] = mapped_column(String(32))
+    correlativo_original: Mapped[str | None] = mapped_column(String(32), nullable=True)
     fecha_emision: Mapped[date] = mapped_column(Date)
     moneda: Mapped[str] = mapped_column(String(3))
     importe_total: Mapped[Decimal] = mapped_column(Numeric(14, 2))
