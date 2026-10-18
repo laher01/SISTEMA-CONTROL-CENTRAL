@@ -3,6 +3,7 @@
 Desde backend: uv run python scripts/reconciliar_eliminaciones.py --tenant UUID
 Para ejecutar: agregar --execute DURANTE MANTENIMIENTO SIN INGESTAS.
 """
+
 import argparse
 import uuid
 
