@@ -23,7 +23,7 @@ from app.services.nexus_context import (
     puede_ver_empresa,
     puede_ver_expediente,
 )
-from app.services.nexus_items import consulta_items_solicitada, responder_items
+from app.services.nexus_items import consulta_items_solicitada, responder_items, seguimiento_proveedor
 from app.services.nexus_knowledge import recuperar_conocimiento
 
 
@@ -97,6 +97,12 @@ def responder(
     if consulta_items is not None:
         tipo, busqueda = consulta_items
         salida = responder_items(session, auth, tipo, busqueda)
+        return _enriquecer(salida, contexto, [], "ESPECIALISTA_ITEMS")
+
+    seguimiento = seguimiento_proveedor(texto, historial or [])
+    if seguimiento is not None:
+        producto, proveedor = seguimiento
+        salida = responder_items(session, auth, "producto", producto, proveedor=proveedor)
         return _enriquecer(salida, contexto, [], "ESPECIALISTA_ITEMS")
 
     conocimiento, fuentes_conocimiento = recuperar_conocimiento(
