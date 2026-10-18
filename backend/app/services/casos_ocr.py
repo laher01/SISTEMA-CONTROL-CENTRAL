@@ -21,9 +21,7 @@ def motivo_pendiente(documento: Documento) -> str | None:
     estado = automatizacion.get("estado")
     if estado not in ESTADOS_FALLO:
         return None
-    motivos = automatizacion.get("motivos")
-    if isinstance(motivos, list):
-        return "; ".join(str(m)[:140] for m in motivos[:3])[:500] or str(estado)
+    # No persistir fragmentos OCR, números de cuenta, RUC ni PII en diagnóstico.
     return str(estado)
 
 
