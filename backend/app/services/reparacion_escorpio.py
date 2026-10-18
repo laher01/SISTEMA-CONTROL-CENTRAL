@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.enums import TipoComprobante
+from app.services import auditoria
 from app.models import Documento, Empresa, Expediente
 from app.services.facturas_estaciones import extraer_factura_estacion
 from app.storage import AlmacenLocal
@@ -153,3 +154,76 @@ def diagnosticar(session: Session, almacen: AlmacenLocal, tenant_id) -> list[Dia
 
 def vista_previa(session: Session, almacen: AlmacenLocal, tenant_id) -> list[dict]:
     return [asdict(item) for item in diagnosticar(session, almacen, tenant_id)]
+
+
+class ReparacionBloqueada(ValueError):
+    """La base no coincide con la vista previa autorizada."""
+
+
+def aplicar_lote_verificado(
+    session: Session,
+    almacen: AlmacenLocal,
+    tenant_id,
+    aprobaciones: list[dict[str, str]],
+) -> list[str]:
+    """Aplica seis reparaciones exactas en una sola transacción.
+
+    El llamador confirma/ejecuta commit; un fallo obliga a rollback.
+    Todas las evidencias se recalculan después de bloquear expedientes.
+    """
+    if len(aprobaciones) != 6:
+        raise ReparacionBloqueada("Se requieren exactamente seis aprobaciones")
+    ids = [a.get("expediente_id") for a in aprobaciones]
+    if len(set(ids)) != 6 or any(not item for item in ids):
+        raise ReparacionBloqueada("Identificadores repetidos o ausentes")
+
+    from uuid import UUID
+
+    try:
+        uuids = [UUID(item) for item in ids]
+    except ValueError as exc:
+        raise ReparacionBloqueada("Identificador inválido") from exc
+
+    bloqueados = list(
+        session.scalars(
+            select(Expediente)
+            .where(
+                Expediente.tenant_id == tenant_id,
+                Expediente.id.in_(uuids),
+                Expediente.deleted_at.is_(None),
+            )
+            .order_by(Expediente.id)
+            .with_for_update()
+        )
+    )
+    if len(bloqueados) != 6:
+        raise ReparacionBloqueada("Uno o más expedientes no están disponibles")
+    por_id = {str(e.id): e for e in bloqueados}
+    propuestas = diagnosticar(session, almacen, tenant_id)
+    candidatos = {p.expediente_id: p for p in propuestas if p.estado == "CANDIDATO"}
+    if set(ids) != set(candidatos):
+        raise ReparacionBloqueada("La vista previa ha cambiado o existen candidatos distintos")
+
+    for aprobacion in aprobaciones:
+        p = candidatos[aprobacion["expediente_id"]]
+        if (
+            aprobacion.get("antes") != p.antes
+            or aprobacion.get("despues") != p.despues
+            or aprobacion.get("pdf_sha256") != p.evidencia
+            or aprobacion.get("documento_id") != p.documento_id
+        ):
+            raise ReparacionBloqueada("Evidencia o estado diferente de la vista previa")
+
+    for expediente_id in ids:
+        p = candidatos[expediente_id]
+        e = por_id[expediente_id]
+        e.serie = "F109"
+        e.correlativo = str(int(OBJETIVOS[p.receptor_ruc]))
+        e.correlativo_original = OBJETIVOS[p.receptor_ruc]
+        auditoria.registrar(
+            session, tenant_id, "ESCORPIO_CORRECCION_HISTORICA_P0",
+            "expediente", e.id,
+            {**p.auditoria_propuesta, "correlativo_normalizado": e.correlativo},
+        )
+    session.flush()  # violaciones de unicidad abortan la transacción
+    return ids
