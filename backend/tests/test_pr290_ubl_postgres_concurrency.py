@@ -17,7 +17,7 @@ xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponent
 xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
 <cac:InvoiceLine><cbc:InvoicedQuantity unitCode="KGM">3</cbc:InvoicedQuantity>
 <cbc:LineExtensionAmount>27.00</cbc:LineExtensionAmount>
-<cac:Item><cbc:Description>Pota para prueba sintética</cbc:Description></cac:Item>
+<cac:Item><cbc:Description>Pota para prueba sintetica</cbc:Description></cac:Item>
 </cac:InvoiceLine></Invoice>"""
 
 
