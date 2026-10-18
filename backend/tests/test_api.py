@@ -1317,3 +1317,21 @@ def test_retirar_lote_no_elimina_documento_de_otro_tenant(
     finally:
         auth_prueba.contexto = anterior
     assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
+
+
+
+def test_diagnostico_documental_es_solo_lectura_y_de_administrador(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
+    documento = subir(client, "diagnostico.pdf", b"%PDF-1.7 verificar original")
+    auth_prueba.como_admin()
+    ruta = "/api/v1/configuracion/mantenimiento/diagnostico-documental?limit=100"
+    resultado = client.get(ruta)
+    assert resultado.status_code == 200, resultado.text
+    assert resultado.json()["solo_diagnostico"] is True
+    assert resultado.json()["documentos_revisados"] >= 1
+    assert resultado.json()["documentos_sin_original"] == 0
+    assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
+    auth_prueba.como_superadmin()
+    assert client.get(ruta).status_code == 403
