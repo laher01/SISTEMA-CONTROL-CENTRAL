@@ -66,6 +66,9 @@ export default function Pendientes() {
       offset: String(pagina * POR_PAGINA),
     }),
   );
+  const { datos: capacidades } = useDatos<{ puede_retirar: boolean }>(
+    "/api/v1/documentos/capacidades",
+  );
   const { datos: provisionales, recargar: recargarProvisionales } = useDatos<ProvisionalGRE[]>(
     "/api/v1/documentos/provisionales-gre?limit=2000",
   );
@@ -231,7 +234,7 @@ export default function Pendientes() {
       {errorLote && <p className="error">{errorLote}</p>}
       <div className="acciones-documento">
         <strong>{(datos ?? []).filter((d) => seleccionados.includes(d.id)).length} pendientes seleccionados</strong>
-        <button className="peligro" disabled={retirandoSeleccionados || !(datos ?? []).some((d) => seleccionados.includes(d.id))} onClick={() => void retirarSeleccionados()}>
+        <button className="peligro" disabled={!capacidades?.puede_retirar || retirandoSeleccionados || !(datos ?? []).some((d) => seleccionados.includes(d.id))} onClick={() => void retirarSeleccionados()}>
           {retirandoSeleccionados ? "Retirando…" : "Eliminar seleccionados"}
         </button>
         <button className="secundario" disabled={retirandoSeleccionados || !seleccionados.length} onClick={() => setSeleccionados([])}>Limpiar selección</button>
@@ -251,7 +254,7 @@ export default function Pendientes() {
             </tr>
           </thead>
           <tbody>
-            {datos?.map((d) => <FilaPendiente key={d.id} documento={d} alVincular={recargar} seleccionado={seleccionados.includes(d.id)} alSeleccionar={(activo) => setSeleccionados((actual) => activo ? [...new Set([...actual, d.id])] : actual.filter((id) => id !== d.id))} />)}
+            {datos?.map((d) => <FilaPendiente key={d.id} documento={d} alVincular={recargar} puedeRetirar={capacidades?.puede_retirar ?? false} seleccionado={seleccionados.includes(d.id)} alSeleccionar={(activo) => setSeleccionados((actual) => activo ? [...new Set([...actual, d.id])] : actual.filter((id) => id !== d.id))} />)}
           </tbody>
         </table>
       </Estado>
@@ -269,11 +272,13 @@ function FilaPendiente({
   alVincular,
   seleccionado,
   alSeleccionar,
+  puedeRetirar,
 }: {
   documento: Documento;
   alVincular: () => void;
   seleccionado: boolean;
   alSeleccionar: (activo: boolean) => void;
+  puedeRetirar: boolean;
 }) {
   const [seleccion, setSeleccion] = useState<SeleccionSugerida>();
   const [eliminando, setEliminando] = useState(false);
@@ -314,9 +319,9 @@ function FilaPendiente({
         />
       </td>
       <td>
-        <button className="peligro" onClick={retirar} disabled={eliminando}>
+        {puedeRetirar && <button className="peligro" onClick={retirar} disabled={eliminando}>
           {eliminando ? "Eliminando…" : "Eliminar"}
-        </button>
+        </button>}
         {errorEliminar && <small role="alert" className="error bloque">{errorEliminar}</small>}
       </td>
     </tr>
