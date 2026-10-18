@@ -1,0 +1,41 @@
+name: security-fiscal-concurrency-pr264
+
+on:
+  pull_request:
+    paths:
+      - "backend/tests/test_facturas_concurrencia_postgresql_pr264.py"
+      - ".github/workflows/security-fiscal-concurrency-pr264.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  fiscal-concurrency:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: fact
+          POSTGRES_PASSWORD: fact
+          POSTGRES_DB: fact_central_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U fact -d fact_central_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      FC_TEST_DATABASE_URL: postgresql+psycopg://fact:fact@localhost:5432/fact_central_test
+      FC_DATABASE_URL: postgresql+psycopg://fact:fact@localhost:5432/fact_central_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: false
+      - name: Run concurrent fiscal invoice transactions against isolated PostgreSQL 17
+        working-directory: backend
+        run: |
+          uv sync --locked
+          uv run pytest -q tests/test_facturas_concurrencia_postgresql_pr264.py
