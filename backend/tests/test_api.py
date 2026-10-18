@@ -569,7 +569,6 @@ def test_eliminar_documento_es_logico_y_deja_de_listarlo(
     assert all(d["id"] != documento_id for d in listado.json())
 
 
-
 def test_documento_eliminado_puede_reingresarse_con_mismo_hash(
     client: TestClient, auth_prueba: AuthPrueba
 ) -> None:
@@ -580,13 +579,10 @@ def test_documento_eliminado_puede_reingresarse_con_mismo_hash(
     respuesta = client.delete(f"/api/v1/documentos/{original['id']}")
     assert respuesta.status_code == 204, respuesta.text
 
-    recarga = client.post(
-        "/api/v1/documentos", files={"archivo": ("recargado.pdf", contenido)}
-    )
+    recarga = client.post("/api/v1/documentos", files={"archivo": ("recargado.pdf", contenido)})
     assert recarga.status_code == 201, recarga.text
     assert recarga.json()["id"] != original["id"]
     assert client.get(f"/api/v1/documentos/{original['id']}").status_code == 404
-
 
 
 def test_reprocesamiento_masivo_repara_razones_sociales(
