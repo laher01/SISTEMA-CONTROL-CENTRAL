@@ -596,7 +596,7 @@ def test_no_permitir_borrado_parcial_de_documento_con_expediente(
     auth_prueba.como_admin()
 
     respuesta = client.delete(f"/api/v1/documentos/{documento['id']}")
-    assert respuesta.status_code == 409, respuesta.text
+    assert respuesta.status_code == 403, respuesta.text
     assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
 
 
