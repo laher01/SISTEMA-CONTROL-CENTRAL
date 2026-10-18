@@ -180,8 +180,9 @@ def test_rollback_preserves_replaced_inode(tmp_path):
     original = target / "invoice.txt"
     original.write_text("owned")
     info = original.stat()
-    original.unlink()
-    original.write_text("foreign")
+    replacement = target / "replacement.txt"
+    replacement.write_text("foreign")
+    os.replace(replacement, original)
     fd = os.open(target, os.O_RDONLY | os.O_DIRECTORY)
     try:
         with pytest.raises(ValueError, match="inode changed"):
