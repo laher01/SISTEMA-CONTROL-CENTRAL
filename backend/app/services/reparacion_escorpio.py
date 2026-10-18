@@ -7,6 +7,7 @@ con el texto interno del PDF, su hash SHA256 y el emisor/receptor.
 import hashlib
 import io
 from dataclasses import asdict, dataclass
+from uuid import UUID
 
 from pypdf import PdfReader
 from sqlalchemy import select
@@ -65,7 +66,7 @@ def evaluar_identidad(
     return "CANDIDATO", "Serie, correlativo, emisor y receptor verificados en PDF"
 
 
-def diagnosticar(session: Session, almacen: AlmacenLocal, tenant_id) -> list[Diagnostico]:
+def diagnosticar(session: Session, almacen: AlmacenLocal, tenant_id: UUID) -> list[Diagnostico]:
     """Vista previa; no utiliza flush, commit, ni escribe auditoría en BD."""
     expedientes = list(
         session.scalars(
@@ -160,7 +161,7 @@ def diagnosticar(session: Session, almacen: AlmacenLocal, tenant_id) -> list[Dia
     return resultados
 
 
-def vista_previa(session: Session, almacen: AlmacenLocal, tenant_id) -> list[dict]:
+def vista_previa(session: Session, almacen: AlmacenLocal, tenant_id: UUID) -> list[dict[str, object]]:
     return [asdict(item) for item in diagnosticar(session, almacen, tenant_id)]
 
 
@@ -171,7 +172,7 @@ class ReparacionBloqueada(ValueError):
 def aplicar_lote_verificado(
     session: Session,
     almacen: AlmacenLocal,
-    tenant_id,
+    tenant_id: UUID,
     aprobaciones: list[dict[str, str]],
 ) -> list[str]:
     """Aplica seis reparaciones exactas en una sola transacción.
@@ -181,11 +182,9 @@ def aplicar_lote_verificado(
     """
     if len(aprobaciones) != 6:
         raise ReparacionBloqueada("Se requieren exactamente seis aprobaciones")
-    ids = [a.get("expediente_id") for a in aprobaciones]
+    ids = [a["expediente_id"] for a in aprobaciones]
     if len(set(ids)) != 6 or any(not item for item in ids):
         raise ReparacionBloqueada("Identificadores repetidos o ausentes")
-
-    from uuid import UUID
 
     try:
         uuids = [UUID(item) for item in ids]
