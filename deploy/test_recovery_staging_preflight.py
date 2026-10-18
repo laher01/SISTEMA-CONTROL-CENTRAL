@@ -53,3 +53,22 @@ def test_reject_nonempty_restore_target(tmp_path):
     (tmp_path / "target" / "data").write_text("in use")
     with pytest.raises(ValueError):
         verify(item)
+
+
+@pytest.mark.parametrize("field", ["source_documents", "target_documents"])
+def test_reject_symlinked_document_roots(tmp_path, field):
+    item = args(tmp_path)
+    original = tmp_path / ("source" if field == "source_documents" else "target")
+    link = tmp_path / (field + "-link")
+    link.symlink_to(original, target_is_directory=True)
+    setattr(item, field, str(link))
+    with pytest.raises(ValueError, match="Symlink"):
+        verify(item)
+
+
+@pytest.mark.parametrize("field", ["source_database", "target_database", "expected_host", "actual_host"])
+def test_reject_blank_identifiers(tmp_path, field):
+    item = args(tmp_path)
+    setattr(item, field, " ")
+    with pytest.raises(ValueError):
+        verify(item)
