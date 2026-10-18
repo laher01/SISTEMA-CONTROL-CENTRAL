@@ -123,10 +123,11 @@ def eliminar_expediente_del_gestor(
             (ReferenciaGRE, ReferenciaGRE.documento_id),
         ):
             session.execute(delete(modelo).where(modelo.tenant_id == tenant_id, columna.in_(ids)))
-        for modelo in (Alerta, AlertaManual, AuditoriaFacturaItem):
+        for modelo_expediente in (Alerta, AlertaManual, AuditoriaFacturaItem):
             session.execute(
-                delete(modelo).where(
-                    modelo.tenant_id == tenant_id, modelo.expediente_id == expediente_id
+                delete(modelo_expediente).where(
+                    modelo_expediente.tenant_id == tenant_id,
+                    modelo_expediente.expediente_id == expediente_id,
                 )
             )
         # Sincronizar colección ORM para evitar que el flush intente desvincular
