@@ -651,7 +651,6 @@ def test_admin_no_elimina_documento_asignado_a_gestor_sin_expediente(
     assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
 
 
-
 def test_gestor_propietario_elimina_factura_integral_y_reingresa_mismo_xml(
     client: TestClient, auth_prueba: AuthPrueba, session: Session
 ) -> None:
