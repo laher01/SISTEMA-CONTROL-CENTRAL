@@ -1362,6 +1362,7 @@ def test_superadmin_no_puede_retirar_documento_por_delete(
     auth_prueba.como_admin()
     assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
 
+
 def test_ambitos_documentales_cinco_roles(
     client: TestClient, auth_prueba: AuthPrueba, session: Session
 ) -> None:
