@@ -44,8 +44,8 @@ def test_gre_provisional_does_not_invent_factura_or_economic_items(session: Sess
             select(func.count())
             .select_from(ReferenciaGRE)
             .where(
-            ReferenciaGRE.tenant_id == tenant_id,
-            ReferenciaGRE.documento_id == guide.id,
+                ReferenciaGRE.tenant_id == tenant_id,
+                ReferenciaGRE.documento_id == guide.id,
             )
         )
         == 1
@@ -55,8 +55,8 @@ def test_gre_provisional_does_not_invent_factura_or_economic_items(session: Sess
             select(func.count())
             .select_from(Expediente)
             .where(
-            Expediente.tenant_id == tenant_id,
-            Expediente.tipo_comprobante == "FACT",
+                Expediente.tenant_id == tenant_id,
+                Expediente.tipo_comprobante == "FACT",
             )
         )
         == 0
@@ -66,7 +66,7 @@ def test_gre_provisional_does_not_invent_factura_or_economic_items(session: Sess
             select(func.count())
             .select_from(LineaComprobanteItem)
             .where(
-            LineaComprobanteItem.tenant_id == tenant_id
+                LineaComprobanteItem.tenant_id == tenant_id
             )
         )
         == 0
@@ -120,9 +120,9 @@ def test_factura_and_guide_same_tenant_do_not_multiply_invoice_amount(
             select(func.count())
             .select_from(Expediente)
             .where(
-            Expediente.tenant_id == tenant_id,
-            Expediente.serie == "F001",
-            Expediente.correlativo == "900",
+                Expediente.tenant_id == tenant_id,
+                Expediente.serie == "F001",
+                Expediente.correlativo == "900",
             )
         )
         == 1
@@ -130,8 +130,11 @@ def test_factura_and_guide_same_tenant_do_not_multiply_invoice_amount(
     assert session.scalar(
         select(Expediente.importe_total).where(Expediente.id == dossier.id)
     ) == Decimal("150.00")
-    assert session.scalar(
-        select(func.count()).select_from(Documento).where(
-            Documento.tenant_id == tenant_id, Documento.expediente_id == dossier.id
+    assert (
+        session.scalar(
+            select(func.count())
+            .select_from(Documento)
+            .where(Documento.tenant_id == tenant_id, Documento.expediente_id == dossier.id)
         )
-    ) == 3
+        == 3
+    )
