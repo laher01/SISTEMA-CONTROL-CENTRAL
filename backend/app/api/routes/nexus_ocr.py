@@ -19,7 +19,9 @@ def _admin(auth: OperativeAuthDep) -> None:
 
 
 @router.get("/casos")
-def listar_casos(session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep) -> list[dict[str, object]]:
+def listar_casos(
+    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
+) -> list[dict[str, object]]:
     _admin(auth)
     consulta = (
         select(CasoOcr)
