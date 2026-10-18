@@ -19,8 +19,8 @@ with engine.begin() as c:
         c.execute(text("INSERT INTO empresas(id,tenant_id,ruc,razon_social) VALUES (:id,:t,:r,:n)"),
             {"id":company2,"t":tenant,"r":f"2000000001{idx}","n":"Synthetic recipient"})
         c.execute(text("""INSERT INTO expedientes
-          (id,tenant_id,receptor_id,emisor_id,tipo_comprobante,serie,correlativo,fecha_emision,moneda,importe_total)
-          VALUES (:id,:t,:r,:e,'01','F001',:n,CURRENT_DATE,'PEN',100.00)"""),
+          (id,tenant_id,receptor_id,emisor_id,tipo_comprobante,serie,correlativo,fecha_emision,moneda,importe_total,estado)
+          VALUES (:id,:t,:r,:e,'01','F001',:n,CURRENT_DATE,'PEN',100.00,'NARANJA')"""),
           {"id":expedition,"t":tenant,"r":company2,"e":company1,"n":f"000{idx}"})
         c.execute(text("""INSERT INTO documentos
           (id,tenant_id,expediente_id,estado,sha256,nombre_original,mime_type,tamano_bytes,ruta_storage)
