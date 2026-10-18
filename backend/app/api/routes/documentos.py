@@ -66,6 +66,7 @@ from app.services.ingesta import (
     vincular_documento,
 )
 from app.services.jerarquia_documental import nombres_jerarquia
+from app.services.lotes_imagenes import MAX_IMAGENES_POR_SUBLOTE
 from app.services.metadatos_documento import metadatos_individuales
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
@@ -289,6 +290,17 @@ async def importar_paquete_pdf(
                     documento.id,
                     {"documento_padre_id": str(paquete_original.id)},
                 )
+            # Conservar cotizaciones como evidencia comercial, no como expediente fiscal.
+            if segmento.tipo == "COT" and settings.procesamiento_automatico:
+                try:
+                    lectura = procesar(
+                        subido.contenido,
+                        settings.max_extracted_chars,
+                        settings.max_ocr_pdf_pages,
+                    )
+                    guardar_procesamiento(session, documento, lectura.a_dict())
+                except DocumentoNoProcesable as exc:
+                    registrar_fallo(session, documento, str(exc))
             if (
                 segmento.tipo != "COT"
                 and settings.procesamiento_automatico
@@ -331,6 +343,83 @@ async def importar_paquete_pdf(
         "duplicados": sum(x["estado"] == "duplicado" for x in resultados),
         "errores": sum(x["estado"] == "error" for x in resultados),
         "documentos": resultados,
+    }
+
+
+@router.post("/lote-imagenes")
+async def subir_sublote_imagenes(
+    session: SessionDep,
+    settings: SettingsDep,
+    almacen: AlmacenDep,
+    hoy: HoyDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    archivos: Annotated[list[UploadFile], File()],
+) -> dict[str, object]:
+    """Procesa hasta diez imágenes secuencialmente reutilizando permisos y deduplicación.
+
+    Cada archivo es independiente: un duplicado o un fallo no cancela los
+    documentos que ya fueron registrados correctamente en el mismo sublote.
+    El endpoint no agrupa páginas en una factura; eso exige revisión del usuario.
+    """
+    if not 1 <= len(archivos) <= MAX_IMAGENES_POR_SUBLOTE:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Cada sublote debe contener entre 1 y 10 imágenes",
+        )
+    # El límite acumulado evita una solicitud que multiplique hasta diez veces
+    # el consumo permitido para un documento individual.
+    limite_acumulado = settings.max_upload_mb * 1024 * 1024 * MAX_IMAGENES_POR_SUBLOTE
+    tamanos = [getattr(archivo, "size", None) for archivo in archivos]
+    if (
+        all(isinstance(tamano, int) for tamano in tamanos)
+        and sum(tamano for tamano in tamanos if isinstance(tamano, int)) > limite_acumulado
+    ):
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Sublote demasiado grande")
+    resultados: list[dict[str, object]] = []
+    for indice, archivo in enumerate(archivos):
+        cabecera = await archivo.read(12)
+        await archivo.seek(0)
+        firma_valida = (
+            cabecera.startswith(b"\xff\xd8\xff")
+            or cabecera.startswith(b"\x89PNG\r\n\x1a\n")
+            or (cabecera.startswith(b"RIFF") and cabecera[8:12] == b"WEBP")
+            or cabecera.startswith((b"II*\x00", b"MM\x00*"))
+        )
+        if not firma_valida:
+            resultados.append(
+                {"indice": indice, "estado": "error", "detalle": "Imagen no reconocida"}
+            )
+            continue
+        try:
+            documento = await subir_documento(
+                session=session,
+                settings=settings,
+                almacen=almacen,
+                hoy=hoy,
+                tenant_id=tenant_id,
+                auth=auth,
+                archivo=archivo,
+                tipo_documento=None,
+                expediente_id=None,
+            )
+            resultados.append({"indice": indice, "estado": "ok", "documento_id": str(documento.id)})
+        except HTTPException as exc:
+            session.rollback()
+            detalle = exc.detail
+            es_duplicado = (
+                exc.status_code == status.HTTP_409_CONFLICT
+                and isinstance(detalle, dict)
+                and detalle.get("duplicado") is True
+            )
+            estado = "duplicado" if es_duplicado else "error"
+            resultados.append({"indice": indice, "estado": estado, "detalle": detalle})
+    return {
+        "total": len(archivos),
+        "procesados": sum(x["estado"] == "ok" for x in resultados),
+        "duplicados": sum(x["estado"] == "duplicado" for x in resultados),
+        "errores": sum(x["estado"] == "error" for x in resultados),
+        "resultados": resultados,
     }
 
 

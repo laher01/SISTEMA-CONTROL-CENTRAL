@@ -1,7 +1,7 @@
-import { useRef, useState, type DragEvent } from "react";
+import { useRef, useState, type ClipboardEvent, type DragEvent } from "react";
 import { Link } from "react-router-dom";
 
-import { ErrorApi, enviarFormulario } from "../api";
+import { ErrorApi, enviarFormulario, obtener } from "../api";
 import { ETIQUETA_TIPO_DOCUMENTO, formatearFecha, formatearMonto } from "../formato";
 import type { Documento, SesionActual } from "../tipos";
 
@@ -65,6 +65,8 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
   };
   const [filas, setFilas] = useState<Fila[]>([]);
   const [arrastrando, setArrastrando] = useState(false);
+  const [mostrarOpciones, setMostrarOpciones] = useState(false);
+  const [avisoPegado, setAvisoPegado] = useState("");
   const entrada = useRef<HTMLInputElement>(null);
   const entradaCamara = useRef<HTMLInputElement>(null);
   const entradaEscaneos = useRef<HTMLInputElement>(null);
@@ -97,7 +99,56 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
     }
   };
 
-  const agregar = (lista: FileList | null) => {
+  const subirSublote = async (grupo: Fila[]) => {
+    grupo.forEach((fila) => actualizar(fila.clave, { estado: "subiendo" }));
+    const formulario = new FormData();
+    grupo.forEach((fila) => formulario.append("archivos", fila.archivo));
+    try {
+      const informe = await enviarFormulario<{
+        resultados: Array<{
+          indice: number;
+          estado: "ok" | "duplicado" | "error";
+          documento_id?: string;
+          detalle?: unknown;
+        }>;
+      }>("/api/v1/documentos/lote-imagenes", formulario);
+      for (const [indice, fila] of grupo.entries()) {
+        const respuesta = informe.resultados.find((item) => item.indice === indice);
+        if (respuesta?.estado === "ok" && respuesta.documento_id) {
+          try {
+            const documento = await obtener<Documento>(
+              `/api/v1/documentos/${respuesta.documento_id}`,
+            );
+            actualizar(fila.clave, { estado: "ok", documento });
+          } catch {
+            actualizar(fila.clave, {
+              estado: "error",
+              mensaje: `Documento registrado (${respuesta.documento_id}), pero no se pudo consultar. No lo vuelva a cargar sin verificar.`,
+            });
+          }
+        } else {
+          const detalle = respuesta?.detalle;
+          const mensaje =
+            detalle && typeof detalle === "object" && "mensaje" in detalle
+              ? String(detalle.mensaje)
+              : typeof detalle === "string"
+                ? detalle
+                : "No fue posible procesar la imagen";
+          actualizar(
+            fila.clave,
+            respuesta?.estado === "duplicado"
+              ? { estado: "duplicado", mensaje }
+              : { estado: "error", mensaje },
+          );
+        }
+      }
+    } catch (error) {
+      const mensaje = error instanceof Error ? error.message : String(error);
+      grupo.forEach((fila) => actualizar(fila.clave, { estado: "error", mensaje }));
+    }
+  };
+
+  const agregar = (lista: FileList | File[] | null) => {
     if (!lista || lista.length === 0) return;
     const nuevas: Fila[] = Array.from(lista).map((archivo, i) => ({
       clave: `${Date.now()}-${i}-${archivo.name}`,
@@ -113,12 +164,43 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
     while (activos.current < CONCURRENCIA) {
       const fila = cola.current.shift();
       if (!fila) return;
+      const grupo = [fila];
+      if (fila.archivo.type.startsWith("image/")) {
+        while (
+          grupo.length < 10 &&
+          cola.current[0]?.archivo.type.startsWith("image/")
+        ) {
+          const siguiente = cola.current.shift();
+          if (siguiente) grupo.push(siguiente);
+        }
+      }
       activos.current += 1;
-      void subirUno(fila).finally(() => {
+      const operacion = fila.archivo.type.startsWith("image/")
+        ? subirSublote(grupo)
+        : subirUno(fila);
+      void operacion.finally(() => {
         activos.current -= 1;
         despachar();
       });
     }
+  };
+
+  const pegarImagen = (evento: ClipboardEvent<HTMLDivElement>) => {
+    const imagenes = Array.from(evento.clipboardData.items)
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((archivo): archivo is File => archivo !== null);
+    if (!imagenes.length) {
+      imagenes.push(
+        ...Array.from(evento.clipboardData.files).filter((archivo) =>
+          archivo.type.startsWith("image/"),
+        ),
+      );
+    }
+    if (!imagenes.length) return;
+    evento.preventDefault();
+    agregar(imagenes);
+    setAvisoPegado(`${imagenes.length} imagen(es) añadidas a la cola.`);
   };
 
   const soltar = (evento: DragEvent) => {
@@ -213,6 +295,11 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
     { relacionados: 0, revision: 0, duplicados: 0, errores: 0 },
   );
 
+  const lotesDeDiez = Math.ceil(filas.length / 10);
+  const archivosTerminados = filas.filter((f) =>
+    f.resultado.estado === "ok" || f.resultado.estado === "duplicado" || f.resultado.estado === "error",
+  ).length;
+
   const conteo = (estado: Resultado["estado"]) =>
     filas.filter((f) => f.resultado.estado === estado).length;
 
@@ -231,9 +318,29 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
 
   return (
     <>
-      <h2>Subir documentos</h2>
+      <h2>Ingreso de documentos</h2>
+      <p>Dos modalidades independientes: ingreso inteligente y PDF paquetizados.</p>
+      <section className="resumen-carga" aria-label="Ingreso inteligente" style={{ marginBottom: 20 }}>
+        <h3>Ingreso inteligente de documentos</h3>
+        <p>Arrastra PDF individuales o imágenes; también puedes pegar fotos o capturarlas desde el celular.</p>
+        <button type="button" onClick={() => setMostrarOpciones((actual) => !actual)}>
+          {mostrarOpciones ? "Ocultar opciones" : "Agregar documentos"}
+        </button>
+        {mostrarOpciones && (
+          <div className="acciones">
+            <button type="button" onClick={() => entrada.current?.click()}>Subir PDF o XML</button>
+            <button type="button" onClick={() => entradaCamara.current?.click()}>Tomar foto</button>
+            <button type="button" onClick={() => entradaEscaneos.current?.click()}>Subir imágenes</button>
+            <button type="button" onClick={() => { setAvisoPegado("Haz clic en la zona de pegado y presiona Ctrl+V."); document.getElementById("zona-pegado-documental")?.focus(); }}>Pegar imagen</button>
+          </div>
+        )}
+        <div id="zona-pegado-documental" tabIndex={0} role="textbox" aria-label="Zona para pegar imágenes" aria-multiline={false} onPaste={pegarImagen} style={{ border: "1px dashed currentColor", borderRadius: 8, padding: 12, marginTop: 12 }}>
+          Haz clic aquí y pega una imagen con Ctrl+V. En el celular también puedes utilizar la opción de pegar del navegador si está disponible.
+        </div>
+        {avisoPegado && <p role="status">{avisoPegado}</p>}
+      </section>
       <section className="resumen-carga" style={{ marginBottom: 20 }}>
-        <h3>Importación masiva de paquetes PDF</h3>
+        <h3>Importación masiva de PDF paquetizados (apartado independiente)</h3>
         <p>
           Seleccione varios paquetes PDF. El análisis muestra los comprobantes antes de
           importar. Los paquetes se procesan uno por uno para proteger la memoria de la VPS.
@@ -406,7 +513,7 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
           <div className="resumen-lote">
             <p className="resumen-carga">
               {conteo("ok")} subidos · {conteo("duplicado")} duplicados · {conteo("error")} con error ·{" "}
-              {conteo("en_cola") + conteo("subiendo")} en proceso
+              {conteo("en_cola") + conteo("subiendo")} en proceso · {archivosTerminados}/{filas.length} finalizados · {lotesDeDiez} grupo(s) de hasta 10
             </p>
             <strong>Total del lote: {formatearMonto("PEN", String(totales.pen))}</strong>
             {totales.usd > 0 && (
