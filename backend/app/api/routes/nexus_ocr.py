@@ -119,7 +119,11 @@ def proponer_regla(
     session.add(regla)
     session.flush()
     auditoria.registrar(
-        session, tenant_id, "REGLA_OCR_PROPUESTA", "regla_ocr", regla.id,
+        session,
+        tenant_id,
+        "REGLA_OCR_PROPUESTA",
+        "regla_ocr",
+        regla.id,
         {"nombre": regla.nombre, "version": regla.version},
     )
     session.commit()
@@ -150,7 +154,11 @@ def aprobar_regla(
     regla.estado = "APROBADA"
     regla.aprobada_at = ahora()
     auditoria.registrar(
-        session, tenant_id, "REGLA_OCR_APROBADA", "regla_ocr", regla.id,
+        session,
+        tenant_id,
+        "REGLA_OCR_APROBADA",
+        "regla_ocr",
+        regla.id,
         {"version": regla.version},
     )
     session.commit()
@@ -173,7 +181,8 @@ def diagnostico_nexus(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Caso no encontrado")
     documento = session.scalar(
         select(Documento).where(
-            Documento.tenant_id == tenant_id, Documento.id == caso.documento_id,
+            Documento.tenant_id == tenant_id,
+            Documento.id == caso.documento_id,
             Documento.deleted_at.is_(None),
         )
     )
@@ -236,8 +245,13 @@ def reprocesar_caso(
 
     try:
         resultado = _procesar_y_aplicar(
-            session, settings, almacen, hoy, documento,
-            reutilizar=False, forzar_cache=True,
+            session,
+            settings,
+            almacen,
+            hoy,
+            documento,
+            reutilizar=False,
+            forzar_cache=True,
         )
     except DocumentoNoProcesable:
         session.rollback()
@@ -252,7 +266,11 @@ def reprocesar_caso(
         "relacionado": resultado.relacionado,
     }
     auditoria.registrar(
-        session, tenant_id, "CASO_OCR_REPROCESADO", "documento", documento.id,
+        session,
+        tenant_id,
+        "CASO_OCR_REPROCESADO",
+        "documento",
+        documento.id,
         {"caso_id": str(caso.id), "estado": caso.estado, "intentos": caso.intentos},
     )
     session.commit()
