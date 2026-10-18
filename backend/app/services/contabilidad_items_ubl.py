@@ -133,7 +133,7 @@ def registrar_items_pdf_estacion(
     No infiere importes, no sustituye UBL y evita duplicados ante reprocesamientos.
     """
     normal = " ".join(texto.split())
-    if "FACTURA" not in normal.upper() or "FACTURACION.JADAL.PE" not in normal.upper():
+    if not re.search(r"\bFACTURA\b", normal, re.I) or "FACTURACION.JADAL.PE" not in normal.upper():
         return 0
     patron = re.compile(
         r"(?<!\d)(\d{1,6}[.,]\d{1,3})\s+\d{1,5}\s+"
