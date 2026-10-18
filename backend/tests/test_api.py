@@ -1430,6 +1430,7 @@ def test_ambitos_documentales_cinco_roles(
             documentos_routes._validar_ambito_documento(contexto, documento, session)
         assert error.value.status_code == 404
 
+
 def test_retirada_y_restauracion_recalculan_expediente_y_alertas(
     client: TestClient,
     auth_prueba: AuthPrueba,
