@@ -662,6 +662,12 @@ def test_gestor_propietario_elimina_factura_integral_y_reingresa_mismo_xml(
     expediente_id = documento["expediente_id"]
     assert expediente_id is not None
     ajeno = subir(client, "otra-factura.xml", factura(numero="F001-00000872"))
+    voucher = subir(client, "voucher-del-expediente.pdf", b"%PDF-1.7 pago relacionado")
+    vinculado = client.post(
+        f"/api/v1/documentos/{voucher['id']}/vincular",
+        json={"expediente_id": expediente_id, "tipo_documento": "VCHR"},
+    )
+    assert vinculado.status_code == 200, vinculado.text
 
     gestor = Gestor(
         tenant_id=auth_prueba.contexto.tenant_id,
@@ -673,7 +679,10 @@ def test_gestor_propietario_elimina_factura_integral_y_reingresa_mismo_xml(
     doc = session.get(Documento, documento["id"])
     exp = session.get(Expediente, expediente_id)
     assert doc is not None and exp is not None
+    adjunto = session.get(Documento, voucher["id"])
+    assert adjunto is not None
     doc.gestor_id = gestor.id
+    adjunto.gestor_id = gestor.id
     exp.gestor_id = gestor.id
     session.commit()
 
@@ -681,6 +690,7 @@ def test_gestor_propietario_elimina_factura_integral_y_reingresa_mismo_xml(
     borrado = client.delete(f"/api/v1/documentos/{documento['id']}")
     assert borrado.status_code == 204, borrado.text
     assert session.get(Documento, documento["id"]) is None
+    assert session.get(Documento, voucher["id"]) is None
     assert session.get(Expediente, expediente_id) is None
     assert session.get(Documento, ajeno["id"]) is not None
 
