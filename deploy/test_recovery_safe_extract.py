@@ -83,3 +83,35 @@ def test_partial_output_removed_on_late_hash_failure(tmp_path):
     with pytest.raises(ValueError):
         extract(archive, manifest, target)
     assert list(target.rglob("*")) == []
+
+
+def test_rollback_directory_lookup_never_recreates_deleted_directory(tmp_path):
+    import os
+
+    from recovery_safe_extract import _open_directory
+
+    target = tmp_path / "root"
+    target.mkdir()
+    root_fd = os.open(target, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        with pytest.raises(FileNotFoundError):
+            _open_directory(root_fd, ("missing",), [], create=False)
+        assert not (target / "missing").exists()
+    finally:
+        os.close(root_fd)
+
+
+def test_descriptor_directory_lookup_rejects_symlink(tmp_path):
+    import os
+
+    from recovery_safe_extract import _open_directory
+
+    target = tmp_path / "root"
+    target.mkdir()
+    (target / "linked").symlink_to(tmp_path, target_is_directory=True)
+    root_fd = os.open(target, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        with pytest.raises(OSError):
+            _open_directory(root_fd, ("linked",), [], create=False)
+    finally:
+        os.close(root_fd)
