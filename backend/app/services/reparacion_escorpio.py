@@ -161,7 +161,9 @@ def diagnosticar(session: Session, almacen: AlmacenLocal, tenant_id: UUID) -> li
     return resultados
 
 
-def vista_previa(session: Session, almacen: AlmacenLocal, tenant_id: UUID) -> list[dict[str, object]]:
+def vista_previa(
+    session: Session, almacen: AlmacenLocal, tenant_id: UUID
+) -> list[dict[str, object]]:
     return [asdict(item) for item in diagnosticar(session, almacen, tenant_id)]
 
 
