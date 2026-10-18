@@ -105,3 +105,38 @@ def test_reintento_no_procesa_dos_veces(session: Session, tmp_path) -> None:
     assert primera == (1, [])
     assert segunda == (0, [])
     assert listar_intentos(almacen, tenant_id) == []
+
+
+def test_reingesta_mismo_sha_impide_purgar_cuarentena_antigua(
+    session: Session, tmp_path
+) -> None:
+    tenant = Tenant(nombre="tenant_reingesta_concurrente_280")
+    session.add(tenant)
+    session.flush()
+    almacen = AlmacenLocal(tmp_path)
+    contenido = b"reingreso con igual contenido"
+    ruta = almacen.guardar(tenant.id, "e" * 64, contenido)
+    original = almacen.ruta_absoluta(ruta)
+    antiguo_id = uuid.uuid4()
+    cuarentena = original.with_name(f".eliminando-{antiguo_id}")
+    diario = registrar_intento(almacen, tenant.id, [(antiguo_id, original, cuarentena)])
+    original.replace(cuarentena)
+    original.write_bytes(contenido)
+    nuevo = Documento(
+        tenant_id=tenant.id,
+        sha256="e" * 64,
+        nombre_original="reingresado.pdf",
+        mime_type="application/pdf",
+        tamano_bytes=len(contenido),
+        ruta_storage=ruta,
+        tipo_documento="OTRO",
+        estado="PENDIENTE_CLASIFICACION",
+    )
+    session.add(nuevo)
+    session.commit()
+
+    with pytest.raises(ValueError, match="reingresado"):
+        reconciliar_intento(session, almacen, tenant.id, diario)
+    assert original.read_bytes() == contenido
+    assert cuarentena.exists()
+    assert diario.exists()
