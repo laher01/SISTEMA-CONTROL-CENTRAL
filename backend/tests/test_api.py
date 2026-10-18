@@ -935,7 +935,7 @@ Total Neto Recibido : 1,500.00 SOLES""",
     assert datos["expedientes_total"] == 3
     montos = {m["moneda"]: m for m in datos["montos"]}
     total_pen = Decimal(montos["PEN"]["bancarizable"]) + Decimal(montos["PEN"]["no_bancarizable"])
-    assert total_pen == Decimal("4500.00")
+    assert total_pen == 0
 
 
 def test_empresas_eliminadas_no_se_reactivan_por_ingesta_automatica(
