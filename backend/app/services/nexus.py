@@ -90,13 +90,14 @@ def responder(
         if not isinstance(estados, dict) or not estados:
             resumen = "No encontré documentos visibles para resumir en esta pantalla."
         else:
-            resumen = "Documentos visibles por estado: " + ", ".join(
-                f"{estado}: {cantidad}" for estado, cantidad in sorted(estados.items())
-            ) + "."
+            resumen = (
+                "Documentos visibles por estado: "
+                + ", ".join(f"{estado}: {cantidad}" for estado, cantidad in sorted(estados.items()))
+                + "."
+            )
         return NexusChatOut(
             respuesta=(
-                resumen
-                + " Esta información proviene del sistema documental existente. "
+                resumen + " Esta información proviene del sistema documental existente. "
                 "Puedo ayudarte a revisar sus estados; no he reprocesado ni cambiado archivos."
             ),
             accion="RESUMEN_DOCUMENTOS",
