@@ -115,14 +115,14 @@ def extraer_factura_estacion(texto: str) -> dict[str, tuple[str, str]]:
         if fecha:
             campos["fecha_emision"] = (fecha.group(1), fecha.group(0))
     else:
-        fecha = re.search(r"Fecha\s+Emision\s*:\s*(\d{2})/(\d{2})/(20\d{2})", texto, re.I)
+        fecha = re.search(r"Fecha\s+Emisi[oó]n\s*[:：]?\s*(?:[^\d\n]{0,40}\s*)?(\d{2})\s*/\s*(\d{2})\s*/\s*(20\d{2})", texto, re.I)
         if fecha:
             campos["fecha_emision"] = (
                 f"{fecha.group(3)}-{fecha.group(2)}-{fecha.group(1)}",
                 fecha.group(0),
             )
     if jabsa and "fecha_emision" not in campos:
-        invertida = re.search(r"(\d{2})/(\d{2})/(20\d{2})\s*Fecha\s+Emision", texto, re.I)
+        invertida = re.search(r"(\d{2})\s*/\s*(\d{2})\s*/\s*(20\d{2})\s*(?:[^\d\n]{0,40}\s*)?Fecha\s+Emisi[oó]n", texto, re.I)
         if invertida:
             campos["fecha_emision"] = (
                 f"{invertida.group(3)}-{invertida.group(2)}-{invertida.group(1)}",
