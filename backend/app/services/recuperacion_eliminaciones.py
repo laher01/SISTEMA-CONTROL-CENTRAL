@@ -98,3 +98,23 @@ def reconciliar_intento(
 def listar_intentos(almacen: AlmacenLocal, tenant_id: uuid.UUID) -> list[Path]:
     directorio = (almacen.base / str(tenant_id)).resolve() / "_eliminaciones_pendientes"
     return sorted(directorio.glob("*.json")) if directorio.is_dir() else []
+
+
+def reconciliar_pendientes(
+    session: Session, almacen: AlmacenLocal, tenant_id: uuid.UUID
+) -> tuple[int, list[str]]:
+    """Reintentar diarios conservando para revisión cualquier fallo.
+
+    Debe ejecutarse durante una ventana de mantenimiento sin ingestas
+    concurrentes: no está permitido borrar a ciegas ni cambiar de tenant.
+    """
+    correctos = 0
+    errores: list[str] = []
+    for manifiesto in listar_intentos(almacen, tenant_id):
+        try:
+            reconciliar_intento(session, almacen, tenant_id, manifiesto)
+        except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
+            errores.append(f"{manifiesto.name}: {type(error).__name__}: {error}")
+        else:
+            correctos += 1
+    return correctos, errores
