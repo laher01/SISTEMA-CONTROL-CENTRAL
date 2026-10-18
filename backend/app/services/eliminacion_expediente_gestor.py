@@ -1,4 +1,5 @@
 """Elimina expedientes completos únicamente cuando no deja referencias externas."""
+
 import uuid
 
 from sqlalchemy import delete, or_, select
@@ -61,27 +62,30 @@ def eliminar_expediente_del_gestor(
                 RelacionDocumento.origen_id.in_(ids),
                 RelacionDocumento.destino_id.in_(ids),
             ),
-            ~RelacionDocumento.origen_id.in_(ids)
-            | ~RelacionDocumento.destino_id.in_(ids),
+            ~RelacionDocumento.origen_id.in_(ids) | ~RelacionDocumento.destino_id.in_(ids),
         )
         .limit(1)
     )
     if relaciones_externas is not None:
         raise EliminacionNoSegura("Existe relación con documentos fuera del expediente")
     pago = session.scalar(
-        select(PagoERP.id).where(
+        select(PagoERP.id)
+        .where(
             PagoERP.tenant_id == tenant_id,
             PagoERP.voucher_documento_id.in_(ids),
-        ).limit(1)
+        )
+        .limit(1)
     )
     if pago is not None:
         raise EliminacionNoSegura("Existe un pago ERP vinculado")
     referencia_externa = session.scalar(
-        select(ReferenciaGRE.id).where(
+        select(ReferenciaGRE.id)
+        .where(
             ReferenciaGRE.tenant_id == tenant_id,
             ReferenciaGRE.expediente_id == expediente_id,
             ~ReferenciaGRE.documento_id.in_(ids),
-        ).limit(1)
+        )
+        .limit(1)
     )
     if referencia_externa is not None:
         raise EliminacionNoSegura("Referencia GRE de otro documento")
@@ -118,9 +122,7 @@ def eliminar_expediente_del_gestor(
             (LineaComprobanteItem, LineaComprobanteItem.documento_id),
             (ReferenciaGRE, ReferenciaGRE.documento_id),
         ):
-            session.execute(
-                delete(modelo).where(modelo.tenant_id == tenant_id, columna.in_(ids))
-            )
+            session.execute(delete(modelo).where(modelo.tenant_id == tenant_id, columna.in_(ids)))
         for modelo in (Alerta, AlertaManual, AuditoriaFacturaItem):
             session.execute(
                 delete(modelo).where(
@@ -130,9 +132,7 @@ def eliminar_expediente_del_gestor(
         # Sincronizar colección ORM para evitar que el flush intente desvincular
         # documentos eliminados por DELETE a nivel SQL.
         session.execute(
-            delete(Documento).where(
-                Documento.tenant_id == tenant_id, Documento.id.in_(ids)
-            )
+            delete(Documento).where(Documento.tenant_id == tenant_id, Documento.id.in_(ids))
         )
         session.execute(
             delete(Expediente).where(
