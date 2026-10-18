@@ -42,9 +42,7 @@ def test_unassigned_global_budget_is_not_a_fictitious_percentage():
 def test_total_is_weighted_by_authorized_amount_not_mean_percentage():
     a = progress(Decimal("100"), [("A", Decimal("100"))])
     b = progress(Decimal("900"), [("B", Decimal("0"))])
-    total = progress(
-        Decimal("1000"), [("A", Decimal("100")), ("B", Decimal("0"))]
-    )
+    total = progress(Decimal("1000"), [("A", Decimal("100")), ("B", Decimal("0"))])
     assert a == 100 and b == 0
     assert total == 10
 
