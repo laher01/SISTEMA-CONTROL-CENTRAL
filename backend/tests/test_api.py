@@ -618,7 +618,6 @@ def test_archivo_vigente_sigue_rechazando_duplicados_tras_reingreso(
     assert duplicado.json()["detail"]["duplicado"] is True
 
 
-
 def test_superadmin_no_puede_eliminar_archivos_huerfanos(
     client: TestClient, auth_prueba: AuthPrueba
 ) -> None:
