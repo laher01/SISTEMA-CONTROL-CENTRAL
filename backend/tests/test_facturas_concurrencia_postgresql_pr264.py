@@ -30,10 +30,16 @@ def test_factura_identity_unique_during_two_concurrent_transactions(engine, auth
     def insert(_: int) -> str:
         with Session(engine) as session:
             item = Expediente(
-                tenant_id=tenant_id, emisor_id=emisor_id, receptor_id=receptor_id,
-                tipo_comprobante="FACT", serie="F001", correlativo="123456",
-                fecha_emision=date(2026, 10, 18), moneda="PEN",
-                importe_total=Decimal("100.00"), estado="NARANJA",
+                tenant_id=tenant_id,
+                emisor_id=emisor_id,
+                receptor_id=receptor_id,
+                tipo_comprobante="FACT",
+                serie="F001",
+                correlativo="123456",
+                fecha_emision=date(2026, 10, 18),
+                moneda="PEN",
+                importe_total=Decimal("100.00"),
+                estado="NARANJA",
             )
             session.add(item)
             barrier.wait()
