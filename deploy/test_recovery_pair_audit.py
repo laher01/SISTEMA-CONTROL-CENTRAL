@@ -94,3 +94,29 @@ def test_pair_audit_rejects_tenant_path_reassignment(tmp_path):
     }
     with pytest.raises(ValueError, match="inventory mismatch"):
         compare({"files": expected}, inspect_tar(path))
+
+
+def test_pair_manifest_rejects_second_tenant_even_with_same_payload(tmp_path):
+    """Manifest cannot silently omit an extra tenant's archived document."""
+    payload = b"shared-payload"
+    path = archive(tmp_path, [
+        ("tenant-a/doc.pdf", payload, "file"),
+        ("tenant-b/doc.pdf", payload, "file"),
+    ])
+    expected = {"tenant-a/doc.pdf": {
+        "sha256": hashlib.sha256(payload).hexdigest(), "size": len(payload)
+    }}
+    with pytest.raises(ValueError, match="inventory mismatch"):
+        compare({"files": expected}, inspect_tar(path))
+
+
+def test_same_document_name_allowed_when_tenant_paths_are_distinct(tmp_path):
+    """Two tenants may use an identical filename without collapsing identities."""
+    payload = b"shared-payload"
+    path = archive(tmp_path, [
+        ("tenant-a/invoice.pdf", payload, "file"),
+        ("tenant-b/invoice.pdf", payload, "file"),
+    ])
+    entries = inspect_tar(path)
+    assert set(entries) == {"tenant-a/invoice.pdf", "tenant-b/invoice.pdf"}
+    compare({"files": entries}, entries)
