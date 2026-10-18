@@ -24,7 +24,7 @@ class CambiarLanding(BaseModel):
 def estado_publico(session: SessionDep) -> EstadoLanding:
     estado = session.get(ConfiguracionLandingGlobal, 1)
     if estado is None:
-        return EstadoLanding(activa=True, version=1)
+        return EstadoLanding(activa=False, version=1)
     return EstadoLanding(activa=estado.activa, version=estado.version)
 
 
@@ -45,7 +45,7 @@ def actualizar_estado(datos: CambiarLanding, session: SessionDep, auth: AuthDep)
     if estado is None:
         if datos.version != 1:
             raise HTTPException(status.HTTP_409_CONFLICT, "La configuración cambió; recargue")
-        estado = ConfiguracionLandingGlobal(id=1, activa=True, version=1)
+        estado = ConfiguracionLandingGlobal(id=1, activa=False, version=1)
         session.add(estado)
         session.flush()
     if estado.version != datos.version:

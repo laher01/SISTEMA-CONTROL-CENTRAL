@@ -11,7 +11,7 @@ export default function LandingPublica() {
     return <main className="contenido"><p>Consultando presentación…</p></main>;
   }
   // Falla cerrada cuando no se puede comprobar la autorización de publicación.
-  if (error || datos?.activa === false) {
+  if (error || datos?.activa !== true) {
     return (
       <main className="contenido">
         <h1>FACT CENTRAL</h1>

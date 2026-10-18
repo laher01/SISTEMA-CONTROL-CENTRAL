@@ -34,8 +34,22 @@ def test_consulta_publica_no_requiere_cuenta() -> None:
     session = MagicMock()
     session.get.return_value = None
     estado = estado_publico(session)
-    assert estado.activa is True
+    assert estado.activa is False
     assert estado.version == 1
+
+
+def test_primera_activacion_requiere_superadmin_y_audita() -> None:
+    session = MagicMock()
+    session.scalar.return_value = None
+    cuenta = auth("SUPERADMIN")
+    resultado = actualizar_estado(CambiarLanding(activa=True, version=1), session, cuenta)
+    assert resultado.activa is True
+    assert resultado.version == 2
+    assert session.add.call_count == 2
+    auditoria = session.add.call_args.args[0]
+    assert auditoria.anterior is False
+    assert auditoria.nuevo is True
+    session.commit.assert_called_once()
 
 
 def test_lectura_administrativa_bloquea_otro_rol() -> None:
