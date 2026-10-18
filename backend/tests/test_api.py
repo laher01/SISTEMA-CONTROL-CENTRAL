@@ -752,7 +752,6 @@ def test_otro_gestor_no_elimina_factura_ajena(
     assert session.get(Documento, doc["id"]) is not None
 
 
-
 def test_eliminacion_integral_rechaza_relaciones_con_facturas_ajenas(
     client: TestClient, auth_prueba: AuthPrueba, session: Session
 ) -> None:
