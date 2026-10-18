@@ -597,6 +597,23 @@ def test_no_permitir_borrado_parcial_de_documento_con_expediente(
     assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
 
 
+def test_archivo_vigente_sigue_rechazando_duplicados_tras_reingreso(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    contenido = b"%PDF-1.7 control de duplicado activo tras recarga"
+    inicial = subir(client, "inicial.pdf", contenido)
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/documentos/{inicial['id']}").status_code == 204
+
+    recargado = subir(client, "nuevo.pdf", contenido)
+    assert recargado["id"] != inicial["id"]
+    duplicado = client.post(
+        "/api/v1/documentos", files={"archivo": ("tercero.pdf", contenido)}
+    )
+    assert duplicado.status_code == 409
+    assert duplicado.json()["detail"]["duplicado"] is True
+
+
 def test_reprocesamiento_masivo_repara_razones_sociales(
     client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
