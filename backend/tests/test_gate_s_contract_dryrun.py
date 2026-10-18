@@ -1,4 +1,5 @@
 """Synthetic, offline tests for the Gate S read-only contract analyzer."""
+
 import importlib.util
 from pathlib import Path
 
@@ -25,7 +26,9 @@ def test_detects_old_batch_signature_and_locking():
         "    eliminar_documento(session, settings, hoy, tenant_id, auth, documento_id)\n"
     )
     result = module.analyze_sources(
-        delete_src, trash_src, "def registrar_items_ubl():\n    pass\n",
+        delete_src,
+        trash_src,
+        "def registrar_items_ubl():\n    pass\n",
         "def registrar_items_ubl():\n    Tenant.id\n    with_for_update()\n",
     )
     assert result["signature_mismatch"] is True
