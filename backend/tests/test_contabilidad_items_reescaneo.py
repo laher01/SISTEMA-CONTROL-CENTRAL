@@ -220,8 +220,9 @@ def test_reescaneo_registra_solo_items_del_tenant_solicitante(session: Session, 
     assert resultados[0].estado == "PROCESADO"
     conteos = dict(
         session.execute(
-            select(LineaComprobanteItem.tenant_id, func.count())
-            .group_by(LineaComprobanteItem.tenant_id)
+            select(LineaComprobanteItem.tenant_id, func.count()).group_by(
+                LineaComprobanteItem.tenant_id
+            )
         ).all()
     )
     assert conteos.get(primero.id, 0) == 1
