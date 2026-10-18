@@ -21,6 +21,7 @@ from app.models import (
     ahora,
 )
 from app.services import auditoria
+from app.services.bloqueo_documental import bloquear_tenant_documental
 from app.services.contabilidad_items_ubl import registrar_items_ubl
 from app.services.expedientes import (
     actualizar_expediente,
@@ -120,6 +121,7 @@ def ingerir_documento(
     usuario_id: uuid.UUID | None = None,
     creado_por_cuenta_id: uuid.UUID | None = None,
 ) -> Documento:
+    bloquear_tenant_documental(session, tenant_id)
     sha256 = hashlib.sha256(archivo.contenido).hexdigest()
     existente = session.scalar(
         select(Documento.id).where(Documento.tenant_id == tenant_id, Documento.sha256 == sha256)
