@@ -94,7 +94,7 @@ def _diesel_en_factura_procesada(datos: object) -> bool:
         return False
     return bool(
         re.search(
-            r"\\b(?:gll|gal|galones)\\s+(?:[a-z0-9-]+\\s+){0,3}diesel\\s+b5\\s+s50\\b",
+            r"\b(?:gll|gal|galones)\s+(?:[a-z0-9-]+\s+){0,3}diesel\s+b5\s+s50\b",
             compacto,
         )
     )
