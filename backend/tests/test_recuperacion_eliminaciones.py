@@ -231,3 +231,33 @@ def test_recuperacion_multitenant_no_toca_diario_ajeno(
             reconciliar_intento(otra_sesion, almacen, tenant_b.id, diario)
     assert temporal.read_bytes() == b"privado"
     assert diario.exists()
+
+
+def test_fallo_intermedio_conserva_diario_para_reintento(
+    session: Session, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tenant_id = uuid.uuid4()
+    almacen = AlmacenLocal(tmp_path)
+    ruta = almacen.guardar(tenant_id, "3" * 64, b"pendiente de limpieza")
+    original = almacen.ruta_absoluta(ruta)
+    documento_id = uuid.uuid4()
+    temporal = original.with_name(f".eliminando-{documento_id}")
+    diario = registrar_intento(almacen, tenant_id, [(documento_id, original, temporal)])
+    original.replace(temporal)
+
+    original_unlink = type(temporal).unlink
+    intentos = 0
+
+    def falla_una_vez(self, *args, **kwargs):
+        nonlocal intentos
+        if self == temporal and intentos == 0:
+            intentos += 1
+            raise OSError("fallo temporal del almacenamiento")
+        return original_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(temporal), "unlink", falla_una_vez)
+    primero = reconciliar_pendientes(session, almacen, tenant_id)
+    segundo = reconciliar_pendientes(session, almacen, tenant_id)
+    assert primero[0] == 0 and len(primero[1]) == 1
+    assert segundo == (1, [])
+    assert not diario.exists() and not temporal.exists()
