@@ -192,6 +192,7 @@ def test_sesiones_postgresql_aislan_reingesta_no_confirmada(
 
     def cargar_sin_confirmar() -> None:
         with sessionmaker(engine, expire_on_commit=False)() as carga:
+            bloquear_tenant_documental(carga, tenant.id)
             original.write_bytes(b"nuevo pendiente")
             nuevo = Documento(
                 tenant_id=tenant.id,
@@ -206,21 +207,21 @@ def test_sesiones_postgresql_aislan_reingesta_no_confirmada(
             carga.add(nuevo)
             carga.flush()
             listo.set()
-            assert liberar.wait(10)
+            assert liberar.wait(20)
             carga.rollback()
 
     with ThreadPoolExecutor(max_workers=1) as ejecutor:
         futuro = ejecutor.submit(cargar_sin_confirmar)
         try:
             assert listo.wait(10)
-            with (
-                sessionmaker(engine, expire_on_commit=False)() as recuperacion,
-                pytest.raises(ValueError, match="Ruta ocupada"),
-            ):
-                reconciliar_intento(recuperacion, almacen, tenant.id, diario)
+            with sessionmaker(engine, expire_on_commit=False)() as recuperacion:
+                recuperacion.execute(text("SET LOCAL lock_timeout = '200ms'"))
+                with pytest.raises(OperationalError):
+                    reconciliar_intento(recuperacion, almacen, tenant.id, diario)
+                recuperacion.rollback()
         finally:
             liberar.set()
-            futuro.result(timeout=10)
+            futuro.result(timeout=20)
     assert original.read_bytes() == b"nuevo pendiente"
     assert cuarentena.read_bytes() == b"antiguo"
 
