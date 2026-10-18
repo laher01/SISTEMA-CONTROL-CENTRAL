@@ -979,8 +979,6 @@ def eliminar(
             "Solo el gestor propietario puede eliminar expedientes de clientes",
         )
     try:
-        eliminar_expediente_del_gestor(
-            session, almacen, tenant_id, expediente_id, auth.gestor_id
-        )
+        eliminar_expediente_del_gestor(session, almacen, tenant_id, expediente_id, auth.gestor_id)
     except EliminacionNoSegura as error:
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
