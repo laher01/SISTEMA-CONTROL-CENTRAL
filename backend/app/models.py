@@ -234,7 +234,7 @@ class Expediente(ConId, ConTenant, ConCreacion, Base):
     emisor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("empresas.id"), index=True)
     tipo_comprobante: Mapped[str] = mapped_column(String(4))
     serie: Mapped[str] = mapped_column(String(4))
-    correlativo: Mapped[str] = mapped_column(String(8))
+    correlativo: Mapped[str] = mapped_column(String(32))
     fecha_emision: Mapped[date] = mapped_column(Date)
     moneda: Mapped[str] = mapped_column(String(3))
     importe_total: Mapped[Decimal] = mapped_column(Numeric(14, 2))
@@ -351,7 +351,7 @@ class ReferenciaGRE(ConId, ConTenant, ConCreacion, Base):
 
     documento_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documentos.id"), index=True)
     serie: Mapped[str] = mapped_column(String(4))
-    correlativo: Mapped[str] = mapped_column(String(8))
+    correlativo: Mapped[str] = mapped_column(String(32))
     emisor_ruc: Mapped[str] = mapped_column(String(11))
     receptor_ruc: Mapped[str] = mapped_column(String(11))
     usuario_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"))
