@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { conParametros, eliminar, enviarJson, urlArchivo, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
+import { conParametros, eliminar, enviarJson, obtener, urlArchivo, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
 import { Estado, Paginacion } from "../componentes";
 import FiltroJerarquia from "../componentes/FiltroJerarquia";
 import { formatearMonto } from "../formato";
@@ -94,6 +94,38 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
   const [eliminandoLote, setEliminandoLote] = useState(false);
   const [resultadoEliminacion, setResultadoEliminacion] = useState("");
   const [errorEliminacion, setErrorEliminacion] = useState("");
+  const [retirados, setRetirados] = useState<Documento[] | null>(null);
+  const [errorRetirados, setErrorRetirados] = useState("");
+  const [cargandoRetirados, setCargandoRetirados] = useState(false);
+  const [restaurandoId, setRestaurandoId] = useState("");
+
+  const consultarRetirados = async () => {
+    setCargandoRetirados(true);
+    setErrorRetirados("");
+    try {
+      setRetirados(await obtener<Documento[]>("/api/v1/documentos/retirados?limit=100"));
+    } catch (error) {
+      setErrorRetirados(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCargandoRetirados(false);
+    }
+  };
+
+  const restaurarRetirado = async (documento: Documento) => {
+    if (!window.confirm(`¿Restaurar ${documento.nombre_original}? Se verificará el archivo original.`)) return;
+    setRestaurandoId(documento.id);
+    setErrorRetirados("");
+    try {
+      await enviarJson<Documento>(`/api/v1/documentos/${documento.id}/restaurar`, "POST");
+      await consultarRetirados();
+      recargar();
+    } catch (error) {
+      setErrorRetirados(error instanceof Error ? error.message : String(error));
+    } finally {
+      setRestaurandoId("");
+    }
+  };
+
   const visibles = datos ?? [];
   const seleccionVisible = visibles.filter((documento) => seleccionados.includes(documento.id));
   const todosSeleccionados = visibles.length > 0 && seleccionVisible.length === visibles.length;
@@ -207,6 +239,40 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
           onClick={() => setSeleccionados([])}
         >Limpiar selección</button>
       </div>
+      <section aria-label="Documentos retirados">
+        <button
+          className="secundario"
+          type="button"
+          disabled={cargandoRetirados}
+          onClick={() => {
+            if (retirados !== null) setRetirados(null);
+            else void consultarRetirados();
+          }}
+        >
+          {cargandoRetirados ? "Consultando…" : retirados === null ? "Ver retirados" : "Ocultar retirados"}
+        </button>
+        {errorRetirados && <p role="alert" className="error">{errorRetirados}</p>}
+        {retirados !== null && (
+          <div className="panel-configuracion">
+            <h3>Documentos retirados (hasta 100)</h3>
+            <p>El original se conserva hasta que se autorice su eliminación definitiva.</p>
+            {retirados.length === 0 && <p>No hay documentos retirados en su ámbito.</p>}
+            {retirados.map((documento) => (
+              <div key={documento.id} className="acciones-documento">
+                <span>{documento.nombre_original}</span>
+                <button
+                  type="button"
+                  className="secundario"
+                  disabled={restaurandoId !== ""}
+                  onClick={() => void restaurarRetirado(documento)}
+                >
+                  {restaurandoId === documento.id ? "Restaurando…" : "Restaurar"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
       {resultadoEliminacion && <p role="status">{resultadoEliminacion}</p>}
       {errorEliminacion && <p role="alert" className="error">{errorEliminacion}</p>}
 
