@@ -10,9 +10,9 @@ from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, Setti
 from app.enums import RolMiembro
 from app.models import CasoOcr, Documento, ReglaOcr, ahora
 from app.services import auditoria
+from app.services.casos_ocr import clave_diagnostico, registrar_caso, serializar_caso
 from app.services.ingesta import ComprobanteYaRegistrado
 from app.services.procesamiento_documental import DocumentoNoProcesable
-from app.services.casos_ocr import clave_diagnostico, registrar_caso, serializar_caso
 from app.services.reglas_ocr import validar_definicion
 
 router = APIRouter(prefix="/nexus/ocr", tags=["nexus-ocr"])
