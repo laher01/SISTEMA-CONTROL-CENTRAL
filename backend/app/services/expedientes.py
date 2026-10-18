@@ -85,7 +85,7 @@ def buscar_expediente(
             Expediente.tenant_id == tenant_id,
             Expediente.tipo_comprobante == tipo_comprobante,
             Expediente.serie == serie,
-            Expediente.correlativo == correlativo,
+            Expediente.correlativo == str(int(correlativo)),
             Expediente.deleted_at.is_(None),
             emisor.c.ruc == emisor_ruc,
         )
