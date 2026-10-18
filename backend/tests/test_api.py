@@ -819,7 +819,6 @@ def test_eliminacion_integral_no_borra_original_compartido(
     assert session.get(Documento, ajeno["id"]) is not None
 
 
-
 def test_borrado_huerfano_respeta_cuarentena_existente(
     client: TestClient, auth_prueba: AuthPrueba, session: Session, settings: Settings
 ) -> None:
@@ -837,7 +836,6 @@ def test_borrado_huerfano_respeta_cuarentena_existente(
     assert original.is_file()
     assert temporal.read_bytes() == b"pendiente de recuperacion"
     assert session.get(Documento, registro.id) is not None
-
 
 
 def test_fallo_al_apartar_original_no_elimina_registro(
