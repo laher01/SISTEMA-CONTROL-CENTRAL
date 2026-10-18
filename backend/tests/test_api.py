@@ -1153,7 +1153,10 @@ def test_restauracion_rechaza_original_ausente(
     documento = subir(client, "ausente.pdf", b"%PDF-1.7 archivo de prueba")
     auth_prueba.como_admin()
     assert client.delete(f"/api/v1/documentos/{documento['id']}").status_code == 204
-    original = settings.storage_dir / str(auth_prueba.contexto.tenant_id) / documento["sha256"][:2] / documento["sha256"]
+    original = (
+        settings.storage_dir / str(auth_prueba.contexto.tenant_id)
+        / documento["sha256"][:2] / documento["sha256"]
+    )
     original.unlink()
     respuesta = client.post(f"/api/v1/documentos/{documento['id']}/restaurar")
     assert respuesta.status_code == 409
