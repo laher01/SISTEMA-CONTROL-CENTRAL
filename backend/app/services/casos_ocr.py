@@ -49,7 +49,11 @@ def registrar_caso(session: Session, documento: Documento) -> CasoOcr | None:
         session.add(caso)
         session.flush()
         auditoria.registrar(
-            session, documento.tenant_id, "CASO_OCR_CREADO", "documento", documento.id,
+            session,
+            documento.tenant_id,
+            "CASO_OCR_CREADO",
+            "documento",
+            documento.id,
             {"caso_id": str(caso.id), "motivo": motivo},
         )
     return caso
