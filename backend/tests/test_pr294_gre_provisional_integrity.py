@@ -84,7 +84,7 @@ def test_factura_and_guide_same_tenant_do_not_multiply_invoice_amount(
     for name, kind, digest in (
         ("factura.xml", "FACT", "4" * 64),
         ("gre.xml", "GRR", "5" * 64),
-        ("voucher.pdf", "VOUCH", "6" * 64),
+        ("voucher.pdf", "VCHR", "6" * 64),
     ):
         session.add(
             Documento(
