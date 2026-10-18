@@ -240,7 +240,26 @@ def actualizar(
     empresa_id: uuid.UUID,
     datos: EmpresaActualizar,
 ) -> Empresa:
-    if auth.rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.SECRETARIA):
+    solicita_aprobacion = "autorizada" in datos.model_fields_set
+    if solicita_aprobacion and auth.rol not in (
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.GERENTE,
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Solo Administración o Gerencia autoriza clientes",
+        )
+    if auth.rol == RolMiembro.GERENTE:
+        if datos.model_fields_set != {"autorizada"} or datos.autorizada is None:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Gerencia solo puede modificar la autorización del cliente",
+            )
+    elif auth.rol not in (
+        RolMiembro.SUPERADMIN,
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.SECRETARIA,
+    ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "No tiene permiso para modificar Empresas")
     empresa = session.get(Empresa, empresa_id)
     if empresa is None or empresa.tenant_id != tenant_id or empresa.deleted_at:
