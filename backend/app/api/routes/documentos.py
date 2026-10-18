@@ -19,18 +19,19 @@ from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, RolMiembro, TipoDocumento
 from app.models import (
     AlertaManual,
+    CorreccionIA,
     Documento,
     Empresa,
     Expediente,
     Gestor,
     Miembro,
+    PagoERP,
     ReferenciaGRE,
     RelacionDocumento,
-    CorreccionIA,
-    PagoERP,
     SolicitudCargaEmisor,
     ahora,
 )
+from app.item_models import LineaComprobanteItem
 from app.schemas import (
     DocumentoOut,
     DocumentoVincular,
@@ -75,7 +76,6 @@ from app.services.procesamiento_documental import DocumentoNoProcesable, procesa
 from app.services.relaciones_documentales import sugerir_relaciones
 from app.services.separador_pdf import analizar_paquete, extraer_fragmento
 from app.services.ubl import UblInvalido, parece_xml, parse_ubl
-from app.item_models import LineaComprobanteItem
 from app.storage import AlmacenLocal
 
 router = APIRouter(prefix="/documentos", tags=["documentos"])
