@@ -56,7 +56,6 @@ from app.services.automatizacion_documental import (
     registrar_fallo,
 )
 from app.services.cache_ocr import procesar_con_cache
-from app.services.recuperacion_eliminaciones import registrar_intento, reconciliar_intento
 from app.services.eliminacion_expediente_gestor import (
     EliminacionNoSegura,
     eliminar_expediente_del_gestor,
@@ -76,6 +75,7 @@ from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.lotes_imagenes import MAX_IMAGENES_POR_SUBLOTE
 from app.services.metadatos_documento import metadatos_individuales
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
+from app.services.recuperacion_eliminaciones import registrar_intento, reconciliar_intento
 from app.services.relaciones_documentales import sugerir_relaciones
 from app.services.separador_pdf import analizar_paquete, extraer_fragmento
 from app.services.ubl import UblInvalido, parece_xml, parse_ubl
