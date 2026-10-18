@@ -20,7 +20,11 @@ def upgrade() -> None:
         )
 
 
+    op.add_column("expedientes", sa.Column("correlativo_original", sa.String(length=32), nullable=True))
+
+
 def downgrade() -> None:
+    op.drop_column("expedientes", "correlativo_original")
     conexion = op.get_bind()
     for tabla in ("expedientes", "referencias_gre"):
         excedentes = conexion.execute(
