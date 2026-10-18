@@ -10,7 +10,11 @@ from fastapi import HTTPException
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import OperationalError
 
-from app.api.routes.pagos import _resumen_pedido, agregar_asignacion_pedido, eliminar_asignacion_pedido
+from app.api.routes.pagos import (
+    _resumen_pedido,
+    agregar_asignacion_pedido,
+    eliminar_asignacion_pedido,
+)
 from app.enums import RolMiembro
 from app.schemas import PedidoGerenciaOut
 from app.services.pedido_avance import (
