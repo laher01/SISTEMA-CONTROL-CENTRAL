@@ -201,9 +201,11 @@ def test_sesiones_postgresql_aislan_reingesta_no_confirmada(
         futuro = ejecutor.submit(cargar_sin_confirmar)
         try:
             assert listo.wait(10)
-            with sessionmaker(engine, expire_on_commit=False)() as recuperacion:
-                with pytest.raises(ValueError, match="Ruta ocupada"):
-                    reconciliar_intento(recuperacion, almacen, tenant.id, diario)
+            with (
+                sessionmaker(engine, expire_on_commit=False)() as recuperacion,
+                pytest.raises(ValueError, match="Ruta ocupada"),
+            ):
+                reconciliar_intento(recuperacion, almacen, tenant.id, diario)
         finally:
             liberar.set()
             futuro.result(timeout=10)
@@ -224,9 +226,11 @@ def test_recuperacion_multitenant_no_toca_diario_ajeno(
     temporal = original.with_name(".eliminando-ajeno")
     diario = registrar_intento(almacen, tenant_a.id, [(uuid.uuid4(), original, temporal)])
     original.replace(temporal)
-    with sessionmaker(engine, expire_on_commit=False)() as otra_sesion:
-        with pytest.raises(ValueError, match="fuera del tenant"):
-            reconciliar_intento(otra_sesion, almacen, tenant_b.id, diario)
+    with (
+        sessionmaker(engine, expire_on_commit=False)() as otra_sesion,
+        pytest.raises(ValueError, match="fuera del tenant"),
+    ):
+        reconciliar_intento(otra_sesion, almacen, tenant_b.id, diario)
     assert temporal.read_bytes() == b"privado"
     assert diario.exists()
 
