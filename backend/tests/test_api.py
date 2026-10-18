@@ -1371,7 +1371,7 @@ def test_ambitos_documentales_cinco_roles(
 
     from fastapi import HTTPException
 
-    from app.models import Documento, Miembro
+    from app.models import Documento, Gestor, Miembro
 
     datos = subir(client, "ambitos-roles.pdf", b"%PDF-1.7 prueba ambitos")
     documento = session.get(Documento, datos["id"])
@@ -1396,8 +1396,16 @@ def test_ambitos_documentales_cinco_roles(
     )
     session.add(usuario)
     session.flush()
+    gestor_real = Gestor(
+        tenant_id=admin.tenant_id,
+        codigo="GEST-AMBITO",
+        nombre="Gestor asignado",
+        usuario_id=usuario.id,
+    )
+    session.add(gestor_real)
+    session.flush()
     documento.usuario_id = usuario.id
-    documento.gestor_id = uuid4()
+    documento.gestor_id = gestor_real.id
     session.flush()
 
     documentos_routes._validar_ambito_documento(
