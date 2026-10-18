@@ -3,6 +3,12 @@ name: deploy-staging
 on:
   push:
     branches: [main]
+    # Cambios exclusivamente de workflows de diagnostico o de este propio
+    # workflow no deben reconstruir la aplicacion en la VPS.
+    # Si el mismo commit incluye codigo u otros archivos, SI se despliega.
+    paths-ignore:
+      - '.github/workflows/diagnostico-vps-ocr.yml'
+      - '.github/workflows/deploy-staging.yml'
   pull_request:
     paths:
       - '.github/workflows/deploy-staging.yml'
