@@ -629,7 +629,6 @@ def test_superadmin_no_puede_eliminar_archivos_huerfanos(
     assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
 
 
-
 def test_admin_no_elimina_documento_asignado_a_gestor_sin_expediente(
     client: TestClient, auth_prueba: AuthPrueba, session: Session
 ) -> None:
