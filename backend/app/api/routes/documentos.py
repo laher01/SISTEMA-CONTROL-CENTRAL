@@ -1325,7 +1325,7 @@ def eliminar_documento(
 ) -> None:
     documento = _documento(session, tenant_id, documento_id)
     _validar_ambito_documento(auth, documento, session)
-    if not permiso_habilitado(
+    if auth.rol == RolMiembro.SUPERADMIN or not permiso_habilitado(
         session,
         tenant_id,
         auth.rol,
