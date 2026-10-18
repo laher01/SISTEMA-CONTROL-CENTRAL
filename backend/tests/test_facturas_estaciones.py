@@ -195,3 +195,18 @@ def test_ticket_contradictorio_requiere_revision_en_pdf_y_ocr(metodo: str) -> No
     assert datos is not None
     assert datos["requiere_revision"] is True
     assert datos["alertas"] == ["TIPO_COMPROBANTE_CONFLICTIVO"]
+
+
+@pytest.mark.parametrize(
+    "numero",
+    ["00000000000000000000000000000001", "00123456789012345678"],
+)
+def test_escorpio_correlativo_largo_conserva_ceros(numero: str) -> None:
+    texto = (
+        "INVERSIONES Y ASESORAMIENTO ESCORPIO SAC\\n"
+        "FACTURA ELECTRÓNICA F109 Nº " + numero + "\\n"
+        "www.facturacion.jadal.pe"
+    )
+    datos = extraer_factura_estacion(texto)
+    assert datos["serie"][0] == "F109"
+    assert datos["correlativo"][0] == numero
