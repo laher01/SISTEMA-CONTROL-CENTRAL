@@ -55,6 +55,8 @@ for name, spec in m["files"].items():
 print("SYNTHETIC_DOCUMENT_RESTORE_OK")
 PY
 export FC_DATABASE_URL="postgresql+psycopg://fact:fact@localhost:5432/$restoredb"
+export FC_RECOVERED_DOC_ROOT="$work/restored-docs"
+uv run python ../deploy/verify_recovered_storage_ci.py
 uv run alembic upgrade 0039
 test "$(psql -XAt -d "$restoredb" -c 'SELECT version_num FROM alembic_version')" = 0039
 uv run alembic downgrade -1
