@@ -92,7 +92,7 @@ def test_extrae_campos_de_factura_con_trazabilidad() -> None:
     campos = resultado["campos"]
     assert isinstance(campos, dict)
     assert campos["serie"]["valor"] == "F001"
-    assert campos["correlativo"]["valor"] == "123"
+    assert campos["correlativo"]["valor"] == "00000123"
     assert campos["ruc_emisor"]["valor"] == "20500000002"
     assert campos["ruc_receptor"]["valor"] == "20100000001"
     assert campos["fecha_emision"]["valor"] == "2026-09-17"
@@ -147,7 +147,7 @@ def test_extrae_partes_y_campos_de_recibo_por_honorarios() -> None:
     campos = resultado["campos"]
     assert isinstance(campos, dict)
     assert campos["serie"]["valor"] == "E001"
-    assert campos["correlativo"]["valor"] == "38"
+    assert campos["correlativo"]["valor"] == "00000038"
     assert campos["ruc_emisor"]["valor"] == "10456789012"
     assert campos["ruc_receptor"]["valor"] == "20100000001"
     assert campos["razon_social_emisor"]["valor"] == "JUAN PEREZ LOPEZ"
