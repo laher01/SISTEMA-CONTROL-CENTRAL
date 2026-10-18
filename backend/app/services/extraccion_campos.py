@@ -30,7 +30,7 @@ class CampoExtraido:
         }
 
 
-REFERENCIA = re.compile(r"\b([A-Z0-9]{4})\s*[-–—]\s*0*(\d{1,8})\b", re.IGNORECASE)
+REFERENCIA = re.compile(r"\b([A-Z0-9]{4})\s*[-–—]\s*(\d{1,32})\b", re.IGNORECASE)
 RUC = re.compile(r"(?<!\d)(\d{11})(?!\d)")
 RUC_FLEXIBLE = re.compile(r"(?<!\d)((?:\d[\s.\-]?){10}\d)(?!\d)")
 FECHA_ETIQUETADA = re.compile(
@@ -179,7 +179,7 @@ def extraer_campos(
             referencia.group(1).upper(), min(0.98, 0.96 * factor), evidencia
         ).a_dict(fuente)
         campos["correlativo"] = CampoExtraido(
-            str(int(referencia.group(2))), min(0.98, 0.96 * factor), evidencia
+            referencia.group(2), min(0.98, 0.96 * factor), evidencia
         ).a_dict(fuente)
 
     rucs = _rucs_en_texto(texto)
@@ -699,7 +699,7 @@ def _extraer_campos_fiscales_rhe(
 
     # SUNAT puede separar «Nro:» de «E001-39» en distintas líneas.
     serie_numero = re.search(
-        r"(?<![A-Z0-9])[-–—]?\s*(E[0-9]{3})\s*(?:[-–—]|\s)\s*0*([0-9]{1,8})\b",
+        r"(?<![A-Z0-9])[-–—]?\s*(E[0-9]{3})\s*(?:[-–—]|\s)\s*([0-9]{1,32})\b",
         texto,
         re.I,
     )
@@ -709,7 +709,7 @@ def _extraer_campos_fiscales_rhe(
             serie_numero.group(1).upper(), min(0.98, 0.98 * factor), evidencia
         ).a_dict(fuente)
         campos["correlativo"] = CampoExtraido(
-            str(int(serie_numero.group(2))), min(0.98, 0.98 * factor), evidencia
+            serie_numero.group(2), min(0.98, 0.98 * factor), evidencia
         ).a_dict(fuente)
 
     # Mes escrito con nombre: SUNAT también puede colocar la etiqueta al

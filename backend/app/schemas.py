@@ -184,7 +184,7 @@ class ProcesamientoLoteOut(BaseModel):
 
 class ExtraccionConfirmar(BaseModel):
     serie: str | None = Field(default=None, pattern=r"^[A-Z0-9]{4}$")
-    correlativo: str | None = Field(default=None, pattern=r"^\d{1,8}$")
+    correlativo: str | None = Field(default=None, pattern=r"^\d{1,32}$")
     ruc_emisor: Ruc | None = None
     ruc_receptor: Ruc | None = None
     razon_social_emisor: str | None = Field(default=None, min_length=1, max_length=300)
@@ -232,7 +232,7 @@ class ExpedienteIn(BaseModel):
     emisor: EmpresaIn
     tipo_comprobante: TipoComprobante
     serie: str = Field(pattern=r"^[A-Z0-9]{4}$")
-    correlativo: str = Field(pattern=r"^\d{1,8}$")
+    correlativo: str = Field(pattern=r"^\d{1,32}$")
     fecha_emision: date
     moneda: Moneda = Moneda.PEN
     importe_total: Decimal = Field(ge=0, max_digits=14, decimal_places=2)
@@ -247,6 +247,7 @@ class ExpedienteOut(Orm):
     tipo_comprobante: TipoComprobante
     serie: str
     correlativo: str
+    correlativo_original: str | None = None
     fecha_emision: date
     moneda: Moneda
     importe_total: Decimal

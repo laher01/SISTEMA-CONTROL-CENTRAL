@@ -397,6 +397,7 @@ def crear_expediente(
     gestor_id: uuid.UUID | None,
     usuario_id: uuid.UUID | None = None,
     creado_por_cuenta_id: uuid.UUID | None = None,
+    correlativo_original: str | None = None,
 ) -> Expediente:
     empresa_receptora = obtener_o_crear_empresa(
         session, tenant_id, *receptor, tipo_relacion="CLIENTE"
@@ -412,6 +413,7 @@ def crear_expediente(
         tipo_comprobante=tipo_comprobante,
         serie=serie,
         correlativo=str(int(correlativo)),
+        correlativo_original=correlativo_original or correlativo,
         fecha_emision=fecha_emision,
         moneda=moneda,
         importe_total=importe_total,
@@ -476,7 +478,8 @@ def _expediente_para_comprobante(
             emisor_id=emisor.id,
             tipo_comprobante=TipoComprobante.FACT,
             serie=comprobante.serie,
-            correlativo=comprobante.correlativo,
+            correlativo=str(int(comprobante.correlativo)),
+            correlativo_original=comprobante.correlativo,
             fecha_emision=comprobante.fecha_emision,
             moneda=comprobante.moneda,
             importe_total=comprobante.importe_total,

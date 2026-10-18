@@ -30,7 +30,7 @@ def test_factura_real_menciona_pago_bcp_y_preserva_serie() -> None:
     resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
     assert resultado is not None
     assert resultado["campos"]["serie"]["valor"] == "F001"
-    assert resultado["campos"]["correlativo"]["valor"] == "123"
+    assert resultado["campos"]["correlativo"]["valor"] == "00000123"
 
 
 def test_no_inferir_operacion_bcp_sin_identificador() -> None:

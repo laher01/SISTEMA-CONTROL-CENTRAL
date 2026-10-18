@@ -136,6 +136,7 @@ export interface Expediente {
   tipo_comprobante: TipoComprobante;
   serie: string;
   correlativo: string;
+  correlativo_original?: string | null;
   fecha_emision: string;
   moneda: Moneda;
   importe_total: string;

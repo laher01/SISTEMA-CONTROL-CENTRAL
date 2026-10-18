@@ -26,13 +26,13 @@ def extraer_factura_estacion(texto: str) -> dict[str, tuple[str, str]]:
     campos: dict[str, tuple[str, str]] = {}
     compacto = " ".join(texto.split())
     numero = re.search(
-        r"\b(F[0-9]{3})\s*(?:[-–—]\s*|N[°ºO.]\s*)0*([0-9]{1,10})\b",
+        r"\b(F[0-9]{3})\s*(?:[-–—]\s*|N[°ºO.]\s*)([0-9]{1,32})\b",
         texto,
         re.I,
     )
     if numero:
         campos["serie"] = (numero.group(1).upper(), numero.group(0))
-        campos["correlativo"] = (str(int(numero.group(2))), numero.group(0))
+        campos["correlativo"] = (numero.group(2), numero.group(0))
 
     if escorpio:
         emisor = re.search(r"R\.?U\.?C\.?\s*N[°º]?\s*(\d{11})", texto, re.I)

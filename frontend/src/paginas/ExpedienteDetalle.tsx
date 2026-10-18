@@ -23,8 +23,8 @@ export default function ExpedienteDetalle() {
         <>
           <h2>
             {datos.tipo_comprobante === "RHE"
-              ? numeroExpediente(datos.tipo_comprobante, datos.serie, datos.correlativo)
-              : "FACT " + numeroExpediente(datos.tipo_comprobante, datos.serie, datos.correlativo)}{" "}
+              ? numeroExpediente(datos.tipo_comprobante, datos.serie, datos.correlativo_original ?? datos.correlativo)
+              : "FACT " + numeroExpediente(datos.tipo_comprobante, datos.serie, datos.correlativo_original ?? datos.correlativo)}{" "}
             <Semaforo estado={datos.estado} />
           </h2>
           <p><a className="boton-enlace" href={urlZipExpediente(datos.id)}>Descargar expediente completo (.zip)</a>{" · "}<a className="boton-enlace" href={urlPdfExpediente(datos.id)}>Descargar PDF ordenado</a></p>
