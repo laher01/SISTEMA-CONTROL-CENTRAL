@@ -1,4 +1,5 @@
 """PostgreSQL-only fiscal identity concurrency regression; isolated synthetic test."""
+
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from decimal import Decimal
