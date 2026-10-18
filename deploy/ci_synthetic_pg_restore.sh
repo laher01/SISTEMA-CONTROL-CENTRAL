@@ -47,7 +47,7 @@ test "$(psql -XAt -d "$restoredb" -c "SELECT COUNT(*) FROM synthetic_restore_mar
 FC_DATABASE_URL="postgresql+psycopg://fact:fact@localhost:5432/$restoredb" uv run python ../deploy/validate_restored_relations.py
 # Check document bytes after safe inspection; tar extraction targets disposable empty directory.
 mkdir "$work/restored-docs"
-tar -xzf "$work/docs.tar.gz" -C "$work/restored-docs" --no-same-owner --no-same-permissions
+python3 ../deploy/recovery_safe_extract.py --archive "$work/docs.tar.gz" --manifest "$work/manifest.json" --target "$work/restored-docs"
 python3 - "$work" <<'PY'
 import hashlib,json,sys
 from pathlib import Path
