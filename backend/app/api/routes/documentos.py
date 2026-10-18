@@ -993,11 +993,11 @@ def resumen_documentos(
         select(
             func.count(Expediente.id),
             func.coalesce(
-                func.sum(case((Expediente.moneda == "PEN", Expediente.importe_total), else_=0)),
+                func.sum(case((and_(Expediente.moneda == "PEN", Expediente.pendiente_aprobacion.is_(False)), Expediente.importe_total), else_=0)),
                 0,
             ),
             func.coalesce(
-                func.sum(case((Expediente.moneda == "USD", Expediente.importe_total), else_=0)),
+                func.sum(case((and_(Expediente.moneda == "USD", Expediente.pendiente_aprobacion.is_(False)), Expediente.importe_total), else_=0)),
                 0,
             ),
         )
