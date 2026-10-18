@@ -2,7 +2,7 @@ import InspeccionTenant from "./InspeccionTenant";
 import PanelPaginaWeb from "./PanelPaginaWeb";
 import { useMemo, useState, type FormEvent } from "react";
 
-import { eliminar, enviarJson, useDatos } from "../api";
+import { eliminar, enviarJson, obtener, useDatos } from "../api";
 import type {
   ConfiguracionAcceso as ConfiguracionAccesoTipo,
   CorreoAutorizado,
