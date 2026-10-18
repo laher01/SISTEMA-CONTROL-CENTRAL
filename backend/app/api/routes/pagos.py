@@ -476,6 +476,7 @@ def consolidado_flujos(
         .where(
             Expediente.tenant_id == tenant_id,
             Expediente.deleted_at.is_(None),
+            Expediente.pendiente_aprobacion.is_(False),
             Expediente.fecha_emision.between(desde, hasta),
             Expediente.moneda == moneda,
             Empresa.tenant_id == tenant_id,
@@ -548,6 +549,7 @@ def resumen_clientes(
                 select(func.coalesce(func.sum(Expediente.importe_total), 0)).where(
                     Expediente.tenant_id == tenant_id,
                     Expediente.deleted_at.is_(None),
+                    Expediente.pendiente_aprobacion.is_(False),
                     Expediente.receptor_id == cliente.id,
                     Expediente.moneda == moneda,
                     Expediente.fecha_emision >= desde,
@@ -561,6 +563,7 @@ def resumen_clientes(
                 select(func.coalesce(func.sum(Expediente.importe_total), 0)).where(
                     Expediente.tenant_id == tenant_id,
                     Expediente.deleted_at.is_(None),
+                    Expediente.pendiente_aprobacion.is_(False),
                     Expediente.receptor_id == cliente.id,
                     Expediente.moneda == moneda,
                     Expediente.fecha_emision < desde,
@@ -809,6 +812,7 @@ def _resumen_pedido(
     base_filtros = (
         Expediente.tenant_id == tenant_id,
         Expediente.deleted_at.is_(None),
+        Expediente.pendiente_aprobacion.is_(False),
         Expediente.receptor_id == pedido.cliente_id,
         Expediente.moneda == pedido.moneda,
         Expediente.fecha_emision >= desde,
