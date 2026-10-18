@@ -23,7 +23,7 @@ def _normalizar(texto: str) -> str:
 
 def _contiene_termino(texto: str, termino: str) -> bool:
     """Evita falsos positivos como 'agua' dentro de 'aguardiente'."""
-    return re.search(r"(?<!\w)" + re.escape(termino) + r"(?!\w)", texto) is not None
+    return re.search(r"(?<!\w)" + re.escape(termino) + r"(?:s|es)?(?!\w)", texto) is not None
 
 
 def consulta_items_solicitada(mensaje: str) -> tuple[str, str] | None:
