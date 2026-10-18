@@ -3,6 +3,9 @@ on:
   pull_request:
     paths:
       - "deploy/ci_synthetic_pg_restore.sh"
+      - "deploy/seed_recovery_relations_ci.py"
+      - "deploy/validate_restored_relations.py"
+      - "deploy/verify_recovered_storage_ci.py"
       - "deploy/recovery_pair_audit.py"
       - ".github/workflows/security-synthetic-postgres-restore-ci.yml"
 permissions:
