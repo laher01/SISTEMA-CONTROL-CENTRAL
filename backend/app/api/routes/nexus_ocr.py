@@ -241,10 +241,10 @@ def reprocesar_caso(
         )
     except DocumentoNoProcesable:
         session.rollback()
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "OCR no procesable")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "OCR no procesable") from None
     except ComprobanteYaRegistrado:
         session.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, "Identidad fiscal duplicada")
+        raise HTTPException(status.HTTP_409_CONFLICT, "Identidad fiscal duplicada") from None
     caso.intentos += 1
     caso.estado = "REPROCESADO" if resultado.relacionado else "VALIDACION"
     caso.ultimo_resultado = {
