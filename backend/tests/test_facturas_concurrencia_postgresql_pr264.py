@@ -18,7 +18,9 @@ def test_factura_identity_unique_during_two_concurrent_transactions(engine, auth
     tenant_id = auth_prueba.contexto.tenant_id
     with Session(engine) as session:
         emisor = Empresa(tenant_id=tenant_id, ruc="20611111222", razon_social="Emisor sintético")
-        receptor = Empresa(tenant_id=tenant_id, ruc="20633333444", razon_social="Receptor sintético")
+        receptor = Empresa(
+            tenant_id=tenant_id, ruc="20633333444", razon_social="Receptor sintético"
+        )
         session.add_all([emisor, receptor])
         session.commit()
         emisor_id, receptor_id = emisor.id, receptor.id
