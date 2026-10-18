@@ -80,11 +80,14 @@ def test_documentos_no_cruzan_dos_tenants_y_no_rechazan_mismo_hash(
     assert client.get(f"/api/v1/documentos/{id_b}").status_code == 404
     assert client.get(f"/api/v1/documentos/{id_a}").status_code == 200
 
-    assert session.scalar(
-        select(func.count()).select_from(Documento).where(
-            Documento.tenant_id.in_((tenant_a, tenant_b.id))
+    assert (
+        session.scalar(
+            select(func.count())
+            .select_from(Documento)
+            .where(Documento.tenant_id.in_((tenant_a, tenant_b.id)))
         )
-    ) == 2
+        == 2
+    )
 
 
 def test_lineas_ubl_idempotentes_y_aisladas_por_tenant(session: Session, auth_prueba):
@@ -128,7 +131,9 @@ def test_lineas_ubl_idempotentes_y_aisladas_por_tenant(session: Session, auth_pr
         assert lineas[0].cantidad == Decimal("2.5")
         assert (
             session.scalar(
-                select(func.count()).select_from(ProductoItem).where(
+                select(func.count())
+                .select_from(ProductoItem)
+                .where(
                     ProductoItem.tenant_id == doc.tenant_id,
                 )
             )
