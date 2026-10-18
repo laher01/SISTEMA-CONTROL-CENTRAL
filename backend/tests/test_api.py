@@ -1206,7 +1206,6 @@ def test_listar_retirados_respeta_estado_y_permiso(
     assert client.get("/api/v1/documentos/retirados").status_code == 403
 
 
-
 def test_previsualizar_retirada_no_cambia_documentos(
     client: TestClient,
     auth_prueba: AuthPrueba,
@@ -1219,9 +1218,10 @@ def test_previsualizar_retirada_no_cambia_documentos(
     assert respuesta.json()["aptos"] == 1
     assert respuesta.json()["solo_previsualizacion"] is True
     assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
-    assert client.post(
-        ruta, json={"documentos_ids": [documento["id"], documento["id"]]}
-    ).status_code == 422
+    assert (
+        client.post(ruta, json={"documentos_ids": [documento["id"], documento["id"]]}).status_code
+        == 422
+    )
     auth_prueba.como_superadmin()
     assert client.post(ruta, json={"documentos_ids": [documento["id"]]}).status_code == 403
 
