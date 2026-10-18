@@ -1249,6 +1249,70 @@ def eliminar_documento(
     session.commit()
 
 
+@router.post("/{documento_id}/restaurar", response_model=DocumentoOut)
+def restaurar_documento(
+    session: SessionDep,
+    almacen: AlmacenDep,
+    settings: SettingsDep,
+    hoy: HoyDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    documento_id: uuid.UUID,
+) -> Documento:
+    """Restaurar un documento retirado sin reemplazar su original ni otros registros."""
+    documento = session.get(Documento, documento_id)
+    if documento is None or documento.tenant_id != tenant_id:
+        raise no_encontrado("Documento")
+    _validar_ambito_documento(auth, documento, session)
+    if auth.rol == RolMiembro.SUPERADMIN or not permiso_habilitado(
+        session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No tiene permiso para restaurar documentos")
+    if documento.deleted_at is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "El documento ya se encuentra activo")
+    if documento.expediente_id is not None and (
+        documento.expediente is None or documento.expediente.deleted_at is not None
+    ):
+        raise HTTPException(status.HTTP_409_CONFLICT, "El expediente asociado no está activo")
+    original = almacen.ruta_absoluta(documento.ruta_storage)
+    if not original.is_file():
+        raise HTTPException(status.HTTP_409_CONFLICT, "No existe el archivo original para restaurar")
+    if hashlib.sha256(original.read_bytes()).hexdigest() != documento.sha256:
+        raise HTTPException(status.HTTP_409_CONFLICT, "La huella del archivo original no coincide")
+    colision = session.scalar(
+        select(Documento.id).where(
+            Documento.tenant_id == tenant_id,
+            Documento.id != documento_id,
+            Documento.deleted_at.is_(None),
+            or_(
+                Documento.sha256 == documento.sha256,
+                and_(
+                    Documento.huella_comercial.is_not(None),
+                    Documento.huella_comercial == documento.huella_comercial,
+                ),
+            ),
+        )
+    )
+    if colision is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ya existe un documento activo equivalente")
+    documento.deleted_at = None
+    auditoria.registrar(
+        session, tenant_id, "DOCUMENTO_RESTAURADO", "documento", documento.id,
+        {"expediente_id": str(documento.expediente_id) if documento.expediente_id else None},
+    )
+    try:
+        session.flush()
+        if documento.expediente is not None:
+            actualizar_expediente(session, documento.expediente, hoy, settings)
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "El documento entra en conflicto con otro registro"
+        ) from exc
+    return documento
+
+
 MIME_EN_LINEA = frozenset(
     {"application/pdf", "image/jpeg", "image/png", "image/gif", "image/webp", "text/plain"}
 )
