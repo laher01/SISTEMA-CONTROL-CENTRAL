@@ -79,6 +79,19 @@ def reconciliar_intento(
         vigente = session.scalar(
             select(Documento.id).where(Documento.id == doc_id, Documento.tenant_id == tenant_id)
         )
+        # Un reingreso puede crear otro ID con la misma ruta por SHA.
+        # Nunca restaurar ni purgar automáticamente si otro registro usa el original.
+        ruta_relativa = original.relative_to(raiz).as_posix()
+        otro_documento = session.scalar(
+            select(Documento.id)
+            .where(
+                Documento.ruta_storage == f"{tenant_id}/{ruta_relativa}",
+                Documento.id != doc_id,
+            )
+            .limit(1)
+        )
+        if otro_documento is not None:
+            raise ValueError("Original compartido o reingresado: conciliación manual")
         # Todas las validaciones antes de actuar: un conflicto requiere revisión.
         if vigente is not None and original.exists() and cuarentena.exists():
             raise ValueError("Conflicto entre original vigente y cuarentena")
