@@ -901,3 +901,34 @@ class AuditoriaLandingGlobal(ConId, Base):
     nuevo: Mapped[bool] = mapped_column()
     version: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(default=ahora, server_default=func.now())
+
+
+class CasoOcr(ConId, ConTenant, ConCreacion, Base):
+    """Cola privada de errores OCR. Una incidencia activa por documento."""
+
+    __tablename__ = "casos_ocr"
+    __table_args__ = (UniqueConstraint("tenant_id", "documento_id"),)
+
+    documento_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documentos.id"), index=True)
+    estado: Mapped[str] = mapped_column(String(30), default="PENDIENTE")
+    motivo: Mapped[str] = mapped_column(String(500))
+    intentos: Mapped[int] = mapped_column(Integer, default=0)
+    regla_version: Mapped[str | None] = mapped_column(String(80))
+    ultimo_resultado: Mapped[JsonDict | None]
+    updated_at: Mapped[datetime] = mapped_column(
+        default=ahora, onupdate=ahora, server_default=func.now()
+    )
+
+
+class ReglaOcr(ConId, ConTenant, ConCreacion, Base):
+    """Versiones propuestas de reglas, nunca ejecutables sin aprobación."""
+
+    __tablename__ = "reglas_ocr"
+    __table_args__ = (UniqueConstraint("tenant_id", "nombre", "version"),)
+
+    nombre: Mapped[str] = mapped_column(String(100))
+    version: Mapped[int] = mapped_column(Integer)
+    definicion: Mapped[JsonDict] = mapped_column()
+    estado: Mapped[str] = mapped_column(String(20), default="BORRADOR")
+    aprobada_por: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cuentas_acceso.id"))
+    aprobada_at: Mapped[datetime | None]
