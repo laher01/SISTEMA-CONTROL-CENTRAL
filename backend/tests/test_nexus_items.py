@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.services.nexus_items import (
     _contiene_termino,
+    _diesel_en_factura_procesada,
     _grupos_coincidentes,
     consulta_items_solicitada,
 )
@@ -83,3 +84,18 @@ def test_consulta_libre_elimina_muletillas_sin_perder_producto() -> None:
         "libre",
         "sal industrial",
     )
+
+
+def test_diesel_en_pdf_procesado_requiere_linea_y_tipo_factura() -> None:
+    texto = (
+        "FACTURA ELECTRÓNICA F109 Nº 0016494 CANTIDAD CODIGO U.M DESCRIPCION "
+        "49.499 09 GLL DIESEL B5 S50 20.31 23.96 1005.08"
+    )
+    assert _diesel_en_factura_procesada({"procesamiento_documental": {"texto": texto}})
+    assert not _diesel_en_factura_procesada(
+        {"procesamiento_documental": {"texto": "FACTURA combustibles DIESEL B5 S50"}}
+    )
+    assert not _diesel_en_factura_procesada(
+        {"procesamiento_documental": {"texto": "GLL DIESEL B5 S50"}}
+    )
+    assert not _diesel_en_factura_procesada({})
