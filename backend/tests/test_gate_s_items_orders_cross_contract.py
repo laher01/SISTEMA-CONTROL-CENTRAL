@@ -65,9 +65,7 @@ def synthetic_invoice(**overrides: object) -> Invoice:
 def test_fact_gre_voucher_and_ubl_lines_do_not_repeat_invoice_amount():
     invoice = synthetic_invoice()
     artifacts = [invoice, invoice, invoice]  # FACT, GRE and voucher references
-    total, providers = summarize(
-        artifacts, tenant="A", customer="CLIENTE-1", owner="GESTOR-1"
-    )
+    total, providers = summarize(artifacts, tenant="A", customer="CLIENTE-1", owner="GESTOR-1")
     assert total == Decimal("250")
     assert providers == {"PROVEEDOR-1": Decimal("250")}
 
@@ -81,9 +79,7 @@ def test_customer_supplier_allocation_with_distinct_facturas():
             amount=Decimal("350"),
         ),
     ]
-    total, providers = summarize(
-        entries, tenant="A", customer="CLIENTE-1", owner="GESTOR-1"
-    )
+    total, providers = summarize(entries, tenant="A", customer="CLIENTE-1", owner="GESTOR-1")
     assert total == Decimal("600")
     assert providers == {
         "PROVEEDOR-1": Decimal("250"),
@@ -124,17 +120,13 @@ def test_currency_is_not_mixed_in_progress_calculations():
     pen, _ = summarize(
         entries, tenant="A", customer="CLIENTE-1", owner="GESTOR-1"
     )
-    usd, _ = summarize(
-        entries, tenant="A", customer="CLIENTE-1", owner="GESTOR-1", currency="USD"
-    )
+    usd, _ = summarize(entries, tenant="A", customer="CLIENTE-1", owner="GESTOR-1", currency="USD")
     assert (pen, usd) == (Decimal("250"), Decimal("500"))
 
 
 def test_item_quantities_are_not_invoice_monetary_progress():
     invoice = synthetic_invoice()
     ubl_lines = [("KGM", Decimal("80")), ("NIU", Decimal("12"))]
-    total, _ = summarize(
-        [invoice], tenant="A", customer="CLIENTE-1", owner="GESTOR-1"
-    )
+    total, _ = summarize([invoice], tenant="A", customer="CLIENTE-1", owner="GESTOR-1")
     assert total == Decimal("250")
     assert sum((quantity for _, quantity in ubl_lines), Decimal("0")) != total
