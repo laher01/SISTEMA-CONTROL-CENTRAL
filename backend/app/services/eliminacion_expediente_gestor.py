@@ -123,7 +123,9 @@ def eliminar_expediente_del_gestor(
         pares.append((original, temporal))
 
     diario = registrar_intento(
-        almacen, tenant_id, [(d.id, orig, temp) for d, (orig, temp) in zip(documentos, pares, strict=True)]
+        almacen,
+        tenant_id,
+        [(d.id, orig, temp) for d, (orig, temp) in zip(documentos, pares, strict=True)],
     )
     movidos = []
     try:
