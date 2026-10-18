@@ -1,6 +1,7 @@
 """Prueba real SQLAlchemy/PostgreSQL: idempotencia y aislamiento multitenant."""
 
 import uuid
+from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -75,9 +76,9 @@ def test_pdf_escorpio_persiste_items_sin_duplicar(session: Session) -> None:
     )
     assert linea is not None
     assert linea.descripcion_original == "DIESEL B5 S50"
-    assert linea.cantidad == 49.499
+    assert linea.cantidad == Decimal("49.499")
     assert linea.unidad == "GLL"
-    assert linea.importe_linea == 1005.08
+    assert linea.importe_linea == Decimal("1005.08")
 
 
 def test_pdf_no_registra_si_no_es_factura_escorpio(session: Session) -> None:
