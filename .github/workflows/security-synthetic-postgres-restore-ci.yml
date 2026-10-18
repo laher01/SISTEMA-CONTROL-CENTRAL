@@ -1,0 +1,68 @@
+name: security-synthetic-postgres-restore-ci
+on:
+  pull_request:
+    paths:
+      - "deploy/ci_synthetic_pg_restore.sh"
+      - "backend/scripts/test_restored_rbac_ci.py"
+      - "backend/scripts/seed_roles_e2e.py"
+      - "deploy/test_recovery_cleanup_ci.sh"
+      - "deploy/seed_recovery_relations_ci.py"
+      - "deploy/validate_restored_relations.py"
+      - "deploy/verify_recovered_storage_ci.py"
+      - "deploy/recovery_pair_audit.py"
+      - "deploy/recovery_safe_extract.py"
+      - "deploy/test_recovery_safe_extract.py"
+      - ".github/workflows/security-synthetic-postgres-restore-ci.yml"
+permissions:
+  contents: read
+jobs:
+  pg-restore:
+    strategy:
+      fail-fast: false
+      matrix:
+        pg_major: ["16", "17"]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:${{ matrix.pg_major }}
+        env:
+          POSTGRES_USER: fact
+          POSTGRES_PASSWORD: fact
+          POSTGRES_DB: fact_central
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U fact"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: fact
+      PGPASSWORD: fact
+      PGDATABASE: fact_central
+      FC_DATABASE_URL: postgresql+psycopg://fact:fact@localhost:5432/fact_central
+      FC_TEST_DATABASE_URL: postgresql+psycopg://fact:fact@localhost:5432/fact_central
+      FC_RECOVERY_SYNTHETIC_ONLY: YES
+      FC_CI_PG_MAJOR: ${{ matrix.pg_major }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install PostgreSQL client and isolated backend requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          echo "Using version-matched PostgreSQL client via postgres container"
+          cd backend
+          uv sync --locked
+      - name: Prepare source at revision 0038
+        working-directory: backend
+        run: uv run alembic upgrade 0038
+      - name: Restore synthetic DB and files and roundtrip actual Alembic 0039
+        run: |
+          bash -n deploy/ci_synthetic_pg_restore.sh
+          cd backend
+          bash ../deploy/ci_synthetic_pg_restore.sh
+      - name: Verify cleanup after injected failure
+        run: bash deploy/test_recovery_cleanup_ci.sh
