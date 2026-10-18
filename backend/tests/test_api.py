@@ -1,4 +1,5 @@
 import io
+import uuid
 from datetime import date
 from decimal import Decimal
 
@@ -10,7 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.routes import documentos as documentos_routes
 from app.core.config import Settings
-from app.models import Empresa, Expediente
+from app.models import Documento, Empresa, Expediente
 from app.services import procesamiento_documental
 from app.services.procesamiento_documental import ResultadoProcesamiento, sugerir_tipo
 from tests.conftest import AuthPrueba, Reloj
@@ -623,6 +624,22 @@ def test_superadmin_no_puede_eliminar_archivos_huerfanos(
 ) -> None:
     documento = subir(client, "no_asignado.pdf", b"%PDF-1.7 sin asignar para seguridad")
     auth_prueba.como_superadmin()
+
+    respuesta = client.delete(f"/api/v1/documentos/{documento['id']}")
+    assert respuesta.status_code == 403, respuesta.text
+    assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
+
+
+
+def test_admin_no_elimina_documento_asignado_a_gestor_sin_expediente(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    documento = subir(client, "asignado-sin-expediente.pdf", b"%PDF-1.7 asignado a gestor")
+    registro = session.get(Documento, documento["id"])
+    assert registro is not None
+    registro.gestor_id = uuid.uuid4()
+    session.commit()
+    auth_prueba.como_admin()
 
     respuesta = client.delete(f"/api/v1/documentos/{documento['id']}")
     assert respuesta.status_code == 403, respuesta.text
