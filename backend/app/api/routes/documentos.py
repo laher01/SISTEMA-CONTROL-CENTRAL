@@ -56,6 +56,7 @@ from app.services.automatizacion_documental import (
     registrar_fallo,
 )
 from app.services.cache_ocr import procesar_con_cache
+from app.services.recuperacion_eliminaciones import registrar_intento, reconciliar_intento
 from app.services.eliminacion_expediente_gestor import (
     EliminacionNoSegura,
     eliminar_expediente_del_gestor,
@@ -1314,9 +1315,11 @@ def eliminar_documento(
             raise HTTPException(
                 status.HTTP_409_CONFLICT, "Original no disponible para eliminación completa"
             )
+        diario = registrar_intento(almacen, tenant_id, [(documento.id, archivo, temporal)])
         try:
             archivo.replace(temporal)
         except OSError:
+            reconciliar_intento(session, almacen, tenant_id, diario)
             raise HTTPException(
                 status.HTTP_503_SERVICE_UNAVAILABLE, "No se pudo preparar la eliminación física"
             ) from None
@@ -1333,15 +1336,10 @@ def eliminar_documento(
             session.commit()
         except Exception:
             session.rollback()
-            temporal.replace(archivo)
+            reconciliar_intento(session, almacen, tenant_id, diario)
             raise
-        try:
-            temporal.unlink(missing_ok=True)
-        except OSError:
-            raise HTTPException(
-                status.HTTP_503_SERVICE_UNAVAILABLE,
-                "Registro eliminado; original pendiente de limpieza física",
-            ) from None
+        session.expire_all()
+        reconciliar_intento(session, almacen, tenant_id, diario)
         return
     if auth.rol != "GESTOR" or auth.gestor_id is None:
         raise HTTPException(
