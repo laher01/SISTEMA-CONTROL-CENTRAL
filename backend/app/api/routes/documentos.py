@@ -1221,7 +1221,14 @@ def eliminar_documento(
     if auth.rol == RolMiembro.SUPERADMIN:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin autorización para eliminar")
     if documento.expediente_id is None:
-        # Todo rol operativo del tenant puede eliminar documentos huérfanos.
+        # Sin expediente no implica sin dueño: respetar la titularidad del gestor.
+        if documento.gestor_id is not None and (
+            auth.rol != "GESTOR" or auth.gestor_id != documento.gestor_id
+        ):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Solo el gestor propietario puede eliminar"
+            )
+        # Todo rol operativo del tenant puede eliminar documentos realmente no asignados.
         if auth.rol not in (
             "GESTOR",
             RolMiembro.USUARIO,
