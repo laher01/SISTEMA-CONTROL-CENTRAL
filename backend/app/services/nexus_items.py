@@ -57,6 +57,11 @@ def consulta_items_solicitada(mensaje: str) -> tuple[str, str] | None:
     )
     if coincide:
         termino = coincide.group(1).strip(" ?.")
+        termino = re.sub(
+            r"\s+(?:hay|tenemos|tienen|tiene|en\s+facturas|por\s+favor)$",
+            "",
+            termino,
+        ).strip()
         if termino:
             return ("libre", termino)
     return None
