@@ -228,3 +228,30 @@ def test_reescaneo_registra_solo_items_del_tenant_solicitante(session: Session, 
     assert conteos.get(primero.id, 0) == 1
     assert conteos.get(segundo.id, 0) == 0
     assert almacen.leer(documento_segundo.ruta_storage) == XML + b"<!--b-->"
+
+
+def test_reescaneo_se_puede_reintentar_tras_rollback_sin_duplicar(
+    session: Session, tmp_path: Path
+):
+    tenant = Tenant(nombre="tenant_reintento_rollback_xml")
+    session.add(tenant)
+    session.flush()
+    almacen = AlmacenLocal(tmp_path)
+    documento = _guardar(session, almacen, tenant.id, XML)
+
+    intento = session.begin_nested()
+    primero = registrar_pagina_verificada(session, almacen, tenant.id)
+    assert primero[0].estado == "PROCESADO"
+    assert primero[0].lineas_nuevas == 1
+    intento.rollback()
+    session.expire_all()
+    assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 0
+
+    segundo = registrar_pagina_verificada(session, almacen, tenant.id)
+    assert segundo[0].documento_id == documento.id
+    assert segundo[0].estado == "PROCESADO"
+    assert segundo[0].lineas_nuevas == 1
+    tercero = registrar_pagina_verificada(session, almacen, tenant.id)
+    assert tercero[0].estado == "PROCESADO"
+    assert tercero[0].lineas_nuevas == 0
+    assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 1
