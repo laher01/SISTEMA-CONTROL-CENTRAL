@@ -15,7 +15,9 @@ from app.storage import AlmacenLocal
 def main() -> None:
     parser = argparse.ArgumentParser(description="Conciliar cuarentenas documentales por tenant")
     parser.add_argument("--tenant", required=True, type=uuid.UUID)
-    parser.add_argument("--execute", action="store_true", help="Aplicar recuperación; requiere ventana")
+    parser.add_argument(
+        "--execute", action="store_true", help="Aplicar recuperación; requiere ventana"
+    )
     args = parser.parse_args()
     almacen = AlmacenLocal(get_settings().storage_dir)
     pendientes = listar_intentos(almacen, args.tenant)
