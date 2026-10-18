@@ -1350,3 +1350,14 @@ def test_capacidades_documentales_respeta_admin_y_superadmin(
     auth_prueba.como_superadmin()
     superadmin = client.get(ruta)
     assert superadmin.status_code == 403
+
+
+def test_superadmin_no_puede_retirar_documento_por_delete(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
+    documento = subir(client, "rbac-superadmin.pdf", b"%PDF-1.7 rbac superadmin")
+    auth_prueba.como_superadmin()
+    assert client.delete(f"/api/v1/documentos/{documento['id']}").status_code == 403
+    auth_prueba.como_admin()
+    assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
