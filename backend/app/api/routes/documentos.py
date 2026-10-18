@@ -1231,6 +1231,40 @@ def previsualizar_retirada(
     }
 
 
+@router.post("/retirar-lote")
+def retirar_documentos_lote(
+    datos: PrevisualizacionRetiradaIn,
+    session: SessionDep,
+    settings: SettingsDep,
+    hoy: HoyDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, object]:
+    """Reutiliza la retirada lógica y su auditoría, con resultado individual."""
+    if auth.rol == RolMiembro.SUPERADMIN or not permiso_habilitado(
+        session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No tiene permiso para retirar registros")
+    if len(set(datos.documentos_ids)) != len(datos.documentos_ids):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "IDs repetidos en el lote")
+    resultados: list[dict[str, str]] = []
+    for documento_id in datos.documentos_ids:
+        try:
+            eliminar_documento(session, settings, hoy, tenant_id, auth, documento_id)
+        except HTTPException as exc:
+            session.rollback()
+            resultados.append(
+                {"id": str(documento_id), "estado": "NO_RETIRADO", "codigo": str(exc.status_code)}
+            )
+        else:
+            resultados.append({"id": str(documento_id), "estado": "RETIRADO"})
+    return {
+        "total": len(resultados),
+        "retirados": sum(fila["estado"] == "RETIRADO" for fila in resultados),
+        "resultados": resultados,
+    }
+
+
 @router.get("/retirados", response_model=list[DocumentoOut])
 def listar_documentos_retirados(
     session: SessionDep,
