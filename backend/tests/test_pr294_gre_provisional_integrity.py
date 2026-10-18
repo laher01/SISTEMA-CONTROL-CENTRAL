@@ -65,9 +65,7 @@ def test_gre_provisional_does_not_invent_factura_or_economic_items(session: Sess
         session.scalar(
             select(func.count())
             .select_from(LineaComprobanteItem)
-            .where(
-                LineaComprobanteItem.tenant_id == tenant_id
-            )
+            .where(LineaComprobanteItem.tenant_id == tenant_id)
         )
         == 0
     )
