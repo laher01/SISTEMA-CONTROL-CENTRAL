@@ -109,7 +109,10 @@ def extract(archive_path, manifest_path, target):
                     finally:
                         os.close(parent_fd)
         except BaseException:
-            _rollback(root_fd, created_files, created_dirs)
+            try:
+                _rollback(root_fd, created_files, created_dirs)
+            except (OSError, ValueError) as cleanup_error:
+                raise RuntimeError("Extraction failed; rollback incomplete; quarantine target") from cleanup_error
             raise
         finally:
             os.close(root_fd)
