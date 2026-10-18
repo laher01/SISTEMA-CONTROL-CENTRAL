@@ -350,6 +350,7 @@ def consolidado_compras(
             .where(
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
+                Expediente.pendiente_aprobacion.is_(False),
                 Expediente.fecha_emision.between(desde, hasta),
                 Expediente.moneda == moneda,
                 Empresa.tenant_id == tenant_id,
@@ -370,6 +371,7 @@ def consolidado_compras(
             .where(
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
+                Expediente.pendiente_aprobacion.is_(False),
                 Expediente.fecha_emision.between(desde, hasta),
                 Expediente.moneda == moneda,
                 Miembro.tenant_id == tenant_id,
@@ -419,6 +421,7 @@ def consolidado_compras(
             .where(
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
+                Expediente.pendiente_aprobacion.is_(False),
                 Expediente.fecha_emision.between(desde, hasta),
                 Expediente.moneda == moneda,
                 alcance_expedientes_gerente(auth),
