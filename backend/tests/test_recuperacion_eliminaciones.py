@@ -213,9 +213,7 @@ def test_sesiones_postgresql_aislan_reingesta_no_confirmada(
     assert cuarentena.read_bytes() == b"antiguo"
 
 
-def test_recuperacion_multitenant_no_toca_diario_ajeno(
-    engine, session: Session, tmp_path
-) -> None:
+def test_recuperacion_multitenant_no_toca_diario_ajeno(engine, session: Session, tmp_path) -> None:
     tenant_a = Tenant(nombre="tenant_a_recovery_280")
     tenant_b = Tenant(nombre="tenant_b_recovery_280")
     session.add_all([tenant_a, tenant_b])
