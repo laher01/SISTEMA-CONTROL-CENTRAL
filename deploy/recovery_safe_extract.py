@@ -29,7 +29,11 @@ def extract(archive_path, manifest_path, target):
     with tempfile.TemporaryDirectory(prefix='fc-audit-') as private:
         frozen = pathlib.Path(private) / 'backup.tar.gz'
         with archive.open('rb') as source, frozen.open('xb') as dest:
+            copied = 0
             while part := source.read(1048576):
+                copied += len(part)
+                if copied > 2 * 1024 * 1024 * 1024:
+                    raise ValueError('Compressed archive size exceeded')
                 dest.write(part)
         with frozen.open('rb') as source:
             if hashlib.file_digest(source, 'sha256').hexdigest() != archive_hash:
