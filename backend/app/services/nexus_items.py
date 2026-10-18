@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import unicodedata
 from collections import defaultdict
 
@@ -21,40 +22,36 @@ def _normalizar(texto: str) -> str:
 
 
 def consulta_items_solicitada(mensaje: str) -> tuple[str, str] | None:
-    """Identifica preguntas inequívocas de productos o destinos comerciales."""
+    """Reconocer conceptos comerciales con tolerancia a errores frecuentes."""
     normal = _normalizar(mensaje)
     if any(p in normal for p in ("a que clientes", "a quienes les", "a quien le han emitido")):
         return ("clientes", "")
     if "de que son" in normal and any(x in normal for x in ("factura", "comprobante")):
         return ("resumen", "")
-    if not any(
-        x in normal
-        for x in (
-            "factura",
-            "comprobante",
-            "contiene",
-            "contienen",
-            "son de",
-            "tiene",
-            "tienen",
-            "cuantos",
-            "cuantas",
-            "alguno",
-            "alguna",
-        )
-    ):
-        return None
-    sinonimos = {
-        "petroleo": ("petroleo", "diesel", "diésel", "combustible"),
+    conceptos = {
+        "petroleo": ("petroleo", "petrpoleo", "diesel", "combustible"),
         "hielo": ("hielo",),
-        "viveres": ("viveres", "víveres", "abarrotes"),
-        "cuadernos": ("cuaderno", "cuadernos"),
+        "viveres": ("viveres", "abarrotes"),
+        "cuadernos": ("cuaderno",),
+        "llantas": ("llanta", "neumatico"),
+        "agua": ("agua",),
+        "sporade": ("sporade", "sporada"),
     }
-    terminos = tuple(
-        nombre for nombre, palabras in sinonimos.items() if any(p in normal for p in palabras)
+    encontrados = [
+        clave for clave, variantes in conceptos.items() if any(v in normal for v in variantes)
+    ]
+    if encontrados:
+        return ("producto", ",".join(encontrados))
+    # Preguntas abiertas: extraer el concepto después de "de" o "contienen".
+    coincide = re.search(
+        r"(?:facturas? de|facrturas? de|comprobantes? de|contienen? |y de )"
+        r"([a-z0-9 ]{3,55})",
+        normal,
     )
-    if terminos:
-        return ("producto", ",".join(terminos))
+    if coincide:
+        termino = coincide.group(1).strip(" ?.")
+        if termino:
+            return ("libre", termino)
     return None
 
 
@@ -90,18 +87,22 @@ def responder_items(
         "hielo": ("hielo",),
         "viveres": ("viveres", "abarrotes"),
         "cuadernos": ("cuaderno",),
+        "llantas": ("llanta", "neumatico"),
+        "agua": ("agua",),
+        "sporade": ("sporade",),
     }
     for expediente, cliente, descripcion in filas:
         numero = str(expediente.id)
         expedientes[numero] = (expediente, cliente)
         texto = _normalizar(descripcion)
-        if tipo == "producto":
-            if any(p in texto for grupo in grupos for p in sinonimos[grupo]):
+        if tipo in {"producto", "libre"}:
+            palabras = (p for grupo in grupos for p in sinonimos.get(grupo, (grupo,)))
+            if any(p in texto for p in palabras):
                 conceptos[numero].add(descripcion)
         else:
             conceptos[numero].add(descripcion)
 
-    if tipo == "producto":
+    if tipo in {"producto", "libre"}:
         hallados = {k: v for k, v in conceptos.items() if v}
         ejemplos = [
             f"{expedientes[clave][0].serie}-{expedientes[clave][0].correlativo}"
