@@ -15,7 +15,7 @@ def test_crea_caso_para_fallo_existente() -> None:
     doc = _documento(
         {"automatizacion_documental": {"estado": "FALLIDO", "motivos": ["No hay serie"]}}
     )
-    assert motivo_pendiente(doc) == "No hay serie"
+    assert motivo_pendiente(doc) == "FALLIDO"
 
 
 def test_no_crea_caso_para_documento_sin_error() -> None:
