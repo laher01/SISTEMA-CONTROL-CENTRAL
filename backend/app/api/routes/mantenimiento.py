@@ -401,9 +401,7 @@ def _intentar_eliminar_archivo(
     # Una retirada por SHA puede compartir archivo con otro documento; ni siquiera
     # un registro retirado lógicamente debe perder su original restaurable.
     referencias = session.scalar(
-        select(Documento.id)
-        .where(Documento.ruta_storage == pendiente.ruta_storage)
-        .limit(1)
+        select(Documento.id).where(Documento.ruta_storage == pendiente.ruta_storage).limit(1)
     )
     if referencias is not None:
         pendiente.estado = "BLOQUEADO"
