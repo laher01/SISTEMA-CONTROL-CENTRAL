@@ -66,13 +66,14 @@ def test_cross_tenant_ocr_document_operations_denied(client, session: Session, a
     url = f"/api/v1/documentos/{document.id}"
     assert client.get(url).status_code == 404
     assert client.get(f"{url}/archivo").status_code == 404
-    assert client.put(
-        f"{url}/extraccion-confirmada", json={"serie": "F001"}
-    ).status_code == 404
-    assert client.post(
-        f"{url}/vincular",
-        json={"expediente_id": str(dossier.id), "tipo_documento": "OTRO"},
-    ).status_code == 404
+    assert client.put(f"{url}/extraccion-confirmada", json={"serie": "F001"}).status_code == 404
+    assert (
+        client.post(
+            f"{url}/vincular",
+            json={"expediente_id": str(dossier.id), "tipo_documento": "OTRO"},
+        ).status_code
+        == 404
+    )
 
     # Even a document owned by tenant A cannot link to an alien dossier.
     owned = client.post(
@@ -88,9 +89,7 @@ def test_cross_tenant_ocr_document_operations_denied(client, session: Session, a
     )
     assert denied.status_code == 404
     session.expire_all()
-    assert session.scalar(
-        select(Documento.expediente_id).where(Documento.id == own_id)
-    ) is None
+    assert session.scalar(select(Documento.expediente_id).where(Documento.id == own_id)) is None
     assert session.get(Documento, document.id).datos_extraidos is None
     assert session.get(Documento, document.id).expediente_id == dossier.id
 
