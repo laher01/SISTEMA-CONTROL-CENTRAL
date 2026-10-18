@@ -1293,3 +1293,27 @@ def test_retirar_lote_no_autoriza_superadmin(
         json={"documentos_ids": [documento["id"]]},
     )
     assert respuesta.status_code == 403
+
+
+def test_retirar_lote_no_elimina_documento_de_otro_tenant(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
+    from dataclasses import replace
+    from uuid import uuid4
+
+    documento = subir(client, "lote-ajeno.pdf", b"%PDF-1.7 tenant ajeno")
+    auth_prueba.como_admin()
+    anterior = auth_prueba.contexto
+    auth_prueba.contexto = replace(anterior, tenant_id=uuid4())
+    try:
+        respuesta = client.post(
+            "/api/v1/documentos/retirar-lote",
+            json={"documentos_ids": [documento["id"]]},
+        )
+        assert respuesta.status_code == 200, respuesta.text
+        assert respuesta.json()["retirados"] == 0
+        assert respuesta.json()["resultados"][0]["estado"] == "NO_RETIRADO"
+    finally:
+        auth_prueba.contexto = anterior
+    assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
