@@ -75,6 +75,36 @@ def responder(
             motor="CONVERSACIONAL_LOCAL",
             seccion=contexto.seccion,
         )
+    # NEXUS observa estados ya procesados por FACT CENTRAL; no hace OCR.
+    if contexto.seccion == "DOCUMENTOS" and any(
+        frase in normalizado
+        for frase in (
+            "qué documentos tengo",
+            "que documentos tengo",
+            "cómo van mis documentos",
+            "como van mis documentos",
+            "revisa mis documentos",
+        )
+    ):
+        estados = contexto.datos.get("documentos_por_estado", {})
+        if not isinstance(estados, dict) or not estados:
+            resumen = "No encontré documentos visibles para resumir en esta pantalla."
+        else:
+            resumen = "Documentos visibles por estado: " + ", ".join(
+                f"{estado}: {cantidad}" for estado, cantidad in sorted(estados.items())
+            ) + "."
+        return NexusChatOut(
+            respuesta=(
+                resumen
+                + " Esta información proviene del sistema documental existente. "
+                "Puedo ayudarte a revisar sus estados; no he reprocesado ni cambiado archivos."
+            ),
+            accion="RESUMEN_DOCUMENTOS",
+            motor="ESPECIALISTA_DOCUMENTOS",
+            seccion=contexto.seccion,
+            datos={"documentos_por_estado": estados},
+        )
+
     # Respuestas de lectura de pantalla no dependen del proveedor LLM.
     if any(
         frase in normalizado
