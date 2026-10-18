@@ -1,0 +1,36 @@
+"""Ampliar correlativos fiscales sin modificar identificadores históricos.
+
+Revision ID: 0040
+Revises: 0039
+"""
+from alembic import op
+import sqlalchemy as sa
+
+revision = "0040"
+down_revision = "0039"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    for tabla in ("expedientes", "referencias_gre"):
+        op.alter_column(
+            tabla, "correlativo", existing_type=sa.String(length=8),
+            type_=sa.String(length=32), existing_nullable=False,
+        )
+
+
+def downgrade() -> None:
+    conexion = op.get_bind()
+    for tabla in ("expedientes", "referencias_gre"):
+        excedentes = conexion.execute(
+            sa.text(f"SELECT COUNT(*) FROM {tabla} WHERE length(correlativo) > 8")
+        ).scalar_one()
+        if excedentes:
+            raise RuntimeError(
+                f"No se puede reducir {tabla}.correlativo: hay valores de más de 8 caracteres"
+            )
+        op.alter_column(
+            tabla, "correlativo", existing_type=sa.String(length=32),
+            type_=sa.String(length=8), existing_nullable=False,
+        )
