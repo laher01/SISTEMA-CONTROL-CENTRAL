@@ -151,7 +151,8 @@ def diagnostico_documental(
                 EliminacionArchivoPendiente.tenant_id == tenant_id,
                 EliminacionArchivoPendiente.estado == "PENDIENTE",
             )
-        ) or 0
+        )
+        or 0
     )
     bloqueados = int(
         session.scalar(
@@ -161,7 +162,8 @@ def diagnostico_documental(
                 EliminacionArchivoPendiente.tenant_id == tenant_id,
                 EliminacionArchivoPendiente.estado == "BLOQUEADO",
             )
-        ) or 0
+        )
+        or 0
     )
     return {
         "solo_diagnostico": True,
