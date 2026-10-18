@@ -1299,7 +1299,11 @@ def restaurar_documento(
         raise HTTPException(status.HTTP_409_CONFLICT, "Ya existe un documento activo equivalente")
     documento.deleted_at = None
     auditoria.registrar(
-        session, tenant_id, "DOCUMENTO_RESTAURADO", "documento", documento.id,
+        session,
+        tenant_id,
+        "DOCUMENTO_RESTAURADO",
+        "documento",
+        documento.id,
         {"expediente_id": str(documento.expediente_id) if documento.expediente_id else None},
     )
     try:
