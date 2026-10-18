@@ -56,6 +56,7 @@ from app.services.automatizacion_documental import (
     registrar_fallo,
 )
 from app.services.cache_ocr import procesar_con_cache
+from app.services.bloqueo_documental import bloquear_tenant_documental
 from app.services.eliminacion_expediente_gestor import (
     EliminacionNoSegura,
     eliminar_expediente_del_gestor,
@@ -1248,6 +1249,7 @@ def eliminar_documento(
 ) -> None:
     # Se autoriza únicamente un archivo sin cliente/expediente y sin dependencias:
     # documentos asociados requieren una operación de eliminación integral distinta.
+    bloquear_tenant_documental(session, tenant_id)
     documento = _documento(session, tenant_id, documento_id)
     if auth.rol == RolMiembro.SUPERADMIN:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin autorización para eliminar")
