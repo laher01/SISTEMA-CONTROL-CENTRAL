@@ -62,6 +62,17 @@ def consulta_items_solicitada(mensaje: str) -> tuple[str, str] | None:
     return None
 
 
+def _grupos_coincidentes(
+    descripcion: str, grupos: list[str], sinonimos: dict[str, tuple[str, ...]]
+) -> list[str]:
+    texto = _normalizar(descripcion)
+    return [
+        grupo
+        for grupo in grupos
+        if any(_contiene_termino(texto, termino) for termino in sinonimos.get(grupo, (grupo,)))
+    ]
+
+
 def responder_items(
     session: Session, auth: ContextoAcceso, tipo: str, busqueda: str
 ) -> NexusChatOut:
@@ -88,6 +99,7 @@ def responder_items(
     filas = session.execute(consulta).all()
     expedientes: dict[str, tuple[Expediente, str]] = {}
     conceptos: dict[str, set[str]] = defaultdict(set)
+    por_grupo: dict[str, set[str]] = defaultdict(set)
     grupos = busqueda.split(",") if busqueda else []
     sinonimos = {
         "petroleo": ("petroleo", "diesel", "combustible"),
@@ -101,11 +113,12 @@ def responder_items(
     for expediente, cliente, descripcion in filas:
         numero = str(expediente.id)
         expedientes[numero] = (expediente, cliente)
-        texto = _normalizar(descripcion)
         if tipo in {"producto", "libre"}:
-            palabras = (p for grupo in grupos for p in sinonimos.get(grupo, (grupo,)))
-            if any(_contiene_termino(texto, p) for p in palabras):
+            coincidentes = _grupos_coincidentes(descripcion, grupos, sinonimos)
+            if coincidentes:
                 conceptos[numero].add(descripcion)
+                for grupo in coincidentes:
+                    por_grupo[grupo].add(numero)
         else:
             conceptos[numero].add(descripcion)
 
@@ -119,6 +132,9 @@ def responder_items(
             f"Encontré {len(hallados)} comprobantes con líneas registradas relacionadas con "
             f"{busqueda.replace(',', ' o ')} dentro de tu ámbito."
         )
+        if len(grupos) > 1:
+            desglose = ", ".join(f"{grupo}: {len(por_grupo[grupo])}" for grupo in grupos)
+            texto += f" Desglose por producto: {desglose}. Un comprobante puede contener varios."
         if ejemplos:
             texto += " Ejemplos: " + ", ".join(ejemplos) + "."
         if not hallados:
@@ -142,5 +158,9 @@ def responder_items(
         respuesta=texto,
         accion="CONSULTAR_ITEMS",
         motor="ESPECIALISTA_ITEMS",
-        datos={"comprobantes_con_items": len(expedientes), "coincidencias": len(conceptos)},
+        datos={
+            "comprobantes_con_items": len(expedientes),
+            "coincidencias": len(conceptos),
+            "coincidencias_por_producto": {k: len(v) for k, v in por_grupo.items()},
+        },
     )
