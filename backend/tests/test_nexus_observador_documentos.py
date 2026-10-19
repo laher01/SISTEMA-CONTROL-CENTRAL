@@ -2,11 +2,13 @@
 
 import uuid
 from dataclasses import replace
+from datetime import date
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.models import Documento, Gestor, Miembro
+from app.models import Documento, Empresa, Expediente, Gestor, Miembro
 from app.services.expedientes import obtener_tenant
 from tests.xml import factura
 
@@ -94,10 +96,13 @@ def test_nexus_resumen_documental_aislado_por_tenant(
     assert "F001-00009031" not in ajeno.text
 
 
-def _documento_cartera(session, tenant_id, usuario_id, gestor_id, etiqueta: str) -> None:
+def _documento_cartera(
+    session, tenant_id, usuario_id, gestor_id, etiqueta: str, expediente_id=None
+) -> None:
     session.add(
         Documento(
             tenant_id=tenant_id,
+            expediente_id=expediente_id,
             estado="RECIBIDO",
             sha256=uuid.uuid4().hex,
             nombre_original=f"{etiqueta}.xml",
@@ -193,3 +198,50 @@ def test_nexus_gerente_global_no_ve_documentos_huerfanos(
     )
     assert respuesta.status_code == 200, respuesta.text
     assert respuesta.json()["datos"]["documentos_por_estado"] == {}
+
+
+def test_nexus_gerente_y_global_solo_cuentan_expedientes_permitidos(
+    client: TestClient, session, auth_prueba
+) -> None:
+    """El gerente normal solo cuenta suyos; GRTEGLOBAL suma los históricos libres."""
+    tenant = auth_prueba.contexto.tenant_id
+    auth_prueba.como_gerente()
+    gerente_id = auth_prueba.contexto.miembro_id
+    assert gerente_id is not None
+    emisor = Empresa(tenant_id=tenant, ruc="20111111111", razon_social="Emisor de prueba")
+    receptor = Empresa(tenant_id=tenant, ruc="20222222222", razon_social="Receptor de prueba")
+    session.add_all([emisor, receptor])
+    session.flush()
+    for correlativo, gerente in (
+        ("501", gerente_id),
+        ("502", None),
+        ("503", uuid.uuid4()),
+    ):
+        expediente = Expediente(
+            tenant_id=tenant,
+            emisor_id=emisor.id,
+            receptor_id=receptor.id,
+            tipo_comprobante="01",
+            serie="F001",
+            correlativo=correlativo,
+            fecha_emision=date(2026, 10, 19),
+            moneda="PEN",
+            importe_total=Decimal("10.00"),
+            gerente_id=gerente,
+        )
+        session.add(expediente)
+        session.flush()
+        _documento_cartera(
+            session, tenant, None, None, f"cartera-{correlativo}", expediente.id
+        )
+    _documento_cartera(session, tenant, None, None, "sin-expediente")
+    session.commit()
+    consulta = {"mensaje": "¿Cómo van mis documentos?", "ruta": "/documentos"}
+    normal = client.post("/api/v1/nexus/chat", json=consulta)
+    assert normal.status_code == 200, normal.text
+    assert normal.json()["datos"]["documentos_por_estado"] == {"RECIBIDO": 1}
+
+    auth_prueba.contexto = replace(auth_prueba.contexto, codigo="GRTEGLOBAL")
+    global_ = client.post("/api/v1/nexus/chat", json=consulta)
+    assert global_.status_code == 200, global_.text
+    assert global_.json()["datos"]["documentos_por_estado"] == {"RECIBIDO": 2}
