@@ -1752,3 +1752,57 @@ def test_restauracion_expediente_prohibe_superadmin(
     assert client.delete(f"/api/v1/expedientes/{doc['expediente_id']}").status_code == 204
     auth_prueba.como_superadmin()
     assert client.post(f"/api/v1/expedientes/{doc['expediente_id']}/restaurar").status_code == 403
+
+
+@pytest.mark.parametrize("alteracion", ["ausente", "corrupto"])
+def test_restauracion_integral_rechaza_original_invalido_sin_cambios(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    session: Session,
+    settings: Settings,
+    alteracion: str,
+) -> None:
+    from uuid import UUID
+
+    from app.models import Documento
+
+    principal = subir(client, "integridad-original.xml", factura())
+    exp_id = principal["expediente_id"]
+    adjunto = subir(client, "original-seguro.pdf", b"%PDF-1.7 documento de prueba")
+    adjunto_modelo = session.get(Documento, UUID(str(adjunto["id"])))
+    assert adjunto_modelo is not None
+    adjunto_modelo.expediente_id = UUID(str(exp_id))
+    session.commit()
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/expedientes/{exp_id}").status_code == 204
+    original = settings.storage_dir / adjunto_modelo.ruta_storage
+    assert original.is_file()
+    if alteracion == "ausente":
+        original.unlink()
+    else:
+        original.write_bytes(b"archivo modificado")
+    respuesta = client.post(f"/api/v1/expedientes/{exp_id}/restaurar")
+    assert respuesta.status_code == 409, respuesta.text
+    assert client.get(f"/api/v1/expedientes/{exp_id}").status_code == 404
+    assert client.get(f"/api/v1/documentos/{principal['id']}").status_code == 404
+    assert client.get(f"/api/v1/documentos/{adjunto['id']}").status_code == 404
+
+
+def test_restauracion_integral_oculta_expediente_de_tenant_ajeno(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    from dataclasses import replace
+    from uuid import uuid4
+
+    principal = subir(client, "restauracion-tenant.xml", factura())
+    exp_id = principal["expediente_id"]
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/expedientes/{exp_id}").status_code == 204
+    original = auth_prueba.contexto
+    auth_prueba.contexto = replace(original, tenant_id=uuid4())
+    try:
+        assert client.post(f"/api/v1/expedientes/{exp_id}/restaurar").status_code == 404
+    finally:
+        auth_prueba.contexto = original
+    assert client.get(f"/api/v1/expedientes/{exp_id}").status_code == 404
+    assert client.post(f"/api/v1/expedientes/{exp_id}/restaurar").status_code == 200
