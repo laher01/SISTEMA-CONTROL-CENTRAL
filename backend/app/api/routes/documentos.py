@@ -1388,6 +1388,17 @@ def procesar_pendientes(
                 reutilizar=not forzar,
                 forzar_cache=forzar,
             )
+        except HTTPException as exc:
+            # MISD puede retirar un candidato después de seleccionar el lote.
+            # Saltarlo sin impedir el procesamiento de los siguientes archivos.
+            session.rollback()
+            vigente = session.get(Documento, documento.id)
+            if exc.status_code != status.HTTP_404_NOT_FOUND or vigente is None:
+                raise
+            session.refresh(vigente)
+            if vigente.deleted_at is None:
+                raise
+            continue
         except DocumentoNoProcesable as exc:
             resultado = registrar_fallo(session, documento, str(exc))
         except ComprobanteYaRegistrado as exc:
