@@ -3,11 +3,11 @@
 from pathlib import Path
 
 import pytest
-from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, text
 
+from alembic import command
 from tests.conftest import TEST_DATABASE_URL
 
 
