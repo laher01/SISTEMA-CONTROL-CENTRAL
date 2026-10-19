@@ -41,6 +41,16 @@ def test_pago_generado_bloquea_documento_y_expediente_incluso_para_admin(
     session.commit()
     auth_prueba.como_admin()
 
+    expedientes = client.get("/api/v1/expedientes")
+    assert expedientes.status_code == 200, expedientes.text
+    vista = next(f for f in expedientes.json() if f["id"] == str(expediente.id))
+    assert vista["puede_eliminar"] is False
+
+    registros = client.get("/api/v1/registros")
+    assert registros.status_code == 200, registros.text
+    fila = next(f for f in registros.json()["filas"] if f["expediente_id"] == str(expediente.id))
+    assert fila["puede_eliminar"] is False
+
     ruta_documento = f"/api/v1/documentos/{documento['id']}"
     ruta_expediente = f"/api/v1/expedientes/{expediente.id}"
     documento_bloqueado = client.delete(ruta_documento)
