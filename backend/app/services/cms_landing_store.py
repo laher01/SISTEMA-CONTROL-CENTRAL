@@ -133,8 +133,11 @@ def guardar_borrador(
         nueva = RevisionEditorial(1, EstadoEditorial.BORRADOR, contenido)
         session.execute(
             revision_table.insert().values(
-                id=1, version=1, estado=nueva.estado.value,
-                contenido=contenido, actualizado_por=actor_id,
+                id=1,
+                version=1,
+                estado=nueva.estado.value,
+                contenido=contenido,
+                actualizado_por=actor_id,
             )
         )
         anterior_version = 0
@@ -161,9 +164,12 @@ def guardar_borrador(
     try:
         session.execute(
             evento_table.insert().values(
-                id=uuid.uuid4(), version_anterior=anterior_version,
-                version_nueva=nueva.version, anterior=EstadoEditorial.BORRADOR.value,
-                nuevo=EstadoEditorial.BORRADOR.value, actor_id=actor_id,
+                id=uuid.uuid4(),
+                version_anterior=anterior_version,
+                version_nueva=nueva.version,
+                anterior=EstadoEditorial.BORRADOR.value,
+                nuevo=EstadoEditorial.BORRADOR.value,
+                actor_id=actor_id,
             )
         )
         session.commit()
