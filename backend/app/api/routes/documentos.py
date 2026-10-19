@@ -69,6 +69,7 @@ from app.services.ingesta import (
 from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.lotes_imagenes import MAX_IMAGENES_POR_SUBLOTE
 from app.services.metadatos_documento import metadatos_individuales
+from app.services.misd_autorizaciones import dentro_ventana_correccion
 from app.services.misd_pagos import motivo_bloqueo_liquidacion, motivo_bloqueo_voucher
 from app.services.permisos import (
     PERMISO_ELIMINAR_REGISTROS,
@@ -1351,6 +1352,11 @@ def eliminar_documento(
             "No tiene permiso para eliminar registros",
         )
     expediente = documento.expediente
+    if auth.rol in ("GESTOR", "USUARIO") and (
+        (expediente is not None and not dentro_ventana_correccion(expediente, ahora()))
+        or (expediente is None and (ahora() - documento.created_at).total_seconds() > 1800)
+    ):
+        raise HTTPException(409, "Fuera de ventana: retire mediante autorización MISD")
     if expediente is not None and requiere_autorizacion_administrativa(
         auth.rol, expediente.receptor.autorizada
     ):
