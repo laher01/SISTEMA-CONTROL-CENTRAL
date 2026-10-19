@@ -3,6 +3,7 @@
 Datos sintéticos de estructura reproducida con 17 PDF aportados; sin documentos
 fiscales originales ni datos del cliente incorporados al repositorio.
 """
+
 import pytest
 
 from app.services.facturas_estaciones import extraer_factura_estacion
@@ -17,9 +18,7 @@ from app.services.facturas_estaciones import extraer_factura_estacion
         ("00007229", "02/10/2026", "7,200.00"),
     ],
 )
-def test_san_jose_bizlinks_valores_antes_de_etiquetas(
-    numero: str, fecha: str, monto: str
-) -> None:
+def test_san_jose_bizlinks_valores_antes_de_etiquetas(numero: str, fecha: str, monto: str) -> None:
     texto = (
         "ESTACION DE SERVICIOS SAN JOSE SAC\n"
         "R.U.C.\nELECTRÓNICA\n20175642341\nFACTURA\nF091-" + numero + "\n"
@@ -36,9 +35,7 @@ def test_san_jose_bizlinks_valores_antes_de_etiquetas(
     assert campos["correlativo"][0] == numero
     assert campos["ruc_emisor"][0] == "20175642341"
     assert campos["ruc_receptor"][0] == "20999999991"
-    assert campos["fecha_emision"][0] == (
-        fecha[6:10] + "-" + fecha[3:5] + "-" + fecha[:2]
-    )
+    assert campos["fecha_emision"][0] == fecha[6:10] + "-" + fecha[3:5] + "-" + fecha[:2]
     assert campos["importe_total"][0] == monto.replace(",", "")
     assert campos["moneda"][0] == "PEN"
 
