@@ -41,6 +41,7 @@ from app.schemas import (
     RelacionSugeridaOut,
 )
 from app.security import cuenta_administradora_responsable
+from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
 from app.services import auditoria
 from app.services.ambito_emisor import EstadoAmbitoEmisor, revisar_asignaciones_emisor
 from app.services.ambito_gerencia import alcance_expedientes_gerente, expediente_visible_gerente
@@ -1339,6 +1340,7 @@ def eliminar_documento(
     auth: OperativeAuthDep,
     documento_id: uuid.UUID,
 ) -> None:
+    bloquear_tenant_financiero(session, tenant_id)
     documento = _documento(session, tenant_id, documento_id)
     _validar_ambito_documento(auth, documento, session)
     if auth.rol == RolMiembro.SUPERADMIN or not permiso_habilitado(
