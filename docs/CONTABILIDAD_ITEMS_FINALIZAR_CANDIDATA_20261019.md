@@ -26,3 +26,11 @@ No hay implementación ni cambios sobre eliminación (#292), pedidos, migracione
 Corregir únicamente fallos reproducibles de candidata; comprobar resultados CI por SHA, evidencia pytest de reescaneo, aislamiento y concurrencia. Reconciliar con propietarios de #186/#281 antes de definir orden de integración. Integración a main requiere comando I autorizado; despliegue VPS requiere D y recuperación comprobada.
 
 **No merge, no main, no VPS, no migraciones productivas, no deploy.**
+
+## Verificación comando T — SHA 2665855f6c62bb501a3cdd42601d0aed65613a4f
+- GitHub PR #325 permanece DRAFT, HEAD coincidente con este SHA antes de esta actualización documental.
+- Backend run `39211509640`: ejecutó con éxito `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy app`; `uv run pytest` estaba **en ejecución** durante la comprobación.
+- Recepción run `39211509807` y Roles Real run `39211509698`: **en ejecución**; no hay resultados concluyentes ni prueba que corregir por ahora.
+- El servicio CI Backend levanta contenedores de prueba, pero no incluye un paso explícito de `alembic upgrade head` en su lista de pasos. Por tanto **no se ha verificado migración Alembic completa de la candidata** mediante este workflow.
+- Se intentó consultar logs pytest con GitHub durante la ejecución; API temporalmente respondió `404 BlobNotFound`. No se afirma resultado pytest.
+- No se hicieron cambios en Python/TSX ni acciones de fusión, VPS o producción. El cierre exige revisar el resultado final del CI y ejecutar/constatar Alembic en DB efímera antes de autorizar integración.
