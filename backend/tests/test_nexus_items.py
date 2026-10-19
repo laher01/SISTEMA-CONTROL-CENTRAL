@@ -102,6 +102,7 @@ def test_diesel_en_pdf_procesado_requiere_linea_y_tipo_factura() -> None:
     )
     assert not _diesel_en_factura_procesada({})
 
+
 def test_seguimiento_proveedor_conserva_producto() -> None:
     historial = [NexusMensajeHistorial(autor="usuario", texto="¿Cuántas facturas tienen DIESEL?")]
     assert seguimiento_proveedor("¿Cuántas son de Escorpio?", historial) == ("petroleo", "escorpio")
