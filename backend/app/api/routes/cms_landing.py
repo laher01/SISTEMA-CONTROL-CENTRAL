@@ -92,9 +92,7 @@ def contenido_cms_publico(session: SessionDep) -> dict[str, object]:
     if configuracion is None or configuracion.activa is not True:
         return {"disponible": False, "contenido": None}
     fila = (
-        session.execute(
-            select(publicacion_table).where(publicacion_table.c.id == 1)
-        )
+        session.execute(select(publicacion_table).where(publicacion_table.c.id == 1))
         .mappings()
         .one_or_none()
     )
