@@ -1575,3 +1575,47 @@ def test_restaurar_expediente_rechaza_tenant_ajeno(
     finally:
         auth_prueba.contexto = anterior
     assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 404
+
+
+def test_restaurar_expediente_conserva_gre_pago_y_alertas(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    from uuid import UUID
+
+    from app.models import PagoERP, ReferenciaGRE
+
+    original = subir(client, "factura-vinculada.xml", factura())
+    doc_id = UUID(str(original["id"]))
+    expediente_id = original["expediente_id"]
+    alertas_iniciales = alertas_abiertas(expediente(client, expediente_id))
+    referencia = ReferenciaGRE(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        documento_id=doc_id,
+        serie="F001",
+        correlativo="25",
+        emisor_ruc="20123456789",
+        receptor_ruc="20987654321",
+    )
+    pago = PagoERP(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        usuario_id=auth_prueba.contexto.miembro_id,
+        periodo_desde=date(2026, 9, 1),
+        periodo_hasta=date(2026, 9, 30),
+        moneda="PEN",
+        produccion_total=Decimal("150.00"),
+        porcentaje=Decimal("10.00"),
+        bruto=Decimal("15.00"),
+        saldo=Decimal("15.00"),
+        voucher_documento_id=doc_id,
+    )
+    session.add_all([referencia, pago])
+    session.commit()
+    referencia_id, pago_id = referencia.id, pago.id
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 204
+    respuesta = client.post(f"/api/v1/expedientes/{expediente_id}/restaurar")
+    assert respuesta.status_code == 200, respuesta.text
+    session.expire_all()
+    assert session.get(ReferenciaGRE, referencia_id).documento_id == doc_id
+    assert session.get(PagoERP, pago_id).voucher_documento_id == doc_id
+    assert alertas_abiertas(respuesta.json()) == alertas_iniciales
