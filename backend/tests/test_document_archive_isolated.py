@@ -118,3 +118,49 @@ def test_asegura_permisos_privados(tmp_path: Path) -> None:
     MODULO.restaurar(copia, destino, digest)
     assert destino.stat().st_mode & 0o077 == 0
     assert (destino / "archivo").stat().st_mode & 0o077 == 0
+
+
+def test_destino_concurrente_no_se_reemplaza(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    origen = tmp_path / "source"
+    origen.mkdir()
+    (origen / "archivo").write_bytes(b"origen")
+    copia = tmp_path / "backup.tar"
+    digest = MODULO.respaldo(origen, copia)
+    destino = tmp_path / "restored"
+    original = MODULO._publicar_sin_sobrescribir
+
+    def competir(privada: Path, objetivo: Path) -> None:
+        objetivo.mkdir()
+        (objetivo / "testigo").write_bytes(b"intacto")
+        original(privada, objetivo)
+
+    monkeypatch.setattr(MODULO, "_publicar_sin_sobrescribir", competir)
+    with pytest.raises(OSError):
+        MODULO.restaurar(copia, destino, digest)
+    assert (destino / "testigo").read_bytes() == b"intacto"
+
+
+def test_rechaza_archivo_tar_excesivo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    origen = tmp_path / "source"
+    origen.mkdir()
+    copia = tmp_path / "backup.tar"
+    digest = MODULO.respaldo(origen, copia)
+    monkeypatch.setattr(MODULO, "MAX_ARCHIVO", 50)
+    with pytest.raises(ValueError, match="físico"):
+        MODULO.restaurar(copia, tmp_path / "restored", digest)
+
+
+def test_falta_espacio_no_publica(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import shutil
+    from collections import namedtuple
+
+    origen = tmp_path / "source"
+    origen.mkdir()
+    (origen / "archivo").write_bytes(b"contenido")
+    copia = tmp_path / "backup.tar"
+    digest = MODULO.respaldo(origen, copia)
+    uso = namedtuple("Uso", "total used free")
+    monkeypatch.setattr(shutil, "disk_usage", lambda _: uso(100, 100, 0))
+    with pytest.raises(OSError, match="Espacio"):
+        MODULO.restaurar(copia, tmp_path / "restored", digest)
+    assert not (tmp_path / "restored").exists()
