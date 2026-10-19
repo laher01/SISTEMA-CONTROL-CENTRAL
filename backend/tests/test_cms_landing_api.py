@@ -1,4 +1,5 @@
 """Seguridad de rutas globales CMS y validación de contenido no confiable."""
+
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
