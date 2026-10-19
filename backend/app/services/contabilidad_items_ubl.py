@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.item_models import LineaComprobanteItem, ProductoItem
+from app.models import Documento, Tenant
 from app.services.contabilidad_items_rules import sugerir_categoria, texto_normalizado
 from app.services.ubl import INVOICE, NS
 
@@ -76,6 +77,22 @@ def registrar_items_ubl(
     contenido: bytes,
 ) -> int:
     """No duplica líneas al reprocesar; no mezcla productos con variantes diferentes."""
+    # PostgreSQL: serialize writes sharing a tenant, including catalog creation across
+    # different documents. The lock lasts until the caller commits or rolls back.
+    tenant_valido = session.scalar(
+        select(Tenant.id).where(Tenant.id == tenant_id).with_for_update()
+    )
+    if tenant_valido is None:
+        raise ValueError("Tenant no encontrado")
+    documento_valido = session.scalar(
+        select(Documento.id).where(
+            Documento.id == documento_id,
+            Documento.tenant_id == tenant_id,
+            Documento.deleted_at.is_(None),
+        )
+    )
+    if documento_valido is None:
+        raise ValueError("Documento no encontrado en el tenant autorizado")
     items = extraer_items_ubl(contenido)
     registrados = 0
     for linea in items:
