@@ -191,6 +191,13 @@ def test_misd_fuera_de_ventana_exige_aprobacion(
     assert bloqueada.status_code == 409, bloqueada.text
     assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 409
     assert client.delete(f"/api/v1/documentos/{subida.json()['id']}").status_code == 409
+    lote = client.post(
+        "/api/v1/documentos/retirar-lote",
+        json={"documentos_ids": [subida.json()["id"]]},
+    )
+    assert lote.status_code == 200, lote.text
+    assert lote.json()["retirados"] == 0
+    assert lote.json()["resultados"][0]["codigo"] == "409"
     assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 200
 
 
