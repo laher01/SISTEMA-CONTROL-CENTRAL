@@ -189,6 +189,8 @@ def test_misd_fuera_de_ventana_exige_aprobacion(
     solicitud_id = creada.json()["id"]
     bloqueada = client.post(f"/api/v1/misd/solicitudes/{solicitud_id}/ejecutar")
     assert bloqueada.status_code == 409, bloqueada.text
+    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 409
+    assert client.delete(f"/api/v1/documentos/{subida.json()['id']}").status_code == 409
     assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 200
 
 
