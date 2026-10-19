@@ -1421,6 +1421,11 @@ def _procesar_y_aplicar(
             )
         aplicar_perfiles_aprendidos(session, documento, procesamiento)
         guardar_procesamiento(session, documento, procesamiento)
+    # Si MISD retiró el documento durante la extracción, no aplicar vínculos.
+    # No sustituye un protocolo transaccional compartido entre OCR y MISD.
+    session.refresh(documento)
+    if documento.deleted_at is not None:
+        raise no_encontrado("Documento")
     return aplicar_automaticamente(session, settings, hoy, documento, procesamiento)
 
 
