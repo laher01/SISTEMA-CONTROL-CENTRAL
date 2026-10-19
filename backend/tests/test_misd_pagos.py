@@ -54,3 +54,35 @@ def test_pago_generado_bloquea_documento_y_expediente_incluso_para_admin(
     session.delete(pago)
     session.commit()
     assert client.delete(ruta_expediente).status_code == 204
+
+def test_voucher_vinculado_a_pago_no_puede_retirarse(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    respuesta = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("voucher.pdf", b"%PDF-1.7 voucher generado")},
+    )
+    assert respuesta.status_code == 201, respuesta.text
+    documento = respuesta.json()
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+    pago = PagoERP(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        usuario_id=usuario_id,
+        periodo_desde=date(2026, 9, 1),
+        periodo_hasta=date(2026, 9, 30),
+        moneda="PEN",
+        produccion_total=Decimal("100.00"),
+        porcentaje=Decimal("10"),
+        bruto=Decimal("10.00"),
+        saldo=Decimal("10.00"),
+        estado="PROGRAMADO",
+        voucher_documento_id=documento["id"],
+    )
+    session.add(pago)
+    session.commit()
+    auth_prueba.como_admin()
+    eliminado = client.delete(f"/api/v1/documentos/{documento['id']}")
+    assert eliminado.status_code == 409, eliminado.text
+    assert "Voucher" in eliminado.text
+    assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
