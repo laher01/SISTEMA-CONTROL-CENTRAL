@@ -189,7 +189,7 @@ def responder_items(
             select(Expediente, Empresa.razon_social, Documento.datos_extraidos)
             .join(Documento, Documento.expediente_id == Expediente.id)
             .join(Empresa, Empresa.id == Expediente.receptor_id)
-        .join(Emisor, Emisor.id == Expediente.emisor_id)
+            .join(Emisor, Emisor.id == Expediente.emisor_id)
             .where(
                 Expediente.tenant_id == auth.tenant_id,
                 Documento.tenant_id == auth.tenant_id,
