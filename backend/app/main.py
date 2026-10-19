@@ -7,6 +7,7 @@ from app.api.routes import (
     asignaciones_emisores,
     auth,
     chat,
+    cms_landing,
     comisiones,
     configuracion,
     configuracion_acceso,
@@ -78,6 +79,7 @@ for modulo in (
     configuracion,
     configuracion_acceso,
     pagina_web,
+    cms_landing,
     mantenimiento,
 ):
     api.include_router(modulo.router)
