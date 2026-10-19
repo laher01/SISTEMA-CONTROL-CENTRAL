@@ -1537,8 +1537,6 @@ def crear_expediente_asistido(
         raise _comprobante_duplicado(session, auth, existente.id)
     creado = existente is None
     razon_receptor = (
-    creado = existente is None
-    razon_receptor = (
         solicitud.razon_social_receptor
         or str(campos.get("razon_social_receptor", "")).strip()
         or receptor_ruc
