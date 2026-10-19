@@ -333,8 +333,7 @@ def resolver_auditoria(
 
 def _celda_csv(valor: str) -> str:
     """Evita que un nombre de producto se ejecute como fórmula al abrir CSV en Excel."""
-    if valor.lstrip().startswith(("=", "+", "-", "@", "\t", "\r", "
-")):
+    if valor.lstrip().startswith(("=", "+", "-", "@", "\t", "\r", "\n")):
         return "'" + valor
     return valor
 
