@@ -1,4 +1,5 @@
 """Creación manual de expediente cuando OCR no proporciona campos."""
+
 from fastapi.testclient import TestClient
 
 
@@ -20,22 +21,16 @@ def test_confirmacion_manual_sin_ocr_y_colision_fiscal(client: TestClient) -> No
     )
     assert primero.status_code == 201, primero.text
     documento_id = primero.json()["id"]
-    confirmar = client.put(
-        f"/api/v1/documentos/{documento_id}/extraccion-confirmada", json=campos
-    )
+    confirmar = client.put(f"/api/v1/documentos/{documento_id}/extraccion-confirmada", json=campos)
     assert confirmar.status_code == 200, confirmar.text
-    creado = client.post(
-        f"/api/v1/documentos/{documento_id}/crear-expediente", json=solicitud
-    )
+    creado = client.post(f"/api/v1/documentos/{documento_id}/crear-expediente", json=solicitud)
     assert creado.status_code == 200, creado.text
     assert creado.json()["creado"] is True
     expediente_id = creado.json()["expediente"]["id"]
     assert expediente_id
 
     # Repetición exacta desde el mismo documento: idempotencia.
-    otra_vez = client.post(
-        f"/api/v1/documentos/{documento_id}/crear-expediente", json=solicitud
-    )
+    otra_vez = client.post(f"/api/v1/documentos/{documento_id}/crear-expediente", json=solicitud)
     assert otra_vez.status_code == 200, otra_vez.text
     assert otra_vez.json()["creado"] is False
     assert otra_vez.json()["expediente"]["id"] == expediente_id
@@ -47,12 +42,13 @@ def test_confirmacion_manual_sin_ocr_y_colision_fiscal(client: TestClient) -> No
     )
     assert segundo.status_code == 201, segundo.text
     segundo_id = segundo.json()["id"]
-    assert client.put(
-        f"/api/v1/documentos/{segundo_id}/extraccion-confirmada", json=campos
-    ).status_code == 200
-    conflicto = client.post(
-        f"/api/v1/documentos/{segundo_id}/crear-expediente", json=solicitud
+    assert (
+        client.put(
+            f"/api/v1/documentos/{segundo_id}/extraccion-confirmada", json=campos
+        ).status_code
+        == 200
     )
+    conflicto = client.post(f"/api/v1/documentos/{segundo_id}/crear-expediente", json=solicitud)
     assert conflicto.status_code == 409, conflicto.text
     assert conflicto.json()["detail"]["duplicado"] is True
     assert conflicto.json()["detail"]["expediente_id"] == expediente_id
