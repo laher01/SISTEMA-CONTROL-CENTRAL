@@ -447,6 +447,8 @@ def resumen_filtrado(
     resultado = session.execute(
         select(
             func.count(base.c.id),
+            func.coalesce(func.sum(case((base.c.moneda == "PEN", base.c.importe_total), else_=0)), 0),
+            func.coalesce(func.sum(case((base.c.moneda == "USD", base.c.importe_total), else_=0)), 0),
             func.coalesce(
                 func.sum(
                     case(
@@ -476,7 +478,9 @@ def resumen_filtrado(
     return {
         "total_expedientes": int(resultado[0]),
         "total_pen": Decimal(resultado[1]),
+        "total_pen_autorizado": Decimal(resultado[3]),
         "total_usd": Decimal(resultado[2]),
+        "total_usd_autorizado": Decimal(resultado[4]),
     }
 
 
