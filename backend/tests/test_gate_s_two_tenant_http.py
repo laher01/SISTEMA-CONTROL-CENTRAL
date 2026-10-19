@@ -171,8 +171,8 @@ def test_items_ubl_http_scoped_filters_and_retirement(
     own = client.get("/api/v1/contabilidad-items")
     assert own.status_code == 200, own.text
     assert len(own.json()) == 1
-    assert own.json()[0]["cantidad"] == "12"
-    assert own.json()[0]["importe"] == "60"
+    assert Decimal(own.json()[0]["cantidad"]) == Decimal("12")
+    assert Decimal(own.json()[0]["importe"]) == Decimal("60")
     for key in ("emisor_id", "receptor_id"):
         idx = 0 if key == "emisor_id" else 1
         own_filtered = client.get(
