@@ -66,7 +66,7 @@ def test_nexus_resumen_documental_aislado_por_tenant(
     client: TestClient, session, settings, auth_prueba
 ) -> None:
     """Un tenant ajeno no recibe los estados del documento cargado al tenant original."""
-    auth_prueba.como_admin()
+    # La carga operativa pertenece al rol USUARIO; no se relaja RBAC.
     subido = client.post(
         "/api/v1/documentos",
         files={
