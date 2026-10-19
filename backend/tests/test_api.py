@@ -1676,10 +1676,7 @@ def test_misd_secretaria_no_retiro_documentos_ni_expedientes(
     original = subir(client, "misd-secretaria.xml", factura())
     auth_prueba.contexto = replace(auth_prueba.contexto, rol="SECRETARIA")
     assert client.delete(f"/api/v1/documentos/{original['id']}").status_code == 403
-    assert (
-        client.delete(f"/api/v1/expedientes/{original['expediente_id']}").status_code
-        == 403
-    )
+    assert client.delete(f"/api/v1/expedientes/{original['expediente_id']}").status_code == 403
     assert client.get("/api/v1/documentos/capacidades").json()["puede_retirar"] is False
 
 
