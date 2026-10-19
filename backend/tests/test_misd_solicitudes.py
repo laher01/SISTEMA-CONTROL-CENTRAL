@@ -42,9 +42,9 @@ def test_solicitud_aprobacion_no_borra_expediente(
     assert decision.json()["estado"] == "APROBADA"
     assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 200
     assert session.query(SolicitudRetiroMISD).count() == 1
-    assert session.query(Auditoria).filter(
-        Auditoria.accion == "MISD_SOLICITUD_RESUELTA"
-    ).count() == 1
+    assert (
+        session.query(Auditoria).filter(Auditoria.accion == "MISD_SOLICITUD_RESUELTA").count() == 1
+    )
     assert session.get(Expediente, expediente_id).deleted_at is None
     repeticion = client.post(
         f"/api/v1/misd/solicitudes/{solicitud_id}/resolver",
