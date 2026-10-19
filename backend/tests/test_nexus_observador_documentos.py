@@ -117,19 +117,29 @@ def test_nexus_documentos_carteras_gestor_responsable_y_gerente(
     tenant = auth_prueba.contexto.tenant_id
     usuario_asignado = auth_prueba.contexto.usuario_id
     responsable = Miembro(
-        tenant_id=tenant, codigo="RESP-N1", nombre="Responsable N1",
-        rol="RESPONSABLE", activo=True,
+        tenant_id=tenant,
+        codigo="RESP-N1",
+        nombre="Responsable N1",
+        rol="RESPONSABLE",
+        activo=True,
     )
     usuario_ajeno = Miembro(
-        tenant_id=tenant, codigo="USR-AJENO-N1", nombre="Usuario ajeno N1",
-        rol="USUARIO", activo=True,
+        tenant_id=tenant,
+        codigo="USR-AJENO-N1",
+        nombre="Usuario ajeno N1",
+        rol="USUARIO",
+        activo=True,
     )
     gestor_asignado = Gestor(
-        tenant_id=tenant, codigo="GEST-N1", nombre="Gestor N1",
+        tenant_id=tenant,
+        codigo="GEST-N1",
+        nombre="Gestor N1",
         usuario_id=usuario_asignado,
     )
     gestor_ajeno = Gestor(
-        tenant_id=tenant, codigo="GEST-AJ-N1", nombre="Gestor ajeno N1",
+        tenant_id=tenant,
+        codigo="GEST-AJ-N1",
+        nombre="Gestor ajeno N1",
         usuario_id=usuario_ajeno.id,
     )
     session.add_all([responsable, usuario_ajeno])
@@ -151,8 +161,11 @@ def test_nexus_documentos_carteras_gestor_responsable_y_gerente(
     assert gestor.json()["datos"]["documentos_por_estado"] == {"RECIBIDO": 1}
 
     auth_prueba.contexto = replace(
-        auth_prueba.contexto, rol="RESPONSABLE",
-        miembro_id=responsable.id, gestor_id=None, usuario_id=None,
+        auth_prueba.contexto,
+        rol="RESPONSABLE",
+        miembro_id=responsable.id,
+        gestor_id=None,
+        usuario_id=None,
     )
     resp = client.post("/api/v1/nexus/chat", json=consulta)
     assert resp.status_code == 200, resp.text
