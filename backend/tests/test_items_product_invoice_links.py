@@ -15,9 +15,9 @@ XML = (
     b'xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" '
     b'xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">'
     b'<cac:InvoiceLine><cbc:InvoicedQuantity unitCode="KGM">12</cbc:InvoicedQuantity>'
-    b'<cbc:LineExtensionAmount>60</cbc:LineExtensionAmount>'
-    b'<cac:Item><cbc:Name>Pota congelada</cbc:Name></cac:Item>'
-    b'</cac:InvoiceLine></Invoice>'
+    b"<cbc:LineExtensionAmount>60</cbc:LineExtensionAmount>"
+    b"<cac:Item><cbc:Name>Pota congelada</cbc:Name></cac:Item>"
+    b"</cac:InvoiceLine></Invoice>"
 )
 
 
