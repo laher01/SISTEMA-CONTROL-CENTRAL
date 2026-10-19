@@ -32,6 +32,7 @@ from app.schemas import (
     Recalculo,
 )
 from app.security import cuenta_administradora_responsable
+from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
 from app.services import auditoria
 from app.services.ambito_gerencia import alcance_expedientes_gerente, expediente_visible_gerente
 from app.services.expedientes import (
@@ -950,6 +951,7 @@ def eliminar(
     auth: OperativeAuthDep,
     expediente_id: uuid.UUID,
 ) -> None:
+    bloquear_tenant_financiero(session, tenant_id)
     expediente = session.get(Expediente, expediente_id)
     if expediente is None or expediente.tenant_id != tenant_id or expediente.deleted_at:
         raise no_encontrado("Expediente")
