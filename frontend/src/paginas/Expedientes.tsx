@@ -352,8 +352,13 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
                 </td>
                 {capacidades?.puede_retirar && (
                   <td>
-                    <button type="button" onClick={() => void retirarExpediente(e.id)}>
-                      Retirar
+                    <button
+                      type="button"
+                      disabled={!e.puede_eliminar}
+                      title={e.puede_eliminar ? "Retirar expediente" : "Eliminación no autorizada o bloqueada por liquidación"}
+                      onClick={() => void retirarExpediente(e.id)}
+                    >
+                      {e.puede_eliminar ? "Retirar" : "Bloqueado"}
                     </button>
                   </td>
                 )}
