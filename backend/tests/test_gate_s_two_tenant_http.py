@@ -1,7 +1,7 @@
 """Two-tenant HTTP contract checks using disposable fixture database."""
 
 from dataclasses import replace
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
@@ -108,7 +108,7 @@ def test_conciliacion_excludes_other_tenant_and_emisor_receptor(
         )
     )
     assert own_invoice is not None
-    own_invoice.deleted_at = datetime.now(timezone.utc)
+    own_invoice.deleted_at = datetime.now(UTC)
     session.commit()
     after_retirement = client.get("/api/v1/contabilidad-items/conciliacion")
     assert after_retirement.status_code == 200, after_retirement.text
@@ -188,7 +188,7 @@ def test_items_ubl_http_scoped_filters_and_retirement(
 
     own_doc = session.get(Documento, ids["1"][2])
     assert own_doc is not None
-    own_doc.deleted_at = datetime.now(timezone.utc)
+    own_doc.deleted_at = datetime.now(UTC)
     session.commit()
     retired = client.get("/api/v1/contabilidad-items")
     assert retired.status_code == 200, retired.text
