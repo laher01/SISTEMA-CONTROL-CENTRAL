@@ -2,6 +2,8 @@
 """Respaldo y restauración OFFLINE en destino nuevo; no es snapshot transaccional."""
 
 import argparse
+import ctypes
+import errno
 import hashlib
 import os
 import re
@@ -13,6 +15,22 @@ from pathlib import Path
 
 BLOQUE = 1024 * 1024
 SHA = re.compile(r"[0-9a-f]{64}")
+MAX_ARCHIVO = 12 * 1024**3
+
+
+def _publicar_sin_sobrescribir(privada: Path, destino: Path) -> None:
+    """renameat2(RENAME_NOREPLACE): falla cerrado si el sistema no lo soporta."""
+    libc = ctypes.CDLL(None, use_errno=True)
+    funcion = getattr(libc, "renameat2", None)
+    if funcion is None:
+        raise OSError(errno.ENOSYS, "Publicación sin sobrescritura no soportada")
+    funcion.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    funcion.restype = ctypes.c_int
+    resultado = funcion(-100, os.fsencode(privada), -100, os.fsencode(destino), 1)
+    if resultado != 0:
+        codigo = ctypes.get_errno()
+        raise OSError(codigo, os.strerror(codigo), str(destino))
+
 
 
 def huella(archivo: Path) -> str:
@@ -43,6 +61,8 @@ def respaldo(
         raise ValueError("El respaldo debe ser nuevo y estar fuera del origen")
     entradas = 0
     total = 0
+    if max_bytes > MAX_ARCHIVO:
+        raise ValueError("Límite de respaldo demasiado grande")
     with tempfile.NamedTemporaryFile(dir=archivo.parent, delete=False) as temporal:
         parcial = Path(temporal.name)
     try:
@@ -56,10 +76,17 @@ def respaldo(
                 if entradas > max_entradas or total > max_bytes:
                     raise ValueError("Límites de respaldo superados")
                 salida.add(ruta, arcname=ruta.relative_to(origen).as_posix(), recursive=False)
+        if parcial.stat().st_size > MAX_ARCHIVO:
+            raise ValueError("TAR excede límite físico")
         digest = huella(parcial)
-        with archivo.open("xb") as destino, parcial.open("rb") as entrada:
-            for bloque in iter(lambda: entrada.read(BLOQUE), b""):
-                destino.write(bloque)
+        try:
+            with archivo.open("xb") as destino, parcial.open("rb") as entrada:
+                os.chmod(archivo, 0o600)
+                for bloque in iter(lambda: entrada.read(BLOQUE), b""):
+                    destino.write(bloque)
+        except Exception:
+            archivo.unlink(missing_ok=True)
+            raise
         return digest
     finally:
         parcial.unlink(missing_ok=True)
@@ -106,6 +133,8 @@ def restaurar(
 ) -> int:
     if not archivo.is_file() or not SHA.fullmatch(sha256):
         raise ValueError("Respaldo o huella inválidos")
+    if archivo.stat().st_size > MAX_ARCHIVO:
+        raise ValueError("TAR excede límite físico")
     if huella(archivo) != sha256:
         raise ValueError("La huella del respaldo no coincide")
     if destino.exists() or destino.is_symlink():
@@ -113,6 +142,9 @@ def restaurar(
     with tarfile.open(archivo, "r") as origen:
         miembros = origen.getmembers()
         _validar(miembros, max_entradas, max_bytes)
+        requeridos = sum(m.size for m in miembros if m.isfile())
+        if shutil.disk_usage(destino.parent).free < requeridos + 1024 * 1024:
+            raise OSError(errno.ENOSPC, "Espacio insuficiente para restaurar")
         directorio = destino.parent
         if not directorio.is_dir():
             raise ValueError("El padre del destino no existe")
@@ -139,7 +171,7 @@ def restaurar(
                             raise ValueError("Tamaño incorrecto")
             if destino.exists() or destino.is_symlink():
                 raise ValueError("Destino creado durante restauración")
-            privada.rename(destino)
+            _publicar_sin_sobrescribir(privada, destino)
         except Exception:
             shutil.rmtree(privada)
             raise
