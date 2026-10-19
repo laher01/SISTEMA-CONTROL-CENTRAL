@@ -13,14 +13,13 @@ from app.models import Expediente, Miembro, PagoERP, PagoGestor, PagoResponsable
 
 
 def motivo_bloqueo_liquidacion(session: Session, expediente: Expediente) -> str | None:
-    filtros = (
-        lambda modelo: (
+    def filtros(modelo: type) -> tuple:
+        return (
             modelo.tenant_id == expediente.tenant_id,
             modelo.periodo_desde <= expediente.fecha_emision,
             modelo.periodo_hasta >= expediente.fecha_emision,
             modelo.moneda == expediente.moneda,
         )
-    )
     if expediente.usuario_id is not None:
         pago_usuario = session.scalar(
             select(PagoERP.id)
