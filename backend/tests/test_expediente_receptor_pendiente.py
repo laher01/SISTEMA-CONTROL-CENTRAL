@@ -35,6 +35,20 @@ def test_expediente_manual_receptor_no_autorizado_admite_adjunto(client: TestCli
     expediente = creado.json()["expediente"]
     assert expediente["pendiente_aprobacion"] is True
     expediente_id = expediente["id"]
+    receptor_id = expediente["receptor"]["id"]
+
+    por_serie = client.get("/api/v1/expedientes", params={"buscar": "F001-9988"})
+    assert por_serie.status_code == 200, por_serie.text
+    assert any(item["id"] == expediente_id for item in por_serie.json())
+
+    por_ruc = client.get("/api/v1/expedientes", params={"receptor_ruc": "20999999992"})
+    assert por_ruc.status_code == 200, por_ruc.text
+    assert any(item["id"] == expediente_id for item in por_ruc.json())
+
+    por_uuid = client.get(f"/api/v1/expedientes/{expediente_id}")
+    assert por_uuid.status_code == 200, por_uuid.text
+    assert por_uuid.json()["id"] == expediente_id
+    assert receptor_id
 
     voucher = client.post(
         "/api/v1/documentos",
