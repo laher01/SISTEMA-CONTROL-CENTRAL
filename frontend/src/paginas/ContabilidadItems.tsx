@@ -140,6 +140,32 @@ export default function ContabilidadItems() {
           </table>
         </div>
       )}
+      {productoSeleccionado && (
+        <section aria-label="Facturas vinculadas al ítem">
+          <h3>Facturas que contienen el producto seleccionado</h3>
+          <button type="button" onClick={() => setProductoSeleccionado(null)}>Cerrar detalle</button>
+          {cargandoFacturas && <p>Consultando facturas…</p>}
+          {errorFacturas && <p role="alert">{errorFacturas}</p>}
+          {facturas?.length === 0 && <p>No hay facturas visibles para los filtros aplicados.</p>}
+          {facturas && facturas.length > 0 && (
+            <div style={{ overflowX: "auto" }}>
+              <table>
+                <thead><tr><th>Factura</th><th>Fecha</th><th>Descripción original</th><th>Cantidad</th><th>Importe</th><th>Expediente</th></tr></thead>
+                <tbody>{facturas.map((factura) => (
+                  <tr key={factura.documento_id + ":" + factura.comprobante + ":" + factura.descripcion_original}>
+                    <td>{factura.comprobante}</td>
+                    <td>{factura.fecha_emision}</td>
+                    <td>{factura.descripcion_original}</td>
+                    <td>{factura.cantidad} {factura.unidad}</td>
+                    <td>{factura.importe} {factura.moneda}</td>
+                    <td><a href={`/expedientes/${factura.expediente_id}`}>Abrir expediente</a></td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
     </section>
   );
 }
