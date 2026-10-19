@@ -141,7 +141,10 @@ def test_snapshot_publico_persiste_al_reabrir_borrador(session: Session) -> None
         rol="SUPERADMIN",
         actor_id=actor,
     )
-    assert session.execute(
-        text("SELECT version_editorial, contenido FROM cms_landing_publicacion")
-    ).one() == publicado
+    assert (
+        session.execute(
+            text("SELECT version_editorial, contenido FROM cms_landing_publicacion")
+        ).one()
+        == publicado
+    )
     assert session.execute(text("SELECT COUNT(*) FROM cms_landing_evento")).scalar_one() == 4
