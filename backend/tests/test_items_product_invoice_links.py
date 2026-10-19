@@ -29,11 +29,14 @@ def test_search_and_linked_invoices_are_tenant_scoped(
     tenant_b = Tenant(nombre="tenant_items_links_b")
     session.add(tenant_b)
     session.flush()
+    foreign_emisor_id = None
     for tenant, suffix in ((tenant_a, "1"), (tenant_b.id, "2")):
         emisor = Empresa(tenant_id=tenant, ruc=f"2010000000{suffix}", razon_social="Emisor")
         receptor = Empresa(tenant_id=tenant, ruc=f"2020000000{suffix}", razon_social="Receptor")
         session.add_all([emisor, receptor])
         session.flush()
+        if tenant == tenant_b.id:
+            foreign_emisor_id = emisor.id
         expediente = Expediente(
             tenant_id=tenant,
             emisor_id=emisor.id,
@@ -100,9 +103,10 @@ def test_search_and_linked_invoices_are_tenant_scoped(
     assert Decimal(invoices.json()[0]["importe"]) == 60
 
     # Only the authorized tenant and operational roles may consult a product.
+    assert foreign_emisor_id is not None
     foreign = client.get(
         f"/api/v1/contabilidad-items/productos/{product_id}/facturas",
-        params={"emisor_id": str(tenant_b.id)},
+        params={"emisor_id": str(foreign_emisor_id)},
     )
     assert foreign.status_code == 200, foreign.text
     assert foreign.json() == []
