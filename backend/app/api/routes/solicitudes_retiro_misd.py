@@ -289,3 +289,103 @@ def resolver(
     session.commit()
     # Aprobar no elimina: requiere ejecución MISD independiente y revalidada.
     return {"id": str(solicitud.id), "estado": solicitud.estado}
+
+
+@router.post("/{solicitud_id}/ejecutar")
+def ejecutar(
+    solicitud_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str]:
+    """Retirada lógica con autorización consumible y revalidación transaccional.
+
+    Nunca destruye originales físicos ni pagos ni auditoría.
+    """
+    solicitud = session.scalar(
+        select(SolicitudRetiroMISD)
+        .where(
+            SolicitudRetiroMISD.id == solicitud_id,
+            SolicitudRetiroMISD.tenant_id == tenant_id,
+        )
+        .with_for_update()
+    )
+    if solicitud is None:
+        raise HTTPException(404, "Solicitud no encontrada")
+    expediente = session.scalar(
+        select(Expediente)
+        .where(Expediente.id == solicitud.expediente_id, Expediente.tenant_id == tenant_id)
+        .with_for_update()
+    )
+    if expediente is None:
+        raise HTTPException(404, "Expediente no encontrado")
+    es_solicitante = auth.cuenta_id == solicitud.solicitante_cuenta_id
+    if not es_solicitante or not _ambito(expediente, auth, session):
+        raise HTTPException(404, "Solicitud no encontrada")
+    if not permiso_habilitado(session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS):
+        raise HTTPException(403, "Sin permiso para ejecutar retiro")
+    if solicitud.estado == "EJECUTADA":
+        raise HTTPException(409, "Solicitud consumida previamente")
+    if solicitud.estado == "RECHAZADA":
+        raise HTTPException(409, "Solicitud rechazada")
+    if expediente.deleted_at is not None:
+        raise HTTPException(409, "Expediente ya retirado")
+    if motivo_bloqueo_liquidacion(session, expediente) is not None:
+        raise HTTPException(409, "Expediente bloqueado por liquidación generada")
+
+    # La ventana NO prevalece sobre un cliente registrado protegido.
+    aprobacion_necesaria = (
+        expediente.receptor.autorizada and auth.rol != "ADMINISTRADOR"
+    ) or (
+        auth.rol in ("GESTOR", "USUARIO")
+        and not dentro_ventana_correccion(expediente, ahora())
+    )
+    if aprobacion_necesaria and solicitud.estado != "APROBADA":
+        raise HTTPException(409, "Se requiere aprobación jerárquica")
+    if solicitud.estado not in ("PENDIENTE", "APROBADA"):
+        raise HTTPException(409, "Solicitud en estado incompatible")
+    if solicitud.estado == "APROBADA" and solicitud.aprobado_por_cuenta_id is None:
+        raise HTTPException(409, "Aprobación sin cuenta responsable")
+
+    # Bloquear documentos para serializar retiradas simultáneas del mismo expediente.
+    from app.models import Documento
+
+    session.scalars(
+        select(Documento.id)
+        .where(Documento.tenant_id == tenant_id, Documento.expediente_id == expediente.id)
+        .with_for_update()
+    ).all()
+    marca = ahora()
+    expediente.deleted_at = marca
+    for documento in expediente.documentos:
+        if documento.deleted_at is None:
+            documento.deleted_at = marca
+            auditoria.registrar(
+                session,
+                tenant_id,
+                "DOCUMENTO_ELIMINADO_CON_EXPEDIENTE",
+                "documento",
+                documento.id,
+                {"expediente_id": str(expediente.id), "sha256": documento.sha256},
+            )
+    solicitud.estado = "EJECUTADA"
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "MISD_RETIRO_EJECUTADO",
+        "solicitud_retiro",
+        solicitud.id,
+        {"expediente_id": str(expediente.id), "actor_cuenta_id": str(auth.cuenta_id)},
+    )
+    destinatarios = _destinatarios_aprobacion(session, tenant_id, expediente)
+    if solicitud.aprobado_por_cuenta_id is not None:
+        destinatarios.add(solicitud.aprobado_por_cuenta_id)
+    _notificar(
+        session,
+        tenant_id,
+        auth.cuenta_id,
+        destinatarios,
+        f"MISD: expediente {expediente.id} retirado del sistema operativo.",
+    )
+    session.commit()
+    return {"id": str(solicitud.id), "estado": solicitud.estado}
