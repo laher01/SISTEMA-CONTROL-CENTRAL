@@ -1396,6 +1396,11 @@ def _procesar_y_aplicar(
     reutilizar: bool = False,
     forzar_cache: bool = False,
 ) -> ResultadoAutomatizacion:
+    # Volver a consultar la fila: la selección del lote pudo quedar obsoleta
+    # mientras otro operador retiraba el documento mediante MISD.
+    session.refresh(documento)
+    if documento.deleted_at is not None:
+        raise no_encontrado("Documento")
     datos = documento.datos_extraidos or {}
     existente = datos.get("procesamiento_documental")
     if reutilizar and isinstance(existente, dict):
