@@ -50,8 +50,6 @@ evento_table = Table(
     UniqueConstraint("version_nueva", name="uq_cms_landing_evento_version"),
 )
 
-
-
 publicacion_table = Table(
     "cms_landing_publicacion",
     metadata,
