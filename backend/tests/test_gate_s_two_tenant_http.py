@@ -208,3 +208,24 @@ def test_items_ubl_http_scoped_filters_and_retirement(
     )
     assert count_lines == 1
     assert registrar_items_ubl(session, own_tenant, own_doc.id, xml) == 0
+
+    # GRE and voucher share the invoice expediente; neither is a second sale.
+    for kind, marker in (("GRE", "g"), ("VCHR", "v")):
+        related = Documento(
+            tenant_id=own_tenant,
+            expediente_id=own_doc.expediente_id,
+            tipo_documento=kind,
+            estado="PENDIENTE_RELACION",
+            sha256=marker * 64,
+            nombre_original=f"{kind}.pdf",
+            mime_type="application/pdf",
+            tamano_bytes=20,
+            ruta_storage=f"{own_tenant}/{kind}.pdf",
+        )
+        session.add(related)
+    session.commit()
+    summary = client.get("/api/v1/contabilidad-items/conciliacion")
+    assert summary.status_code == 200, summary.text
+    assert len(summary.json()) == 1
+    assert Decimal(summary.json()[0]["importe_total"]) == Decimal("60")
+    assert summary.json()[0]["total_documentos"] == 1
