@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.item_models import LineaComprobanteItem
+from app.item_models import AuditoriaFacturaItem, LineaComprobanteItem
 from app.models import Documento, Empresa, Expediente, Tenant
 from app.services.contabilidad_items_ubl import registrar_items_ubl
 from tests.conftest import AuthPrueba
@@ -229,3 +229,22 @@ def test_items_ubl_http_scoped_filters_and_retirement(
     assert len(summary.json()) == 1
     assert Decimal(summary.json()[0]["importe_total"]) == Decimal("60")
     assert summary.json()[0]["total_documentos"] == 1
+
+    # Item audit observation excludes the invoice's UBL lines from active items.
+    session.add(
+        AuditoriaFacturaItem(
+            tenant_id=own_tenant,
+            expediente_id=own_doc.expediente_id,
+            estado="OBSERVADA",
+            motivo="Observacion sintetica de control",
+            solicitado_por_cuenta_id=auth_prueba.contexto.cuenta_id,
+        )
+    )
+    session.commit()
+    observed_items = client.get("/api/v1/contabilidad-items")
+    assert observed_items.status_code == 200, observed_items.text
+    assert observed_items.json() == []
+    observed_conciliation = client.get("/api/v1/contabilidad-items/conciliacion")
+    assert observed_conciliation.status_code == 200, observed_conciliation.text
+    assert observed_conciliation.json()[0]["observados"] == 1
+    assert Decimal(observed_conciliation.json()[0]["importe_observado"]) == Decimal("60")
