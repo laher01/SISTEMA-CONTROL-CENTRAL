@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.models import ChatMensaje, CuentaAcceso, Expediente, Miembro, SolicitudRetiroMISD, ahora
+from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
 from app.services import auditoria
 from app.services.misd_autorizaciones import dentro_ventana_correccion
 from app.services.misd_pagos import motivo_bloqueo_liquidacion, motivo_bloqueo_voucher
@@ -341,6 +342,7 @@ def ejecutar(
 
     Nunca destruye originales físicos ni pagos ni auditoría.
     """
+    bloquear_tenant_financiero(session, tenant_id)
     solicitud = session.scalar(
         select(SolicitudRetiroMISD)
         .where(
