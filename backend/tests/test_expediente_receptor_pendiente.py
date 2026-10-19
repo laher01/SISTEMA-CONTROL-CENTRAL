@@ -7,6 +7,10 @@ import uuid
 from dataclasses import replace
 
 from fastapi.testclient import TestClient
+from sqlalchemy import Engine, select
+from sqlalchemy.orm import Session
+
+from app.models import Auditoria
 
 
 def test_expediente_manual_receptor_no_autorizado_admite_adjunto(client: TestClient) -> None:
@@ -52,9 +56,6 @@ def test_expediente_manual_receptor_no_autorizado_admite_adjunto(client: TestCli
     assert por_uuid.status_code == 200, por_uuid.text
     assert por_uuid.json()["id"] == expediente_id
     assert receptor_id
-
-    auth_before = client.get(f"/api/v1/empresas/{receptor_id}")
-    assert auth_before.status_code in (200, 404)
 
     voucher = client.post(
         "/api/v1/documentos",
@@ -104,7 +105,7 @@ def test_usuario_no_puede_autorizar_empresa(client: TestClient) -> None:
 
 
 def test_autorizacion_receptor_recalcula_expediente_y_revocacion(
-    client: TestClient, auth_prueba: object
+    client: TestClient, auth_prueba: object, engine: Engine
 ) -> None:
     archivo = client.post(
         "/api/v1/documentos",
@@ -150,5 +151,17 @@ def test_autorizacion_receptor_recalcula_expediente_y_revocacion(
         pendiente = client.get(f"/api/v1/expedientes/{expediente_id}")
         assert pendiente.status_code == 200, pendiente.text
         assert pendiente.json()["pendiente_aprobacion"] is True
+
+        with Session(engine) as session:
+            registros = list(
+                session.scalars(
+                    select(Auditoria).where(
+                        Auditoria.accion == "EMPRESA_ACTUALIZADA",
+                        Auditoria.entidad_id == uuid.UUID(receptor_id),
+                    )
+                )
+            )
+        assert len(registros) >= 2
+        assert all(registro.entidad == "empresa" for registro in registros)
     finally:
         auth_prueba.contexto = contexto
