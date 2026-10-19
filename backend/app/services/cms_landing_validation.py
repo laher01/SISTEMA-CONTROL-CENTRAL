@@ -6,8 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 def texto_seguro(valor: str) -> str:
     limpio = valor.strip()
     if not limpio or any(
-        caracter in "<>" or (ord(caracter) < 32 and caracter not in "\t\n\r")
-        for caracter in limpio
+        caracter in "<>" or (ord(caracter) < 32 and caracter not in "\t\n\r") for caracter in limpio
     ):
         raise ValueError("Texto vacío, HTML o caracteres de control no permitidos")
     return limpio
@@ -39,8 +38,15 @@ class ContenidoCms(BaseModel):
     registroDescripcion: str = Field(min_length=1, max_length=700)
 
     @field_validator(
-        "marca", "etiqueta", "titulo", "descripcion", "beneficiosTitulo",
-        "planesTitulo", "planesDescripcion", "registroTitulo", "registroDescripcion"
+        "marca",
+        "etiqueta",
+        "titulo",
+        "descripcion",
+        "beneficiosTitulo",
+        "planesTitulo",
+        "planesDescripcion",
+        "registroTitulo",
+        "registroDescripcion",
     )
     @classmethod
     def validar_texto(cls, valor: str) -> str:
