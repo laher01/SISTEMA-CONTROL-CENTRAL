@@ -8,8 +8,7 @@ import sqlalchemy as sa
 
 def test_landing_0039_seed_inactive_and_server_default(monkeypatch):
     migration = (
-        Path(__file__).resolve().parents[1]
-        / "alembic/versions/20261017_0039_landing_global.py"
+        Path(__file__).resolve().parents[1] / "alembic/versions/20261017_0039_landing_global.py"
     )
     spec = importlib.util.spec_from_file_location("landing_migration_0039", migration)
     assert spec is not None and spec.loader is not None
@@ -29,15 +28,14 @@ def test_landing_0039_seed_inactive_and_server_default(monkeypatch):
 
     activa = next(col for col in columns if col.name == "activa")
     assert isinstance(activa.server_default.arg, sa.sql.elements.False_)
-    assert statements == [
+    assert [" ".join(statement.split()) for statement in statements] == [
         "INSERT INTO configuracion_landing_global (id, activa, version) VALUES (1, FALSE, 1)"
     ]
 
 
 def test_landing_0039_downgrade_preserves_existing_behavior(monkeypatch):
     migration = (
-        Path(__file__).resolve().parents[1]
-        / "alembic/versions/20261017_0039_landing_global.py"
+        Path(__file__).resolve().parents[1] / "alembic/versions/20261017_0039_landing_global.py"
     )
     spec = importlib.util.spec_from_file_location("landing_migration_0039_down", migration)
     assert spec is not None and spec.loader is not None
