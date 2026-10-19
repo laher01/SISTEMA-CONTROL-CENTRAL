@@ -447,8 +447,14 @@ def resumen_filtrado(
     resultado = session.execute(
         select(
             func.count(base.c.id),
-            func.coalesce(func.sum(case((base.c.moneda == "PEN", base.c.importe_total), else_=0)), 0),
-            func.coalesce(func.sum(case((base.c.moneda == "USD", base.c.importe_total), else_=0)), 0),
+            func.coalesce(
+                func.sum(case((base.c.moneda == "PEN", base.c.importe_total), else_=0)),
+                0,
+            ),
+            func.coalesce(
+                func.sum(case((base.c.moneda == "USD", base.c.importe_total), else_=0)),
+                0,
+            ),
             func.coalesce(
                 func.sum(
                     case(
