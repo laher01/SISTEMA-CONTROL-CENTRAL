@@ -78,7 +78,7 @@ def test_rechaza_cuotas_antes_de_crear_destino(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="bytes"):
         MODULO.restaurar(copia, tmp_path / "restored", digest, max_bytes=3)
     assert not (tmp_path / "restored").exists()
-    with pytest.raises(ValueError, match="entradas"):
+    with pytest.raises(ValueError, match="límites"):
         MODULO.restaurar(copia, tmp_path / "restored", digest, max_entradas=0)
 
 
