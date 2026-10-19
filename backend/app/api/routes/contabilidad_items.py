@@ -91,7 +91,12 @@ def resumen(
         )
     )
     if buscar and buscar.strip():
-        stmt = stmt.where(\n            or_(\n                ProductoItem.descripcion.ilike(f"%{buscar.strip()}%"),\n                LineaComprobanteItem.descripcion_original.ilike(f"%{buscar.strip()}%"),\n            )\n        )
+        stmt = stmt.where(
+            or_(
+                ProductoItem.descripcion.ilike(f"%{buscar.strip()}%"),
+                LineaComprobanteItem.descripcion_original.ilike(f"%{buscar.strip()}%"),
+            )
+        )
     if categoria and categoria.strip():
         stmt = stmt.where(ProductoItem.categoria == categoria.strip())
     if desde:
@@ -328,7 +333,8 @@ def resolver_auditoria(
 
 def _celda_csv(valor: str) -> str:
     """Evita que un nombre de producto se ejecute como fórmula al abrir CSV en Excel."""
-    if valor.lstrip().startswith(("=", "+", "-", "@", "\t", "\r", "\n")):
+    if valor.lstrip().startswith(("=", "+", "-", "@", "\t", "\r", "
+")):
         return "'" + valor
     return valor
 
@@ -340,7 +346,9 @@ def exportar_csv(
     desde: date | None = None,
     hasta: date | None = None,
     emisor_id: uuid.UUID | None = None,
-    receptor_id: uuid.UUID | None = None,\n    buscar: str | None = Query(None, max_length=150),\n    categoria: str | None = Query(None, max_length=80),
+    receptor_id: uuid.UUID | None = None,
+    buscar: str | None = Query(None, max_length=150),
+    categoria: str | None = Query(None, max_length=80),
 ) -> Response:
     """Exportación de acumulados autorizados; no expone comprobantes ajenos al tenant."""
     filas = resumen(
