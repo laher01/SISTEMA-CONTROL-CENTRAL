@@ -47,24 +47,21 @@ def extraer_factura_estacion(texto: str) -> dict[str, tuple[str, str]]:
             campos["ruc_emisor"] = ("20175642341", "R.U.C. 20175642341")
         bloque_cliente = texto.split("Cliente:", 1)[-1].split("Dirección:", 1)[0]
         receptores = [
-            r
-            for r in re.findall(r"(?<!\d)\d{11}(?!\d)", bloque_cliente)
-            if r != "20175642341"
+            r for r in re.findall(r"(?<!\d)\d{11}(?!\d)", bloque_cliente) if r != "20175642341"
         ]
         if len(set(receptores)) == 1:
             campos["ruc_receptor"] = (receptores[0], bloque_cliente[-120:])
         fecha_invertida = re.search(
             r"(?m)^\s*(\d{2})/(\d{2})/(20\d{2})[^\n]*Fecha Emisi[oó]n:",
-            texto, re.I,
+            texto,
+            re.I,
         )
         if fecha_invertida:
             campos["fecha_emision"] = (
                 f"{fecha_invertida.group(3)}-{fecha_invertida.group(2)}-{fecha_invertida.group(1)}",
                 fecha_invertida.group(0),
             )
-        total_bizlinks = re.search(
-            r"(?m)^\s*Importe Total\s+([0-9][0-9,.]*)\s*S/", texto, re.I
-        )
+        total_bizlinks = re.search(r"(?m)^\s*Importe Total\s+([0-9][0-9,.]*)\s*S/", texto, re.I)
         if total_bizlinks:
             total = _monto(total_bizlinks.group(1))
             if total is not None:
