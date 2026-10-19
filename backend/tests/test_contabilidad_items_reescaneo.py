@@ -230,9 +230,7 @@ def test_reescaneo_registra_solo_items_del_tenant_solicitante(session: Session, 
     assert almacen.leer(documento_segundo.ruta_storage) == XML + b"<!--b-->"
 
 
-def test_reescaneo_se_puede_reintentar_tras_rollback_sin_duplicar(
-    session: Session, tmp_path: Path
-):
+def test_reescaneo_se_puede_reintentar_tras_rollback_sin_duplicar(session: Session, tmp_path: Path):
     tenant = Tenant(nombre="tenant_reintento_rollback_xml")
     session.add(tenant)
     session.flush()
