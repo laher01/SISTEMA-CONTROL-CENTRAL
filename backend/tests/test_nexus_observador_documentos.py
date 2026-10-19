@@ -61,6 +61,7 @@ def test_nexus_documentos_respeta_rol_activo_sin_datos(
     assert datos["llm_usado"] is False
     assert "documentos_por_estado" in datos["datos"]
 
+
 def test_nexus_resumen_documental_aislado_por_tenant(
     client: TestClient, session, settings, auth_prueba
 ) -> None:
