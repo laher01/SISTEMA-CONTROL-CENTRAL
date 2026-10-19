@@ -920,8 +920,8 @@ function AdministracionesPanel() {
     "/api/v1/configuracion/administraciones",
   );
   const [texto, setTexto] = useState("");
-  const [nombreAdministrador, setNombreAdministrador] = useState("Luis Arevalo Herrera");
-  const [nombreEspacio, setNombreEspacio] = useState("Administración Luis Arévalo Herrera");
+  const [nombreAdministrador, setNombreAdministrador] = useState("");
+  const [nombreEspacio, setNombreEspacio] = useState("");
   const [subdominio, setSubdominio] = useState("");
   const [nuevaCuenta, setNuevaCuenta] = useState<{ codigo: string; login: string; clave_temporal: string } | null>(null);
   const [mensaje, setMensaje] = useState("");
