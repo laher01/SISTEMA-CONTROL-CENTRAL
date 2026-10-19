@@ -120,7 +120,9 @@ def test_asegura_permisos_privados(tmp_path: Path) -> None:
     assert (destino / "archivo").stat().st_mode & 0o077 == 0
 
 
-def test_destino_concurrente_no_se_reemplaza(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_destino_concurrente_no_se_reemplaza(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     origen = tmp_path / "source"
     origen.mkdir()
     (origen / "archivo").write_bytes(b"origen")
