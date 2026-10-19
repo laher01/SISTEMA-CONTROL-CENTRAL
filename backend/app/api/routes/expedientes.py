@@ -33,8 +33,8 @@ from app.schemas import (
 )
 from app.security import cuenta_administradora_responsable
 from app.services import auditoria
-from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
 from app.services.ambito_gerencia import alcance_expedientes_gerente, expediente_visible_gerente
+from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
 from app.services.expedientes import (
     actualizar_expediente,
     buscar_expediente,
