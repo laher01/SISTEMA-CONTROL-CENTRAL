@@ -30,11 +30,11 @@ def test_importe_pendiente_no_aparece_en_totales(client: TestClient) -> None:
 
     expedientes = client.get("/api/v1/expedientes/resumen")
     assert expedientes.status_code == 200, expedientes.text
-    assert str(expedientes.json()["total_pen"]) in ("0", "0.00")
+    assert str(expedientes.json()["total_pen_autorizado"]) in ("0", "0.00")
 
     documentos = client.get("/api/v1/documentos/resumen")
     assert documentos.status_code == 200, documentos.text
-    assert str(documentos.json()["total_pen"]) in ("0", "0.00")
+    assert str(documentos.json()["total_pen_autorizado"]) in ("0", "0.00")
 
     empresas = client.get("/api/v1/expedientes/resumen-empresas")
     assert empresas.status_code == 200, empresas.text
