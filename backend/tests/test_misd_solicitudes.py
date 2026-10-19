@@ -70,3 +70,34 @@ def test_secretaria_no_puede_solicitar_retiro(client: TestClient, auth_prueba: A
         },
     )
     assert creada.status_code in (403, 404)
+
+def test_misd_solicitud_tenant_ajeno_no_se_puede_consultar_ni_resolver(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    from dataclasses import replace
+    from uuid import uuid4
+
+    subida = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("misd-tenant.xml", factura())},
+    )
+    assert subida.status_code == 201, subida.text
+    creada = client.post(
+        "/api/v1/misd/solicitudes",
+        json={"expediente_id": subida.json()["expediente_id"], "motivo": "Carga equivocada"},
+    )
+    assert creada.status_code == 201, creada.text
+    solicitud_id = creada.json()["id"]
+    auth_prueba.como_admin()
+    anterior = auth_prueba.contexto
+    auth_prueba.contexto = replace(anterior, tenant_id=uuid4())
+    try:
+        assert client.get("/api/v1/misd/solicitudes").json() == []
+        decision = client.post(
+            f"/api/v1/misd/solicitudes/{solicitud_id}/resolver",
+            json={"aprobar": True, "motivo": "No corresponde a esta empresa"},
+        )
+        assert decision.status_code == 404
+    finally:
+        auth_prueba.contexto = anterior
+    assert client.get(f"/api/v1/expedientes/{subida.json()['expediente_id']}").status_code == 200
