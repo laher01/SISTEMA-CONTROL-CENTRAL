@@ -251,12 +251,8 @@ def listar(
                 **jerarquias[fila.id],
                 "fecha_carga": primeras_cargas.get(fila.id),
                 "puede_eliminar": (
-                    permiso_habilitado(
-                        session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS
-                    )
-                    and not requiere_autorizacion_administrativa(
-                        auth.rol, fila.receptor.autorizada
-                    )
+                    permiso_habilitado(session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS)
+                    and not requiere_autorizacion_administrativa(auth.rol, fila.receptor.autorizada)
                     and motivo_bloqueo_liquidacion(session, fila) is None
                 ),
             }
