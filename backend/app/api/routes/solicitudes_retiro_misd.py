@@ -70,7 +70,6 @@ def _es_aprobador(
     return False
 
 
-
 def _notificar(
     session: SessionDep,
     tenant_id: uuid.UUID,
@@ -104,8 +103,7 @@ def _destinatarios_aprobacion(
 ) -> set[uuid.UUID]:
     ids = set(
         session.scalars(
-            select(CuentaAcceso.id)
-            .where(
+            select(CuentaAcceso.id).where(
                 CuentaAcceso.tenant_id == tenant_id,
                 CuentaAcceso.activo.is_(True),
                 CuentaAcceso.deleted_at.is_(None),
@@ -336,11 +334,8 @@ def ejecutar(
         raise HTTPException(409, "Expediente bloqueado por liquidación generada")
 
     # La ventana NO prevalece sobre un cliente registrado protegido.
-    aprobacion_necesaria = (
-        expediente.receptor.autorizada and auth.rol != "ADMINISTRADOR"
-    ) or (
-        auth.rol in ("GESTOR", "USUARIO")
-        and not dentro_ventana_correccion(expediente, ahora())
+    aprobacion_necesaria = (expediente.receptor.autorizada and auth.rol != "ADMINISTRADOR") or (
+        auth.rol in ("GESTOR", "USUARIO") and not dentro_ventana_correccion(expediente, ahora())
     )
     if aprobacion_necesaria and solicitud.estado != "APROBADA":
         raise HTTPException(409, "Se requiere aprobación jerárquica")
