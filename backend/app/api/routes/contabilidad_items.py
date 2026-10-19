@@ -91,7 +91,7 @@ def resumen(
         )
     )
     if buscar and buscar.strip():
-        stmt = stmt.where(ProductoItem.descripcion.ilike(f"%{buscar.strip()}%"))
+        stmt = stmt.where(\n            or_(\n                ProductoItem.descripcion.ilike(f"%{buscar.strip()}%"),\n                LineaComprobanteItem.descripcion_original.ilike(f"%{buscar.strip()}%"),\n            )\n        )
     if categoria and categoria.strip():
         stmt = stmt.where(ProductoItem.categoria == categoria.strip())
     if desde:
@@ -340,7 +340,7 @@ def exportar_csv(
     desde: date | None = None,
     hasta: date | None = None,
     emisor_id: uuid.UUID | None = None,
-    receptor_id: uuid.UUID | None = None,
+    receptor_id: uuid.UUID | None = None,\n    buscar: str | None = Query(None, max_length=150),\n    categoria: str | None = Query(None, max_length=80),
 ) -> Response:
     """Exportación de acumulados autorizados; no expone comprobantes ajenos al tenant."""
     filas = resumen(
