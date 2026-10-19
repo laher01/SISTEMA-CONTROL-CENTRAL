@@ -795,14 +795,11 @@ class PagoGestor(ConId, ConTenant, ConCreacion, Base):
     estado: Mapped[str] = mapped_column(String(20), default="PROGRAMADO")
 
 
-
 class SolicitudRetiroMISD(ConId, ConTenant, ConCreacion, Base):
     """Solicitud auditable; aprobar no borra sin una ejecución segura posterior."""
 
     __tablename__ = "solicitudes_retiro_misd"
-    __table_args__ = (
-        Index("ix_solicitudes_retiro_misd_tenant_estado", "tenant_id", "estado"),
-    )
+    __table_args__ = (Index("ix_solicitudes_retiro_misd_tenant_estado", "tenant_id", "estado"),)
 
     expediente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("expedientes.id"), index=True)
     solicitante_cuenta_id: Mapped[uuid.UUID] = mapped_column(
