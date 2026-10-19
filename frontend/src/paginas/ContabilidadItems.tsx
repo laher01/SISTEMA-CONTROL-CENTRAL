@@ -26,7 +26,7 @@ export default function ContabilidadItems() {
     emisor_id: filtros.emisor_id,
     receptor_id: filtros.receptor_id,\n    buscar: filtros.buscar,\n    categoria: filtros.categoria,
   });
-  const { datos, error, cargando, recargar } = useDatos<FilaItem[]>(ruta);\n  const rutaFacturas = productoSeleccionado ? conParametros(`/api/v1/contabilidad-items/productos/${productoSeleccionado}/facturas`, {desde: filtros.desde, hasta: filtros.hasta, emisor_id: filtros.emisor_id, receptor_id: filtros.receptor_id}) : "";\n  const { datos: facturas, error: errorFacturas, cargando: cargandoFacturas } = useDatos<FacturaItem[]>(rutaFacturas);
+  const { datos, error, cargando, recargar } = useDatos<FilaItem[]>(ruta);\n  const rutaFacturas = productoSeleccionado ? conParametros(`/api/v1/contabilidad-items/productos/${productoSeleccionado}/facturas`, {desde: filtros.desde, hasta: filtros.hasta, emisor_id: filtros.emisor_id, receptor_id: filtros.receptor_id}) : null;\n  const { datos: facturas, error: errorFacturas, cargando: cargandoFacturas } = useDatos<FacturaItem[]>(rutaFacturas);
 
   return (
     <section aria-label="Contabilidad de ítems">
