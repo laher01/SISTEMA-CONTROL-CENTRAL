@@ -5,7 +5,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 def texto_seguro(valor: str) -> str:
     limpio = valor.strip()
-    if not limpio or any(caracter in "<>" or (ord(caracter) < 32 and caracter not in "\t\n\r") for caracter in limpio):
+    if not limpio or any(
+        caracter in "<>" or (ord(caracter) < 32 and caracter not in "\t\n\r")
+        for caracter in limpio
+    ):
         raise ValueError("Texto vacío, HTML o caracteres de control no permitidos")
     return limpio
 
