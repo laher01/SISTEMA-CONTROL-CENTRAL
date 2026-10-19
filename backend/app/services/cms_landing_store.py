@@ -6,12 +6,13 @@ y validación editorial antes de aceptar contenido.
 
 import uuid
 
-from sqlalchemy import JSON, Column, ForeignKey, Integer, MetaData, String, Table, Uuid, select
+from sqlalchemy import JSON, Column, ForeignKey, Integer, String, Table, Uuid, select
 from sqlalchemy.orm import Session
 
+from app.models import Base
 from app.services.cms_landing_core import EstadoEditorial, RevisionEditorial, transicionar
 
-metadata = MetaData()
+metadata = Base.metadata
 
 revision_table = Table(
     "cms_landing_revision",
