@@ -7,7 +7,6 @@ from decimal import Decimal
 from threading import Barrier
 
 import pytest
-
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
