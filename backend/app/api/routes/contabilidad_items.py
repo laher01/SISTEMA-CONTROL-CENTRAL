@@ -127,7 +127,6 @@ def resumen(
     ]
 
 
-
 @router.get("/productos/{producto_id}/facturas")
 def facturas_por_producto(
     producto_id: uuid.UUID,
