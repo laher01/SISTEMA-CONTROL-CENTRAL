@@ -13,7 +13,12 @@ from app.models import Documento, Empresa, Expediente, Gestor, Miembro
 from app.schemas import FiltroOpcion, RegistroFila, RegistroOpciones, RegistroResumen
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.expedientes import documentos_faltantes, documentos_principales, tipos_presentes
-from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
+from app.services.misd_pagos import motivo_bloqueo_liquidacion
+from app.services.permisos import (
+    PERMISO_ELIMINAR_REGISTROS,
+    permiso_habilitado,
+    requiere_autorizacion_administrativa,
+)
 
 router = APIRouter(prefix="/registros", tags=["registros"])
 
@@ -301,8 +306,13 @@ def listar(
                 opcionales.append(tipo)
 
         mostrar_propiedad = auth.rol != RolMiembro.GERENTE
-        puede_eliminar = puede_eliminar_rol and (
-            auth.rol != "GESTOR" or expediente.gestor_id == auth.gestor_id
+        puede_eliminar = (
+            puede_eliminar_rol
+            and (auth.rol != "GESTOR" or expediente.gestor_id == auth.gestor_id)
+            and not requiere_autorizacion_administrativa(
+                auth.rol, expediente.receptor.autorizada
+            )
+            and motivo_bloqueo_liquidacion(session, expediente) is None
         )
         filas.append(
             RegistroFila(
