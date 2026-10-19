@@ -13,29 +13,47 @@ def test_responsable_no_cotiza_usuarios_ajenos_o_de_otro_tenant(
 ) -> None:
     tenant_id = auth_prueba.contexto.tenant_id
     responsable = Miembro(
-        tenant_id=tenant_id, codigo="RESP-PAGO-A", nombre="Responsable A",
-        rol="RESPONSABLE", activo=True,
+        tenant_id=tenant_id,
+        codigo="RESP-PAGO-A",
+        nombre="Responsable A",
+        rol="RESPONSABLE",
+        activo=True,
     )
     otro_responsable = Miembro(
-        tenant_id=tenant_id, codigo="RESP-PAGO-B", nombre="Responsable B",
-        rol="RESPONSABLE", activo=True,
+        tenant_id=tenant_id,
+        codigo="RESP-PAGO-B",
+        nombre="Responsable B",
+        rol="RESPONSABLE",
+        activo=True,
     )
     session.add_all([responsable, otro_responsable])
     session.flush()
     propio = Miembro(
-        tenant_id=tenant_id, codigo="USER-PAGO-A", nombre="Propio",
-        rol="USUARIO", responsable_id=responsable.id, activo=True,
+        tenant_id=tenant_id,
+        codigo="USER-PAGO-A",
+        nombre="Propio",
+        rol="USUARIO",
+        responsable_id=responsable.id,
+        activo=True,
     )
     ajeno = Miembro(
-        tenant_id=tenant_id, codigo="USER-PAGO-B", nombre="Ajeno",
-        rol="USUARIO", responsable_id=otro_responsable.id, activo=True,
+        tenant_id=tenant_id,
+        codigo="USER-PAGO-B",
+        nombre="Ajeno",
+        rol="USUARIO",
+        responsable_id=otro_responsable.id,
+        activo=True,
     )
     tenant_externo = Tenant(nombre="Tenant externo de prueba")
     session.add(tenant_externo)
     session.flush()
     otro_tenant = Miembro(
-        tenant_id=tenant_externo.id, codigo="USER-PAGO-EX", nombre="Otro tenant",
-        rol="USUARIO", responsable_id=None, activo=True,
+        tenant_id=tenant_externo.id,
+        codigo="USER-PAGO-EX",
+        nombre="Otro tenant",
+        rol="USUARIO",
+        responsable_id=None,
+        activo=True,
     )
     session.add_all([propio, ajeno, otro_tenant])
     session.commit()
