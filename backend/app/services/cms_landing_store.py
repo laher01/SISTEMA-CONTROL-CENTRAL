@@ -6,7 +6,7 @@ y validación editorial antes de aceptar contenido.
 
 import uuid
 
-from sqlalchemy import JSON, Column, ForeignKey, Integer, String, Table, Uuid, select
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, Table, UniqueConstraint, Uuid, func, select
 from sqlalchemy.orm import Session
 
 from app.models import Base
@@ -22,6 +22,7 @@ revision_table = Table(
     Column("estado", String(24), nullable=False),
     Column("contenido", JSON, nullable=False),
     Column("actualizado_por", Uuid, ForeignKey("cuentas_acceso.id")),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
 )
 
 evento_table = Table(
@@ -33,6 +34,8 @@ evento_table = Table(
     Column("anterior", String(24), nullable=False),
     Column("nuevo", String(24), nullable=False),
     Column("actor_id", Uuid, ForeignKey("cuentas_acceso.id"), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    UniqueConstraint("version_nueva", name="uq_cms_landing_evento_version"),
 )
 
 
