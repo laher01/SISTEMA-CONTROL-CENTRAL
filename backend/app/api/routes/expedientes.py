@@ -943,6 +943,94 @@ def detalle(
     )
 
 
+@router.post("/{expediente_id}/restaurar", response_model=ExpedienteDetalle)
+def restaurar_expediente(
+    session: SessionDep,
+    almacen: AlmacenDep,
+    settings: SettingsDep,
+    hoy: HoyDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    expediente_id: uuid.UUID,
+) -> ExpedienteDetalle:
+    """Restauración atómica: solo reactiva evidencias retiradas con el expediente."""
+    expediente = session.get(Expediente, expediente_id)
+    if expediente is None or expediente.tenant_id != tenant_id:
+        raise no_encontrado("Expediente")
+    if not _visible_para_auth(expediente, auth, session):
+        raise no_encontrado("Expediente")
+    if auth.rol == RolMiembro.SUPERADMIN or not permiso_habilitado(
+        session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS
+    ):
+        raise HTTPException(403, "No tiene permiso para restaurar expedientes")
+    if expediente.deleted_at is None:
+        raise HTTPException(409, "El expediente ya se encuentra activo")
+
+    # El mismo instante se asigna solo a las evidencias activas de esta retirada.
+    # Los documentos retirados previamente mantienen su marca diferente.
+    marca = expediente.deleted_at
+    candidatos = [d for d in expediente.documentos if d.deleted_at == marca]
+    for documento in candidatos:
+        original = almacen.ruta_absoluta(documento.ruta_storage)
+        if not original.is_file():
+            raise HTTPException(409, "Falta un original requerido para restaurar el expediente")
+        if hashlib.sha256(original.read_bytes()).hexdigest() != documento.sha256:
+            raise HTTPException(409, "La huella del original no coincide")
+        colision = session.scalar(
+            select(Documento.id).where(
+                Documento.tenant_id == tenant_id,
+                Documento.id != documento.id,
+                Documento.deleted_at.is_(None),
+                or_(
+                    Documento.sha256 == documento.sha256,
+                    and_(
+                        Documento.huella_comercial.is_not(None),
+                        Documento.huella_comercial == documento.huella_comercial,
+                    ),
+                ),
+            )
+        )
+        if colision is not None:
+            raise HTTPException(409, "Existe otra evidencia activa con la misma identidad")
+
+    expediente.deleted_at = None
+    for documento in candidatos:
+        documento.deleted_at = None
+        auditoria.registrar(
+            session,
+            tenant_id,
+            "DOCUMENTO_RESTAURADO_CON_EXPEDIENTE",
+            "documento",
+            documento.id,
+            {"expediente_id": str(expediente.id), "sha256": documento.sha256},
+        )
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "EXPEDIENTE_RESTAURADO",
+        "expediente",
+        expediente.id,
+        {"documentos_restaurados": len(candidatos), "actor": auth.codigo},
+    )
+    try:
+        session.flush()
+        actualizar_expediente(session, expediente, hoy, settings)
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(409, "Conflicto de identidad al restaurar expediente") from exc
+
+    session.refresh(expediente)
+    base = ExpedienteOut.model_validate(expediente)
+    return ExpedienteDetalle(
+        **base.model_dump(),
+        documentos=[d for d in expediente.documentos if d.deleted_at is None],
+        alertas=expediente.alertas,
+        faltantes=documentos_faltantes(expediente, settings),
+        fecha_limite=fecha_limite(expediente.fecha_emision, settings.dia_limite_expediente),
+    )
+
+
 @router.delete("/{expediente_id}", status_code=status.HTTP_204_NO_CONTENT)
 def eliminar(
     session: SessionDep,
