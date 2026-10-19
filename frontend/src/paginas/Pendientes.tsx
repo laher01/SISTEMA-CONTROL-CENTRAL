@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { conParametros, eliminar, enviarJson, obtener, urlArchivo, useDatos } from "../api";
+import { ErrorApi, conParametros, eliminar, enviarJson, obtener, urlArchivo, useDatos } from "../api";
 import { Estado, Paginacion } from "../componentes";
 import {
   ETIQUETA_ESTADO_DOCUMENTO,
@@ -452,6 +452,7 @@ function ConfirmarCampos({
   );
   const [requiereGuia, setRequiereGuia] = useState(tipoSugerido !== "RHE");
   const [error, setError] = useState("");
+  const [duplicado, setDuplicado] = useState<Expediente | null>(null);
   const guardar = async () => {
     setGuardando(true);
     setError("");
@@ -471,6 +472,7 @@ function ConfirmarCampos({
   const crearExpediente = async () => {
     setCreando(true);
     setError("");
+    setDuplicado(null);
     try {
       await enviarJson(
         `/api/v1/documentos/${documentoId}/crear-expediente`,
@@ -485,6 +487,19 @@ function ConfirmarCampos({
       alCrear();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      if (e instanceof ErrorApi && e.status === 409 && e.detalle && typeof e.detalle === "object") {
+        const detalle = e.detalle as { duplicado?: boolean; expediente_id?: string };
+        if (detalle.duplicado && detalle.expediente_id) {
+          try {
+            const existente = await obtener<Expediente>(
+              `/api/v1/expedientes/${detalle.expediente_id}`,
+            );
+            setDuplicado(existente);
+          } catch {
+            // El backend controla el ámbito: no mostrar información no autorizada.
+          }
+        }
+      }
     } finally {
       setCreando(false);
     }
@@ -565,6 +580,25 @@ function ConfirmarCampos({
         </div>
       )}
       {error && <span className="error">{error}</span>}
+      {duplicado && (
+        <div role="alert">
+          <strong>Ya existe un expediente con esta identidad fiscal. No se creó otro.</strong>
+          <table>
+            <thead><tr><th>Campo</th><th>Confirmación manual</th><th>Expediente existente</th></tr></thead>
+            <tbody>
+              <tr><td>Serie</td><td>{valores.serie}</td><td>{duplicado.serie}</td></tr>
+              <tr><td>Número</td><td>{valores.correlativo}</td><td>{duplicado.correlativo}</td></tr>
+              <tr><td>RUC emisor</td><td>{valores.ruc_emisor}</td><td>{duplicado.emisor.ruc}</td></tr>
+              <tr><td>RUC receptor</td><td>{valores.ruc_receptor}</td><td>{duplicado.receptor.ruc}</td></tr>
+              <tr><td>Fecha</td><td>{valores.fecha_emision}</td><td>{duplicado.fecha_emision}</td></tr>
+              <tr><td>Moneda</td><td>{valores.moneda}</td><td>{duplicado.moneda}</td></tr>
+              <tr><td>Importe</td><td>{valores.importe_total}</td><td>{duplicado.importe_total}</td></tr>
+            </tbody>
+          </table>
+          <Link to={`/expedientes/${duplicado.id}`}>Revisar expediente existente</Link>
+          <p>La comparación es informativa. No se autoriza crear otro expediente ni contabilizar dos veces.</p>
+        </div>
+      )}
       </div>
       )}
     </div>
