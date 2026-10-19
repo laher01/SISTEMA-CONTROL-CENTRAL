@@ -1859,3 +1859,29 @@ def test_restauracion_integral_conserva_vinculos_gre_y_pago(
     assert session.get(ReferenciaGRE, referencia_id).expediente_id == UUID(str(exp_id))
     assert session.get(PagoERP, pago_id).voucher_documento_id == doc_id
     assert session.get(PagoERP, pago_id).saldo == Decimal("10.00")
+
+
+def test_restauracion_integral_revierte_cambios_si_falla_actualizacion(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sqlalchemy.exc import IntegrityError
+
+    from app.api.routes import expedientes as expedientes_routes
+
+    principal = subir(client, "exp-rollback.xml", factura())
+    exp_id = principal["expediente_id"]
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/expedientes/{exp_id}").status_code == 204
+
+    def fallar_recalculo(*args: object, **kwargs: object) -> None:
+        raise IntegrityError("actualizar expediente", {}, ValueError("fallo simulado"))
+
+    with monkeypatch.context() as contexto:
+        contexto.setattr(expedientes_routes, "actualizar_expediente", fallar_recalculo)
+        resultado = client.post(f"/api/v1/expedientes/{exp_id}/restaurar")
+    assert resultado.status_code == 409, resultado.text
+    assert client.get(f"/api/v1/expedientes/{exp_id}").status_code == 404
+    assert client.get(f"/api/v1/documentos/{principal['id']}").status_code == 404
+    assert client.post(f"/api/v1/expedientes/{exp_id}/restaurar").status_code == 200
