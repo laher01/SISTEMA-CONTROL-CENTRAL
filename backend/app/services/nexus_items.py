@@ -194,8 +194,8 @@ def responder_items(
                 Expediente.tenant_id == auth.tenant_id,
                 Documento.tenant_id == auth.tenant_id,
                 Empresa.tenant_id == auth.tenant_id,
-            Emisor.tenant_id == auth.tenant_id,
-            *filtro_emisor,
+                Emisor.tenant_id == auth.tenant_id,
+                *filtro_emisor,
                 Documento.tipo_documento == TipoDocumento.FACT,
                 Expediente.deleted_at.is_(None),
                 Documento.deleted_at.is_(None),
@@ -214,10 +214,7 @@ def responder_items(
 
     if tipo in {"producto", "libre"}:
         hallados = {k: v for k, v in conceptos.items() if v}
-        ejemplos = [
-            _numero_visible(expedientes[clave][0])
-            for clave in list(hallados)[:5]
-        ]
+        ejemplos = [_numero_visible(expedientes[clave][0]) for clave in list(hallados)[:5]]
         texto = (
             f"Encontré {len(hallados)} comprobantes con líneas registradas relacionadas con "
             f"{busqueda.replace(',', ' o ')} dentro de tu ámbito."
