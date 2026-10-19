@@ -1013,6 +1013,14 @@ def restaurar_expediente(
     # evidencias activas. Las retiradas anteriormente conservan otra marca.
     marca = expediente.deleted_at
     candidatos = [doc for doc in expediente.documentos if doc.deleted_at == marca]
+    if candidatos:
+        # Serializa restauraciones de originales del mismo tenant y evita
+        # carreras entre verificaciones de huella y colisiones.
+        session.scalars(
+            select(Documento.id)
+            .where(Documento.tenant_id == tenant_id, Documento.expediente_id == expediente_id)
+            .with_for_update()
+        ).all()
     for doc in candidatos:
         ruta = almacen.ruta_absoluta(doc.ruta_storage)
         if not ruta.is_file() or hashlib.sha256(ruta.read_bytes()).hexdigest() != doc.sha256:
