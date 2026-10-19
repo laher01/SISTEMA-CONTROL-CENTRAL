@@ -32,6 +32,12 @@ def session():
             "actor_id CHAR(32), created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL)"
         )
         connection.exec_driver_sql(
+            "CREATE TABLE cms_landing_publicacion (id INTEGER PRIMARY KEY, "
+            "version_editorial INTEGER NOT NULL, contenido JSON NOT NULL, "
+            "publicado_por CHAR(32) NOT NULL, "
+            "published_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL)"
+        )
+        connection.exec_driver_sql(
             "INSERT INTO cms_landing_revision "
             "(id, version, estado, contenido) VALUES "
             "(1, 1, 'borrador', '{\"titulo\": \"Prueba\"}')"
@@ -104,3 +110,38 @@ def test_error_de_auditoria_revierte_actualizacion(session: Session) -> None:
         )
     assert session.execute(text("SELECT version FROM cms_landing_revision")).scalar_one() == 1
     assert session.execute(text("SELECT COUNT(*) FROM cms_landing_evento")).scalar_one() == 0
+
+
+def test_snapshot_publico_persiste_al_reabrir_borrador(session: Session) -> None:
+    from sqlalchemy import text
+
+    actor = uuid4()
+    version = 1
+    for destino in (
+        EstadoEditorial.VISTA_PREVIA,
+        EstadoEditorial.APROBADO,
+        EstadoEditorial.PUBLICADO,
+    ):
+        version = cambiar_estado(
+            session,
+            destino=destino,
+            version_esperada=version,
+            rol="SUPERADMIN",
+            actor_id=actor,
+        ).version
+
+    publicado = session.execute(
+        text("SELECT version_editorial, contenido FROM cms_landing_publicacion")
+    ).one()
+    assert publicado.version_editorial == 4
+    cambiar_estado(
+        session,
+        destino=EstadoEditorial.BORRADOR,
+        version_esperada=version,
+        rol="SUPERADMIN",
+        actor_id=actor,
+    )
+    assert session.execute(
+        text("SELECT version_editorial, contenido FROM cms_landing_publicacion")
+    ).one() == publicado
+    assert session.execute(text("SELECT COUNT(*) FROM cms_landing_evento")).scalar_one() == 4
