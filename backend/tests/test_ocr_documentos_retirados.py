@@ -1,4 +1,5 @@
 """Regresión: un documento retirado nunca vuelve a entrar al motor OCR."""
+
 import uuid
 from datetime import UTC, date, datetime
 
@@ -30,7 +31,5 @@ def test_ocr_no_reprocesa_documento_retirado_ni_usa_cache(
     monkeypatch.setattr(documentos_routes, "procesar_con_cache", prohibido)
     monkeypatch.setattr(documentos_routes, "aplicar_automaticamente", prohibido)
     with pytest.raises(HTTPException) as error:
-        documentos_routes._procesar_y_aplicar(
-            session, object(), object(), date.today(), documento
-        )
+        documentos_routes._procesar_y_aplicar(session, object(), object(), date.today(), documento)
     assert error.value.status_code == 404
