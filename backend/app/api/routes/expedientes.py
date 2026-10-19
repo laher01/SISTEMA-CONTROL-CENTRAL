@@ -456,7 +456,8 @@ def resumen_filtrado(
                         ),
                         else_=0,
                     )
-                ), 0
+                ),
+                0,
             ),
             func.coalesce(
                 func.sum(
@@ -467,7 +468,8 @@ def resumen_filtrado(
                         ),
                         else_=0,
                     )
-                ), 0
+                ),
+                0,
             ),
         )
     ).one()
