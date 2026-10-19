@@ -7,12 +7,12 @@ import unicodedata
 from collections import defaultdict
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.enums import TipoDocumento
 from app.item_models import LineaComprobanteItem
 from app.models import Documento, Empresa, Expediente
-from app.schemas import NexusChatOut
+from app.schemas import NexusChatOut, NexusMensajeHistorial
 from app.security import ContextoAcceso
 from app.services.nexus_context import condiciones_expedientes
 
@@ -100,11 +100,41 @@ def _diesel_en_factura_procesada(datos: object) -> bool:
     )
 
 
+def seguimiento_proveedor(
+    mensaje: str, historial: list[NexusMensajeHistorial]
+) -> tuple[str, str] | None:
+    """Recupera el filtro de producto previo, sin usar datos de otro actor."""
+    normal = _normalizar(mensaje)
+    coincide = re.search(r"(?:cuantas?|cuantos?|cuales?)\s+(?:son\s+)?de\s+([\w ]+)", normal)
+    if not coincide:
+        return None
+    nombre = coincide.group(1).strip(" ?.!")
+    if len(nombre) < 4:
+        return None
+    for entrada in reversed(historial[-20:]):
+        if getattr(entrada, "autor", None) != "usuario":
+            continue
+        consulta = consulta_items_solicitada(str(getattr(entrada, "texto", "")))
+        if consulta and consulta[0] in {"producto", "libre"}:
+            return consulta[1], nombre
+    return None
+
+
+def _numero_visible(expediente: Expediente) -> str:
+    serie = str(expediente.serie or "").strip()
+    correlativo = str(expediente.correlativo or "").strip()
+    if serie.startswith(("F", "B", "E")) and correlativo.isdigit():
+        return f"{serie}-{correlativo}"
+    return "número fiscal por verificar"
+
+
 def responder_items(
-    session: Session, auth: ContextoAcceso, tipo: str, busqueda: str
+    session: Session, auth: ContextoAcceso, tipo: str, busqueda: str, proveedor: str | None = None
 ) -> NexusChatOut:
     """Toda unión comprueba tenant_id y el ámbito de expedientes del actor."""
     condiciones = condiciones_expedientes(session, auth)
+    Emisor = aliased(Empresa)
+    filtro_emisor = [Emisor.razon_social.ilike(f"%{proveedor}%")] if proveedor else []
     consulta = (
         select(Expediente, Empresa.razon_social, LineaComprobanteItem.descripcion_original)
         .join(Documento, Documento.expediente_id == Expediente.id)
@@ -113,11 +143,14 @@ def responder_items(
             LineaComprobanteItem.documento_id == Documento.id,
         )
         .join(Empresa, Empresa.id == Expediente.receptor_id)
+        .join(Emisor, Emisor.id == Expediente.emisor_id)
         .where(
             Expediente.tenant_id == auth.tenant_id,
             Documento.tenant_id == auth.tenant_id,
             LineaComprobanteItem.tenant_id == auth.tenant_id,
             Empresa.tenant_id == auth.tenant_id,
+            Emisor.tenant_id == auth.tenant_id,
+            *filtro_emisor,
             Expediente.deleted_at.is_(None),
             Documento.deleted_at.is_(None),
             *condiciones,
@@ -156,10 +189,13 @@ def responder_items(
             select(Expediente, Empresa.razon_social, Documento.datos_extraidos)
             .join(Documento, Documento.expediente_id == Expediente.id)
             .join(Empresa, Empresa.id == Expediente.receptor_id)
+        .join(Emisor, Emisor.id == Expediente.emisor_id)
             .where(
                 Expediente.tenant_id == auth.tenant_id,
                 Documento.tenant_id == auth.tenant_id,
                 Empresa.tenant_id == auth.tenant_id,
+            Emisor.tenant_id == auth.tenant_id,
+            *filtro_emisor,
                 Documento.tipo_documento == TipoDocumento.FACT,
                 Expediente.deleted_at.is_(None),
                 Documento.deleted_at.is_(None),
@@ -179,13 +215,15 @@ def responder_items(
     if tipo in {"producto", "libre"}:
         hallados = {k: v for k, v in conceptos.items() if v}
         ejemplos = [
-            f"{expedientes[clave][0].serie}-{expedientes[clave][0].correlativo}"
+            _numero_visible(expedientes[clave][0])
             for clave in list(hallados)[:5]
         ]
         texto = (
             f"Encontré {len(hallados)} comprobantes con líneas registradas relacionadas con "
             f"{busqueda.replace(',', ' o ')} dentro de tu ámbito."
         )
+        if proveedor:
+            texto += f" Filtro de proveedor: {proveedor}."
         if len(grupos) > 1:
             desglose = ", ".join(f"{grupo}: {len(por_grupo[grupo])}" for grupo in grupos)
             texto += f" Desglose por producto: {desglose}. Un comprobante puede contener varios."
