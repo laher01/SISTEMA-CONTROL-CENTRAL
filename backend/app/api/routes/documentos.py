@@ -991,6 +991,8 @@ def resumen_documentos(
     total = session.execute(
         select(
             func.count(Expediente.id),
+            func.coalesce(func.sum(case((Expediente.moneda == "PEN", Expediente.importe_total), else_=0)), 0),
+            func.coalesce(func.sum(case((Expediente.moneda == "USD", Expediente.importe_total), else_=0)), 0),
             func.coalesce(
                 func.sum(
                     case(
@@ -1025,7 +1027,9 @@ def resumen_documentos(
         "total_documentos": int(cantidad),
         "total_expedientes": int(total[0]),
         "total_pen": Decimal(total[1]),
+        "total_pen_autorizado": Decimal(total[3]),
         "total_usd": Decimal(total[2]),
+        "total_usd_autorizado": Decimal(total[4]),
     }
 
 
