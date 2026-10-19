@@ -35,8 +35,10 @@ def test_migraciones_coinciden_con_modelos() -> None:
     for indice, activa in enumerate((True, False), start=3):
         with engine.begin() as conexion:
             conexion.execute(
-                text("UPDATE configuracion_landing_global "
-                     "SET activa = :activa, version = :version WHERE id = 1"),
+                text(
+                    "UPDATE configuracion_landing_global "
+                    "SET activa = :activa, version = :version WHERE id = 1"
+                ),
                 {"activa": activa, "version": indice},
             )
             auditorias_antes = conexion.execute(
@@ -50,9 +52,10 @@ def test_migraciones_coinciden_con_modelos() -> None:
             ).one()
             assert fila.activa is activa
             assert fila.version == indice
-            assert conexion.execute(
-                text("SELECT count(*) FROM auditoria_landing_global")
-            ).scalar_one() == auditorias_antes
+            assert (
+                conexion.execute(text("SELECT count(*) FROM auditoria_landing_global")).scalar_one()
+                == auditorias_antes
+            )
     with engine.connect() as conexion:
         diferencias = compare_metadata(MigrationContext.configure(conexion), Base.metadata)
     assert diferencias == []
