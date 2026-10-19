@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
-from app.models import Expediente, Gestor, Miembro, SolicitudRetiroMISD, ahora
+from app.models import Expediente, Miembro, SolicitudRetiroMISD, ahora
 from app.services import auditoria
 from app.services.misd_pagos import motivo_bloqueo_liquidacion
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
