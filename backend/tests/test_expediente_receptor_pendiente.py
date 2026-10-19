@@ -81,10 +81,13 @@ def test_expediente_pendiente_aislado_por_tenant(client: TestClient, auth_prueba
     auth_prueba.contexto = replace(contexto, tenant_id=uuid.uuid4())
     try:
         assert client.get(f"/api/v1/documentos/{documento_id}").status_code == 404
-        assert client.post(
-            f"/api/v1/documentos/{documento_id}/vincular",
-            json={"expediente_id": str(uuid.uuid4()), "tipo_documento": "VCHR"},
-        ).status_code == 404
+        assert (
+            client.post(
+                f"/api/v1/documentos/{documento_id}/vincular",
+                json={"expediente_id": str(uuid.uuid4()), "tipo_documento": "VCHR"},
+            ).status_code
+            == 404
+        )
     finally:
         auth_prueba.contexto = contexto
 
