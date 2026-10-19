@@ -1619,3 +1619,31 @@ def test_restaurar_expediente_conserva_gre_pago_y_alertas(
     assert session.get(ReferenciaGRE, referencia_id).documento_id == doc_id
     assert session.get(PagoERP, pago_id).voucher_documento_id == doc_id
     assert alertas_abiertas(respuesta.json()) == alertas_iniciales
+
+
+def test_restauraciones_concurrentes_no_duplican_reactivacion(
+    client: TestClient, auth_prueba: AuthPrueba, engine: Engine
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    if engine.dialect.name != "postgresql":
+        pytest.skip("La prueba exige bloqueos reales PostgreSQL")
+    original = subir(client, "factura-concurrente.xml", factura())
+    expediente_id = original["expediente_id"]
+    auth_prueba.como_admin()
+    ruta = f"/api/v1/expedientes/{expediente_id}/restaurar"
+    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 204
+    barrera = Barrier(2)
+
+    def restaurar() -> int:
+        barrera.wait(timeout=15)
+        return client.post(ruta).status_code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        primero = executor.submit(restaurar)
+        segundo = executor.submit(restaurar)
+        resultados = sorted((primero.result(timeout=30), segundo.result(timeout=30)))
+    assert resultados == [200, 409]
+    detalle_final = expediente(client, expediente_id)
+    assert sum(doc["id"] == original["id"] for doc in detalle_final["documentos"]) == 1
