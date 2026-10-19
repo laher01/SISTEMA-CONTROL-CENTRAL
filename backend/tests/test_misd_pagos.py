@@ -48,6 +48,13 @@ def test_pago_generado_bloquea_documento_y_expediente_incluso_para_admin(
     assert documento_bloqueado.status_code == 409, documento_bloqueado.text
     assert expediente_bloqueado.status_code == 409, expediente_bloqueado.text
     assert "Liquidación" in documento_bloqueado.text
+    previsualizacion = client.post(
+        "/api/v1/documentos/previsualizar-retirada",
+        json={"documentos_ids": [documento["id"]]},
+    )
+    assert previsualizacion.status_code == 200, previsualizacion.text
+    assert previsualizacion.json()["aptos"] == 0
+    assert previsualizacion.json()["resultados"][0]["estado"] == "BLOQUEADO"
     assert client.get(ruta_documento).status_code == 200
     assert client.get(ruta_expediente).status_code == 200
 
