@@ -32,21 +32,27 @@ def test_migraciones_coinciden_con_modelos() -> None:
         )
 
     # 0041 no modifica decisiones editoriales ya guardadas.
-    for activa in (True, False):
+    for indice, activa in enumerate((True, False), start=3):
         with engine.begin() as conexion:
             conexion.execute(
-                text("UPDATE configuracion_landing_global SET activa = :activa WHERE id = 1"),
-                {"activa": activa},
+                text("UPDATE configuracion_landing_global "
+                     "SET activa = :activa, version = :version WHERE id = 1"),
+                {"activa": activa, "version": indice},
             )
+            auditorias_antes = conexion.execute(
+                text("SELECT count(*) FROM auditoria_landing_global")
+            ).scalar_one()
         command.downgrade(config, "0040")
         command.upgrade(config, "0041")
         with engine.connect() as conexion:
-            assert (
-                conexion.execute(
-                    text("SELECT activa FROM configuracion_landing_global WHERE id = 1")
-                ).scalar_one()
-                is activa
-            )
+            fila = conexion.execute(
+                text("SELECT activa, version FROM configuracion_landing_global WHERE id = 1")
+            ).one()
+            assert fila.activa is activa
+            assert fila.version == indice
+            assert conexion.execute(
+                text("SELECT count(*) FROM auditoria_landing_global")
+            ).scalar_one() == auditorias_antes
     with engine.connect() as conexion:
         diferencias = compare_metadata(MigrationContext.configure(conexion), Base.metadata)
     assert diferencias == []
