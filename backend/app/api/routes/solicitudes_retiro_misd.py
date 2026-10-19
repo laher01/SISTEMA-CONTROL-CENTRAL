@@ -185,7 +185,8 @@ def solicitar(
         tenant_id,
         auth.cuenta_id,
         destinatarios,
-        f"MISD: solicitud de retiro pendiente para expediente {expediente.id}. Motivo: {nueva.motivo}",
+        f"MISD: solicitud de retiro pendiente para expediente {expediente.id}. "
+        f"Motivo: {nueva.motivo}",
     )
     auditoria.registrar(
         session,
@@ -276,7 +277,8 @@ def resolver(
         tenant_id,
         auth.cuenta_id,
         {solicitud.solicitante_cuenta_id},
-        f"MISD: solicitud {solicitud.id} {solicitud.estado.lower()}. Motivo: {solicitud.decision_motivo}",
+        f"MISD: solicitud {solicitud.id} {solicitud.estado.lower()}. "
+        f"Motivo: {solicitud.decision_motivo}",
     )
     auditoria.registrar(
         session,
