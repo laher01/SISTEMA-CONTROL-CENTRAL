@@ -1710,6 +1710,7 @@ def test_misd_solo_administrador_puede_retirar_cliente_autorizado() -> None:
         assert not requiere_autorizacion_administrativa(rol, False)
     assert not requiere_autorizacion_administrativa("ADMINISTRADOR", True)
 
+
 def test_restaurar_expediente_preserva_retiros_anteriores_y_alertas(
     client: TestClient,
     auth_prueba: AuthPrueba,
@@ -1750,7 +1751,4 @@ def test_restauracion_expediente_prohibe_superadmin(
     auth_prueba.como_admin()
     assert client.delete(f"/api/v1/expedientes/{doc['expediente_id']}").status_code == 204
     auth_prueba.como_superadmin()
-    assert (
-        client.post(f"/api/v1/expedientes/{doc['expediente_id']}/restaurar").status_code
-        == 403
-    )
+    assert client.post(f"/api/v1/expedientes/{doc['expediente_id']}/restaurar").status_code == 403
