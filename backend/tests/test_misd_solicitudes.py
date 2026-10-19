@@ -3,7 +3,7 @@
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models import Auditoria, Expediente, SolicitudRetiroMISD
+from app.models import Auditoria, ChatMensaje, Expediente, SolicitudRetiroMISD
 from tests.conftest import AuthPrueba
 from tests.xml import factura
 
@@ -132,3 +132,112 @@ def test_misd_solicitud_tenant_ajeno_no_se_puede_consultar_ni_resolver(
     finally:
         auth_prueba.contexto = anterior
     assert client.get(f"/api/v1/expedientes/{subida.json()['expediente_id']}").status_code == 200
+
+
+def test_ejecutar_misd_en_ventana_sin_pagos_consume_solicitud(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    subida = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("misd-correccion.xml", factura())},
+    )
+    assert subida.status_code == 201, subida.text
+    expediente_id = subida.json()["expediente_id"]
+    creada = client.post(
+        "/api/v1/misd/solicitudes",
+        json={"expediente_id": expediente_id, "motivo": "Carga realizada por equivocación"},
+    )
+    assert creada.status_code == 201, creada.text
+    solicitud_id = creada.json()["id"]
+    ejecutada = client.post(f"/api/v1/misd/solicitudes/{solicitud_id}/ejecutar")
+    assert ejecutada.status_code == 200, ejecutada.text
+    assert ejecutada.json()["estado"] == "EJECUTADA"
+    assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 404
+    assert client.post(f"/api/v1/misd/solicitudes/{solicitud_id}/ejecutar").status_code == 409
+    assert (
+        session.query(Auditoria).filter(Auditoria.accion == "MISD_RETIRO_EJECUTADO").count() == 1
+    )
+
+
+def test_misd_fuera_de_ventana_exige_aprobacion(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    from datetime import timedelta
+
+    from app.models import ahora
+
+    subida = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("misd-expirada.xml", factura())},
+    )
+    assert subida.status_code == 201, subida.text
+    expediente_id = subida.json()["expediente_id"]
+    expediente = session.get(Expediente, expediente_id)
+    assert expediente is not None
+    expediente.created_at = ahora() - timedelta(minutes=31)
+    session.commit()
+    creada = client.post(
+        "/api/v1/misd/solicitudes",
+        json={"expediente_id": expediente_id, "motivo": "Documento ajeno a la operación"},
+    )
+    assert creada.status_code == 201, creada.text
+    solicitud_id = creada.json()["id"]
+    bloqueada = client.post(f"/api/v1/misd/solicitudes/{solicitud_id}/ejecutar")
+    assert bloqueada.status_code == 409, bloqueada.text
+    assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 200
+
+
+def test_misd_envia_notificaciones_chat_al_aprobar(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    from dataclasses import replace
+
+    from app.models import CuentaAcceso, Miembro
+
+    subida = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("misd-avisos.xml", factura())},
+    )
+    assert subida.status_code == 201, subida.text
+    creada = client.post(
+        "/api/v1/misd/solicitudes",
+        json={"expediente_id": subida.json()["expediente_id"], "motivo": "Verificación documental"},
+    )
+    assert creada.status_code == 201, creada.text
+    solicitante = auth_prueba.contexto.cuenta_id
+    administrador = Miembro(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="ADMIN-AVISOS",
+        nombre="Administrador Avisos",
+        rol="ADMINISTRADOR",
+        activo=True,
+    )
+    session.add(administrador)
+    session.flush()
+    cuenta = CuentaAcceso(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        login="admin-avisos",
+        password_hash="hash-pruebas",
+        miembro_id=administrador.id,
+        activo=True,
+        cambio_clave_obligatorio=False,
+    )
+    session.add(cuenta)
+    session.commit()
+    auth_prueba.contexto = replace(
+        auth_prueba.contexto,
+        cuenta_id=cuenta.id,
+        miembro_id=administrador.id,
+        rol="ADMINISTRADOR",
+        usuario_id=None,
+        gestor_id=None,
+    )
+    resuelta = client.post(
+        f"/api/v1/misd/solicitudes/{creada.json()['id']}/resolver",
+        json={"aprobar": True, "motivo": "Autorizado para revisión final"},
+    )
+    assert resuelta.status_code == 200, resuelta.text
+    assert session.query(ChatMensaje).filter(
+        ChatMensaje.tenant_id == auth_prueba.contexto.tenant_id,
+        ChatMensaje.destinatario_cuenta_id == solicitante,
+    ).count() >= 1
