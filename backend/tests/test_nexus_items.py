@@ -106,4 +106,3 @@ def test_seguimiento_proveedor_conserva_producto() -> None:
     historial = [NexusMensajeHistorial(autor="usuario", texto="¿Cuántas facturas tienen DIESEL?")]
     assert seguimiento_proveedor("¿Cuántas son de Escorpio?", historial) == ("petroleo", "escorpio")
     assert seguimiento_proveedor("¿Cuántas son de Escorpio?", []) is None
-
