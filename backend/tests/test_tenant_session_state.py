@@ -65,9 +65,7 @@ class SesionFalsa:
         ("ACTIVO", True),
     ],
 )
-def test_sesion_ajena_o_de_tenant_inactivo_se_revoca(
-    estado: str | None, cruzado: bool
-) -> None:
+def test_sesion_ajena_o_de_tenant_inactivo_se_revoca(estado: str | None, cruzado: bool) -> None:
     session = SesionFalsa(estado, cruzado)
     assert contexto_desde_token(session, "token-ficticio") is None
     assert session.sesion.revocada_at is not None
