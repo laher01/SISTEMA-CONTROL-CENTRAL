@@ -3,7 +3,7 @@
 Versión propuesta: 2.0 — 2026-10-19. **Estado: rama de revisión, no integrado a main.**
 
 ## Propósito
-Los chats de desarrollo usan las mismas órdenes, mantienen el ámbito del módulo que les corresponde y terminan cada etapa con conclusión, nombre del chat, siguiente acción aprobable mediante botón y resumen breve. Este documento sustituye las definiciones de la propuesta v1 del PR #248, pero no reemplaza por sí solo las instrucciones de los chats existentes.
+Los chats de desarrollo usan las mismas órdenes, mantienen el ámbito del módulo que les corresponde y terminan cada etapa con conclusión, nombre del chat, siguiente acción aprobable mediante botón y resumen breve. Este documento sustituye las definiciones de la propuesta v1 del PR #248, pero no reemplaza por sí solo las instrucciones de los chats existentes. **PR #248 y PR #322 añaden la misma ruta `docs/PROTOCOLO_COMANDOS_IA.md`: no deben fusionarse ambos sin conciliación explícita.** Preferir una sola versión aprobada; si v1 se integra primero, actualizar v2 contra el nuevo `main` y resolver el archivo antes de revisar CI.
 
 ## Comandos canónicos (sin puntos)
 
@@ -43,6 +43,8 @@ Los nombres son etiquetas de chats aportadas por el usuario, no garantía de acc
 5. Los comandos `I` y `D` no son intercambiables. Si GitHub despliega automáticamente en push a main, evaluar ese efecto *antes* de `I`, exigir autorización correspondiente y nunca desactivar protecciones para avanzar.
 6. Bloquear operaciones críticas si faltan accesos, respaldo, restauración, validación de migraciones o integridad de datos; ofrecer la corrección/diagnóstico siguiente.
 7. Los botones envían una nueva orden a un chat activo; no hacen trabajo futuro sin interacción y no garantizan propagación entre chats.
+8. La ausencia de revisiones o de resultados de CI disponibles no es aprobación. Antes de `I`, volver a consultar SHA, aprobaciones, reglas de rama, checks y efectos de workflows; ante falta de evidencia, detener integración.
+9. Los comandos universales no sustituyen la autorización para cambios irreversibles ni la política de conservación documental, tributaria y de auditoría.
 
 ## Cierre obligatorio de cada tarea
 
