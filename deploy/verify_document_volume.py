@@ -9,20 +9,25 @@ visibles desde el montaje entregado.
 import argparse
 import csv
 import hashlib
+import os
 import re
+import stat
 import sys
 from pathlib import Path
 
 DIGEST = re.compile(r"[0-9a-f]{64}")
 
 
-def verificar(base: Path, filas: list[list[str]]) -> tuple[int, int]:
+def verificar(base: Path, filas: list[list[str]], esperados: int | None = None) -> tuple[int, int]:
     """Devuelve (verificados, errores). Rechaza rutas fuera del volumen."""
+    if esperados is not None and (esperados < 0 or len(filas) != esperados):
+        return 0, max(1, abs(len(filas) - esperados))
     raiz = base.resolve(strict=True)
     if not raiz.is_dir():
         raise ValueError("El origen documental no es un directorio")
     verificados = 0
     errores = 0
+    vistos: set[tuple[str, str]] = set()
     for fila in filas:
         if len(fila) != 3:
             errores += 1
@@ -31,6 +36,9 @@ def verificar(base: Path, filas: list[list[str]]) -> tuple[int, int]:
         relativa = Path(ruta)
         if (
             not tenant
+            or tenant in {".", ".."}
+            or "/" in tenant
+            or "\\x00" in tenant
             or not DIGEST.fullmatch(sha)
             or relativa.is_absolute()
             or ".." in relativa.parts
@@ -39,6 +47,11 @@ def verificar(base: Path, filas: list[list[str]]) -> tuple[int, int]:
         ):
             errores += 1
             continue
+        identidad = (tenant, ruta)
+        if identidad in vistos:
+            errores += 1
+            continue
+        vistos.add(identidad)
         origen = raiz / relativa
         if any(parte.is_symlink() for parte in (origen, *origen.parents) if parte != raiz):
             errores += 1
@@ -49,9 +62,18 @@ def verificar(base: Path, filas: list[list[str]]) -> tuple[int, int]:
             errores += 1
             continue
         digest = hashlib.sha256()
-        with archivo.open("rb") as entrada:
-            for bloque in iter(lambda: entrada.read(1024 * 1024), b""):
-                digest.update(bloque)
+        try:
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+            fd = os.open(archivo, flags)
+            with os.fdopen(fd, "rb") as entrada:
+                if not stat.S_ISREG(os.fstat(entrada.fileno()).st_mode):
+                    errores += 1
+                    continue
+                for bloque in iter(lambda: entrada.read(1024 * 1024), b""):
+                    digest.update(bloque)
+        except OSError:
+            errores += 1
+            continue
         if digest.hexdigest() != sha:
             errores += 1
             continue
@@ -62,10 +84,11 @@ def verificar(base: Path, filas: list[list[str]]) -> tuple[int, int]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--documentos", type=Path, required=True)
+    parser.add_argument("--esperados", type=int, required=True)
     args = parser.parse_args()
     filas = list(csv.reader(sys.stdin, delimiter="\t"))
     try:
-        correctos, fallos = verificar(args.documentos, filas)
+        correctos, fallos = verificar(args.documentos, filas, args.esperados)
     except (OSError, ValueError) as exc:
         print(f"ERROR: volumen documental inaccesible: {type(exc).__name__}", file=sys.stderr)
         return 2
