@@ -44,6 +44,7 @@ from app.services.expedientes import (
 from app.services.ingesta import crear_expediente
 from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.pdf_consolidado import pdf_con_documentos
+from app.services.misd_pagos import motivo_bloqueo_liquidacion
 from app.services.permisos import (
     PERMISO_ELIMINAR_REGISTROS,
     permiso_habilitado,
@@ -962,6 +963,13 @@ def eliminar(
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             "El cliente está autorizado: debe solicitar aprobación a ADMINISTRACIÓN",
+        )
+
+    bloqueo = motivo_bloqueo_liquidacion(session, expediente)
+    if bloqueo is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Eliminación bloqueada: {bloqueo}",
         )
 
     marca_eliminacion = ahora()
