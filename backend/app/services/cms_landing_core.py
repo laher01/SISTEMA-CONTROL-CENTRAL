@@ -53,5 +53,7 @@ def transicionar(
     if destino not in TRANSICIONES[revision.estado]:
         raise ValueError("Transición editorial no permitida")
     actualizado = replace(revision, version=revision.version + 1, estado=destino)
-    evento = EventoEditorial(revision.version, actualizado.version, revision.estado, destino, actor_id)
+    evento = EventoEditorial(
+        revision.version, actualizado.version, revision.estado, destino, actor_id
+    )
     return actualizado, evento
