@@ -968,9 +968,7 @@ def eliminar(
             "No tiene permiso para eliminar registros",
         )
 
-    if auth.rol in ("GESTOR", "USUARIO") and not dentro_ventana_correccion(
-        expediente, ahora()
-    ):
+    if auth.rol in ("GESTOR", "USUARIO") and not dentro_ventana_correccion(expediente, ahora()):
         raise HTTPException(409, "Fuera de ventana: retire mediante autorización MISD")
 
     if requiere_autorizacion_administrativa(auth.rol, expediente.receptor.autorizada):
