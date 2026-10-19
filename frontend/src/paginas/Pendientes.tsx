@@ -490,11 +490,13 @@ function ConfirmarCampos({
     }
   };
   return (
-    <details open={mostrarManual || undefined} onToggle={(e) => setMostrarManual(e.currentTarget.open)}>
-      <summary>
-        Crear expediente manualmente · Datos sugeridos ({campos.length})
-        {confirmado ? " · Confirmados" : ""}
-      </summary>
+    <div>
+      <button type="button" onClick={() => setMostrarManual((actual) => !actual)}>
+        {mostrarManual ? "Cerrar creación manual" : "Crear expediente manualmente"}
+      </button>
+      {mostrarManual && (
+      <div className="crear-expediente-asistido">
+      <p>Datos sugeridos ({campos.length}){confirmado ? " · Confirmados" : ""}</p>
       <p>Confirme los datos del comprobante antes de crear el expediente. Si ya existe la misma identidad fiscal, el sistema debe rechazar la duplicación.</p>
       <dl className="campos-extraidos">
         {nombresCampos.map((nombre) => {
@@ -563,7 +565,9 @@ function ConfirmarCampos({
         </div>
       )}
       {error && <span className="error">{error}</span>}
-    </details>
+      </div>
+      )}
+    </div>
   );
 }
 
