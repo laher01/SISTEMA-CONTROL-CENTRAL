@@ -13,9 +13,7 @@ from app.security import contexto_desde_token
 class SesionFalsa:
     def __init__(self, estado: str | None, cruzado: bool = False) -> None:
         tenant_id = uuid4()
-        self.tenant = (
-            SimpleNamespace(id=tenant_id, estado=estado) if estado is not None else None
-        )
+        self.tenant = SimpleNamespace(id=tenant_id, estado=estado) if estado is not None else None
         self.cuenta = SimpleNamespace(
             id=uuid4(),
             tenant_id=tenant_id,
