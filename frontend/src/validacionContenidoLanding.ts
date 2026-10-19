@@ -43,7 +43,7 @@ export function validarContenidoLanding(entrada: unknown): ErrorEditorial[] {
   const contenido = entrada as Partial<ContenidoLanding>;
   const errores: ErrorEditorial[] = [];
   const simples: ReadonlyArray<[keyof typeof LIMITES, number]> = Object.entries(LIMITES)
-    .filter(([nombre]) => !nombre.startsWith("beneficio"))
+    .filter(([nombre]) => nombre !== "beneficioTitulo" && nombre !== "beneficioDescripcion")
     .map(([nombre, limite]) => [nombre as keyof typeof LIMITES, limite]);
   for (const [campo, limite] of simples) {
     errores.push(...validarTexto(campo, contenido[campo as keyof ContenidoLanding], limite));
