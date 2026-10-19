@@ -43,6 +43,7 @@ from app.services.expedientes import (
 )
 from app.services.ingesta import crear_expediente
 from app.services.jerarquia_documental import nombres_jerarquia
+from app.services.misd_autorizaciones import dentro_ventana_correccion
 from app.services.misd_pagos import motivo_bloqueo_liquidacion
 from app.services.pdf_consolidado import pdf_con_documentos
 from app.services.permisos import (
@@ -966,6 +967,11 @@ def eliminar(
             status.HTTP_403_FORBIDDEN,
             "No tiene permiso para eliminar registros",
         )
+
+    if auth.rol in ("GESTOR", "USUARIO") and not dentro_ventana_correccion(
+        expediente, ahora()
+    ):
+        raise HTTPException(409, "Fuera de ventana: retire mediante autorización MISD")
 
     if requiere_autorizacion_administrativa(auth.rol, expediente.receptor.autorizada):
         raise HTTPException(
