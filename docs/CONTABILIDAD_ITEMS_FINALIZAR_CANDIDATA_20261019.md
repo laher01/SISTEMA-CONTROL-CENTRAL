@@ -34,3 +34,11 @@ Corregir únicamente fallos reproducibles de candidata; comprobar resultados CI 
 - El servicio CI Backend levanta contenedores de prueba, pero no incluye un paso explícito de `alembic upgrade head` en su lista de pasos. Por tanto **no se ha verificado migración Alembic completa de la candidata** mediante este workflow.
 - Se intentó consultar logs pytest con GitHub durante la ejecución; API temporalmente respondió `404 BlobNotFound`. No se afirma resultado pytest.
 - No se hicieron cambios en Python/TSX ni acciones de fusión, VPS o producción. El cierre exige revisar el resultado final del CI y ejecutar/constatar Alembic en DB efímera antes de autorizar integración.
+
+## T — Pruebas verificadas después de finalizar CI de SHA 2665855f
+- Workflows `backend` run 39211509640, `recepcion-documental-ci` run 39211509807 y `roles-real-integration` run 39211509698: **SUCCESS 3/3**.
+- Log pytest Backend job 117925736887: **406 passed, 8 warnings in 93.77s**.
+- Log incluye `tests/test_contabilidad_items_persistencia.py ...... ` (6 aprobadas), `tests/test_contabilidad_items_reescaneo.py ...............` (15 aprobadas) y `tests/test_items_product_invoice_links.py .` (1 aprobada). La prueba de concurrencia PostgreSQL está entre las seis de persistencia, sin omisiones en esa batería.
+- **Alembic sí quedó verificado en CI**: el log muestra `tests/test_alembic_0034_integracion.py .`; el test crea una DB temporal `fc_migration_check_*`, ejecuta `command.upgrade(config, "0034")` y después `command.upgrade(config, "head")`, comprueba revisión 0035 y destruye la base al terminar. No requiere acceso a VPS. Esto corrige la cautela anterior que decía que faltaba comprobar Alembic: no existía un paso separado del workflow, pero sí la prueba de migración completa dentro de pytest.
+- HEAD documental de entrada `95bff9e3b2ef443f3854fa585e3dfcefbffd6368`: sus tres workflows seguían en ejecución durante esta consulta; la evidencia exitosa del commit de código es válida, sin inferir estados del nuevo HEAD.
+- No se encontraron fallos nuevos que justifiquen corregir código; no tocar ramas fuente ni producción.
