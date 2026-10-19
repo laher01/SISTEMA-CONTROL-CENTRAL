@@ -60,13 +60,17 @@ def motivo_bloqueo_liquidacion(session: Session, expediente: Expediente) -> str 
     return None
 
 
-def motivo_bloqueo_voucher(session: Session, tenant_id: uuid.UUID, documento_id: uuid.UUID) -> str | None:
+def motivo_bloqueo_voucher(
+    session: Session, tenant_id: uuid.UUID, documento_id: uuid.UUID
+) -> str | None:
     """Un voucher ya vinculado a liquidación no puede eliminarse individualmente."""
     pago_id = session.scalar(
-        select(PagoERP.id).where(
+        select(PagoERP.id)
+        .where(
             PagoERP.tenant_id == tenant_id,
             PagoERP.voucher_documento_id == documento_id,
-        ).limit(1)
+        )
+        .limit(1)
     )
     if pago_id is not None:
         return "Voucher vinculado a liquidación generada"
