@@ -43,7 +43,7 @@ def test_otros_roles_no_leen_ni_modifican_cms(rol: str) -> None:
         consultar_cms(session, cuenta)
     assert exc.value.status_code == 403
     with pytest.raises(HTTPException) as exc:
-        guardar_cms(BorradorCms(version=0, contenido=CONTENIDO), session, cuenta)
+        guardar_cms(BorradorCms.model_validate({"version": 0, "contenido": CONTENIDO}), session, cuenta)
     assert exc.value.status_code == 403
     with pytest.raises(HTTPException) as exc:
         transicionar_cms(
