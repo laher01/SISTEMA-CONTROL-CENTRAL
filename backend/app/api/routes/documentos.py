@@ -992,6 +992,14 @@ def resumen_documentos(
         select(
             func.count(Expediente.id),
             func.coalesce(
+                func.sum(case((Expediente.moneda == "PEN", Expediente.importe_total), else_=0)),
+                0,
+            ),
+            func.coalesce(
+                func.sum(case((Expediente.moneda == "USD", Expediente.importe_total), else_=0)),
+                0,
+            ),
+            func.coalesce(
                 func.sum(
                     case(
                         (
@@ -1025,7 +1033,9 @@ def resumen_documentos(
         "total_documentos": int(cantidad),
         "total_expedientes": int(total[0]),
         "total_pen": Decimal(total[1]),
+        "total_pen_autorizado": Decimal(total[3]),
         "total_usd": Decimal(total[2]),
+        "total_usd_autorizado": Decimal(total[4]),
     }
 
 
@@ -1593,6 +1603,45 @@ def crear_expediente_asistido(
         except ComprobanteYaRegistrado as exc:
             session.rollback()
             raise _comprobante_duplicado(session, auth, exc.expediente_id) from exc
+    # Vinculación conservadora de documentos ya extraídos y sin expediente.
+    # Solo si existe una única coincidencia, con referencia y ambos RUC,
+    # dentro del mismo tenant, usuario y ámbito gestor.
+    if creado:
+        pendientes = session.scalars(
+            select(Documento)
+            .where(
+                Documento.tenant_id == tenant_id,
+                Documento.usuario_id == documento.usuario_id,
+                Documento.gestor_id == documento.gestor_id,
+                Documento.expediente_id.is_(None),
+                Documento.deleted_at.is_(None),
+                Documento.tipo_documento.is_not(None),
+                Documento.tipo_documento != TipoDocumento.FACT,
+            )
+            .order_by(Documento.created_at.desc())
+            .limit(100)
+        )
+        for pendiente in pendientes:
+            if pendiente.tipo_documento is None:
+                continue
+            sugerencias = sugerir_relaciones(session, pendiente)
+            if len(sugerencias) != 1 or sugerencias[0].expediente.id != expediente.id:
+                continue
+            evidencias = sugerencias[0].evidencias
+            if not (
+                any(item.startswith("Comprobante ") for item in evidencias)
+                and any(item.startswith("RUC emisor ") for item in evidencias)
+                and any(item.startswith("RUC receptor ") for item in evidencias)
+            ):
+                continue
+            vincular_documento(
+                session,
+                settings,
+                hoy,
+                pendiente,
+                expediente.id,
+                TipoDocumento(pendiente.tipo_documento),
+            )
     session.commit()
     return ExpedienteAsistidoOut(
         expediente=ExpedienteOut.model_validate(expediente),
