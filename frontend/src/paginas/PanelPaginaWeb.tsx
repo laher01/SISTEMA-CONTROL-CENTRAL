@@ -1,6 +1,7 @@
 /** Control global de la landing, exclusivo de SUPERADMIN. */
 import { useState } from "react";
 import { enviarJson, useDatos } from "../api";
+import PanelEditorCms from "./PanelEditorCms";
 
 type EstadoWeb = { activa: boolean; version: number };
 
@@ -47,6 +48,7 @@ export default function PanelPaginaWeb() {
         </p>
         {mensaje && <p role="status">{mensaje}</p>}
       </div>
+      <PanelEditorCms />
       <div className="panel-configuracion">
         <h4>Secciones comerciales preparadas</h4>
         <ul>
