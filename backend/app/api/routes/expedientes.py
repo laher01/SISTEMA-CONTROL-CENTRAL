@@ -43,8 +43,8 @@ from app.services.expedientes import (
 )
 from app.services.ingesta import crear_expediente
 from app.services.jerarquia_documental import nombres_jerarquia
-from app.services.pdf_consolidado import pdf_con_documentos
 from app.services.misd_pagos import motivo_bloqueo_liquidacion
+from app.services.pdf_consolidado import pdf_con_documentos
 from app.services.permisos import (
     PERMISO_ELIMINAR_REGISTROS,
     permiso_habilitado,
