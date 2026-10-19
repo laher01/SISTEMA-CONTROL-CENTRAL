@@ -201,7 +201,6 @@ def test_pago_responsable_generado_bloquea_expediente(
     assert "RESPONSABLE" in resultado.text
 
 
-
 def test_voucher_de_otro_periodo_bloquea_retiro_integral_misd(
     client: TestClient, session: Session, auth_prueba: AuthPrueba
 ) -> None:
