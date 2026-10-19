@@ -1,20 +1,18 @@
 """Issue #311: ninguna sesión existente sobrevive a suspender su tenant."""
 
 from datetime import UTC, datetime, timedelta
-
-from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from app.api.deps import get_contexto_actual
 from app.core.config import Settings
 from app.main import app
 from app.models import CuentaAcceso, Miembro, Tenant
-from app.security import crear_sesion
-from app.security import contexto_desde_token
+from app.security import contexto_desde_token, crear_sesion
 
 
 class SesionFalsa:
