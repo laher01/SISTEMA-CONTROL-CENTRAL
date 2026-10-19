@@ -1556,3 +1556,22 @@ def test_restaurar_expediente_original_faltante_no_cambia_estado(
     respuesta = client.post(f"/api/v1/expedientes/{expediente_id}/restaurar")
     assert respuesta.status_code == 409, respuesta.text
     assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 404
+
+
+def test_restaurar_expediente_rechaza_tenant_ajeno(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    from dataclasses import replace
+    from uuid import uuid4
+
+    original = subir(client, "tenant-expediente.xml", factura())
+    expediente_id = original["expediente_id"]
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 204
+    anterior = auth_prueba.contexto
+    auth_prueba.contexto = replace(anterior, tenant_id=uuid4())
+    try:
+        assert client.post(f"/api/v1/expedientes/{expediente_id}/restaurar").status_code == 404
+    finally:
+        auth_prueba.contexto = anterior
+    assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 404
