@@ -22,12 +22,14 @@ def session():
         connection.exec_driver_sql(
             "CREATE TABLE cms_landing_revision (id INTEGER PRIMARY KEY, "
             "version INTEGER NOT NULL, estado VARCHAR(24) NOT NULL, "
-            "contenido JSON NOT NULL, actualizado_por CHAR(32))"
+            "contenido JSON NOT NULL, actualizado_por CHAR(32), "
+            "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL)"
         )
         connection.exec_driver_sql(
             "CREATE TABLE cms_landing_evento (id CHAR(32) PRIMARY KEY, "
             "version_anterior INTEGER NOT NULL, version_nueva INTEGER NOT NULL, "
-            "anterior VARCHAR(24) NOT NULL, nuevo VARCHAR(24) NOT NULL, actor_id CHAR(32))"
+            "anterior VARCHAR(24) NOT NULL, nuevo VARCHAR(24) NOT NULL, "
+            "actor_id CHAR(32), created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL)"
         )
         connection.exec_driver_sql(
             "INSERT INTO cms_landing_revision "
