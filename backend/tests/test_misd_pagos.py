@@ -248,6 +248,7 @@ def test_voucher_de_otro_periodo_bloquea_retiro_integral_misd(
     assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 409
     assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 200
 
+
 @pytest.mark.parametrize("primer_evento", ["pago", "retirada"])
 def test_bloqueo_compartido_serialize_pago_y_retirada_postgresql(
     client: TestClient,
@@ -336,6 +337,4 @@ def test_bloqueo_compartido_serialize_pago_y_retirada_postgresql(
         liberar.set()
         resultado = futuro_segundo.result(timeout=45)
         futuro_primero.result(timeout=45)
-    assert resultado == (
-        "RETIRO_BLOQUEADO" if primer_evento == "pago" else "PRODUCCION_RETIRADA"
-    )
+    assert resultado == ("RETIRO_BLOQUEADO" if primer_evento == "pago" else "PRODUCCION_RETIRADA")
