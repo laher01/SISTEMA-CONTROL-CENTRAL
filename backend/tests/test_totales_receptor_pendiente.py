@@ -19,9 +19,7 @@ def test_importe_pendiente_no_aparece_en_totales(client: TestClient) -> None:
         "moneda": "PEN",
         "importe_total": "125.00",
     }
-    confirmado = client.put(
-        f"/api/v1/documentos/{documento_id}/extraccion-confirmada", json=campos
-    )
+    confirmado = client.put(f"/api/v1/documentos/{documento_id}/extraccion-confirmada", json=campos)
     assert confirmado.status_code == 200, confirmado.text
     creado = client.post(
         f"/api/v1/documentos/{documento_id}/crear-expediente",
