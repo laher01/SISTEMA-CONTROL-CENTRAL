@@ -1,0 +1,70 @@
+name: diagnostico-vps-ocr
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: diagnostico-ocr-staging
+  cancel-in-progress: false
+
+jobs:
+  diagnostico:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 10
+    steps:
+      - name: Validar destino y secretos
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$VPS_HOST" = '132.145.233.172'
+          test "$VPS_USER" = 'ubuntu'
+          test "$VPS_DEPLOY_PATH" = '/home/ubuntu/fact-central'
+          test -n "$VPS_SSH_PRIVATE_KEY"
+          test -n "$VPS_SSH_KNOWN_HOSTS"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Inspección SSH de solo lectura
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
+            "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /home/ubuntu/fact-central
+          echo '=== HOST Y SISTEMA ==='
+          hostname
+          grep '^PRETTY_NAME=' /etc/os-release
+          echo '=== COMMIT INSTALADO ==='
+          git rev-parse HEAD
+          echo '=== ESTADO DEL REPOSITORIO (SOLO INDICADORES) ==='
+          git diff --quiet && echo 'Archivos versionados: sin cambios' || echo 'Archivos versionados: modificados'
+          echo '=== CONTENEDORES ==='
+          docker ps --format 'table {{.Names}}\t{{.Status}}'
+          echo '=== COMPOSE STAGING ==='
+          docker compose --env-file deploy/.env.production \
+            -f deploy/docker-compose.production.yml ps
+          echo '=== ALEMBIC ACTUAL ==='
+          docker exec fact-central-staging-backend-1 uv run alembic current
+          echo '=== MARCADORES OCR Y REVISIÓN FISCAL ==='
+          docker exec fact-central-staging-backend-1 sh -c \
+            "grep -n -E 'if jabsa|TIPO_COMPROBANTE_CONFLICTIVO|def _procesar_y_aplicar' /app/app/services/facturas_estaciones.py /app/app/services/automatizacion_documental.py /app/app/api/routes/documentos.py | head -25"
+          echo '=== FIN DIAGNÓSTICO; NO SE EJECUTARON MIGRACIONES NI ESCRITURAS ==='
+          REMOTE
