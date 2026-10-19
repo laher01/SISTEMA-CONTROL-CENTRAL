@@ -29,3 +29,8 @@ def permiso_habilitado(
         )
     )
     return configurado is not None
+
+
+def requiere_autorizacion_administrativa(rol: str, receptor_autorizado: bool) -> bool:
+    """Los expedientes con receptor autorizado no se retiran por roles delegados."""
+    return rol != "ADMINISTRADOR" and receptor_autorizado
