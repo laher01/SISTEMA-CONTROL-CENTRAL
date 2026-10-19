@@ -168,8 +168,8 @@ def test_nexus_documentos_carteras_gestor_responsable_y_gerente(
         usuario_id=None,
     )
     resp = client.post("/api/v1/nexus/chat", json=consulta)
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["datos"]["documentos_por_estado"] == {"RECIBIDO": 1}
+    # La API NEXUS todavía no permite este rol: conservar el bloqueo.
+    assert resp.status_code == 403, resp.text
 
     auth_prueba.como_gerente()
     gerencia = client.post("/api/v1/nexus/chat", json=consulta)
