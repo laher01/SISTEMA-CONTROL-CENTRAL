@@ -1,3 +1,4 @@
+import hashlib
 import json
 import re
 import tempfile
@@ -12,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import InstrumentedAttribute
@@ -34,6 +35,7 @@ from app.security import cuenta_administradora_responsable
 from app.services import auditoria
 from app.services.ambito_gerencia import alcance_expedientes_gerente, expediente_visible_gerente
 from app.services.expedientes import (
+    actualizar_expediente,
     buscar_expediente,
     documentos_faltantes,
     fecha_limite,
@@ -980,3 +982,91 @@ def eliminar(
         },
     )
     session.commit()
+
+@router.post("/{expediente_id}/restaurar", response_model=ExpedienteDetalle)
+def restaurar_expediente(
+    expediente_id: uuid.UUID,
+    session: SessionDep,
+    almacen: AlmacenDep,
+    settings: SettingsDep,
+    hoy: HoyDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> ExpedienteDetalle:
+    """Restaura únicamente evidencias retiradas junto con el expediente."""
+    expediente = session.scalar(
+        select(Expediente)
+        .where(Expediente.id == expediente_id, Expediente.tenant_id == tenant_id)
+        .with_for_update()
+    )
+    if expediente is None or not _visible_para_auth(expediente, auth, session):
+        raise no_encontrado("Expediente")
+    if auth.rol == RolMiembro.SUPERADMIN or not permiso_habilitado(
+        session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin permiso para restaurar expedientes")
+    if expediente.deleted_at is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "El expediente ya se encuentra activo")
+
+    # La retirada integral asigna la misma marca al expediente y a las
+    # evidencias activas. Las retiradas anteriormente conservan otra marca.
+    marca = expediente.deleted_at
+    candidatos = [
+        doc for doc in expediente.documentos if doc.deleted_at == marca
+    ]
+    for doc in candidatos:
+        ruta = almacen.ruta_absoluta(doc.ruta_storage)
+        if not ruta.is_file() or hashlib.sha256(ruta.read_bytes()).hexdigest() != doc.sha256:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Original ausente o alterado: no se ha restaurado el expediente",
+            )
+        equivalente = session.scalar(
+            select(Documento.id).where(
+                Documento.tenant_id == tenant_id,
+                Documento.id != doc.id,
+                Documento.deleted_at.is_(None),
+                or_(
+                    Documento.sha256 == doc.sha256,
+                    and_(
+                        Documento.huella_comercial.is_not(None),
+                        Documento.huella_comercial == doc.huella_comercial,
+                    ),
+                ),
+            ).limit(1)
+        )
+        if equivalente is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Un documento activo coincide con una evidencia retirada",
+            )
+
+    expediente.deleted_at = None
+    for doc in candidatos:
+        doc.deleted_at = None
+        auditoria.registrar(
+            session,
+            tenant_id,
+            "DOCUMENTO_RESTAURADO_CON_EXPEDIENTE",
+            "documento",
+            doc.id,
+            {"expediente_id": str(expediente.id)},
+        )
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "EXPEDIENTE_RESTAURADO",
+        "expediente",
+        expediente.id,
+        {"documentos_restaurados": len(candidatos)},
+    )
+    try:
+        session.flush()
+        actualizar_expediente(session, expediente, hoy, settings)
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Conflicto de identidad al restaurar expediente"
+        ) from exc
+    return detalle(session, settings, tenant_id, auth, expediente_id)
