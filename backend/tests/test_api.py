@@ -1495,6 +1495,7 @@ def test_pago_voucher_impide_retirada_y_conserva_vinculos(
     assert session.get(PagoERP, pago_id).voucher_documento_id == doc_id
     assert client.get(f"/api/v1/documentos/{doc_id}").status_code == 200
 
+
 def test_restaurar_expediente_devuelve_evidencia_y_alertas(
     client: TestClient, auth_prueba: AuthPrueba
 ) -> None:
@@ -1621,6 +1622,7 @@ def test_expediente_pagado_bloqueado_y_gre_restaurable_sin_pago(
     session.expire_all()
     assert session.get(ReferenciaGRE, referencia_id).documento_id == doc_id
     assert alertas_abiertas(respuesta.json()) == alertas_iniciales
+
 
 def test_restauraciones_concurrentes_no_duplican_reactivacion(
     client: TestClient, auth_prueba: AuthPrueba, engine: Engine
