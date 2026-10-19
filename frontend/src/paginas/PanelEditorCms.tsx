@@ -1,5 +1,5 @@
 /** Editor CMS interno. No modifica la activación de la landing pública. */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { enviarJson, useDatos } from "../api";
 import type { ContenidoLanding } from "../contenidoLanding";
 import { contenidoLandingInicial } from "../contenidoLanding";
@@ -17,20 +17,16 @@ const CAMPOS = [
 
 export default function PanelEditorCms() {
   const { datos, error, cargando, recargar } = useDatos<EstadoCms>("/api/v1/plataforma/cms");
-  const [contenido, setContenido] = useState<ContenidoLanding>({
-    ...contenidoLandingInicial,
-    beneficios: [...contenidoLandingInicial.beneficios],
-  });
+  const [borrador, setBorrador] = useState<ContenidoLanding | null>(null);
+  const contenido = borrador ?? datos?.contenido ?? contenidoLandingInicial;
   const [ocupado, setOcupado] = useState(false);
   const [mensaje, setMensaje] = useState("");
-  useEffect(() => {
-    if (datos?.contenido) setContenido(datos.contenido);
-  }, [datos]);
   async function ejecutar(url: string, metodo: "PUT" | "POST", payload: object) {
     setOcupado(true);
     setMensaje("");
     try {
       await enviarJson(url, metodo, payload);
+      setBorrador(null);
       recargar();
       setMensaje("Cambio registrado y pendiente de las aprobaciones correspondientes.");
     } catch (e) {
@@ -55,7 +51,7 @@ export default function PanelEditorCms() {
             <textarea
               aria-label={campo}
               value={contenido[campo]}
-              onChange={(e) => setContenido((actual) => ({ ...actual, [campo]: e.target.value }))}
+              onChange={(e) => setBorrador({ ...contenido, [campo]: e.target.value })}
             />
           </label>
         ))}
@@ -67,11 +63,11 @@ export default function PanelEditorCms() {
                 {campo}
                 <input
                   value={beneficio[campo]}
-                  onChange={(e) => setContenido((actual) => ({
-                    ...actual,
-                    beneficios: actual.beneficios.map((item, i) => i === indice
+                  onChange={(e) => setBorrador({
+                    ...contenido,
+                    beneficios: contenido.beneficios.map((item, i) => i === indice
                       ? { ...item, [campo]: e.target.value } : item),
-                  }))}
+                  })}
                 />
               </label>
             ))}
