@@ -96,15 +96,19 @@ def cambiar_estado(
     if getattr(resultado, "rowcount", None) != 1:
         session.rollback()
         raise ValueError("Conflicto concurrente de versión")
-    session.execute(
-        evento_table.insert().values(
-            id=uuid.uuid4(),
-            version_anterior=evento.version_anterior,
-            version_nueva=evento.version_nueva,
-            anterior=evento.anterior.value,
-            nuevo=evento.nuevo.value,
-            actor_id=actor_id,
+    try:
+        session.execute(
+            evento_table.insert().values(
+                id=uuid.uuid4(),
+                version_anterior=evento.version_anterior,
+                version_nueva=evento.version_nueva,
+                anterior=evento.anterior.value,
+                nuevo=evento.nuevo.value,
+                actor_id=actor_id,
+            )
         )
-    )
-    session.commit()
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
     return nueva
