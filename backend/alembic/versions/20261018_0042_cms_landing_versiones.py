@@ -3,7 +3,9 @@
 Revision ID: 0042
 Revises: 0041
 """
+
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "0042"
@@ -20,7 +22,10 @@ def upgrade() -> None:
         sa.Column("estado", sa.String(length=24), nullable=False),
         sa.Column("contenido", sa.JSON(), nullable=False),
         sa.Column("actualizado_por", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True),
+            server_default=sa.func.now(), nullable=False,
+        ),
         sa.CheckConstraint("id = 1", name="cms_landing_revision_unica"),
     )
     op.create_table(
@@ -31,7 +36,10 @@ def upgrade() -> None:
         sa.Column("anterior", sa.String(length=24), nullable=False),
         sa.Column("nuevo", sa.String(length=24), nullable=False),
         sa.Column("actor_id", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id"), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True),
+            server_default=sa.func.now(), nullable=False,
+        ),
         sa.UniqueConstraint("version_nueva", name="uq_cms_landing_evento_version"),
     )
 
