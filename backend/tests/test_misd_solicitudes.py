@@ -71,6 +71,7 @@ def test_secretaria_no_puede_solicitar_retiro(client: TestClient, auth_prueba: A
     )
     assert creada.status_code in (403, 404)
 
+
 def test_misd_solicitud_tenant_ajeno_no_se_puede_consultar_ni_resolver(
     client: TestClient, auth_prueba: AuthPrueba
 ) -> None:
