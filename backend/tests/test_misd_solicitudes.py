@@ -253,3 +253,27 @@ def test_misd_envia_notificaciones_chat_al_aprobar(
         .count()
         >= 1
     )
+
+
+def test_misd_cambio_de_rol_invalida_solicitud_original(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    from dataclasses import replace
+
+    subida = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("misd-rol-inmutable.xml", factura())},
+    )
+    assert subida.status_code == 201, subida.text
+    creada = client.post(
+        "/api/v1/misd/solicitudes",
+        json={
+            "expediente_id": subida.json()["expediente_id"],
+            "motivo": "Verificación de autoría",
+        },
+    )
+    assert creada.status_code == 201, creada.text
+    auth_prueba.contexto = replace(auth_prueba.contexto, rol="ADMINISTRADOR")
+    respuesta = client.post(f"/api/v1/misd/solicitudes/{creada.json()['id']}/ejecutar")
+    assert respuesta.status_code == 404
+    assert client.get(f"/api/v1/expedientes/{subida.json()['expediente_id']}").status_code == 200
