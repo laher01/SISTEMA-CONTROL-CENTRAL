@@ -309,9 +309,7 @@ def listar(
         puede_eliminar = (
             puede_eliminar_rol
             and (auth.rol != "GESTOR" or expediente.gestor_id == auth.gestor_id)
-            and not requiere_autorizacion_administrativa(
-                auth.rol, expediente.receptor.autorizada
-            )
+            and not requiere_autorizacion_administrativa(auth.rol, expediente.receptor.autorizada)
             and motivo_bloqueo_liquidacion(session, expediente) is None
         )
         filas.append(
