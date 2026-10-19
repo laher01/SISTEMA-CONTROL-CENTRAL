@@ -77,7 +77,7 @@ def cambiar_estado(
             actualizado_por=actor_id,
         )
     )
-    if resultado.rowcount != 1:
+    if getattr(resultado, "rowcount", None) != 1:
         session.rollback()
         raise ValueError("Conflicto concurrente de versión")
     session.execute(
