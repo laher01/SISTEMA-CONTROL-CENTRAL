@@ -128,9 +128,9 @@ def test_items_ubl_http_scoped_filters_and_retirement(
         b'xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" '
         b'xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">'
         b'<cac:InvoiceLine><cbc:InvoicedQuantity unitCode="KGM">12</cbc:InvoicedQuantity>'
-        b'<cbc:LineExtensionAmount>60</cbc:LineExtensionAmount>'
-        b'<cac:Item><cbc:Name>Pota congelada</cbc:Name></cac:Item>'
-        b'</cac:InvoiceLine></Invoice>'
+        b"<cbc:LineExtensionAmount>60</cbc:LineExtensionAmount>"
+        b"<cac:Item><cbc:Name>Pota congelada</cbc:Name></cac:Item>"
+        b"</cac:InvoiceLine></Invoice>"
     )
     ids = {}
     for tenant_id, tag in ((own_tenant, "1"), (other_tenant.id, "2")):
@@ -175,9 +175,7 @@ def test_items_ubl_http_scoped_filters_and_retirement(
     assert Decimal(own.json()[0]["importe"]) == Decimal("60")
     for key in ("emisor_id", "receptor_id"):
         idx = 0 if key == "emisor_id" else 1
-        own_filtered = client.get(
-            "/api/v1/contabilidad-items", params={key: str(ids["1"][idx])}
-        )
+        own_filtered = client.get("/api/v1/contabilidad-items", params={key: str(ids["1"][idx])})
         assert own_filtered.status_code == 200, own_filtered.text
         assert len(own_filtered.json()) == 1
         foreign_filtered = client.get(
