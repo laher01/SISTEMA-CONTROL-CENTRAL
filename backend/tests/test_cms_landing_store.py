@@ -1,4 +1,5 @@
 """Regresiones de persistencia editorial con base SQLite aislada."""
+
 from uuid import uuid4
 
 import pytest
@@ -43,13 +44,14 @@ def test_superadmin_transicion_y_evento_atomico(session: Session) -> None:
 
     actor = uuid4()
     nueva = cambiar_estado(
-        session, destino=EstadoEditorial.VISTA_PREVIA, version_esperada=1,
-        rol="SUPERADMIN", actor_id=actor,
+        session,
+        destino=EstadoEditorial.VISTA_PREVIA,
+        version_esperada=1,
+        rol="SUPERADMIN",
+        actor_id=actor,
     )
     assert nueva.version == 2
-    assert session.execute(
-        text("SELECT COUNT(*) FROM cms_landing_evento")
-    ).scalar_one() == 1
+    assert session.execute(text("SELECT COUNT(*) FROM cms_landing_evento")).scalar_one() == 1
 
 
 def test_admin_no_puede_mutar(session: Session) -> None:
@@ -57,12 +59,13 @@ def test_admin_no_puede_mutar(session: Session) -> None:
 
     with pytest.raises(PermissionError):
         cambiar_estado(
-            session, destino=EstadoEditorial.VISTA_PREVIA, version_esperada=1,
-            rol="ADMINISTRADOR", actor_id=uuid4(),
+            session,
+            destino=EstadoEditorial.VISTA_PREVIA,
+            version_esperada=1,
+            rol="ADMINISTRADOR",
+            actor_id=uuid4(),
         )
-    assert session.execute(
-        text("SELECT version FROM cms_landing_revision")
-    ).scalar_one() == 1
+    assert session.execute(text("SELECT version FROM cms_landing_revision")).scalar_one() == 1
 
 
 def test_version_obsoleta_no_genera_evento(session: Session) -> None:
@@ -70,9 +73,10 @@ def test_version_obsoleta_no_genera_evento(session: Session) -> None:
 
     with pytest.raises(ValueError, match="versión"):
         cambiar_estado(
-            session, destino=EstadoEditorial.VISTA_PREVIA, version_esperada=0,
-            rol="SUPERADMIN", actor_id=uuid4(),
+            session,
+            destino=EstadoEditorial.VISTA_PREVIA,
+            version_esperada=0,
+            rol="SUPERADMIN",
+            actor_id=uuid4(),
         )
-    assert session.execute(
-        text("SELECT COUNT(*) FROM cms_landing_evento")
-    ).scalar_one() == 0
+    assert session.execute(text("SELECT COUNT(*) FROM cms_landing_evento")).scalar_one() == 0
