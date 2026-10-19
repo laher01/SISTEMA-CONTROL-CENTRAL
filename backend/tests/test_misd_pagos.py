@@ -274,6 +274,7 @@ def test_bloqueo_compartido_serialize_pago_y_retirada_postgresql(
     expediente_id = respuesta.json()["expediente_id"]
     fabrica = sessionmaker(engine, expire_on_commit=False)
     listo = Event()
+    intenta_bloquear = Event()
     liberar = Event()
 
     def primero() -> None:
@@ -308,6 +309,7 @@ def test_bloqueo_compartido_serialize_pago_y_retirada_postgresql(
         with fabrica() as sesion:
             exp = sesion.get(Expediente, expediente_id)
             assert exp is not None
+            intenta_bloquear.set()
             bloquear_tenant_financiero(sesion, exp.tenant_id)
             sesion.refresh(exp)
             if primer_evento == "pago":
@@ -330,6 +332,7 @@ def test_bloqueo_compartido_serialize_pago_y_retirada_postgresql(
         futuro_primero = ejecutor.submit(primero)
         futuro_segundo = ejecutor.submit(segundo)
         assert listo.wait(timeout=30)
+        assert intenta_bloquear.wait(timeout=30)
         liberar.set()
         resultado = futuro_segundo.result(timeout=45)
         futuro_primero.result(timeout=45)
