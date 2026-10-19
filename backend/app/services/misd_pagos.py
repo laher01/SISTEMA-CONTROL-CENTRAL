@@ -20,6 +20,7 @@ def motivo_bloqueo_liquidacion(session: Session, expediente: Expediente) -> str 
             modelo.periodo_hasta >= expediente.fecha_emision,
             modelo.moneda == expediente.moneda,
         )
+
     if expediente.usuario_id is not None:
         pago_usuario = session.scalar(
             select(PagoERP.id)
