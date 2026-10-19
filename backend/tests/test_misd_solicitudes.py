@@ -154,9 +154,7 @@ def test_ejecutar_misd_en_ventana_sin_pagos_consume_solicitud(
     assert ejecutada.json()["estado"] == "EJECUTADA"
     assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 404
     assert client.post(f"/api/v1/misd/solicitudes/{solicitud_id}/ejecutar").status_code == 409
-    assert (
-        session.query(Auditoria).filter(Auditoria.accion == "MISD_RETIRO_EJECUTADO").count() == 1
-    )
+    assert session.query(Auditoria).filter(Auditoria.accion == "MISD_RETIRO_EJECUTADO").count() == 1
 
 
 def test_misd_fuera_de_ventana_exige_aprobacion(
@@ -237,7 +235,12 @@ def test_misd_envia_notificaciones_chat_al_aprobar(
         json={"aprobar": True, "motivo": "Autorizado para revisión final"},
     )
     assert resuelta.status_code == 200, resuelta.text
-    assert session.query(ChatMensaje).filter(
-        ChatMensaje.tenant_id == auth_prueba.contexto.tenant_id,
-        ChatMensaje.destinatario_cuenta_id == solicitante,
-    ).count() >= 1
+    assert (
+        session.query(ChatMensaje)
+        .filter(
+            ChatMensaje.tenant_id == auth_prueba.contexto.tenant_id,
+            ChatMensaje.destinatario_cuenta_id == solicitante,
+        )
+        .count()
+        >= 1
+    )
