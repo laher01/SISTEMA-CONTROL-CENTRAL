@@ -13,6 +13,7 @@ from app.services.cms_landing_core import EstadoEditorial
 from app.services.cms_landing_store import (
     cambiar_estado,
     guardar_borrador,
+    publicacion_table,
     revision_table,
 )
 from app.services.cms_landing_validation import ContenidoCms
@@ -91,12 +92,7 @@ def contenido_cms_publico(session: SessionDep) -> dict[str, object]:
     if configuracion is None or configuracion.activa is not True:
         return {"disponible": False, "contenido": None}
     fila = (
-        session.execute(
-            select(revision_table).where(
-                revision_table.c.id == 1,
-                revision_table.c.estado == EstadoEditorial.PUBLICADO.value,
-            )
-        )
+        session.execute(select(publicacion_table).where(publicacion_table.c.id == 1))
         .mappings()
         .one_or_none()
     )

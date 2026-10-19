@@ -50,6 +50,16 @@ evento_table = Table(
     UniqueConstraint("version_nueva", name="uq_cms_landing_evento_version"),
 )
 
+publicacion_table = Table(
+    "cms_landing_publicacion",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("version_editorial", Integer, nullable=False),
+    Column("contenido", JSON, nullable=False),
+    Column("publicado_por", Uuid, ForeignKey("cuentas_acceso.id"), nullable=False),
+    Column("published_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+)
+
 
 def cambiar_estado(
     session: Session,
@@ -97,6 +107,31 @@ def cambiar_estado(
         session.rollback()
         raise ValueError("Conflicto concurrente de versión")
     try:
+        if destino == EstadoEditorial.PUBLICADO:
+            # Snapshot reemplazado atomica y exclusivamente al publicar.
+            sesion_publica = session.execute(
+                select(publicacion_table.c.id).where(publicacion_table.c.id == 1).with_for_update()
+            ).scalar_one_or_none()
+            if sesion_publica is None:
+                session.execute(
+                    publicacion_table.insert().values(
+                        id=1,
+                        version_editorial=nueva.version,
+                        contenido=dict(nueva.contenido),
+                        publicado_por=actor_id,
+                    )
+                )
+            else:
+                session.execute(
+                    publicacion_table.update()
+                    .where(publicacion_table.c.id == 1)
+                    .values(
+                        version_editorial=nueva.version,
+                        contenido=dict(nueva.contenido),
+                        publicado_por=actor_id,
+                        published_at=func.now(),
+                    )
+                )
         session.execute(
             evento_table.insert().values(
                 id=uuid.uuid4(),
