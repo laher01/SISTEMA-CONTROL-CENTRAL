@@ -3,6 +3,9 @@
 Los importes quedan como datos documentales; no se autoriza contabilización.
 """
 
+import uuid
+from dataclasses import replace
+
 from fastapi.testclient import TestClient
 
 
@@ -65,3 +68,30 @@ def test_expediente_manual_receptor_no_autorizado_admite_adjunto(client: TestCli
     assert repetido.status_code == 200, repetido.text
     assert repetido.json()["expediente"]["id"] == expediente_id
     assert repetido.json()["expediente"]["pendiente_aprobacion"] is True
+
+
+def test_expediente_pendiente_aislado_por_tenant(client: TestClient, auth_prueba: object) -> None:
+    original = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("pendiente-aislado.pdf", b"%PDF-1.7 contenido sintetico")},
+    )
+    assert original.status_code == 201, original.text
+    documento_id = original.json()["id"]
+    contexto = auth_prueba.contexto
+    auth_prueba.contexto = replace(contexto, tenant_id=uuid.uuid4())
+    try:
+        assert client.get(f"/api/v1/documentos/{documento_id}").status_code == 404
+        assert client.post(
+            f"/api/v1/documentos/{documento_id}/vincular",
+            json={"expediente_id": str(uuid.uuid4()), "tipo_documento": "VCHR"},
+        ).status_code == 404
+    finally:
+        auth_prueba.contexto = contexto
+
+
+def test_usuario_no_puede_autorizar_empresa(client: TestClient) -> None:
+    resultado = client.patch(
+        f"/api/v1/empresas/{uuid.uuid4()}",
+        json={"autorizada": True},
+    )
+    assert resultado.status_code == 403, resultado.text
