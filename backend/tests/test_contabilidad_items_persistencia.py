@@ -3,10 +3,10 @@
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from decimal import Decimal
 from threading import Barrier
 
 import pytest
-from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
