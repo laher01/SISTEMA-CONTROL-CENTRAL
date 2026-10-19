@@ -7,6 +7,7 @@ La revisión 0042 continúa la 0041 de main; verificar siempre Alembic en CI.
 """
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
 
 from alembic import op
 
@@ -33,7 +34,7 @@ def upgrade() -> None:
         sa.Column("solicitante_gestor_id", sa.Uuid(), sa.ForeignKey("gestores.id")),
         sa.Column("motivo", sa.String(500), nullable=False),
         sa.Column("estado", sa.String(20), nullable=False, server_default="PENDIENTE"),
-        sa.Column("notificado_a", sa.JSON(), nullable=False),
+        sa.Column("notificado_a", sa.JSON().with_variant(JSONB(), "postgresql"), nullable=False),
         sa.Column("aprobado_por_cuenta_id", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id")),
         sa.Column("decidido_at", sa.DateTime(timezone=True)),
         sa.Column("decision_motivo", sa.String(500)),
@@ -42,6 +43,11 @@ def upgrade() -> None:
         "ix_solicitudes_retiro_misd_tenant_estado",
         "solicitudes_retiro_misd",
         ["tenant_id", "estado"],
+    )
+    op.create_index(
+        "ix_solicitudes_retiro_misd_tenant_id",
+        "solicitudes_retiro_misd",
+        ["tenant_id"],
     )
     op.create_index(
         "ix_solicitudes_retiro_misd_expediente_id",
@@ -58,5 +64,6 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_solicitudes_retiro_misd_solicitante_cuenta_id")
     op.drop_index("ix_solicitudes_retiro_misd_expediente_id")
+    op.drop_index("ix_solicitudes_retiro_misd_tenant_id")
     op.drop_index("ix_solicitudes_retiro_misd_tenant_estado")
     op.drop_table("solicitudes_retiro_misd")
