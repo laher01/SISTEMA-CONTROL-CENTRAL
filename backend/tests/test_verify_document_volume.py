@@ -60,3 +60,18 @@ def test_rechaza_symlink_fuera_del_volumen(tmp_path: Path) -> None:
     (raiz / tenant).mkdir()
     (raiz / tenant / "enlace").symlink_to(archivo)
     assert MODULO.verificar(raiz, [[tenant, f"{tenant}/enlace", sha]]) == (0, 1)
+
+
+def test_rechaza_symlink_hacia_otro_tenant_del_mismo_volumen(tmp_path: Path) -> None:
+    origen_tenant = str(uuid4())
+    otro_tenant = str(uuid4())
+    contenido = b"privado otro tenant"
+    sha = hashlib.sha256(contenido).hexdigest()
+    original = tmp_path / otro_tenant / sha[:2] / sha
+    original.parent.mkdir(parents=True)
+    original.write_bytes(contenido)
+    acceso = tmp_path / origen_tenant / sha[:2] / sha
+    acceso.parent.mkdir(parents=True)
+    acceso.symlink_to(original)
+    ruta = f"{origen_tenant}/{sha[:2]}/{sha}"
+    assert MODULO.verificar(tmp_path, [[origen_tenant, ruta, sha]]) == (0, 1)
