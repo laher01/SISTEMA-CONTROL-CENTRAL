@@ -50,7 +50,7 @@ def respaldo(
             for ruta in sorted(origen.rglob("*")):
                 info = ruta.lstat()
                 if not (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)):
-                    raise ValueError("Enlaces y archivos especiales no admitidos")
+                    raise ValueError("Enlaces simbólicos y archivos especiales no admitidos")
                 entradas += 1
                 total += info.st_size if stat.S_ISREG(info.st_mode) else 0
                 if entradas > max_entradas or total > max_bytes:
