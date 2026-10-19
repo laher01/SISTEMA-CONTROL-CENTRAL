@@ -100,9 +100,5 @@ def test_error_de_auditoria_revierte_actualizacion(session: Session) -> None:
             rol="SUPERADMIN",
             actor_id=uuid4(),
         )
-    assert session.execute(
-        text("SELECT version FROM cms_landing_revision")
-    ).scalar_one() == 1
-    assert session.execute(
-        text("SELECT COUNT(*) FROM cms_landing_evento")
-    ).scalar_one() == 0
+    assert session.execute(text("SELECT version FROM cms_landing_revision")).scalar_one() == 1
+    assert session.execute(text("SELECT COUNT(*) FROM cms_landing_evento")).scalar_one() == 0
