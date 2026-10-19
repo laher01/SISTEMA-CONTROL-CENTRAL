@@ -1885,3 +1885,31 @@ def test_restauracion_integral_revierte_cambios_si_falla_actualizacion(
     assert client.get(f"/api/v1/expedientes/{exp_id}").status_code == 404
     assert client.get(f"/api/v1/documentos/{principal['id']}").status_code == 404
     assert client.post(f"/api/v1/expedientes/{exp_id}/restaurar").status_code == 200
+
+
+def test_restauracion_integral_concurrente_solo_una_operacion_activa(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    engine: Engine,
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    if engine.dialect.name != "postgresql":
+        pytest.skip("Prueba concurrente requiere bloqueos FOR UPDATE reales de PostgreSQL")
+
+    principal = subir(client, "exp-concurrente.xml", factura())
+    exp_id = principal["expediente_id"]
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/expedientes/{exp_id}").status_code == 204
+    barrera = Barrier(2)
+
+    def restaurar_simultaneamente() -> int:
+        barrera.wait(timeout=15)
+        return client.post(f"/api/v1/expedientes/{exp_id}/restaurar").status_code
+
+    with ThreadPoolExecutor(max_workers=2) as ejecutor:
+        futuros = [ejecutor.submit(restaurar_simultaneamente) for _ in range(2)]
+        estados = [futuro.result(timeout=30) for futuro in futuros]
+    assert sorted(estados) == [200, 409]
+    assert client.get(f"/api/v1/expedientes/{exp_id}").status_code == 200
