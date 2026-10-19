@@ -358,9 +358,10 @@ def ejecutar(
         .with_for_update()
     ).all()
     for documento in expediente.documentos:
-        if documento.deleted_at is None and motivo_bloqueo_voucher(
-            session, tenant_id, documento.id
-        ) is not None:
+        if (
+            documento.deleted_at is None
+            and motivo_bloqueo_voucher(session, tenant_id, documento.id) is not None
+        ):
             raise HTTPException(409, "Expediente contiene un voucher vinculado a un pago")
     marca = ahora()
     expediente.deleted_at = marca
