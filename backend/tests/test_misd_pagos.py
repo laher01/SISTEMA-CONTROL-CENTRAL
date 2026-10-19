@@ -3,6 +3,8 @@
 from datetime import date
 from decimal import Decimal
 
+import pytest
+from sqlalchemy import Engine
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -245,3 +247,92 @@ def test_voucher_de_otro_periodo_bloquea_retiro_integral_misd(
     auth_prueba.como_admin()
     assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 409
     assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 200
+
+@pytest.mark.parametrize("primer_evento", ["pago", "retirada"])
+def test_bloqueo_compartido_serialize_pago_y_retirada_postgresql(
+    client: TestClient,
+    engine: Engine,
+    primer_evento: str,
+) -> None:
+    """Dos transacciones reales prueban el contrato en ambos órdenes."""
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    from sqlalchemy import select
+    from sqlalchemy.orm import sessionmaker
+
+    from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
+    from app.services.misd_pagos import motivo_bloqueo_liquidacion
+
+    if engine.dialect.name != "postgresql":
+        pytest.skip("La prueba requiere advisory locks transaccionales PostgreSQL")
+    respuesta = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("contrato-carrera.xml", factura())},
+    )
+    assert respuesta.status_code == 201, respuesta.text
+    expediente_id = respuesta.json()["expediente_id"]
+    fabrica = sessionmaker(engine, expire_on_commit=False)
+    listo = Event()
+    liberar = Event()
+
+    def primero() -> None:
+        with fabrica() as sesion:
+            exp = sesion.get(Expediente, expediente_id)
+            assert exp is not None
+            bloquear_tenant_financiero(sesion, exp.tenant_id)
+            if primer_evento == "pago":
+                sesion.add(
+                    PagoERP(
+                        tenant_id=exp.tenant_id,
+                        usuario_id=exp.usuario_id,
+                        periodo_desde=date(2026, 1, 1),
+                        periodo_hasta=date(2026, 12, 31),
+                        moneda=exp.moneda,
+                        produccion_total=Decimal("100"),
+                        porcentaje=Decimal("10"),
+                        bruto=Decimal("10"),
+                        saldo=Decimal("10"),
+                        estado="PROGRAMADO",
+                    )
+                )
+            else:
+                exp.deleted_at = exp.created_at
+            sesion.flush()
+            listo.set()
+            assert liberar.wait(timeout=30)
+            sesion.commit()
+
+    def segundo() -> str:
+        assert listo.wait(timeout=30)
+        with fabrica() as sesion:
+            exp = sesion.get(Expediente, expediente_id)
+            assert exp is not None
+            bloquear_tenant_financiero(sesion, exp.tenant_id)
+            sesion.refresh(exp)
+            if primer_evento == "pago":
+                resultado = motivo_bloqueo_liquidacion(sesion, exp)
+                assert resultado is not None
+                return "RETIRO_BLOQUEADO"
+            visibles = list(
+                sesion.scalars(
+                    select(Expediente.id).where(
+                        Expediente.tenant_id == exp.tenant_id,
+                        Expediente.id == exp.id,
+                        Expediente.deleted_at.is_(None),
+                    )
+                )
+            )
+            assert not visibles
+            return "PRODUCCION_RETIRADA"
+
+    with ThreadPoolExecutor(max_workers=2) as ejecutor:
+        futuro_primero = ejecutor.submit(primero)
+        futuro_segundo = ejecutor.submit(segundo)
+        assert listo.wait(timeout=30)
+        liberar.set()
+        resultado = futuro_segundo.result(timeout=45)
+        futuro_primero.result(timeout=45)
+    assert resultado == (
+        "RETIRO_BLOQUEADO" if primer_evento == "pago" else "PRODUCCION_RETIRADA"
+    )
