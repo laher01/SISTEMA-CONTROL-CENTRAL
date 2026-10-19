@@ -181,8 +181,13 @@ def test_lote_continua_si_misd_retiro_un_candidato(
     monkeypatch.setattr(documentos_routes, "_automatizacion_ya_evaluada", lambda _d: False)
     monkeypatch.setattr(documentos_routes, "_procesar_y_aplicar", procesar)
     resultado = documentos_routes.procesar_pendientes(
-        SesionLote(), object(), object(), date.today(), uuid.uuid4(),
-        object(), limit=50,
+        SesionLote(),
+        object(),
+        object(),
+        date.today(),
+        uuid.uuid4(),
+        object(),
+        limit=50,
     )
     assert procesados == [retirado.id, siguiente.id]
     assert resultado.relacionados == 0
@@ -216,7 +221,12 @@ def test_lote_no_silencia_404_de_documento_vigente(
     monkeypatch.setattr(documentos_routes, "_procesar_y_aplicar", fallo)
     with pytest.raises(HTTPException) as error:
         documentos_routes.procesar_pendientes(
-            SesionLote(), object(), object(), date.today(), uuid.uuid4(),
-            object(), limit=50,
+            SesionLote(),
+            object(),
+            object(),
+            date.today(),
+            uuid.uuid4(),
+            object(),
+            limit=50,
         )
     assert error.value.status_code == 404
