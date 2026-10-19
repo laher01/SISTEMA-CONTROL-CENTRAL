@@ -210,12 +210,19 @@ def test_nexus_gerente_y_global_solo_cuentan_expedientes_permitidos(
     assert gerente_id is not None
     emisor = Empresa(tenant_id=tenant, ruc="20111111111", razon_social="Emisor de prueba")
     receptor = Empresa(tenant_id=tenant, ruc="20222222222", razon_social="Receptor de prueba")
-    session.add_all([emisor, receptor])
+    otro_gerente = Miembro(
+        tenant_id=tenant,
+        codigo="GRTE-AJENO-N1",
+        nombre="Gerente de otra cartera",
+        rol="GERENTE",
+        activo=True,
+    )
+    session.add_all([emisor, receptor, otro_gerente])
     session.flush()
     for correlativo, gerente in (
         ("501", gerente_id),
         ("502", None),
-        ("503", uuid.uuid4()),
+        ("503", otro_gerente.id),
     ):
         expediente = Expediente(
             tenant_id=tenant,
