@@ -262,6 +262,7 @@ class ExpedienteOut(Orm):
     gestor_codigo: str | None = None
     estado: EstadoExpediente
     pendiente_aprobacion: bool
+    puede_eliminar: bool = False
     fecha_carga: datetime | None = None
     created_at: datetime
 
