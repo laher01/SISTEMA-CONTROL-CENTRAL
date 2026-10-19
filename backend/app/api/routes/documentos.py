@@ -1421,6 +1421,9 @@ def _procesar_y_aplicar(
             )
         aplicar_perfiles_aprendidos(session, documento, procesamiento)
         guardar_procesamiento(session, documento, procesamiento)
+    # Conservar los cambios OCR pendientes antes de refrescar la fila: refresh
+    # descarta atributos no volcados y provocaba pérdida de la extracción.
+    session.flush()
     # Si MISD retiró el documento durante la extracción, no aplicar vínculos.
     # No sustituye un protocolo transaccional compartido entre OCR y MISD.
     session.refresh(documento)
