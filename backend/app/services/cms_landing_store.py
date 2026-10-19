@@ -6,7 +6,19 @@ y validación editorial antes de aceptar contenido.
 
 import uuid
 
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, Table, UniqueConstraint, Uuid, func, select
+from sqlalchemy import (
+    JSON,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    UniqueConstraint,
+    Uuid,
+    func,
+    select,
+)
 from sqlalchemy.orm import Session
 
 from app.models import Base
