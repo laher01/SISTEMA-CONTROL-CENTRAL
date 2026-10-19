@@ -75,3 +75,38 @@ def test_rechaza_symlink_hacia_otro_tenant_del_mismo_volumen(tmp_path: Path) -> 
     acceso.symlink_to(original)
     ruta = f"{origen_tenant}/{sha[:2]}/{sha}"
     assert MODULO.verificar(tmp_path, [[origen_tenant, ruta, sha]]) == (0, 1)
+
+
+def test_manifiesto_incompleto_falla_aunque_archivo_sea_valido(tmp_path: Path) -> None:
+    tenant = str(uuid4())
+    contenido = b"documento"
+    sha = hashlib.sha256(contenido).hexdigest()
+    relativa = f"{tenant}/{sha}"
+    archivo = tmp_path / relativa
+    archivo.parent.mkdir()
+    archivo.write_bytes(contenido)
+    assert MODULO.verificar(tmp_path, [[tenant, relativa, sha]], esperados=2)[1] > 0
+
+
+def test_manifest_vacio_no_cubre_documentos_esperados(tmp_path: Path) -> None:
+    assert MODULO.verificar(tmp_path, [], esperados=1) == (0, 1)
+
+
+def test_manifiesto_cero_valido_si_base_tambien_tiene_cero(tmp_path: Path) -> None:
+    assert MODULO.verificar(tmp_path, [], esperados=0) == (0, 0)
+
+
+def test_detecta_registros_duplicados(tmp_path: Path) -> None:
+    tenant = str(uuid4())
+    contenido = b"duplicado"
+    sha = hashlib.sha256(contenido).hexdigest()
+    relativa = f"{tenant}/{sha}"
+    archivo = tmp_path / relativa
+    archivo.parent.mkdir()
+    archivo.write_bytes(contenido)
+    fila = [tenant, relativa, sha]
+    assert MODULO.verificar(tmp_path, [fila, fila], esperados=2) == (1, 1)
+
+
+def test_cantidad_manifest_superior_a_base_falla(tmp_path: Path) -> None:
+    assert MODULO.verificar(tmp_path, [["x", "x/doc", "0" * 64]], esperados=0) == (0, 1)
