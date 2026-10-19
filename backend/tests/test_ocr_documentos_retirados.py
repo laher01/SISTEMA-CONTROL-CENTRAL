@@ -2,6 +2,8 @@
 
 import uuid
 from datetime import UTC, date, datetime
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -36,7 +38,7 @@ def test_ocr_no_reprocesa_documento_retirado_ni_usa_cache(
 
 
 def test_ocr_revalida_retirada_durante_extraccion(
-    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     respuesta = client.post(
         "/api/v1/documentos",
@@ -61,6 +63,10 @@ def test_ocr_revalida_retirada_durante_extraccion(
     monkeypatch.setattr(documentos_routes, "aplicar_perfiles_aprendidos", sin_efecto)
     monkeypatch.setattr(documentos_routes, "guardar_procesamiento", sin_efecto)
     monkeypatch.setattr(documentos_routes, "aplicar_automaticamente", vinculacion_prohibida)
+    original = tmp_path / "original.pdf"
+    original.write_bytes(b"%PDF-1.7 contenido de carrera")
+    almacen = SimpleNamespace(ruta_absoluta=lambda _: original)
+    settings = SimpleNamespace(storage_dir=tmp_path, max_extracted_chars=1000, max_ocr_pdf_pages=2)
     with pytest.raises(HTTPException) as error:
-        documentos_routes._procesar_y_aplicar(session, object(), object(), date.today(), documento)
+        documentos_routes._procesar_y_aplicar(session, settings, almacen, date.today(), documento)
     assert error.value.status_code == 404
