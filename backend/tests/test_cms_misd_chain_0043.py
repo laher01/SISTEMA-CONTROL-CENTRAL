@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import pytest
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
@@ -21,8 +22,6 @@ def test_un_solo_head_0043_cms_despues_de_misd() -> None:
 
 def test_postgresql_actualiza_0042_a_0043_sin_alterar_estado_landing(engine) -> None:
     if engine.dialect.name != "postgresql":
-        import pytest
-
         pytest.skip("Requiere PostgreSQL real")
     config = Config(Path(__file__).resolve().parents[1] / "alembic.ini")
     config.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
@@ -39,7 +38,10 @@ def test_postgresql_actualiza_0042_a_0043_sin_alterar_estado_landing(engine) -> 
         assert connection.execute(
             text("SELECT activa, version FROM configuracion_landing_global WHERE id = 1")
         ).one() == (False, 7)
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == "0043"
+        assert (
+            connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+            == "0043"
+        )
     assert {"solicitudes_retiro_misd", "cms_landing_revision", "cms_landing_evento"}.issubset(
         inspect(engine).get_table_names()
     )
