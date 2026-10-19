@@ -23,6 +23,7 @@ def test_solicitud_aprobacion_no_borra_expediente(
     )
     assert creada.status_code == 201, creada.text
     solicitud_id = creada.json()["id"]
+    contexto_solicitante = auth_prueba.contexto
     assert creada.json()["estado"] == "PENDIENTE"
     duplicada = client.post(
         "/api/v1/misd/solicitudes",
@@ -81,6 +82,12 @@ def test_solicitud_aprobacion_no_borra_expediente(
         json={"aprobar": True, "motivo": "Segunda resolución no permitida"},
     )
     assert repeticion.status_code == 409
+    auth_prueba.contexto = contexto_solicitante
+    ejecutada = client.post(f"/api/v1/misd/solicitudes/{solicitud_id}/ejecutar")
+    assert ejecutada.status_code == 200, ejecutada.text
+    assert ejecutada.json()["estado"] == "EJECUTADA"
+    assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 404
+    assert client.post(f"/api/v1/misd/solicitudes/{solicitud_id}/ejecutar").status_code == 409
 
 
 def test_secretaria_no_puede_solicitar_retiro(client: TestClient, auth_prueba: AuthPrueba) -> None:
