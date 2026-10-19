@@ -176,3 +176,20 @@ def test_nexus_documentos_carteras_gestor_responsable_y_gerente(
     assert gerencia.status_code == 200, gerencia.text
     # No se asignó ninguna de las carteras de prueba a esta gerencia.
     assert gerencia.json()["datos"]["documentos_por_estado"] == {}
+
+
+def test_nexus_gerente_global_no_ve_documentos_huerfanos(
+    client: TestClient, session, auth_prueba
+) -> None:
+    """GRTEGLOBAL conserva expedientes históricos, no documentos sin expediente."""
+    tenant = auth_prueba.contexto.tenant_id
+    _documento_cartera(session, tenant, auth_prueba.contexto.usuario_id, None, "huerfano")
+    session.commit()
+    auth_prueba.como_gerente()
+    auth_prueba.contexto = replace(auth_prueba.contexto, codigo="GRTEGLOBAL")
+    respuesta = client.post(
+        "/api/v1/nexus/chat",
+        json={"mensaje": "¿Cómo van mis documentos?", "ruta": "/documentos"},
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["datos"]["documentos_por_estado"] == {}
