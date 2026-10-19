@@ -21,7 +21,8 @@ def extraer_factura_estacion(texto: str) -> dict[str, tuple[str, str]]:
     normal = texto.upper()
     escorpio = "FACTURACION.JADAL.PE" in normal and "FACTURA" in normal
     jabsa = "SERVICENTRO JABSA" in normal and "FACTURA" in normal
-    if not (escorpio or jabsa):
+    bizlinks = "ESTACION DE SERVICIOS SAN JOSE SAC" in normal and "BIZLINKS" in normal and "FACTURA" in normal
+    if not (escorpio or jabsa or bizlinks):
         return {}
     campos: dict[str, tuple[str, str]] = {}
     compacto = " ".join(texto.split())
@@ -33,6 +34,35 @@ def extraer_factura_estacion(texto: str) -> dict[str, tuple[str, str]]:
     if numero:
         campos["serie"] = (numero.group(1).upper(), numero.group(0))
         campos["correlativo"] = (numero.group(2), numero.group(0))
+
+    if bizlinks:
+        # pypdf extrae las columnas en orden inverso: valor ... etiqueta.
+        # Exigir emisor y comprobante inequívocos, sin deducirlos del nombre.
+        rucs = re.findall(r"(?<!\\d)\\d{11}(?!\\d)", texto)
+        if "20175642341" in rucs:
+            campos["ruc_emisor"] = ("20175642341", "R.U.C. 20175642341")
+        bloque_cliente = texto.split("Cliente:", 1)[-1].split("Dirección:", 1)[0]
+        receptores = [r for r in re.findall(r"(?<!\\d)\\d{11}(?!\\d)", bloque_cliente) if r != "20175642341"]
+        if len(set(receptores)) == 1:
+            campos["ruc_receptor"] = (receptores[0], bloque_cliente[-120:])
+        fecha_invertida = re.search(
+            r"(?m)^\\s*(\\d{2})/(\\d{2})/(20\\d{2})[^\\n]*Fecha Emisi[oó]n:",
+            texto, re.I,
+        )
+        if fecha_invertida:
+            campos["fecha_emision"] = (
+                f"{fecha_invertida.group(3)}-{fecha_invertida.group(2)}-{fecha_invertida.group(1)}",
+                fecha_invertida.group(0),
+            )
+        total_bizlinks = re.search(
+            r"(?m)^\\s*Importe Total\\s+([0-9][0-9,.]*)\\s*S/", texto, re.I
+        )
+        if total_bizlinks:
+            total = _monto(total_bizlinks.group(1))
+            if total is not None:
+                campos["importe_total"] = (str(total), total_bizlinks.group(0))
+                campos["moneda"] = ("PEN", total_bizlinks.group(0))
+        return campos
 
     if escorpio:
         emisor = re.search(r"R\.?U\.?C\.?\s*N[°º]?\s*(\d{11})", texto, re.I)
