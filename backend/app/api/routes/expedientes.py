@@ -44,7 +44,7 @@ from app.services.expedientes import (
 from app.services.ingesta import crear_expediente
 from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.pdf_consolidado import pdf_con_documentos
-from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
+from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado, requiere_autorizacion_administrativa
 
 NUMERO_RE = re.compile(r"^([a-z0-9]{4})-0*(\d+)$")
 NUMERO_RHE_RE = re.compile(r"^rhe-([a-z0-9]{4})-0*(\d+)$")
@@ -952,6 +952,12 @@ def eliminar(
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "No tiene permiso para eliminar registros",
+        )
+
+    if requiere_autorizacion_administrativa(auth.rol, expediente.receptor.autorizada):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "El cliente está autorizado: debe solicitar aprobación a ADMINISTRACIÓN",
         )
 
     marca_eliminacion = ahora()
