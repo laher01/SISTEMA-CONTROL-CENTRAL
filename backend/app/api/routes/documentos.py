@@ -1603,6 +1603,38 @@ def crear_expediente_asistido(
         except ComprobanteYaRegistrado as exc:
             session.rollback()
             raise _comprobante_duplicado(session, auth, exc.expediente_id) from exc
+    # Vinculación conservadora de documentos ya extraídos y sin expediente.
+    # Solo si existe una única coincidencia, con referencia y ambos RUC,
+    # dentro del mismo tenant, usuario y ámbito gestor.
+    if creado:
+        pendientes = session.scalars(
+            select(Documento)
+            .where(
+                Documento.tenant_id == tenant_id,
+                Documento.usuario_id == documento.usuario_id,
+                Documento.gestor_id == documento.gestor_id,
+                Documento.expediente_id.is_(None),
+                Documento.deleted_at.is_(None),
+                Documento.tipo_documento.is_not(None),
+                Documento.tipo_documento != TipoDocumento.FACT,
+            )
+            .order_by(Documento.created_at.desc())
+            .limit(100)
+        )
+        for pendiente in pendientes:
+            sugerencias = sugerir_relaciones(session, pendiente)
+            if len(sugerencias) != 1 or sugerencias[0].expediente.id != expediente.id:
+                continue
+            evidencias = sugerencias[0].evidencias
+            if not (
+                any(item.startswith("Comprobante ") for item in evidencias)
+                and any(item.startswith("RUC emisor ") for item in evidencias)
+                and any(item.startswith("RUC receptor ") for item in evidencias)
+            ):
+                continue
+            vincular_documento(
+                session, settings, hoy, pendiente, expediente.id, pendiente.tipo_documento
+            )
     session.commit()
     return ExpedienteAsistidoOut(
         expediente=ExpedienteOut.model_validate(expediente),
