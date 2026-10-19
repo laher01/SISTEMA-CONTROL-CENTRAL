@@ -1633,7 +1633,12 @@ def crear_expediente_asistido(
             ):
                 continue
             vincular_documento(
-                session, settings, hoy, pendiente, expediente.id, TipoDocumento(pendiente.tipo_documento)
+                session,
+                settings,
+                hoy,
+                pendiente,
+                expediente.id,
+                TipoDocumento(pendiente.tipo_documento),
             )
     session.commit()
     return ExpedienteAsistidoOut(
