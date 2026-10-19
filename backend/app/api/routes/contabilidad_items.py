@@ -358,6 +358,8 @@ def exportar_csv(
         emisor_id=emisor_id,
         receptor_id=receptor_id,
         limite=501,
+        buscar=buscar,
+        categoria=categoria,
     )
     if len(filas) > 500:
         raise HTTPException(413, "La exportación supera 500 grupos; reduzca el período")
