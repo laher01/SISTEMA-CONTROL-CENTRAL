@@ -49,16 +49,16 @@ def test_conciliacion_excludes_other_tenant_and_emisor_receptor(
     own = client.get("/api/v1/contabilidad-items/conciliacion")
     assert own.status_code == 200, own.text
     assert len(own.json()) == 1
-    assert Decimal(own.json()[0]["total"]) == Decimal("120.00")
+    assert Decimal(own.json()[0]["importe_total"]) == Decimal("120.00")
 
     other_context = replace(auth_prueba.contexto, tenant_id=other_tenant.id)
     auth_prueba.contexto = other_context
     other = client.get("/api/v1/contabilidad-items/conciliacion")
     assert other.status_code == 200, other.text
     assert len(other.json()) == 1
-    assert Decimal(other.json()[0]["total"]) == Decimal("900.00")
+    assert Decimal(other.json()[0]["importe_total"]) == Decimal("900.00")
 
     auth_prueba.contexto = replace(other_context, tenant_id=own_tenant)
     own_again = client.get("/api/v1/contabilidad-items/conciliacion")
     assert own_again.status_code == 200, own_again.text
-    assert Decimal(own_again.json()[0]["total"]) == Decimal("120.00")
+    assert Decimal(own_again.json()[0]["importe_total"]) == Decimal("120.00")
