@@ -27,6 +27,11 @@ describe("validación editorial de landing", () => {
       descripcion: "<script>contenido</script>",
     });
     expect(errores.some((error) => error.campo === "descripcion")).toBe(true);
+    const controles = validarContenidoLanding({
+      ...contenidoLandingInicial,
+      descripcion: "texto" + String.fromCharCode(1),
+    });
+    expect(controles.some((error) => error.campo === "descripcion")).toBe(true);
   });
 
   it("detecta identificadores duplicados entre beneficios", () => {
