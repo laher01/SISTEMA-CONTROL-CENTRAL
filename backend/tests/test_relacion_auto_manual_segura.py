@@ -1,4 +1,5 @@
 """Vinculación automática prudente y alternativa manual de pendientes."""
+
 import uuid
 
 from fastapi.testclient import TestClient
