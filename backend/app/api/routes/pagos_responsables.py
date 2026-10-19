@@ -24,6 +24,7 @@ from app.models import (
     PagoResponsableERP,
     PedidoGerencia,
 )
+from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
 from app.services import auditoria
 
 router = APIRouter(prefix="/pagos-responsables", tags=["pagos-responsables"])
@@ -547,6 +548,7 @@ def programar(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> dict[str, str]:
+    bloquear_tenant_financiero(session, tenant_id)
     if auth.rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.GERENTE):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "No puede programar pagos a Responsables")
     _responsable(session, tenant_id, datos.responsable_id)
