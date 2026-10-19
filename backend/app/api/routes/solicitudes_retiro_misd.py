@@ -70,6 +70,46 @@ def _es_aprobador(
     return False
 
 
+
+def _aprobacion_sigue_vigente(
+    solicitud: SolicitudRetiroMISD, expediente: Expediente, session: SessionDep
+) -> bool:
+    """Revalida que la cuenta aprobadora conserve su autoridad jerárquica."""
+    if solicitud.aprobado_por_cuenta_id is None:
+        return False
+    cuenta = session.get(CuentaAcceso, solicitud.aprobado_por_cuenta_id)
+    if (
+        cuenta is None
+        or cuenta.tenant_id != expediente.tenant_id
+        or not cuenta.activo
+        or cuenta.deleted_at is not None
+    ):
+        return False
+    miembro = session.get(Miembro, cuenta.miembro_id) if cuenta.miembro_id else None
+    if (
+        miembro is None
+        or miembro.tenant_id != expediente.tenant_id
+        or miembro.deleted_at is not None
+        or not miembro.activo
+    ):
+        return False
+    if miembro.rol == "ADMINISTRADOR":
+        return True
+    usuario = session.get(Miembro, expediente.usuario_id) if expediente.usuario_id else None
+    if usuario is None or usuario.tenant_id != expediente.tenant_id:
+        return False
+    if miembro.rol == "RESPONSABLE":
+        return (
+            solicitud.solicitante_rol in ("USUARIO", "GESTOR")
+            and usuario.responsable_id == miembro.id
+        )
+    return (
+        miembro.rol == "USUARIO"
+        and solicitud.solicitante_rol == "GESTOR"
+        and usuario.id == miembro.id
+    )
+
+
 def _notificar(
     session: SessionDep,
     tenant_id: uuid.UUID,
@@ -346,8 +386,10 @@ def ejecutar(
         raise HTTPException(409, "Se requiere aprobación jerárquica")
     if solicitud.estado not in ("PENDIENTE", "APROBADA"):
         raise HTTPException(409, "Solicitud en estado incompatible")
-    if solicitud.estado == "APROBADA" and solicitud.aprobado_por_cuenta_id is None:
-        raise HTTPException(409, "Aprobación sin cuenta responsable")
+    if solicitud.estado == "APROBADA" and not _aprobacion_sigue_vigente(
+        solicitud, expediente, session
+    ):
+        raise HTTPException(409, "La aprobación jerárquica ya no es válida")
 
     # Bloquear documentos para serializar retiradas simultáneas del mismo expediente.
     from app.models import Documento
