@@ -69,6 +69,7 @@ from app.services.ingesta import (
 from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.lotes_imagenes import MAX_IMAGENES_POR_SUBLOTE
 from app.services.metadatos_documento import metadatos_individuales
+from app.services.misd_pagos import motivo_bloqueo_liquidacion
 from app.services.permisos import (
     PERMISO_ELIMINAR_REGISTROS,
     permiso_habilitado,
@@ -1347,6 +1348,13 @@ def eliminar_documento(
             status.HTTP_409_CONFLICT,
             "El cliente está autorizado: debe solicitar aprobación a ADMINISTRACIÓN",
         )
+    if expediente is not None:
+        bloqueo = motivo_bloqueo_liquidacion(session, expediente)
+        if bloqueo is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"Eliminación bloqueada: {bloqueo}",
+            )
     documento.deleted_at = ahora()
     auditoria.registrar(
         session,
