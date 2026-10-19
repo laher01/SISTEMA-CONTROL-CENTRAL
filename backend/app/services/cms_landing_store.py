@@ -49,9 +49,13 @@ def cambiar_estado(
     if not isinstance(actor_id, uuid.UUID):
         raise PermissionError("Identidad editorial requerida")
 
-    actual = session.execute(
-        select(revision_table).where(revision_table.c.id == 1).with_for_update()
-    ).mappings().one_or_none()
+    actual = (
+        session.execute(
+            select(revision_table).where(revision_table.c.id == 1).with_for_update()
+        )
+        .mappings()
+        .one_or_none()
+    )
     if actual is None:
         raise LookupError("Inicialice un borrador aprobado antes de transicionar")
 
@@ -71,7 +75,11 @@ def cambiar_estado(
         revision_table.update()
         .where(revision_table.c.id == 1)
         .where(revision_table.c.version == version_esperada)
-        .values(version=nueva.version, estado=nueva.estado.value, actualizado_por=actor_id)
+        .values(
+            version=nueva.version,
+            estado=nueva.estado.value,
+            actualizado_por=actor_id,
+        )
     )
     if resultado.rowcount != 1:
         session.rollback()
