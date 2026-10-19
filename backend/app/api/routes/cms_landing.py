@@ -14,6 +14,7 @@ from app.services.cms_landing_store import (
     cambiar_estado,
     guardar_borrador,
     revision_table,
+    publicacion_table,
 )
 from app.services.cms_landing_validation import ContenidoCms
 
@@ -92,10 +93,7 @@ def contenido_cms_publico(session: SessionDep) -> dict[str, object]:
         return {"disponible": False, "contenido": None}
     fila = (
         session.execute(
-            select(revision_table).where(
-                revision_table.c.id == 1,
-                revision_table.c.estado == EstadoEditorial.PUBLICADO.value,
-            )
+            select(publicacion_table).where(publicacion_table.c.id == 1)
         )
         .mappings()
         .one_or_none()
