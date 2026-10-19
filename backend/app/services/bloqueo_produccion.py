@@ -18,8 +18,6 @@ def bloquear_tenant_para_produccion(session: Session, tenant_id: uuid.UUID) -> N
     El bloqueo vive hasta COMMIT o ROLLBACK. SQLite no implementa FOR UPDATE:
     los ensayos de concurrencia deben ejecutarse con PostgreSQL.
     """
-    encontrado = session.scalar(
-        select(Tenant.id).where(Tenant.id == tenant_id).with_for_update()
-    )
+    encontrado = session.scalar(select(Tenant.id).where(Tenant.id == tenant_id).with_for_update())
     if encontrado is None:
         raise ValueError("Tenant inexistente para bloqueo transaccional")
