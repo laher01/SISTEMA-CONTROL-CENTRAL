@@ -1,32 +1,54 @@
 # Contrato de bloqueo compartido — MISD, Rol Responsable y Gestores
 
-Fecha: 19/10/2026. Estado: **propuesta técnica para revisión de responsables**, no implementación en rutas de pagos.
+Fecha inicial: 19/10/2026. Revisión de correspondencia código/documento: 19/10/2026.
 
-## Problema verificado
+## Historial y alcance
 
-En `solicitudes_retiro_misd.ejecutar`, MISD toma `FOR UPDATE` del expediente y revisa pagos. En `responsable.programar_pago_usuario`, el cálculo de producción y la creación de `PagoERP` no toman el mismo bloqueo del expediente. El sistema puede retirar una producción mientras otra transacción computa o liquida esa producción. `motivo_bloqueo_liquidacion` consulta tres tipos de pago, pero una consulta sola no serializa inserciones concurrentes.
+La propuesta inicial de este documento planteaba `SELECT ... FOR UPDATE` sobre la fila `Tenant` en todos los consumidores. **Esa propuesta no describe el mecanismo implementado en el HEAD del PR #292**. Se conserva aquí como antecedente, no como instrucción vigente. El PR #336 (aún no integrado) modifica `bloqueo_produccion.py` para delegar en el bloqueo financiero común; no se debe describir como integrado antes de su fusión y comprobación.
 
-## Protocolo propuesto
+## Contrato implementado actualmente en PR #292
 
-**Clave:** tenant UUID. **Lock transaccional PostgreSQL:** tomar primero el mismo bloqueo de fila de `Tenant` mediante `SELECT id FROM tenants WHERE id=:tenant_id FOR UPDATE` en todos los caminos que cambien producción elegible, liquiden producción o retiren expedientes. No bloquear con clave de expediente únicamente, porque la liquidación calcula agregados por usuario, gestor, responsable, período y moneda. El bloqueo tenant-wide simplifica el orden y prioriza seguridad sobre concurrencia.
+- Identificador de aislamiento: UUID de tenant, derivado de la sesión y el contexto autorizado.
+- Primitiva PostgreSQL: `pg_advisory_xact_lock(hashtextextended(:clave, 0))`, con `clave = "fact-central:misd-liquidacion:" + tenant_id`. Está definida en `backend/app/services/bloqueo_financiero_misd.py`.
+- Propiedad: **transaccional**, retenida hasta COMMIT o ROLLBACK; todas las rutas incompatibles deben usar la misma clave dentro de la misma transacción.
+- En SQLite la función no adquiere un advisory lock PostgreSQL: las pruebas de exclusión mutua reales exigen PostgreSQL y dos conexiones.
+- Consultar liquidaciones con `motivo_bloqueo_liquidacion` no sustituye la serialización; tampoco basta `FOR UPDATE` de una fila de expediente o pago distinto.
 
-**Orden obligatorio:** (1) validar contexto tenant y autorización inicial; (2) adquirir fila `Tenant` una sola vez, antes de cualquier lectura de elegibilidad; (3) volver a leer expedientes/documentos/pagos activos, validar límites y referencias; (4) adquirir otros locks por ID ascendente si son necesarios; (5) calcular/actualizar/registrar auditoría; (6) confirmar o revertir la misma transacción. Nunca liberar lock antes del `commit`.
+### Orden requerido para cada ruta de mutación
 
-**Consumidores obligatorios:**
-- MISD: `DELETE /expedientes/{id}`, `DELETE /documentos/{id}`, `POST /documentos/retirar-lote` y `POST /misd/solicitudes/{id}/ejecutar`.
-- Liquidaciones: `responsable.programar_pago_usuario`, rutas que creen `PagoResponsableERP`, `PagoGestor` y recálculos/liquidaciones que dependan de documentos activos.
-- Documentar las rutas de ajustes posteriores que alteren producción o pagos.
+1. Validar contexto de tenant y autorización inicial.
+2. Adquirir `bloquear_tenant_financiero(session, tenant_id)` **antes** de consultar producción elegible, pagos, documentos activos o referencias cuya validez dependa de la concurrencia.
+3. Reconsultar los datos de elegibilidad ya bajo el bloqueo y adquirir bloqueos específicos en orden estable cuando corresponda.
+4. Validar permisos y relaciones vigentes; registrar retiro, liquidación y auditoría.
+5. Realizar COMMIT o ROLLBACK de la **misma transacción**.
 
-**No basta usar** `FOR UPDATE` en `PagoERP` inexistente, `Expediente` local o la mera lectura de `motivo_bloqueo_liquidacion`. El lock debe ser compartido y previo a las consultas.
+### Evidencia inspeccionada, no cobertura certificada
 
-## Plan de pruebas para aceptación conjunta
+En el HEAD `c2c686011e44831bb6487263c3e723e9e171097d` de PR #292 se encontró uso de `bloquear_tenant_financiero` en:
 
-1. PostgreSQL real con dos conexiones: A inicia retiro y retiene lock; B intenta programar liquidación, espera; tras commit A, B lee solo producción activa y nunca paga producción retirada.
-2. Invertir el orden: B bloquea/crea `PagoERP` y confirma; A reevalúa bajo el lock y rechaza retiro con HTTP 409 sin cambiar los originales.
-3. Repetir para `PagoGestor` y `PagoResponsableERP`, varios períodos, monedas, tenants y vouchers vinculados.
-4. Validar rollback, timeout de lock, orden uniforme de bloqueos y evitar deadlocks; comprobar todas las entradas directas, por lote y con autorización MISD.
-5. Probar `backend` y `roles-real-integration` en GitHub Actions, además de regresión de migraciones. Ninguna operación sobre VPS.
+- `backend/app/api/routes/responsable.py` (programación de pagos de usuario);
+- `backend/app/api/routes/pagos_responsables.py` (pagos a responsables);
+- `backend/app/api/routes/pagos_gestores.py` (pagos a gestores);
+- `backend/app/api/routes/expedientes.py` (retirada de expedientes);
+- `backend/app/api/routes/documentos.py` (retirada documental).
 
-## Coordinación requerida
+El flujo `backend/app/api/routes/solicitudes_retiro_misd.py` también importa y utiliza el mismo bloqueo. **Presencia del llamado no certifica** que todos los caminos de lote/retirada directa/pagos lo obtengan antes de leer elegibilidad; requiere revisión y pruebas de carreras completas. La migración financiera y los controles fiscales no pueden declararse seguros solo por resultados unitarios.
 
-Los responsables de **Rol Responsable**, **Gestores** y **MISD** deben acordar el contrato antes de editar sus rutas compartidas. La rama del PR #292 no debe sobrescribir implementaciones paralelas. Mantener DRAFT y NO integrar ni desplegar mientras el contrato no se adopte en todos los consumidores y se verifique con PostgreSQL.
+## Corrección aislada del PR #336, todavía pendiente
+
+El PR #336, HEAD `9672152de10415c23e5eac053fb7445fe8271ecc`, propone que `bloquear_tenant_para_produccion` sea alias de `bloquear_tenant_financiero` y añade prueba PostgreSQL de exclusión bidireccional para ambos nombres; su CI previo es 4/4 exitoso. La rama base #292 contiene la versión anterior. **No asumir convergencia completa de consumidores hasta integrar #336, volver a ejecutar CI y revisar rutas HTTP reales.**
+
+## Pruebas necesarias antes de integración a main
+
+1. Dos sesiones PostgreSQL: retirada retiene lock; pago espera y reevalúa para no liquidar producción ya retirada.
+2. Orden inverso: pago confirma primero; retirada bajo lock reevalúa y rechaza con HTTP 409 cuando corresponda.
+3. Repetir para `PagoERP`, `PagoGestor`, `PagoResponsableERP`, retiro individual/por lote y ejecución autorizada de solicitud MISD.
+4. Aislamiento entre tenants, rollback, errores de integridad, cambios de período/moneda y tiempo de espera/deadlock.
+5. Verificar en pruebas de API que el lock precede a lecturas de elegibilidad y se conserva en transacción hasta el commit.
+6. Ejecutar CI sobre SHA resultante de cualquier integración; respaldos/restauración VPS pertenecen al módulo especializado.
+
+## Límites de responsabilidad y trazabilidad
+
+Esta corrección **solo actualiza documentación de MISD**; no cambia contratos de pagos compartidos ni código ajeno, ni altera política fiscal de conservación. La eliminación física sigue deshabilitada mientras no existan autorizaciones y recuperación acreditada.
+
+Referencias: PR #292, PR #336, issue #340 (dependencia Etapa 7), documento histórico `PR292_CIERRE_TECNICO_FINALIZAR_20261019.md`. No fusionar a `main` ni desplegar con base en esta documentación.
