@@ -46,7 +46,9 @@ def _ambito(expediente: Expediente, auth: OperativeAuthDep, session: SessionDep)
 
 
 def _es_aprobador(
-    solicitud: SolicitudRetiroMISD, expediente: Expediente, auth: OperativeAuthDep,
+    solicitud: SolicitudRetiroMISD,
+    expediente: Expediente,
+    auth: OperativeAuthDep,
     session: SessionDep,
 ) -> bool:
     if auth.rol == "ADMINISTRADOR":
@@ -69,7 +71,9 @@ def _es_aprobador(
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def solicitar(
-    datos: SolicitarRetiro, session: SessionDep, tenant_id: TenantDep,
+    datos: SolicitarRetiro,
+    session: SessionDep,
+    tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> dict[str, str]:
     expediente = session.scalar(
@@ -108,7 +112,11 @@ def solicitar(
     session.add(nueva)
     session.flush()
     auditoria.registrar(
-        session, tenant_id, "MISD_SOLICITUD_RETIRO", "solicitud_retiro", nueva.id,
+        session,
+        tenant_id,
+        "MISD_SOLICITUD_RETIRO",
+        "solicitud_retiro",
+        nueva.id,
         {"expediente_id": str(expediente.id), "solicitante_rol": auth.rol},
     )
     session.commit()
@@ -117,12 +125,17 @@ def solicitar(
 
 @router.get("")
 def listar(
-    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
 ) -> list[dict[str, str]]:
     consultas = session.scalars(
-        select(SolicitudRetiroMISD).where(
+        select(SolicitudRetiroMISD)
+        .where(
             SolicitudRetiroMISD.tenant_id == tenant_id,
-        ).order_by(SolicitudRetiroMISD.created_at.desc()).limit(200)
+        )
+        .order_by(SolicitudRetiroMISD.created_at.desc())
+        .limit(200)
     )
     resultado = []
     for solicitud in consultas:
@@ -133,31 +146,40 @@ def listar(
             solicitud, expediente, auth, session
         ):
             continue
-        resultado.append({
-            "id": str(solicitud.id),
-            "expediente_id": str(solicitud.expediente_id),
-            "estado": solicitud.estado,
-            "rol_solicitante": solicitud.solicitante_rol,
-        })
+        resultado.append(
+            {
+                "id": str(solicitud.id),
+                "expediente_id": str(solicitud.expediente_id),
+                "estado": solicitud.estado,
+                "rol_solicitante": solicitud.solicitante_rol,
+            }
+        )
     return resultado
 
 
 @router.post("/{solicitud_id}/resolver")
 def resolver(
-    solicitud_id: uuid.UUID, datos: ResolverRetiro, session: SessionDep,
-    tenant_id: TenantDep, auth: OperativeAuthDep,
+    solicitud_id: uuid.UUID,
+    datos: ResolverRetiro,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
 ) -> dict[str, str]:
     solicitud = session.scalar(
-        select(SolicitudRetiroMISD).where(
+        select(SolicitudRetiroMISD)
+        .where(
             SolicitudRetiroMISD.id == solicitud_id,
             SolicitudRetiroMISD.tenant_id == tenant_id,
-        ).with_for_update()
+        )
+        .with_for_update()
     )
     if solicitud is None:
         raise HTTPException(404, "Solicitud no encontrada")
     expediente = session.get(Expediente, solicitud.expediente_id)
-    if expediente is None or expediente.tenant_id != tenant_id or not _es_aprobador(
-        solicitud, expediente, auth, session
+    if (
+        expediente is None
+        or expediente.tenant_id != tenant_id
+        or not _es_aprobador(solicitud, expediente, auth, session)
     ):
         raise HTTPException(404, "Solicitud no encontrada")
     if solicitud.solicitante_cuenta_id == auth.cuenta_id:
@@ -174,8 +196,12 @@ def resolver(
     solicitud.decidido_at = ahora()
     solicitud.decision_motivo = datos.motivo.strip()
     auditoria.registrar(
-        session, tenant_id, "MISD_SOLICITUD_RESUELTA", "solicitud_retiro",
-        solicitud.id, {"estado": solicitud.estado, "expediente_id": str(expediente.id)},
+        session,
+        tenant_id,
+        "MISD_SOLICITUD_RESUELTA",
+        "solicitud_retiro",
+        solicitud.id,
+        {"estado": solicitud.estado, "expediente_id": str(expediente.id)},
     )
     session.commit()
     # Aprobar no elimina: requiere ejecución MISD independiente y revalidada.
