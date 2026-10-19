@@ -8,7 +8,7 @@ describe("validación editorial de landing", () => {
   });
 
   it("rechaza valores no estructurados o campos obligatorios vacíos", () => {
-    expect(validarContenidoLanding(null)[0].campo).toBe("contenido");
+    expect(validarContenidoLanding(null)[0]?.campo).toBe("contenido");
     const errores = validarContenidoLanding({ ...contenidoLandingInicial, titulo: " " });
     expect(errores.some((error) => error.campo === "titulo")).toBe(true);
   });
