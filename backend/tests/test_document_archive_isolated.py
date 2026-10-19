@@ -67,3 +67,54 @@ def test_rechaza_symlink_del_origen(tmp_path: Path) -> None:
     (origen / "link").symlink_to(tmp_path / "externo")
     with pytest.raises(ValueError, match="simbólicos"):
         MODULO.respaldo(origen, tmp_path / "backup.tar")
+
+
+def test_rechaza_cuotas_antes_de_crear_destino(tmp_path: Path) -> None:
+    origen = tmp_path / "source"
+    origen.mkdir()
+    (origen / "a").write_bytes(b"123456")
+    copia = tmp_path / "backup.tar"
+    digest = MODULO.respaldo(origen, copia)
+    with pytest.raises(ValueError, match="bytes"):
+        MODULO.restaurar(copia, tmp_path / "restored", digest, max_bytes=3)
+    assert not (tmp_path / "restored").exists()
+    with pytest.raises(ValueError, match="entradas"):
+        MODULO.restaurar(copia, tmp_path / "restored", digest, max_entradas=0)
+
+
+def test_rechaza_colision_archivo_directorio(tmp_path: Path) -> None:
+    copia = tmp_path / "collision.tar"
+    with tarfile.open(copia, "w") as archivo:
+        for nombre in ("a", "a/b"):
+            datos = b"x"
+            entrada = tarfile.TarInfo(nombre)
+            entrada.size = len(datos)
+            archivo.addfile(entrada, io.BytesIO(datos))
+    digest = hashlib.sha256(copia.read_bytes()).hexdigest()
+    with pytest.raises(ValueError, match="Colisión"):
+        MODULO.restaurar(copia, tmp_path / "restored", digest)
+    assert not (tmp_path / "restored").exists()
+
+
+def test_rechaza_nombre_duplicado(tmp_path: Path) -> None:
+    copia = tmp_path / "duplicate.tar"
+    with tarfile.open(copia, "w") as archivo:
+        for _ in range(2):
+            entrada = tarfile.TarInfo("duplicado")
+            entrada.size = 1
+            archivo.addfile(entrada, io.BytesIO(b"x"))
+    digest = hashlib.sha256(copia.read_bytes()).hexdigest()
+    with pytest.raises(ValueError, match="insegura"):
+        MODULO.restaurar(copia, tmp_path / "restored", digest)
+
+
+def test_asegura_permisos_privados(tmp_path: Path) -> None:
+    origen = tmp_path / "source"
+    origen.mkdir()
+    (origen / "archivo").write_bytes(b"privado")
+    copia = tmp_path / "backup.tar"
+    digest = MODULO.respaldo(origen, copia)
+    destino = tmp_path / "restored"
+    MODULO.restaurar(copia, destino, digest)
+    assert destino.stat().st_mode & 0o077 == 0
+    assert (destino / "archivo").stat().st_mode & 0o077 == 0
