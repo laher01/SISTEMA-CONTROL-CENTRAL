@@ -5,7 +5,7 @@ import io
 import uuid
 from datetime import date
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
@@ -52,6 +52,8 @@ def resumen(
     emisor_id: uuid.UUID | None = None,
     receptor_id: uuid.UUID | None = None,
     limite: int = Query(100, ge=1, le=500),
+    buscar: Annotated[str | None, Query(max_length=150)] = None,
+    categoria: Annotated[str | None, Query(max_length=80)] = None,
 ) -> list[dict[str, str]]:
     """No mezcla unidades ni incluye facturas pendientes de auditoría."""
     if desde is not None and hasta is not None and desde > hasta:
@@ -102,6 +104,16 @@ def resumen(
             ),
         )
     )
+    if buscar and buscar.strip():
+        termino = f"%{buscar.strip()}%"
+        stmt = stmt.where(
+            or_(
+                ProductoItem.descripcion.ilike(termino),
+                LineaComprobanteItem.descripcion_original.ilike(termino),
+            )
+        )
+    if categoria and categoria.strip():
+        stmt = stmt.where(ProductoItem.categoria == categoria.strip())
     if desde:
         stmt = stmt.where(Expediente.fecha_emision >= desde)
     if hasta:
@@ -132,6 +144,105 @@ def resumen(
             "importe": str(Decimal(r.importe)) if r.importe is not None else "",
         }
         for r in session.execute(stmt)
+    ]
+
+
+@router.get("/productos/{producto_id}/facturas")
+def facturas_por_producto(
+    producto_id: uuid.UUID,
+    session: SessionDep,
+    auth: OperativeAuthDep,
+    desde: date | None = None,
+    hasta: date | None = None,
+    emisor_id: uuid.UUID | None = None,
+    receptor_id: uuid.UUID | None = None,
+    limite: int = Query(100, ge=1, le=500),
+) -> list[dict[str, str]]:
+    """Documentos originales que contienen el producto; solo ámbito autorizado."""
+    if desde is not None and hasta is not None and desde > hasta:
+        raise HTTPException(422, "La fecha inicial no puede ser posterior a la final")
+    producto = session.scalar(
+        select(ProductoItem).where(
+            ProductoItem.id == producto_id,
+            ProductoItem.tenant_id == auth.tenant_id,
+            ProductoItem.activo.is_(True),
+        )
+    )
+    if producto is None:
+        raise HTTPException(404, "Producto no encontrado")
+    ultimo_estado = (
+        select(AuditoriaFacturaItem.estado)
+        .where(
+            AuditoriaFacturaItem.expediente_id == Expediente.id,
+            AuditoriaFacturaItem.tenant_id == auth.tenant_id,
+        )
+        .order_by(AuditoriaFacturaItem.created_at.desc(), AuditoriaFacturaItem.id.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    consulta = (
+        select(
+            Expediente.id.label("expediente_id"),
+            Documento.id.label("documento_id"),
+            Expediente.serie,
+            Expediente.correlativo,
+            Expediente.fecha_emision,
+            Expediente.moneda,
+            Expediente.emisor_id,
+            Expediente.receptor_id,
+            LineaComprobanteItem.numero_linea,
+            LineaComprobanteItem.descripcion_original,
+            LineaComprobanteItem.unidad,
+            LineaComprobanteItem.cantidad,
+            LineaComprobanteItem.importe_linea,
+        )
+        .join(Documento, Documento.id == LineaComprobanteItem.documento_id)
+        .join(Expediente, Expediente.id == Documento.expediente_id)
+        .where(
+            LineaComprobanteItem.producto_id == producto_id,
+            LineaComprobanteItem.tenant_id == auth.tenant_id,
+            Documento.tenant_id == auth.tenant_id,
+            Expediente.tenant_id == auth.tenant_id,
+            Documento.deleted_at.is_(None),
+            Expediente.deleted_at.is_(None),
+            _alcance(auth),
+            or_(
+                ultimo_estado.is_(None),
+                ultimo_estado.not_in(
+                    ["INVALIDADA_CONFIRMADA", "INVALIDADA_PENDIENTE", "REACTIVACION_PENDIENTE"]
+                ),
+            ),
+        )
+    )
+    if desde is not None:
+        consulta = consulta.where(Expediente.fecha_emision >= desde)
+    if hasta is not None:
+        consulta = consulta.where(Expediente.fecha_emision <= hasta)
+    if emisor_id is not None:
+        consulta = consulta.where(Expediente.emisor_id == emisor_id)
+    if receptor_id is not None:
+        consulta = consulta.where(Expediente.receptor_id == receptor_id)
+    consulta = consulta.order_by(
+        Expediente.fecha_emision.desc(),
+        Expediente.id,
+        LineaComprobanteItem.numero_linea,
+    ).limit(limite)
+    return [
+        {
+            "expediente_id": str(fila.expediente_id),
+            "documento_id": str(fila.documento_id),
+            "comprobante": f"{fila.serie}-{fila.correlativo}",
+            "fecha_emision": str(fila.fecha_emision),
+            "moneda": fila.moneda,
+            "emisor_id": str(fila.emisor_id),
+            "receptor_id": str(fila.receptor_id),
+            "numero_linea": str(fila.numero_linea),
+            "descripcion_original": fila.descripcion_original,
+            "unidad": fila.unidad,
+            "cantidad": str(fila.cantidad),
+            "importe": str(fila.importe_linea) if fila.importe_linea is not None else "",
+        }
+        for fila in session.execute(consulta)
     ]
 
 
