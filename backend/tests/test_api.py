@@ -1453,7 +1453,7 @@ def test_retirada_y_restauracion_recalculan_expediente_y_alertas(
     assert alertas_abiertas(despues) == alertas_antes
 
 
-def test_retirada_restauracion_conserva_gre_y_pago_voucher(
+def test_pago_voucher_impide_retirada_y_conserva_vinculos(
     client: TestClient,
     auth_prueba: AuthPrueba,
     session: Session,
@@ -1487,16 +1487,13 @@ def test_retirada_restauracion_conserva_gre_y_pago_voucher(
     )
     session.add_all([referencia, pago])
     session.commit()
+    referencia_id, pago_id = referencia.id, pago.id
     auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/documentos/{doc_id}").status_code == 204
+    assert client.delete(f"/api/v1/documentos/{doc_id}").status_code == 409
     session.expire_all()
-    assert session.get(ReferenciaGRE, referencia.id).documento_id == doc_id
-    assert session.get(PagoERP, pago.id).voucher_documento_id == doc_id
-    assert client.post(f"/api/v1/documentos/{doc_id}/restaurar").status_code == 200
-    session.expire_all()
-    assert session.get(ReferenciaGRE, referencia.id).documento_id == doc_id
-    assert session.get(PagoERP, pago.id).voucher_documento_id == doc_id
-
+    assert session.get(ReferenciaGRE, referencia_id).documento_id == doc_id
+    assert session.get(PagoERP, pago_id).voucher_documento_id == doc_id
+    assert client.get(f"/api/v1/documentos/{doc_id}").status_code == 200
 
 def test_restaurar_expediente_devuelve_evidencia_y_alertas(
     client: TestClient, auth_prueba: AuthPrueba
@@ -1577,7 +1574,7 @@ def test_restaurar_expediente_rechaza_tenant_ajeno(
     assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 404
 
 
-def test_restaurar_expediente_conserva_gre_pago_y_alertas(
+def test_expediente_pagado_bloqueado_y_gre_restaurable_sin_pago(
     client: TestClient, auth_prueba: AuthPrueba, session: Session
 ) -> None:
     from uuid import UUID
@@ -1610,16 +1607,20 @@ def test_restaurar_expediente_conserva_gre_pago_y_alertas(
     )
     session.add_all([referencia, pago])
     session.commit()
-    referencia_id, pago_id = referencia.id, pago.id
+    referencia_id = referencia.id
     auth_prueba.como_admin()
+
+    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 409
+    assert alertas_abiertas(expediente(client, expediente_id)) == alertas_iniciales
+    session.delete(pago)
+    session.commit()
+
     assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 204
     respuesta = client.post(f"/api/v1/expedientes/{expediente_id}/restaurar")
     assert respuesta.status_code == 200, respuesta.text
     session.expire_all()
     assert session.get(ReferenciaGRE, referencia_id).documento_id == doc_id
-    assert session.get(PagoERP, pago_id).voucher_documento_id == doc_id
     assert alertas_abiertas(respuesta.json()) == alertas_iniciales
-
 
 def test_restauraciones_concurrentes_no_duplican_reactivacion(
     client: TestClient, auth_prueba: AuthPrueba, engine: Engine
