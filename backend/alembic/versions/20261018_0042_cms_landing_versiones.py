@@ -47,7 +47,23 @@ def upgrade() -> None:
         sa.UniqueConstraint("version_nueva", name="uq_cms_landing_evento_version"),
     )
 
+    op.create_table(
+        "cms_landing_publicacion",
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column("version_editorial", sa.Integer(), nullable=False),
+        sa.Column("contenido", sa.JSON(), nullable=False),
+        sa.Column("publicado_por", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id"), nullable=False),
+        sa.Column(
+            "published_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+        ),
+        sa.CheckConstraint("id = 1", name="cms_landing_publicacion_unica"),
+    )
+
 
 def downgrade() -> None:
+    op.drop_table("cms_landing_publicacion")
     op.drop_table("cms_landing_evento")
     op.drop_table("cms_landing_revision")
