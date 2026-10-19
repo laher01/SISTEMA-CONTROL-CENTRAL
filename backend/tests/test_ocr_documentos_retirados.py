@@ -33,3 +33,34 @@ def test_ocr_no_reprocesa_documento_retirado_ni_usa_cache(
     with pytest.raises(HTTPException) as error:
         documentos_routes._procesar_y_aplicar(session, object(), object(), date.today(), documento)
     assert error.value.status_code == 404
+
+
+def test_ocr_revalida_retirada_durante_extraccion(
+    client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    respuesta = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("durante-ocr.pdf", b"%PDF-1.7 contenido de carrera")},
+    )
+    assert respuesta.status_code == 201, respuesta.text
+    documento = session.get(Documento, uuid.UUID(respuesta.json()["id"]))
+    assert documento is not None
+
+    def extraccion_con_retirada(*args: object, **kwargs: object) -> dict[str, object]:
+        documento.deleted_at = datetime.now(UTC)
+        session.flush()
+        return {"texto": "lectura provisional"}
+
+    def sin_efecto(*args: object, **kwargs: object) -> None:
+        return None
+
+    def vinculacion_prohibida(*args: object, **kwargs: object) -> None:
+        raise AssertionError("No aplicar relaciones a documento retirado")
+
+    monkeypatch.setattr(documentos_routes, "procesar_con_cache", extraccion_con_retirada)
+    monkeypatch.setattr(documentos_routes, "aplicar_perfiles_aprendidos", sin_efecto)
+    monkeypatch.setattr(documentos_routes, "guardar_procesamiento", sin_efecto)
+    monkeypatch.setattr(documentos_routes, "aplicar_automaticamente", vinculacion_prohibida)
+    with pytest.raises(HTTPException) as error:
+        documentos_routes._procesar_y_aplicar(session, object(), object(), date.today(), documento)
+    assert error.value.status_code == 404
