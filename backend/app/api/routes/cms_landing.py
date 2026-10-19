@@ -13,8 +13,8 @@ from app.services.cms_landing_core import EstadoEditorial
 from app.services.cms_landing_store import (
     cambiar_estado,
     guardar_borrador,
-    revision_table,
     publicacion_table,
+    revision_table,
 )
 from app.services.cms_landing_validation import ContenidoCms
 
