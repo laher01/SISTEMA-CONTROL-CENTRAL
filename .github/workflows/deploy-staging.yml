@@ -16,6 +16,51 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  change-scope:
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.changes.outputs.should_deploy }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Determinar si el push modifica la aplicación
+        id: changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Cualquier despacho manual mantiene el despliegue de contingencia.
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo 'should_deploy=true' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Los PR nunca despliegan; se mantienen sus verificaciones.
+          if [[ "$EVENT_NAME" != "push" ]]; then
+            echo 'should_deploy=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Ante una comparación imposible, fallar cerrado: nunca desplegar.
+          if [[ ! "$BEFORE_SHA" =~ ^[0-9a-f]{40}$ ]] ||
+             [[ "$BEFORE_SHA" == "0000000000000000000000000000000000000000" ]]; then
+            echo "::error::No se puede determinar el commit anterior del push"
+            exit 1
+          fi
+          git cat-file -e "$BEFORE_SHA^{commit}"
+          git diff --name-only -z "$BEFORE_SHA" "$CURRENT_SHA" > "$RUNNER_TEMP/changed-files"
+          should_deploy=false
+          while IFS= read -r -d '' file; do
+            case "$file" in
+              .github/workflows/diagnostico-vps-ocr.yml|.github/workflows/deploy-staging.yml)
+                ;;
+              *) should_deploy=true; break ;;
+            esac
+          done < "$RUNNER_TEMP/changed-files"
+          echo "should_deploy=$should_deploy" >> "$GITHUB_OUTPUT"
+
   verify-backend:
     runs-on: ubuntu-latest
     defaults:
@@ -64,8 +109,8 @@ jobs:
       - run: npm run build
 
   deploy:
-    if: github.ref == 'refs/heads/main'
-    needs: [verify-backend, verify-frontend]
+    if: github.ref == 'refs/heads/main' && needs.change-scope.outputs.should_deploy == 'true'
+    needs: [change-scope, verify-backend, verify-frontend]
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 20
