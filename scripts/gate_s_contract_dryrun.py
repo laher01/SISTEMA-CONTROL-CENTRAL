@@ -59,6 +59,71 @@ def analyze_sources(delete_src: str, trash_src: str, items_src: str, rescan_src:
     }
 
 
+
+def lifecycle_semantics(delete_src: str, trash_src: str) -> dict:
+    """Read-only AST diagnostics; indicators, never proof of transactional safety."""
+    delete_tree, trash_tree = ast.parse(delete_src), ast.parse(trash_src)
+    deletion = definition(delete_tree, "eliminar_documento")
+    batch = definition(trash_tree, "retirar_documentos_lote")
+    soft = definition(trash_tree, "eliminar_documento")
+    if deletion is None or batch is None or soft is None:
+        raise ValueError("Expected lifecycle definitions unavailable")
+
+    def parameters(node):
+        return [arg.arg for arg in node.args.args]
+
+    def call_sites(node, name):
+        return [
+            call for call in ast.walk(node)
+            if isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Name)
+            and call.func.id == name
+        ]
+
+    batch_calls = call_sites(batch, "eliminar_documento")
+    hard_parameters = parameters(deletion)
+    soft_parameters = parameters(soft)
+    if not batch_calls:
+        raise ValueError("Batch does not call the expected lifecycle operation")
+
+    assigned_fields = {
+        target.attr
+        for node in ast.walk(soft)
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Attribute)
+    }
+    hard_calls = {
+        node.func.id if isinstance(node.func, ast.Name) else node.func.attr
+        for node in ast.walk(deletion)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, (ast.Name, ast.Attribute))
+    }
+    expected = len(hard_parameters)
+    supplied = len(batch_calls[0].args)
+    return {
+        "batch_calls_eliminar_documento": True,
+        "batch_positional_args": supplied,
+        "physical_required_args": expected,
+        "physical_has_storage_parameter": "almacen" in hard_parameters,
+        "soft_signature": soft_parameters,
+        "physical_signature": hard_parameters,
+        "soft_assigns_deleted_at": "deleted_at" in assigned_fields,
+        "physical_calls_transaction_lock": "bloquear_tenant_documental" in hard_calls,
+        "name_collision": deletion.name == soft.name,
+        "positional_mismatch": supplied != expected,
+        "semantic_collision_risk": (
+            deletion.name == soft.name
+            and "deleted_at" in assigned_fields
+            and "bloquear_tenant_documental" in hard_calls
+        ),
+        "status": "BLOCK_INTEGRATION",
+        "limitations": (
+            "Static indicators cannot prove physical deletion or transaction rollback; "
+            "review both implementations before any integration."
+        ),
+    }
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--delete-ref", required=True)
@@ -93,6 +158,10 @@ def main():
                         assignments[node.target.id] = ast.literal_eval(node.value)
             revisions[revision] = assignments
         result["migration_metadata"] = revisions
+        result["lifecycle_semantics"] = lifecycle_semantics(
+            git_show(args.delete_ref, DOCUMENTOS),
+            git_show(args.trash_ref, DOCUMENTOS),
+        )
         print(json.dumps(result, indent=2, sort_keys=True))
     except (RuntimeError, ValueError, SyntaxError) as exc:
         print(json.dumps({"status": "BLOCKED", "reason": str(exc)}))
