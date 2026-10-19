@@ -33,9 +33,11 @@ class TransicionCms(BaseModel):
 @router.get("")
 def consultar_cms(session: SessionDep, auth: AuthDep) -> dict[str, object]:
     _exigir_superadmin(auth)
-    fila = session.execute(
-        select(revision_table).where(revision_table.c.id == 1)
-    ).mappings().one_or_none()
+    fila = (
+        session.execute(select(revision_table).where(revision_table.c.id == 1))
+        .mappings()
+        .one_or_none()
+    )
     if fila is None:
         return {"existe": False, "version": 0, "estado": "borrador", "contenido": None}
     return {
