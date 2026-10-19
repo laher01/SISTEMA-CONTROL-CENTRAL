@@ -277,3 +277,56 @@ def test_misd_cambio_de_rol_invalida_solicitud_original(
     respuesta = client.post(f"/api/v1/misd/solicitudes/{creada.json()['id']}/ejecutar")
     assert respuesta.status_code == 404
     assert client.get(f"/api/v1/expedientes/{subida.json()['expediente_id']}").status_code == 200
+
+
+def test_aprobacion_revocada_no_es_valida_para_ejecutar(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    from app.api.routes.solicitudes_retiro_misd import _aprobacion_sigue_vigente
+    from app.models import CuentaAcceso, Miembro
+
+    subida = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("misd-revocacion.xml", factura())},
+    )
+    assert subida.status_code == 201, subida.text
+    expediente = session.get(Expediente, subida.json()["expediente_id"])
+    assert expediente is not None
+    creada = client.post(
+        "/api/v1/misd/solicitudes",
+        json={"expediente_id": str(expediente.id), "motivo": "Retiro bajo aprobación"},
+    )
+    assert creada.status_code == 201, creada.text
+    solicitud = session.get(SolicitudRetiroMISD, creada.json()["id"])
+    assert solicitud is not None
+
+    miembro = Miembro(
+        tenant_id=expediente.tenant_id,
+        codigo="APROBADOR-REV",
+        nombre="Aprobador Revocado",
+        rol="ADMINISTRADOR",
+        activo=True,
+    )
+    session.add(miembro)
+    session.flush()
+    cuenta = CuentaAcceso(
+        tenant_id=expediente.tenant_id,
+        miembro_id=miembro.id,
+        login="aprobador-rev",
+        password_hash="hash-pruebas",
+        activo=True,
+        cambio_clave_obligatorio=False,
+    )
+    session.add(cuenta)
+    session.flush()
+    solicitud.aprobado_por_cuenta_id = cuenta.id
+    solicitud.estado = "APROBADA"
+    session.flush()
+    assert _aprobacion_sigue_vigente(solicitud, expediente, session)
+    cuenta.activo = False
+    session.flush()
+    assert not _aprobacion_sigue_vigente(solicitud, expediente, session)
+
+    ejecutada = client.post(f"/api/v1/misd/solicitudes/{solicitud.id}/ejecutar")
+    assert ejecutada.status_code == 409, ejecutada.text
+    assert client.get(f"/api/v1/expedientes/{expediente.id}").status_code == 200
