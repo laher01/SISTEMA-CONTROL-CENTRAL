@@ -1806,3 +1806,56 @@ def test_restauracion_integral_oculta_expediente_de_tenant_ajeno(
         auth_prueba.contexto = original
     assert client.get(f"/api/v1/expedientes/{exp_id}").status_code == 404
     assert client.post(f"/api/v1/expedientes/{exp_id}/restaurar").status_code == 200
+
+
+def test_restauracion_integral_conserva_vinculos_gre_y_pago(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    session: Session,
+) -> None:
+    from uuid import UUID
+
+    from app.models import Documento, PagoERP, ReferenciaGRE
+
+    principal = subir(client, "exp-vinculos.xml", factura())
+    exp_id = principal["expediente_id"]
+    adjunto = subir(client, "exp-voucher.pdf", b"%PDF-1.7 comprobante de prueba")
+    doc_id = UUID(str(adjunto["id"]))
+    documento = session.get(Documento, doc_id)
+    assert documento is not None
+    documento.expediente_id = UUID(str(exp_id))
+    session.commit()
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/expedientes/{exp_id}").status_code == 204
+
+    referencia = ReferenciaGRE(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        documento_id=doc_id,
+        expediente_id=UUID(str(exp_id)),
+        serie="F001",
+        correlativo="123",
+        emisor_ruc="20123456789",
+        receptor_ruc="20987654321",
+    )
+    pago = PagoERP(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        usuario_id=auth_prueba.contexto.miembro_id,
+        periodo_desde=date(2026, 8, 1),
+        periodo_hasta=date(2026, 8, 31),
+        moneda="PEN",
+        produccion_total=Decimal("100.00"),
+        porcentaje=Decimal("10.00"),
+        bruto=Decimal("10.00"),
+        saldo=Decimal("10.00"),
+        voucher_documento_id=doc_id,
+    )
+    session.add_all([referencia, pago])
+    session.commit()
+    referencia_id, pago_id = referencia.id, pago.id
+    respuesta = client.post(f"/api/v1/expedientes/{exp_id}/restaurar")
+    assert respuesta.status_code == 200, respuesta.text
+    session.expire_all()
+    assert session.get(ReferenciaGRE, referencia_id).documento_id == doc_id
+    assert session.get(ReferenciaGRE, referencia_id).expediente_id == UUID(str(exp_id))
+    assert session.get(PagoERP, pago_id).voucher_documento_id == doc_id
+    assert session.get(PagoERP, pago_id).saldo == Decimal("10.00")
