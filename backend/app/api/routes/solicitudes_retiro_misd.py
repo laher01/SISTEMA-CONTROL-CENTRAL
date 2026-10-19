@@ -10,7 +10,7 @@ from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.models import ChatMensaje, CuentaAcceso, Expediente, Miembro, SolicitudRetiroMISD, ahora
 from app.services import auditoria
 from app.services.misd_autorizaciones import dentro_ventana_correccion
-from app.services.misd_pagos import motivo_bloqueo_liquidacion
+from app.services.misd_pagos import motivo_bloqueo_liquidacion, motivo_bloqueo_voucher
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 
 router = APIRouter(prefix="/misd/solicitudes", tags=["misd"])
@@ -320,7 +320,12 @@ def ejecutar(
     if expediente is None:
         raise HTTPException(404, "Expediente no encontrado")
     es_solicitante = auth.cuenta_id == solicitud.solicitante_cuenta_id
-    if not es_solicitante or not _ambito(expediente, auth, session):
+    identidad_original = (
+        auth.rol == solicitud.solicitante_rol
+        and auth.miembro_id == solicitud.solicitante_miembro_id
+        and auth.gestor_id == solicitud.solicitante_gestor_id
+    )
+    if not es_solicitante or not identidad_original or not _ambito(expediente, auth, session):
         raise HTTPException(404, "Solicitud no encontrada")
     if not permiso_habilitado(session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS):
         raise HTTPException(403, "Sin permiso para ejecutar retiro")
@@ -352,6 +357,11 @@ def ejecutar(
         .where(Documento.tenant_id == tenant_id, Documento.expediente_id == expediente.id)
         .with_for_update()
     ).all()
+    for documento in expediente.documentos:
+        if documento.deleted_at is None and motivo_bloqueo_voucher(
+            session, tenant_id, documento.id
+        ) is not None:
+            raise HTTPException(409, "Expediente contiene un voucher vinculado a un pago")
     marca = ahora()
     expediente.deleted_at = marca
     for documento in expediente.documentos:
