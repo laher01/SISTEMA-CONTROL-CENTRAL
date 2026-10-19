@@ -238,9 +238,7 @@ def test_nexus_gerente_y_global_solo_cuentan_expedientes_permitidos(
         )
         session.add(expediente)
         session.flush()
-        _documento_cartera(
-            session, tenant, None, None, f"cartera-{correlativo}", expediente.id
-        )
+        _documento_cartera(session, tenant, None, None, f"cartera-{correlativo}", expediente.id)
     _documento_cartera(session, tenant, None, None, "sin-expediente")
     session.commit()
     consulta = {"mensaje": "¿Cómo van mis documentos?", "ruta": "/documentos"}
