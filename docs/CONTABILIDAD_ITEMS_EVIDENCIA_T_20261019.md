@@ -14,3 +14,13 @@
 
 ## Límite de alcance
 Solo archivos de Contabilidad de Ítems y pruebas del módulo. Sin modificaciones #186, #281, #292, #300, main, VPS, migraciones reales, merge o deploy. El contrato de reescaneo #281 requiere evaluación aislada posterior antes de integrar.
+
+
+## Nueva iteración T — verificación y reparación del CSV
+- HEAD de entrada `84036ae9e5d513ee06accae8e74f372f88bf81f2`, DRAFT: Frontend SUCCESS (run 39208486465), Roles Browser SUCCESS (39208486305), Roles Real SUCCESS (39208486268), Backend FAILURE (39208486415), Recepción FAILURE (39208486490).
+- Evidencia de ambos logs pytest: `1 failed, 385 passed, 8 warnings`. Único fallo `tests/test_items_product_invoice_links.py::test_search_and_linked_invoices_are_tenant_scoped`: CSV con `buscar=anchoveta` contenía `Pota congelada`, porque `exportar_csv` recibía los parámetros pero no los transmitía a `resumen`.
+- Corrección funcional limitada a Ítems: SHA `745fc5ab1b3d227e793b5413fcfa368a645f8090`; `exportar_csv` ahora envía `buscar=buscar` y `categoria=categoria` a `resumen`.
+- Workflows de ese SHA: Frontend confirmado SUCCESS; otros inicialmente en curso. No inferir cierre general antes de inspeccionar los cinco resultados del commit.
+- Las pruebas continúan usando PostgreSQL aislado, XML y empresas sintéticas; no hay datos productivos ni intervención sobre módulos externos.
+
+Gate S sin modificación. PR #320 DRAFT. No merge, main, VPS ni deploy.
