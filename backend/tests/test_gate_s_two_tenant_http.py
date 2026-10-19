@@ -5,9 +5,10 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.item_models import LineaComprobanteItem
 from app.models import Documento, Empresa, Expediente, Tenant
 from app.services.contabilidad_items_ubl import registrar_items_ubl
 from tests.conftest import AuthPrueba
@@ -191,3 +192,19 @@ def test_items_ubl_http_scoped_filters_and_retirement(
     retired = client.get("/api/v1/contabilidad-items")
     assert retired.status_code == 200, retired.text
     assert retired.json() == []
+
+    # Synthetic restoration of document state, not the PR #292 restore endpoint.
+    own_doc.deleted_at = None
+    session.commit()
+    restored = client.get("/api/v1/contabilidad-items")
+    assert restored.status_code == 200, restored.text
+    assert len(restored.json()) == 1
+    assert Decimal(restored.json()[0]["importe"]) == Decimal("60")
+    count_lines = session.scalar(
+        select(func.count(LineaComprobanteItem.id)).where(
+            LineaComprobanteItem.tenant_id == own_tenant,
+            LineaComprobanteItem.documento_id == own_doc.id,
+        )
+    )
+    assert count_lines == 1
+    assert registrar_items_ubl(session, own_tenant, own_doc.id, xml) == 0
