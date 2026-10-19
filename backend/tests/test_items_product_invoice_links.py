@@ -99,6 +99,24 @@ def test_search_and_linked_invoices_are_tenant_scoped(
     assert invoices.json()[0]["descripcion_original"] == "Pota congelada"
     assert Decimal(invoices.json()[0]["importe"]) == 60
 
+    # Only the authorized tenant and operational roles may consult a product.
+    foreign = client.get(
+        f"/api/v1/contabilidad-items/productos/{product_id}/facturas",
+        params={"emisor_id": str(tenant_b.id)},
+    )
+    assert foreign.status_code == 200, foreign.text
+    assert foreign.json() == []
+    invalid_range = client.get(
+        f"/api/v1/contabilidad-items/productos/{product_id}/facturas",
+        params={"desde": "2026-10-20", "hasta": "2026-10-19"},
+    )
+    assert invalid_range.status_code == 422
+
+    auth_prueba.como_superadmin()
+    denied = client.get(f"/api/v1/contabilidad-items/productos/{product_id}/facturas")
+    assert denied.status_code == 403
+    auth_prueba.como_admin()
+
     own_doc = session.get(Documento, invoices.json()[0]["documento_id"])
     assert own_doc is not None
     own_doc.deleted_at = datetime.now(UTC)
