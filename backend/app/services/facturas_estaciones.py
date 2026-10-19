@@ -21,7 +21,11 @@ def extraer_factura_estacion(texto: str) -> dict[str, tuple[str, str]]:
     normal = texto.upper()
     escorpio = "FACTURACION.JADAL.PE" in normal and "FACTURA" in normal
     jabsa = "SERVICENTRO JABSA" in normal and "FACTURA" in normal
-    bizlinks = "ESTACION DE SERVICIOS SAN JOSE SAC" in normal and "BIZLINKS" in normal and "FACTURA" in normal
+    bizlinks = (
+        "ESTACION DE SERVICIOS SAN JOSE SAC" in normal
+        and "BIZLINKS" in normal
+        and "FACTURA" in normal
+    )
     if not (escorpio or jabsa or bizlinks):
         return {}
     campos: dict[str, tuple[str, str]] = {}
@@ -42,7 +46,11 @@ def extraer_factura_estacion(texto: str) -> dict[str, tuple[str, str]]:
         if "20175642341" in rucs:
             campos["ruc_emisor"] = ("20175642341", "R.U.C. 20175642341")
         bloque_cliente = texto.split("Cliente:", 1)[-1].split("Dirección:", 1)[0]
-        receptores = [r for r in re.findall(r"(?<!\\d)\\d{11}(?!\\d)", bloque_cliente) if r != "20175642341"]
+        receptores = [
+            r
+            for r in re.findall(r"(?<!\\d)\\d{11}(?!\\d)", bloque_cliente)
+            if r != "20175642341"
+        ]
         if len(set(receptores)) == 1:
             campos["ruc_receptor"] = (receptores[0], bloque_cliente[-120:])
         fecha_invertida = re.search(
