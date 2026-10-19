@@ -33,5 +33,5 @@ export default function LandingPublica() {
       </main>
     );
   }
-  return <Presentacion />;
+  return <PresentacionAutorizada />;
 }
