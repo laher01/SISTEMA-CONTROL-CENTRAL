@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { conParametros, useDatos } from "../api";
 
+type FacturaItem = { expediente_id: string; documento_id: string; comprobante: string; fecha_emision: string; moneda: string; descripcion_original: string; cantidad: string; unidad: string; importe: string; };
+
 type FilaItem = {
   producto_id: string;
   categoria: string;
@@ -12,6 +14,9 @@ type FilaItem = {
 };
 
 export default function ContabilidadItems() {
+  const [buscar, setBuscar] = useState("");
+  const [categoria, setCategoria] = useState("");
+  const [productoSeleccionado, setProductoSeleccionado] = useState<string | null>(null);
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [emisorId, setEmisorId] = useState("");
@@ -19,14 +24,18 @@ export default function ContabilidadItems() {
   const [errorFiltros, setErrorFiltros] = useState("");
   const [errorDescarga, setErrorDescarga] = useState("");
   const [descargando, setDescargando] = useState(false);
-  const [filtros, setFiltros] = useState({ desde: "", hasta: "", emisor_id: "", receptor_id: "" });
+  const [filtros, setFiltros] = useState({ desde: "", hasta: "", emisor_id: "", receptor_id: "", buscar: "", categoria: "" });
   const ruta = conParametros("/api/v1/contabilidad-items", {
     desde: filtros.desde,
     hasta: filtros.hasta,
     emisor_id: filtros.emisor_id,
     receptor_id: filtros.receptor_id,
+    buscar: filtros.buscar,
+    categoria: filtros.categoria,
   });
   const { datos, error, cargando, recargar } = useDatos<FilaItem[]>(ruta);
+  const rutaFacturas = productoSeleccionado ? conParametros(`/api/v1/contabilidad-items/productos/${productoSeleccionado}/facturas`, {desde: filtros.desde, hasta: filtros.hasta, emisor_id: filtros.emisor_id, receptor_id: filtros.receptor_id}) : null;
+  const { datos: facturas, error: errorFacturas, cargando: cargandoFacturas } = useDatos<FacturaItem[]>(rutaFacturas);
 
   return (
     <section aria-label="Contabilidad de ítems">
@@ -43,9 +52,14 @@ export default function ContabilidadItems() {
           return;
         }
         setErrorFiltros("");
-        setFiltros({ desde, hasta, emisor_id: emisorId.trim(), receptor_id: receptorId.trim() });
+        setProductoSeleccionado(null);
+        setFiltros({ desde, hasta, emisor_id: emisorId.trim(), receptor_id: receptorId.trim(), buscar: buscar.trim(), categoria: categoria.trim() });
         recargar();
       }}>
+        <label htmlFor="items-buscar">Buscar producto o servicio</label>
+        <input id="items-buscar" value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Descripción del producto o servicio" />
+        <label htmlFor="items-categoria">Categoría (opcional)</label>
+        <input id="items-categoria" value={categoria} onChange={(e) => setCategoria(e.target.value)} placeholder="Categoría exacta" />
         <label htmlFor="items-desde">Desde</label>
         <input id="items-desde" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
         <label htmlFor="items-hasta">Hasta</label>
@@ -107,6 +121,7 @@ export default function ContabilidadItems() {
                 <th scope="col">Cantidad acumulada</th>
                 <th scope="col">Moneda</th>
                 <th scope="col">Importe de líneas</th>
+                <th scope="col">Facturas</th>
               </tr>
             </thead>
             <tbody>
@@ -118,11 +133,38 @@ export default function ContabilidadItems() {
                   <td>{fila.cantidad}</td>
                   <td>{fila.moneda}</td>
                   <td>{fila.importe || "Sin importe"}</td>
+                  <td><button type="button" onClick={() => setProductoSeleccionado(fila.producto_id)}>Ver facturas</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+      {productoSeleccionado && (
+        <section aria-label="Facturas vinculadas al ítem">
+          <h3>Facturas que contienen el producto seleccionado</h3>
+          <button type="button" onClick={() => setProductoSeleccionado(null)}>Cerrar detalle</button>
+          {cargandoFacturas && <p>Consultando facturas…</p>}
+          {errorFacturas && <p role="alert">{errorFacturas}</p>}
+          {facturas?.length === 0 && <p>No hay facturas visibles para los filtros aplicados.</p>}
+          {facturas && facturas.length > 0 && (
+            <div style={{ overflowX: "auto" }}>
+              <table>
+                <thead><tr><th>Factura</th><th>Fecha</th><th>Descripción original</th><th>Cantidad</th><th>Importe</th><th>Expediente</th></tr></thead>
+                <tbody>{facturas.map((factura) => (
+                  <tr key={factura.documento_id + ":" + factura.comprobante + ":" + factura.descripcion_original}>
+                    <td>{factura.comprobante}</td>
+                    <td>{factura.fecha_emision}</td>
+                    <td>{factura.descripcion_original}</td>
+                    <td>{factura.cantidad} {factura.unidad}</td>
+                    <td>{factura.importe} {factura.moneda}</td>
+                    <td><a href={`/expedientes/${factura.expediente_id}`}>Abrir expediente</a></td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+        </section>
       )}
     </section>
   );
