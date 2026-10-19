@@ -6,7 +6,7 @@ from decimal import Decimal
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models import Expediente, Gestor, Miembro, PagoERP, PagoGestor, PagoResponsableERP
+from app.models import Documento, Expediente, Gestor, Miembro, PagoERP, PagoGestor, PagoResponsableERP
 from tests.conftest import AuthPrueba
 from tests.xml import factura
 
@@ -191,3 +191,49 @@ def test_pago_responsable_generado_bloquea_expediente(
     resultado = client.delete(f"/api/v1/expedientes/{expediente.id}")
     assert resultado.status_code == 409, resultado.text
     assert "RESPONSABLE" in resultado.text
+
+
+
+def test_voucher_de_otro_periodo_bloquea_retiro_integral_misd(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    factura_subida = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("expediente-voucher.xml", factura())},
+    )
+    assert factura_subida.status_code == 201, factura_subida.text
+    expediente_id = factura_subida.json()["expediente_id"]
+    voucher_subido = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("voucher-misd.pdf", b"%PDF-1.7 voucher")},
+    )
+    assert voucher_subido.status_code == 201, voucher_subido.text
+    voucher = session.get(Documento, voucher_subido.json()["id"])
+    assert voucher is not None
+    voucher.expediente_id = expediente_id
+    session.flush()
+    solicitud = client.post(
+        "/api/v1/misd/solicitudes",
+        json={"expediente_id": expediente_id, "motivo": "Retiro pendiente de revisión"},
+    )
+    assert solicitud.status_code == 201, solicitud.text
+    pago = PagoERP(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        usuario_id=auth_prueba.contexto.usuario_id,
+        periodo_desde=date(2025, 1, 1),
+        periodo_hasta=date(2025, 12, 31),
+        moneda="PEN",
+        produccion_total=Decimal("100"),
+        porcentaje=Decimal("10"),
+        bruto=Decimal("10"),
+        saldo=Decimal("10"),
+        estado="PROGRAMADO",
+        voucher_documento_id=voucher.id,
+    )
+    session.add(pago)
+    session.commit()
+    retirada = client.post(f"/api/v1/misd/solicitudes/{solicitud.json()['id']}/ejecutar")
+    assert retirada.status_code == 409, retirada.text
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 409
+    assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 200
