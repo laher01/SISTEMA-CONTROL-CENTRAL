@@ -6,7 +6,15 @@ from decimal import Decimal
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models import Documento, Expediente, Gestor, Miembro, PagoERP, PagoGestor, PagoResponsableERP
+from app.models import (
+    Documento,
+    Expediente,
+    Gestor,
+    Miembro,
+    PagoERP,
+    PagoGestor,
+    PagoResponsableERP,
+)
 from tests.conftest import AuthPrueba
 from tests.xml import factura
 
