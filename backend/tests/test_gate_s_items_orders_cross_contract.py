@@ -94,9 +94,7 @@ def test_hierarchy_tenant_and_customer_scope():
         synthetic_invoice(identity="OTHER-CUSTOMER", customer="CLIENTE-2"),
         synthetic_invoice(identity="OTHER-GESTOR", owner="GESTOR-2"),
     ]
-    total, _ = summarize(
-        entries, tenant="A", customer="CLIENTE-1", owner="GESTOR-1"
-    )
+    total, _ = summarize(entries, tenant="A", customer="CLIENTE-1", owner="GESTOR-1")
     assert total == Decimal("250")
 
 
@@ -106,9 +104,7 @@ def test_retired_and_pending_invoices_do_not_inflate_progress():
         synthetic_invoice(identity="RETIRED", active=False),
         synthetic_invoice(identity="PENDING", approved=False),
     ]
-    total, _ = summarize(
-        entries, tenant="A", customer="CLIENTE-1", owner="GESTOR-1"
-    )
+    total, _ = summarize(entries, tenant="A", customer="CLIENTE-1", owner="GESTOR-1")
     assert total == Decimal("250")
 
 
@@ -117,9 +113,7 @@ def test_currency_is_not_mixed_in_progress_calculations():
         synthetic_invoice(),
         synthetic_invoice(identity="USD-1", currency="USD", amount=Decimal("500")),
     ]
-    pen, _ = summarize(
-        entries, tenant="A", customer="CLIENTE-1", owner="GESTOR-1"
-    )
+    pen, _ = summarize(entries, tenant="A", customer="CLIENTE-1", owner="GESTOR-1")
     usd, _ = summarize(entries, tenant="A", customer="CLIENTE-1", owner="GESTOR-1", currency="USD")
     assert (pen, usd) == (Decimal("250"), Decimal("500"))
 
