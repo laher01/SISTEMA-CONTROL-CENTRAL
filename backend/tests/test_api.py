@@ -1496,3 +1496,44 @@ def test_retirada_restauracion_conserva_gre_y_pago_voucher(
     session.expire_all()
     assert session.get(ReferenciaGRE, referencia.id).documento_id == doc_id
     assert session.get(PagoERP, pago.id).voucher_documento_id == doc_id
+
+
+def test_restaurar_expediente_devuelve_evidencia_y_alertas(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    original = subir(client, "factura-expediente.xml", factura())
+    expediente_id = original["expediente_id"]
+    previas = alertas_abiertas(expediente(client, expediente_id))
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 204
+    assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 404
+    restaurado = client.post(f"/api/v1/expedientes/{expediente_id}/restaurar")
+    assert restaurado.status_code == 200, restaurado.text
+    assert any(doc["id"] == original["id"] for doc in restaurado.json()["documentos"])
+    assert alertas_abiertas(restaurado.json()) == previas
+    assert client.post(f"/api/v1/expedientes/{expediente_id}/restaurar").status_code == 409
+
+
+def test_restaurar_expediente_no_reactiva_documento_retirado_previamente(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    original = subir(client, "factura-previa.xml", factura())
+    expediente_id = original["expediente_id"]
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/documentos/{original['id']}").status_code == 204
+    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 204
+    restaurado = client.post(f"/api/v1/expedientes/{expediente_id}/restaurar")
+    assert restaurado.status_code == 200, restaurado.text
+    assert all(doc["id"] != original["id"] for doc in restaurado.json()["documentos"])
+    assert client.get(f"/api/v1/documentos/{original['id']}").status_code == 404
+
+
+def test_restaurar_expediente_denegado_a_superadmin(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    original = subir(client, "factura-superadmin.xml", factura())
+    expediente_id = original["expediente_id"]
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 204
+    auth_prueba.como_superadmin()
+    assert client.post(f"/api/v1/expedientes/{expediente_id}/restaurar").status_code == 403
