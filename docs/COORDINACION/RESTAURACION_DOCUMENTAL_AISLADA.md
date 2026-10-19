@@ -23,3 +23,10 @@ La integración de este PR y PR #328 debe revisarse en infraestructura; PR #323 
 - La publicación por renombrado funciona cuando el directorio temporal y el destino comparten sistema de archivos. No elimina todos los riesgos de concurrencia ni prueba recuperación tras apagado.
 - La validación con SHA-256 no autentica el origen: debe protegerse la huella mediante custodia independiente y cifrar los respaldos reales.
 - Continúa **BLOQUEANTE** la consistencia temporal y recuperación conjunta PostgreSQL/documentos; no usar este prototipo como gate de despliegue.
+
+## Seguridad de publicación y recursos (prototipo)
+- Publicación usa `renameat2(RENAME_NOREPLACE)` de Linux; falla de forma cerrada si falta soporte y **nunca** acepta sustituir el directorio de destino.
+- TAR limitado a 12 GiB y cuota de entradas/bytes declarados; comprobación previa de espacio libre con margen de 1 MiB. No garantiza espacio durante escrituras simultáneas ni limita exhaustivamente memoria de metadatos.
+- Respaldo nuevo con permisos 0600 y eliminación del archivo final parcial cuando falla la copia.
+- Faltan pruebas de truncamiento específico e interrupciones de E/S sobre archivos de múltiples GiB; el preflight de producción no utiliza esta herramienta.
+- **Bloqueantes:** captura consistente PostgreSQL/documentos, cifrado, backups externos, recuperación comprobada, controles de acceso y retención.
