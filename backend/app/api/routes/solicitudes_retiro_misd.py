@@ -7,8 +7,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
-from app.models import Expediente, Miembro, SolicitudRetiroMISD, ahora
+from app.models import ChatMensaje, CuentaAcceso, Expediente, Miembro, SolicitudRetiroMISD, ahora
 from app.services import auditoria
+from app.services.misd_autorizaciones import dentro_ventana_correccion
 from app.services.misd_pagos import motivo_bloqueo_liquidacion
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 
@@ -69,6 +70,73 @@ def _es_aprobador(
     return False
 
 
+
+def _notificar(
+    session: SessionDep,
+    tenant_id: uuid.UUID,
+    remitente: uuid.UUID,
+    cuentas_destino: set[uuid.UUID],
+    mensaje: str,
+) -> None:
+    """Notifica por la mensajería interna, siempre dentro del mismo tenant."""
+    cuentas = session.scalars(
+        select(CuentaAcceso).where(
+            CuentaAcceso.tenant_id == tenant_id,
+            CuentaAcceso.id.in_(cuentas_destino),
+            CuentaAcceso.activo.is_(True),
+            CuentaAcceso.deleted_at.is_(None),
+        )
+    )
+    for cuenta in cuentas:
+        if cuenta.id != remitente:
+            session.add(
+                ChatMensaje(
+                    tenant_id=tenant_id,
+                    remitente_cuenta_id=remitente,
+                    destinatario_cuenta_id=cuenta.id,
+                    texto=mensaje[:2000],
+                )
+            )
+
+
+def _destinatarios_aprobacion(
+    session: SessionDep, tenant_id: uuid.UUID, expediente: Expediente
+) -> set[uuid.UUID]:
+    ids = set(
+        session.scalars(
+            select(CuentaAcceso.id)
+            .where(
+                CuentaAcceso.tenant_id == tenant_id,
+                CuentaAcceso.activo.is_(True),
+                CuentaAcceso.deleted_at.is_(None),
+                CuentaAcceso.miembro_id.in_(
+                    select(Miembro.id).where(
+                        Miembro.tenant_id == tenant_id,
+                        Miembro.rol == "ADMINISTRADOR",
+                        Miembro.deleted_at.is_(None),
+                    )
+                ),
+            )
+        )
+    )
+    if expediente.usuario_id is not None:
+        usuario = session.get(Miembro, expediente.usuario_id)
+        if usuario is not None and usuario.tenant_id == tenant_id:
+            ids.update(
+                session.scalars(
+                    select(CuentaAcceso.id).where(
+                        CuentaAcceso.tenant_id == tenant_id,
+                        CuentaAcceso.miembro_id.in_(
+                            [ident for ident in (usuario.id, usuario.responsable_id) if ident]
+                        ),
+                        CuentaAcceso.activo.is_(True),
+                        CuentaAcceso.deleted_at.is_(None),
+                    )
+                )
+            )
+    return ids
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 def solicitar(
     datos: SolicitarRetiro,
@@ -111,6 +179,14 @@ def solicitar(
     )
     session.add(nueva)
     session.flush()
+    destinatarios = _destinatarios_aprobacion(session, tenant_id, expediente)
+    _notificar(
+        session,
+        tenant_id,
+        auth.cuenta_id,
+        destinatarios,
+        f"MISD: solicitud de retiro pendiente para expediente {expediente.id}. Motivo: {nueva.motivo}",
+    )
     auditoria.registrar(
         session,
         tenant_id,
@@ -195,6 +271,13 @@ def resolver(
     solicitud.aprobado_por_cuenta_id = auth.cuenta_id
     solicitud.decidido_at = ahora()
     solicitud.decision_motivo = datos.motivo.strip()
+    _notificar(
+        session,
+        tenant_id,
+        auth.cuenta_id,
+        {solicitud.solicitante_cuenta_id},
+        f"MISD: solicitud {solicitud.id} {solicitud.estado.lower()}. Motivo: {solicitud.decision_motivo}",
+    )
     auditoria.registrar(
         session,
         tenant_id,
