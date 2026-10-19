@@ -308,8 +308,7 @@ function Procesar({
             <pre className="texto-extraido">{lectura.texto}</pre>
           </details>
         )}
-        {lectura.campos.length > 0 && (
-          <ConfirmarCampos
+        <ConfirmarCampos
             documentoId={documento.id}
             campos={lectura.campos}
             confirmado={lectura.confirmada}
@@ -317,7 +316,6 @@ function Procesar({
             alConfirmar={setResultado}
             alCrear={alCompletar}
           />
-        )}
         <button onClick={procesar} disabled={procesando}>
           {procesando ? "Procesando…" : "Reprocesar"}
         </button>
@@ -358,6 +356,13 @@ function Procesar({
   }
   return (
     <div className="formulario-linea">
+      <ConfirmarCampos
+        documentoId={documento.id}
+        campos={[]}
+        confirmado={false}
+        alConfirmar={setResultado}
+        alCrear={alCompletar}
+      />
       <button onClick={procesar} disabled={procesando}>
         {procesando ? "Procesando…" : "Extraer texto"}
       </button>
@@ -424,9 +429,16 @@ function ConfirmarCampos({
   alConfirmar: (documento: Documento) => void;
   alCrear: () => void;
 }) {
-  const [valores, setValores] = useState<Record<string, string>>(
-    Object.fromEntries(campos.map((campo) => [campo.nombre, campo.valor])),
-  );
+  const [valores, setValores] = useState<Record<string, string>>({
+    moneda: "PEN",
+    ...Object.fromEntries(campos.map((campo) => [campo.nombre, campo.valor])),
+  });
+  const [mostrarManual, setMostrarManual] = useState(false);
+  const nombresCampos = [
+    "serie", "correlativo", "ruc_emisor", "ruc_receptor",
+    "fecha_emision", "moneda", "importe_total",
+    "razon_social_emisor", "razon_social_receptor",
+  ];
   const [guardando, setGuardando] = useState(false);
   const [creando, setCreando] = useState(false);
   const [tipoComprobante, setTipoComprobante] = useState<"FACT" | "RHE">(
@@ -478,25 +490,35 @@ function ConfirmarCampos({
     }
   };
   return (
-    <details>
+    <details open={mostrarManual || undefined} onToggle={(e) => setMostrarManual(e.currentTarget.open)}>
       <summary>
-        Datos sugeridos ({campos.length}){confirmado ? " · Confirmados" : ""}
+        Crear expediente manualmente · Datos sugeridos ({campos.length})
+        {confirmado ? " · Confirmados" : ""}
       </summary>
+      <p>Confirme los datos del comprobante antes de crear el expediente. Si ya existe la misma identidad fiscal, el sistema debe rechazar la duplicación.</p>
       <dl className="campos-extraidos">
-        {campos.map((campo) => (
-          <div key={campo.nombre}>
-            <dt>{ETIQUETAS_CAMPOS[campo.nombre] ?? campo.nombre}</dt>
+        {nombresCampos.map((nombre) => {
+          const campo = campos.find((item) => item.nombre === nombre);
+          return (
+          <div key={nombre}>
+            <dt>{ETIQUETAS_CAMPOS[nombre] ?? nombre}</dt>
             <dd>
               <input
-                aria-label={ETIQUETAS_CAMPOS[campo.nombre] ?? campo.nombre}
-                value={valores[campo.nombre] ?? ""}
-                onChange={(e) => setValores({ ...valores, [campo.nombre]: e.target.value })}
+                aria-label={ETIQUETAS_CAMPOS[nombre] ?? nombre}
+                value={valores[nombre] ?? ""}
+                type={nombre === "fecha_emision" ? "date" : "text"}
+                onChange={(e) => setValores({ ...valores, [nombre]: e.target.value })}
               />
-              <span> {Math.round(campo.confianza * 100)} % · {campo.fuente}</span>
-              <small title={campo.evidencia}>Evidencia: {campo.evidencia}</small>
+              {campo && (
+                <>
+                  <span> {Math.round(campo.confianza * 100)} % · {campo.fuente}</span>
+                  <small title={campo.evidencia}>Evidencia: {campo.evidencia}</small>
+                </>
+              )}
             </dd>
           </div>
-        ))}
+          );
+        })}
       </dl>
       <button disabled={guardando} onClick={guardar}>
         {guardando ? "Guardando…" : confirmado ? "Actualizar confirmación" : "Confirmar campos"}
