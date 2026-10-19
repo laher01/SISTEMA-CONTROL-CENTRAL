@@ -174,13 +174,14 @@ def test_items_ubl_http_scoped_filters_and_retirement(
     assert own.json()[0]["cantidad"] == "12"
     assert own.json()[0]["importe"] == "60"
     for key in ("emisor_id", "receptor_id"):
+        idx = 0 if key == "emisor_id" else 1
         own_filtered = client.get(
-            "/api/v1/contabilidad-items", params={key: str(ids["1"][0 if key == "emisor_id" else 1])}
+            "/api/v1/contabilidad-items", params={key: str(ids["1"][idx])}
         )
         assert own_filtered.status_code == 200, own_filtered.text
         assert len(own_filtered.json()) == 1
         foreign_filtered = client.get(
-            "/api/v1/contabilidad-items", params={key: str(ids["2"][0 if key == "emisor_id" else 1])}
+            "/api/v1/contabilidad-items", params={key: str(ids["2"][idx])}
         )
         assert foreign_filtered.status_code == 200, foreign_filtered.text
         assert foreign_filtered.json() == []
