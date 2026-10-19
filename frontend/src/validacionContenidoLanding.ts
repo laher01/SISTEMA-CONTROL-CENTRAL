@@ -30,7 +30,10 @@ function validarTexto(campo: string, valor: unknown, maximo: number): ErrorEdito
   if (valor.trim().length > maximo) {
     return [{ campo, mensaje: `No superar ${maximo} caracteres` }];
   }
-  if (/[<>\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(valor)) {
+  if (/[<>]/u.test(valor) || [...valor].some((caracter) => {
+    const codigo = caracter.charCodeAt(0);
+    return codigo <= 31 && codigo !== 9 && codigo !== 10 && codigo !== 13;
+  })) {
     return [{ campo, mensaje: "No se permite HTML ni caracteres de control" }];
   }
   return [];
