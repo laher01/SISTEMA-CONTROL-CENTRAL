@@ -23,8 +23,10 @@ def upgrade() -> None:
         sa.Column("contenido", sa.JSON(), nullable=False),
         sa.Column("actualizado_por", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id")),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True),
-            server_default=sa.func.now(), nullable=False,
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
         sa.CheckConstraint("id = 1", name="cms_landing_revision_unica"),
     )
@@ -37,8 +39,10 @@ def upgrade() -> None:
         sa.Column("nuevo", sa.String(length=24), nullable=False),
         sa.Column("actor_id", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id"), nullable=False),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True),
-            server_default=sa.func.now(), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
         sa.UniqueConstraint("version_nueva", name="uq_cms_landing_evento_version"),
     )
