@@ -24,9 +24,12 @@ def test_migraciones_coinciden_con_modelos() -> None:
     command.upgrade(config, "head")
     # PostgreSQL real: la instalación nueva comienza no publicada.
     with engine.begin() as conexion:
-        assert conexion.execute(
-            text("SELECT activa FROM configuracion_landing_global WHERE id = 1")
-        ).scalar_one() is False
+        assert (
+            conexion.execute(
+                text("SELECT activa FROM configuracion_landing_global WHERE id = 1")
+            ).scalar_one()
+            is False
+        )
 
     # 0041 no modifica decisiones editoriales ya guardadas.
     for activa in (True, False):
@@ -38,9 +41,12 @@ def test_migraciones_coinciden_con_modelos() -> None:
         command.downgrade(config, "0040")
         command.upgrade(config, "0041")
         with engine.connect() as conexion:
-            assert conexion.execute(
-                text("SELECT activa FROM configuracion_landing_global WHERE id = 1")
-            ).scalar_one() is activa
+            assert (
+                conexion.execute(
+                    text("SELECT activa FROM configuracion_landing_global WHERE id = 1")
+                ).scalar_one()
+                is activa
+            )
     with engine.connect() as conexion:
         diferencias = compare_metadata(MigrationContext.configure(conexion), Base.metadata)
     assert diferencias == []
