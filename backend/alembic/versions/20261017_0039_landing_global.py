@@ -31,8 +31,10 @@ def upgrade() -> None:
         ),
     )
     op.execute(
-        "INSERT INTO configuracion_landing_global (id, activa, version) "
-        "VALUES (1, FALSE, 1)"
+        """
+        INSERT INTO configuracion_landing_global (id, activa, version)
+        VALUES (1, FALSE, 1)
+        """
     )
     op.create_table(
         "auditoria_landing_global",
