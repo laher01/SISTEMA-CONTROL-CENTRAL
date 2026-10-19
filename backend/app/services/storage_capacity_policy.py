@@ -7,7 +7,6 @@ de que el orquestador habilite su uso como almacén activo.
 from dataclasses import dataclass
 from decimal import Decimal
 
-
 UMBRAL_PREPARACION = Decimal("0.60")
 
 
