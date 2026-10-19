@@ -67,12 +67,15 @@ def cambiar_estado(
         rol=rol,
         actor_id=str(actor_id),
     )
-    session.execute(
+    resultado = session.execute(
         revision_table.update()
         .where(revision_table.c.id == 1)
         .where(revision_table.c.version == version_esperada)
         .values(version=nueva.version, estado=nueva.estado.value, actualizado_por=actor_id)
     )
+    if resultado.rowcount != 1:
+        session.rollback()
+        raise ValueError("Conflicto concurrente de versión")
     session.execute(
         evento_table.insert().values(
             id=uuid.uuid4(),
