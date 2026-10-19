@@ -1666,3 +1666,37 @@ def test_restaurar_expediente_original_alterado_no_cambia_estado(
     resultado = client.post(f"/api/v1/expedientes/{expediente_id}/restaurar")
     assert resultado.status_code == 409, resultado.text
     assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 404
+
+
+def test_misd_secretaria_no_retiro_documentos_ni_expedientes(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    from dataclasses import replace
+
+    original = subir(client, "misd-secretaria.xml", factura())
+    auth_prueba.contexto = replace(auth_prueba.contexto, rol="SECRETARIA")
+    assert client.delete(f"/api/v1/documentos/{original['id']}").status_code == 403
+    assert (
+        client.delete(f"/api/v1/expedientes/{original['expediente_id']}").status_code
+        == 403
+    )
+    assert client.get("/api/v1/documentos/capacidades").json()["puede_retirar"] is False
+
+
+def test_misd_cliente_autorizado_requiere_administrador(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    from dataclasses import replace
+
+    from app.models import Expediente as ExpedienteModelo
+
+    original = subir(client, "misd-cliente.xml", factura())
+    registro = session.get(ExpedienteModelo, original["expediente_id"])
+    assert registro is not None
+    registro.receptor.autorizada = True
+    session.commit()
+    auth_prueba.contexto = replace(auth_prueba.contexto, rol="GERENTE")
+    # El gerente sin ámbito no debe descubrir la existencia del expediente.
+    assert client.delete(f"/api/v1/expedientes/{registro.id}").status_code == 404
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/expedientes/{registro.id}").status_code == 204
