@@ -12,8 +12,8 @@ from sqlalchemy.exc import IntegrityError
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
 from app.models import Empresa, Expediente, Gestor, PagoGestor
-from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
 from app.services import auditoria
+from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
 
 router = APIRouter(prefix="/pagos-gestores", tags=["pagos-gestores"])
 
