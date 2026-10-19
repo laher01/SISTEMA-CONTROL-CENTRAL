@@ -112,3 +112,68 @@ def cambiar_estado(
         session.rollback()
         raise
     return nueva
+
+
+def guardar_borrador(
+    session: Session,
+    *,
+    contenido: dict[str, object],
+    version_esperada: int,
+    rol: str,
+    actor_id: uuid.UUID,
+) -> RevisionEditorial:
+    """Crear o editar borrador con versionado; nunca afecta la landing pública."""
+    if rol != "SUPERADMIN" or not isinstance(actor_id, uuid.UUID):
+        raise PermissionError("Solo SUPERADMIN puede administrar el CMS")
+    consulta = select(revision_table).where(revision_table.c.id == 1).with_for_update()
+    actual = session.execute(consulta).mappings().one_or_none()
+    if actual is None:
+        if version_esperada != 0:
+            raise ValueError("Conflicto de versión editorial")
+        nueva = RevisionEditorial(1, EstadoEditorial.BORRADOR, contenido)
+        session.execute(
+            revision_table.insert().values(
+                id=1,
+                version=1,
+                estado=nueva.estado.value,
+                contenido=contenido,
+                actualizado_por=actor_id,
+            )
+        )
+        anterior_version = 0
+    else:
+        if actual["version"] != version_esperada:
+            raise ValueError("Conflicto de versión editorial")
+        if actual["estado"] != EstadoEditorial.BORRADOR.value:
+            raise ValueError("Solo se puede editar un borrador")
+        nueva = RevisionEditorial(version_esperada + 1, EstadoEditorial.BORRADOR, contenido)
+        cambiado = session.execute(
+            revision_table.update()
+            .where(revision_table.c.id == 1)
+            .where(revision_table.c.version == version_esperada)
+            .values(
+                contenido=contenido,
+                version=nueva.version,
+                actualizado_por=actor_id,
+            )
+        )
+        if getattr(cambiado, "rowcount", None) != 1:
+            session.rollback()
+            raise ValueError("Conflicto concurrente de versión")
+        anterior_version = version_esperada
+    try:
+        session.execute(
+            evento_table.insert().values(
+                id=uuid.uuid4(),
+                version_anterior=anterior_version,
+                version_nueva=nueva.version,
+                anterior=EstadoEditorial.BORRADOR.value,
+                nuevo=EstadoEditorial.BORRADOR.value,
+                actor_id=actor_id,
+            )
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    return nueva
