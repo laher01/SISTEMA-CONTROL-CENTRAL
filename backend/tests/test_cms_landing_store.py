@@ -80,3 +80,29 @@ def test_version_obsoleta_no_genera_evento(session: Session) -> None:
             actor_id=uuid4(),
         )
     assert session.execute(text("SELECT COUNT(*) FROM cms_landing_evento")).scalar_one() == 0
+
+
+def test_error_de_auditoria_revierte_actualizacion(session: Session) -> None:
+    from sqlalchemy import text
+
+    session.execute(
+        text(
+            "CREATE TRIGGER bloquear_evento BEFORE INSERT ON cms_landing_evento "
+            "BEGIN SELECT RAISE(ABORT, 'auditoria bloqueada'); END"
+        )
+    )
+    session.commit()
+    with pytest.raises(Exception, match="auditoria bloqueada"):
+        cambiar_estado(
+            session,
+            destino=EstadoEditorial.VISTA_PREVIA,
+            version_esperada=1,
+            rol="SUPERADMIN",
+            actor_id=uuid4(),
+        )
+    assert session.execute(
+        text("SELECT version FROM cms_landing_revision")
+    ).scalar_one() == 1
+    assert session.execute(
+        text("SELECT COUNT(*) FROM cms_landing_evento")
+    ).scalar_one() == 0
