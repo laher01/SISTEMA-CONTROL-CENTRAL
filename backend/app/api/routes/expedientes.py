@@ -983,6 +983,7 @@ def eliminar(
     )
     session.commit()
 
+
 @router.post("/{expediente_id}/restaurar", response_model=ExpedienteDetalle)
 def restaurar_expediente(
     expediente_id: uuid.UUID,
@@ -1011,9 +1012,7 @@ def restaurar_expediente(
     # La retirada integral asigna la misma marca al expediente y a las
     # evidencias activas. Las retiradas anteriormente conservan otra marca.
     marca = expediente.deleted_at
-    candidatos = [
-        doc for doc in expediente.documentos if doc.deleted_at == marca
-    ]
+    candidatos = [doc for doc in expediente.documentos if doc.deleted_at == marca]
     for doc in candidatos:
         ruta = almacen.ruta_absoluta(doc.ruta_storage)
         if not ruta.is_file() or hashlib.sha256(ruta.read_bytes()).hexdigest() != doc.sha256:
@@ -1022,7 +1021,8 @@ def restaurar_expediente(
                 "Original ausente o alterado: no se ha restaurado el expediente",
             )
         equivalente = session.scalar(
-            select(Documento.id).where(
+            select(Documento.id)
+            .where(
                 Documento.tenant_id == tenant_id,
                 Documento.id != doc.id,
                 Documento.deleted_at.is_(None),
@@ -1033,7 +1033,8 @@ def restaurar_expediente(
                         Documento.huella_comercial == doc.huella_comercial,
                     ),
                 ),
-            ).limit(1)
+            )
+            .limit(1)
         )
         if equivalente is not None:
             raise HTTPException(
