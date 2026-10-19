@@ -1,4 +1,5 @@
 """Nunca exponer borradores CMS ni contenido con landing global inactiva."""
+
 from unittest.mock import MagicMock
 
 from app.api.routes.cms_landing import contenido_cms_publico
