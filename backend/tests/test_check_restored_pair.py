@@ -1,4 +1,5 @@
 """Pruebas offline del cotejo conjunto sin conexión a bases reales."""
+
 import hashlib
 import importlib.util
 from pathlib import Path
@@ -19,9 +20,7 @@ def test_par_restaurado_coincide(tmp_path: Path) -> None:
     ruta.parent.mkdir(parents=True)
     ruta.write_bytes(contenido)
     manifiesto = tmp_path / "manifest.tsv"
-    manifiesto.write_text(
-        f"{tenant}\t{tenant}/{digest[:2]}/{digest}\t{digest}\n", encoding="utf-8"
-    )
+    manifiesto.write_text(f"{tenant}\t{tenant}/{digest[:2]}/{digest}\t{digest}\n", encoding="utf-8")
     assert MOD.cotejar(manifiesto, documentos, 1) == (1, 0)
     assert MOD.cotejar(manifiesto, documentos, 2)[1] > 0
     ruta.write_bytes(b"alterado")
