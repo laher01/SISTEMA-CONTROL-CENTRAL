@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.enums import RolMiembro
-from app.models import CuentaAcceso, Gestor, Miembro, SesionAcceso
+from app.models import CuentaAcceso, Gestor, Miembro, SesionAcceso, Tenant
 
 
 @dataclass(frozen=True)
@@ -132,6 +132,11 @@ def contexto_desde_token(session: Session, token: str) -> ContextoAcceso | None:
 
     cuenta = session.get(CuentaAcceso, sesion.cuenta_id)
     if cuenta is None or not cuenta.activo or cuenta.deleted_at is not None:
+        return None
+    tenant = session.get(Tenant, cuenta.tenant_id)
+    if tenant is None or tenant.estado != "ACTIVO" or sesion.tenant_id != tenant.id:
+        sesion.revocada_at = ahora
+        session.flush()
         return None
 
     sesion.ultima_actividad = ahora
