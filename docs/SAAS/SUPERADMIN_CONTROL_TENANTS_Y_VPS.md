@@ -13,7 +13,7 @@ Se reutiliza el flujo vigente `POST /api/v1/configuracion/administraciones`, pro
 
 **Plantilla:** cada tenant hereda automáticamente la estructura **versionada de la aplicación y migraciones comunes**: mismas tablas compartidas con `tenant_id`, permisos y menús de su plan. No se clonan filas, archivos, expedientes, credenciales, historiales ni IDs del tenant original; este continúa intacto. La actualización del código y migraciones del SaaS central alcanza a todos los tenants compatibles, sin usar un tenant con datos como origen de copia.
 
-Provisionamiento idempotente con clave de solicitud, transacción, auditoría y rechazo de nombres/subdominios duplicados. Mantener política de tenant inicial y demos conforme a `docs/SAAS/01_TENANT_LIFECYCLE.md`; no desactivar registro público sin una decisión explícita que coordine Etapa 7.
+Provisionamiento idempotente con clave de solicitud, transacción, auditoría y rechazo de nombres/subdominios duplicados. **Nueva regla solicitada:** únicamente SUPERADMIN (o auxiliares de plataforma con delegación expresamente aprobada) autoriza la creación efectiva del tenant. El registro público debe producir una **solicitud pendiente de aprobación**, no una base ni un tenant activo. Existe actualmente la ruta de demos con secreto (`POST /configuracion/administraciones/demo`), y el documento de ciclo de vida histórico prevé autoalta: resolver esa incompatibilidad con el equipo de Etapa 7 y autenticación antes de cambiar el onboarding compartido. No afirmar exclusividad total de SUPERADMIN mientras la ruta demo siga disponible.
 
 ## 3. Administración y seguridad
 | Operación | Responsable |
