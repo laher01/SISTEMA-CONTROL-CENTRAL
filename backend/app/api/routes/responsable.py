@@ -25,8 +25,8 @@ from app.models import (
     SaldoCompraERP,
 )
 from app.services import auditoria
-
 from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
+
 router = APIRouter(prefix="/responsable", tags=["responsable"])
 
 
