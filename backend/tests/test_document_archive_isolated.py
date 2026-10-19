@@ -164,3 +164,17 @@ def test_falta_espacio_no_publica(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     with pytest.raises(OSError, match="Espacio"):
         MODULO.restaurar(copia, tmp_path / "restored", digest)
     assert not (tmp_path / "restored").exists()
+
+
+def test_tar_truncado_no_publica(tmp_path: Path) -> None:
+    origen = tmp_path / "source"
+    origen.mkdir()
+    (origen / "archivo").write_bytes(b"contenido")
+    copia = tmp_path / "backup.tar"
+    MODULO.respaldo(origen, copia)
+    copia.write_bytes(copia.read_bytes()[:300])
+    digest_truncado = hashlib.sha256(copia.read_bytes()).hexdigest()
+    destino = tmp_path / "restored"
+    with pytest.raises((tarfile.TarError, EOFError, OSError, ValueError)):
+        MODULO.restaurar(copia, destino, digest_truncado)
+    assert not destino.exists()
