@@ -18,9 +18,7 @@ def test_cadena_jerarquica_misd() -> None:
     assert roles_aprobadores("SECRETARIA") == ()
 
 
-def test_ventana_de_correccion_y_prioridad_de_pagos(
-    client: TestClient, session: Session
-) -> None:
+def test_ventana_de_correccion_y_prioridad_de_pagos(client: TestClient, session: Session) -> None:
     subida = client.post(
         "/api/v1/documentos",
         files={"archivo": ("politica-misd.xml", factura())},
