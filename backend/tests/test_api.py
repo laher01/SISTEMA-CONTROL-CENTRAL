@@ -1537,3 +1537,22 @@ def test_restaurar_expediente_denegado_a_superadmin(
     assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 204
     auth_prueba.como_superadmin()
     assert client.post(f"/api/v1/expedientes/{expediente_id}/restaurar").status_code == 403
+
+
+def test_restaurar_expediente_original_faltante_no_cambia_estado(
+    client: TestClient, auth_prueba: AuthPrueba, settings: Settings
+) -> None:
+    original = subir(client, "factura-faltante.xml", factura())
+    expediente_id = original["expediente_id"]
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 204
+    ruta = (
+        settings.storage_dir
+        / str(auth_prueba.contexto.tenant_id)
+        / str(original["sha256"])[:2]
+        / str(original["sha256"])
+    )
+    ruta.unlink()
+    respuesta = client.post(f"/api/v1/expedientes/{expediente_id}/restaurar")
+    assert respuesta.status_code == 409, respuesta.text
+    assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 404
