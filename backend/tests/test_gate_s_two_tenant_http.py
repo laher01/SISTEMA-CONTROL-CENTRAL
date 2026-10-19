@@ -8,7 +8,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Empresa, Expediente, Tenant
+from app.models import Documento, Empresa, Expediente, Tenant
+from app.services.contabilidad_items_ubl import registrar_items_ubl
 from tests.conftest import AuthPrueba
 
 
@@ -112,3 +113,82 @@ def test_conciliacion_excludes_other_tenant_and_emisor_receptor(
     after_retirement = client.get("/api/v1/contabilidad-items/conciliacion")
     assert after_retirement.status_code == 200, after_retirement.text
     assert after_retirement.json() == []
+
+
+def test_items_ubl_http_scoped_filters_and_retirement(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    auth_prueba.como_admin()
+    own_tenant = auth_prueba.contexto.tenant_id
+    other_tenant = Tenant(nombre="gate-s-ubl-other")
+    session.add(other_tenant)
+    session.flush()
+    xml = (
+        b'<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" '
+        b'xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" '
+        b'xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">'
+        b'<cac:InvoiceLine><cbc:InvoicedQuantity unitCode="KGM">12</cbc:InvoicedQuantity>'
+        b'<cbc:LineExtensionAmount>60</cbc:LineExtensionAmount>'
+        b'<cac:Item><cbc:Name>Pota congelada</cbc:Name></cac:Item>'
+        b'</cac:InvoiceLine></Invoice>'
+    )
+    ids = {}
+    for tenant_id, tag in ((own_tenant, "1"), (other_tenant.id, "2")):
+        emisor = Empresa(tenant_id=tenant_id, ruc=f"2200000000{tag}", razon_social="Emisor")
+        receptor = Empresa(tenant_id=tenant_id, ruc=f"2300000000{tag}", razon_social="Receptor")
+        session.add_all([emisor, receptor])
+        session.flush()
+        expediente = Expediente(
+            tenant_id=tenant_id,
+            emisor_id=emisor.id,
+            receptor_id=receptor.id,
+            tipo_comprobante="FACT",
+            serie="F002",
+            correlativo=tag,
+            fecha_emision=date(2026, 10, 18),
+            moneda="PEN",
+            importe_total=Decimal("60"),
+        )
+        session.add(expediente)
+        session.flush()
+        documento = Documento(
+            tenant_id=tenant_id,
+            expediente_id=expediente.id,
+            estado="PENDIENTE_RELACION",
+            sha256=tag * 64,
+            nombre_original="prueba.xml",
+            mime_type="text/xml",
+            tamano_bytes=len(xml),
+            ruta_storage=f"{tenant_id}/prueba-{tag}.xml",
+        )
+        session.add(documento)
+        session.flush()
+        assert registrar_items_ubl(session, tenant_id, documento.id, xml) == 1
+        assert registrar_items_ubl(session, tenant_id, documento.id, xml) == 0
+        ids[tag] = (emisor.id, receptor.id, documento.id)
+    session.commit()
+
+    own = client.get("/api/v1/contabilidad-items")
+    assert own.status_code == 200, own.text
+    assert len(own.json()) == 1
+    assert own.json()[0]["cantidad"] == "12"
+    assert own.json()[0]["importe"] == "60"
+    for key in ("emisor_id", "receptor_id"):
+        own_filtered = client.get(
+            "/api/v1/contabilidad-items", params={key: str(ids["1"][0 if key == "emisor_id" else 1])}
+        )
+        assert own_filtered.status_code == 200, own_filtered.text
+        assert len(own_filtered.json()) == 1
+        foreign_filtered = client.get(
+            "/api/v1/contabilidad-items", params={key: str(ids["2"][0 if key == "emisor_id" else 1])}
+        )
+        assert foreign_filtered.status_code == 200, foreign_filtered.text
+        assert foreign_filtered.json() == []
+
+    own_doc = session.get(Documento, ids["1"][2])
+    assert own_doc is not None
+    own_doc.deleted_at = datetime.now(timezone.utc)
+    session.commit()
+    retired = client.get("/api/v1/contabilidad-items")
+    assert retired.status_code == 200, retired.text
+    assert retired.json() == []
