@@ -1709,3 +1709,48 @@ def test_misd_solo_administrador_puede_retirar_cliente_autorizado() -> None:
         assert requiere_autorizacion_administrativa(rol, True)
         assert not requiere_autorizacion_administrativa(rol, False)
     assert not requiere_autorizacion_administrativa("ADMINISTRADOR", True)
+
+def test_restaurar_expediente_preserva_retiros_anteriores_y_alertas(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    session: Session,
+) -> None:
+    from uuid import UUID
+
+    from app.models import Documento
+
+    factura_doc = subir(client, "exp-restauracion.xml", factura())
+    exp_id = factura_doc["expediente_id"]
+    previo = subir(client, "exp-previo.pdf", b"%PDF-1.7 retiro previo")
+    posterior = subir(client, "exp-posterior.pdf", b"%PDF-1.7 retiro cascada")
+    session.get(Documento, UUID(str(previo["id"]))).expediente_id = UUID(str(exp_id))
+    session.get(Documento, UUID(str(posterior["id"]))).expediente_id = UUID(str(exp_id))
+    session.commit()
+    alertas_iniciales = alertas_abiertas(expediente(client, exp_id))
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/documentos/{previo['id']}").status_code == 204
+    assert client.delete(f"/api/v1/expedientes/{exp_id}").status_code == 204
+    assert client.get(f"/api/v1/expedientes/{exp_id}").status_code == 404
+    assert client.post(f"/api/v1/documentos/{posterior['id']}/restaurar").status_code == 409
+    respuesta = client.post(f"/api/v1/expedientes/{exp_id}/restaurar")
+    assert respuesta.status_code == 200, respuesta.text
+    activos = {item["id"] for item in respuesta.json()["documentos"]}
+    assert factura_doc["id"] in activos
+    assert posterior["id"] in activos
+    assert previo["id"] not in activos
+    assert client.get(f"/api/v1/documentos/{previo['id']}").status_code == 404
+    assert alertas_abiertas(expediente(client, exp_id)) == alertas_iniciales
+    assert client.post(f"/api/v1/expedientes/{exp_id}/restaurar").status_code == 409
+
+
+def test_restauracion_expediente_prohibe_superadmin(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    doc = subir(client, "exp-permisos.xml", factura())
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/expedientes/{doc['expediente_id']}").status_code == 204
+    auth_prueba.como_superadmin()
+    assert (
+        client.post(f"/api/v1/expedientes/{doc['expediente_id']}/restaurar").status_code
+        == 403
+    )
