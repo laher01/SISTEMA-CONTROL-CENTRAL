@@ -218,7 +218,8 @@ def test_voucher_de_otro_periodo_bloquea_retiro_integral_misd(
     voucher = session.get(Documento, voucher_subido.json()["id"])
     assert voucher is not None
     voucher.expediente_id = expediente_id
-    session.flush()
+    # Evitar retener bloqueos de escritura al abrir la sesión HTTP de MISD.
+    session.commit()
     solicitud = client.post(
         "/api/v1/misd/solicitudes",
         json={"expediente_id": expediente_id, "motivo": "Retiro pendiente de revisión"},
