@@ -1,6 +1,6 @@
 # Etapa 7 — Issue #340: publicación inicial Landing/CMS y cadena Alembic
 
-Estado: PROPUESTA DE CORRECCIÓN / SIN CAMBIOS DE ESQUEMA. Propietario funcional: Etapa 7.
+Estado: IMPLEMENTACIÓN PROPUESTA EN DRAFT PR #341 / SIN NUEVA REVISIÓN ALEMBIC. Propietario funcional: Etapa 7.
 Coordinación: https://github.com/laher01/SISTEMA-CONTROL-CENTRAL/issues/340
 PR consumidor MISD: #336 (base #292). No realizar merge ni despliegue desde este documento.
 
@@ -39,3 +39,11 @@ P1: archivo 0041 idéntico a main, se necesita coordinación histórica y de pro
 P2: el seed TRUE en 0039 sigue sin cumplir el criterio de estado inicial no publicado; los endpoints de main sin fila ya devuelven/crean FALSE. No cerrar sin solución y pruebas.
 
 Este documento prepara la corrección; **no constituye implementación ni prueba exitosa**.
+
+## Implementación propuesta en PR #341 (2026-10-19)
+
+Se ajustó **solo para instalaciones nuevas** el código fuente de la migración `0039`: la columna `activa` tiene `server_default=FALSE` y la fila inicial se inserta con `activa=FALSE`. El `0041` de `main` queda intacto y sigue estableciendo `server_default=FALSE`. No se añade revisión ni head Alembic, preservando `0041→0042` en la integración MISD.
+
+**Limitación consciente:** cambiar el código de una migración histórica afecta las instalaciones nuevas que aún no ejecutaron `0039`; Alembic NO vuelve a ejecutar `0039` sobre bases ya migradas, por tanto no cambia el estado editorial de esas bases. Este cambio exige revisión del responsable de Etapa 7 por tratarse de archivo histórico, además de prueba de upgrade desde cero e inspección de estados existentes. Si la política del proyecto prohíbe cualquier edición de migraciones antiguas, revertir el cambio y acordar una inicialización distinta, antes de fusionar.
+
+Se añadió la prueba `backend/tests/test_landing_initial_migration.py` para verificar el default y el INSERT del paso 0039 y que el downgrade conserva el orden de eliminación. **No garantiza por sí sola el upgrade integral de PostgreSQL**: debe comprobarse con CI y despliegue de prueba aislado, nunca en VPS productiva.
