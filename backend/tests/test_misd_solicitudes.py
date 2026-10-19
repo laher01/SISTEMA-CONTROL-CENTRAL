@@ -333,6 +333,8 @@ def test_aprobacion_revocada_no_es_valida_para_ejecutar(
     cuenta.activo = False
     session.flush()
     assert not _aprobacion_sigue_vigente(solicitud, expediente, session)
+    # Liberar los bloqueos de la sesión del test antes de abrir otra sesión HTTP.
+    session.commit()
 
     ejecutada = client.post(f"/api/v1/misd/solicitudes/{solicitud.id}/ejecutar")
     assert ejecutada.status_code == 409, ejecutada.text
