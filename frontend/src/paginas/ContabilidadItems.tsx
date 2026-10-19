@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { conParametros, useDatos } from "../api";
 
-type FilaItem = {
+type FacturaItem = { expediente_id: string; documento_id: string; comprobante: string; fecha_emision: string; moneda: string; descripcion_original: string; cantidad: string; unidad: string; importe: string; };\n\ntype FilaItem = {
   producto_id: string;
   categoria: string;
   descripcion: string;
@@ -24,22 +24,22 @@ type Conciliacion = {
 };
 
 export default function ContabilidadItems() {
-  const [desde, setDesde] = useState("");
+  const [buscar, setBuscar] = useState("");\n  const [categoria, setCategoria] = useState("");\n  const [productoSeleccionado, setProductoSeleccionado] = useState<string | null>(null);\n  const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [emisorId, setEmisorId] = useState("");
   const [receptorId, setReceptorId] = useState("");
   const [errorFiltros, setErrorFiltros] = useState("");
   const [errorDescarga, setErrorDescarga] = useState("");
   const [descargando, setDescargando] = useState(false);
-  const [filtros, setFiltros] = useState({ desde: "", hasta: "", emisor_id: "", receptor_id: "" });
+  const [filtros, setFiltros] = useState({ desde: "", hasta: "", emisor_id: "", receptor_id: "", buscar: "", categoria: "" });
   const ruta = conParametros("/api/v1/contabilidad-items", {
     desde: filtros.desde,
     hasta: filtros.hasta,
     emisor_id: filtros.emisor_id,
-    receptor_id: filtros.receptor_id,
+    receptor_id: filtros.receptor_id,\n    buscar: filtros.buscar,\n    categoria: filtros.categoria,
   });
   const { datos, error, cargando, recargar } = useDatos<FilaItem[]>(ruta);
-  const conciliacion = useDatos<Conciliacion[]>(conParametros("/api/v1/contabilidad-items/conciliacion", filtros));
+  const rutaFacturas = productoSeleccionado ? conParametros(`/api/v1/contabilidad-items/productos/${productoSeleccionado}/facturas`, { desde: filtros.desde, hasta: filtros.hasta, emisor_id: filtros.emisor_id, receptor_id: filtros.receptor_id }) : null;\n  const { datos: facturas, error: errorFacturas, cargando: cargandoFacturas } = useDatos<FacturaItem[]>(rutaFacturas);\n  const conciliacion = useDatos<Conciliacion[]>(conParametros("/api/v1/contabilidad-items/conciliacion", filtros));
 
   return (
     <section aria-label="Contabilidad de ítems">
@@ -56,10 +56,10 @@ export default function ContabilidadItems() {
           return;
         }
         setErrorFiltros("");
-        setFiltros({ desde, hasta, emisor_id: emisorId.trim(), receptor_id: receptorId.trim() });
+        setProductoSeleccionado(null);\n        setFiltros({ desde, hasta, emisor_id: emisorId.trim(), receptor_id: receptorId.trim(), buscar: buscar.trim(), categoria: categoria.trim() });
         recargar();
       }}>
-        <label htmlFor="items-desde">Desde</label>
+        <label htmlFor="items-buscar">Buscar producto o servicio</label>\n        <input id="items-buscar" value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Descripción original o nombre del producto" />\n        <label htmlFor="items-categoria">Categoría</label>\n        <input id="items-categoria" value={categoria} onChange={(e) => setCategoria(e.target.value)} placeholder="Categoría exacta (opcional)" />\n        <label htmlFor="items-desde">Desde</label>
         <input id="items-desde" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
         <label htmlFor="items-hasta">Hasta</label>
         <input id="items-hasta" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
@@ -134,7 +134,7 @@ export default function ContabilidadItems() {
                 <th scope="col">Unidad</th>
                 <th scope="col">Cantidad acumulada</th>
                 <th scope="col">Moneda</th>
-                <th scope="col">Importe de líneas</th>
+                <th scope="col">Importe de líneas</th>\n                <th scope="col">Facturas</th>
               </tr>
             </thead>
             <tbody>
@@ -145,12 +145,33 @@ export default function ContabilidadItems() {
                   <td>{fila.unidad}</td>
                   <td>{fila.cantidad}</td>
                   <td>{fila.moneda}</td>
-                  <td>{fila.importe || "Sin importe"}</td>
+                  <td>{fila.importe || "Sin importe"}</td>\n                  <td><button type="button" onClick={() => setProductoSeleccionado(fila.producto_id)}>Ver facturas</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+      {productoSeleccionado && (
+        <section aria-label="Facturas vinculadas al ítem">
+          <h3>Facturas que contienen el producto seleccionado</h3>
+          <button type="button" onClick={() => setProductoSeleccionado(null)}>Cerrar detalle</button>
+          {cargandoFacturas && <p>Consultando facturas…</p>}
+          {errorFacturas && <p role="alert">{errorFacturas}</p>}
+          {facturas?.length === 0 && <p>No hay facturas visibles para los filtros aplicados.</p>}
+          {facturas && facturas.length > 0 && <div style={{ overflowX: "auto" }}>
+            <table>
+              <thead><tr><th>Factura</th><th>Fecha</th><th>Descripción original</th><th>Cantidad</th><th>Importe</th><th>Expediente</th></tr></thead>
+              <tbody>{facturas.map((factura) => (
+                <tr key={factura.documento_id + ":" + factura.comprobante + ":" + factura.descripcion_original}>
+                  <td>{factura.comprobante}</td><td>{factura.fecha_emision}</td><td>{factura.descripcion_original}</td>
+                  <td>{factura.cantidad} {factura.unidad}</td><td>{factura.importe} {factura.moneda}</td>
+                  <td><a href={`/expedientes/${factura.expediente_id}`}>Abrir expediente</a></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>}
+        </section>
       )}
     </section>
   );
