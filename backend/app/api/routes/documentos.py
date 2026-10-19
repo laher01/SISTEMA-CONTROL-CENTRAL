@@ -1244,6 +1244,16 @@ def previsualizar_retirada(
         except HTTPException:
             resultados.append({"id": str(documento_id), "estado": "NO_DISPONIBLE"})
             continue
+        expediente = documento.expediente
+        if expediente is not None and (
+            requiere_autorizacion_administrativa(auth.rol, expediente.receptor.autorizada)
+            or motivo_bloqueo_liquidacion(session, expediente) is not None
+        ):
+            resultados.append({"id": str(documento_id), "estado": "BLOQUEADO"})
+            continue
+        if motivo_bloqueo_voucher(session, tenant_id, documento.id) is not None:
+            resultados.append({"id": str(documento_id), "estado": "BLOQUEADO"})
+            continue
         resultados.append({"id": str(documento_id), "estado": "APTO_RETIRADA"})
     return {
         "total": len(resultados),
