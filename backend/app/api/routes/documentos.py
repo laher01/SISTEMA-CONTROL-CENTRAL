@@ -69,7 +69,7 @@ from app.services.ingesta import (
 from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.lotes_imagenes import MAX_IMAGENES_POR_SUBLOTE
 from app.services.metadatos_documento import metadatos_individuales
-from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
+from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado, requiere_autorizacion_administrativa
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 from app.services.relaciones_documentales import sugerir_relaciones
 from app.services.separador_pdf import analizar_paquete, extraer_fragmento
@@ -1336,6 +1336,13 @@ def eliminar_documento(
             "No tiene permiso para eliminar registros",
         )
     expediente = documento.expediente
+    if expediente is not None and requiere_autorizacion_administrativa(
+        auth.rol, expediente.receptor.autorizada
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "El cliente está autorizado: debe solicitar aprobación a ADMINISTRACIÓN",
+        )
     documento.deleted_at = ahora()
     auditoria.registrar(
         session,
