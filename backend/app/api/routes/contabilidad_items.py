@@ -437,6 +437,8 @@ def exportar_csv(
     hasta: date | None = None,
     emisor_id: uuid.UUID | None = None,
     receptor_id: uuid.UUID | None = None,
+    buscar: Annotated[str | None, Query(max_length=150)] = None,
+    categoria: Annotated[str | None, Query(max_length=80)] = None,
 ) -> Response:
     """Exportación de acumulados autorizados; no expone comprobantes ajenos al tenant."""
     filas = resumen(
@@ -447,6 +449,8 @@ def exportar_csv(
         emisor_id=emisor_id,
         receptor_id=receptor_id,
         limite=501,
+        buscar=buscar,
+        categoria=categoria,
     )
     if len(filas) > 500:
         raise HTTPException(413, "La exportación supera 500 grupos; reduzca el período")
