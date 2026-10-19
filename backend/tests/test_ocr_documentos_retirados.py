@@ -138,3 +138,85 @@ def test_ocr_detecta_retirada_confirmada_por_otra_sesion(
     with pytest.raises(HTTPException) as error:
         documentos_routes._procesar_y_aplicar(session, settings, almacen, date.today(), documento)
     assert error.value.status_code == 404
+
+
+def test_lote_continua_si_misd_retiro_un_candidato(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    retirado = SimpleNamespace(id=uuid.uuid4(), deleted_at=datetime.now(UTC))
+    siguiente = SimpleNamespace(id=uuid.uuid4(), deleted_at=None)
+    procesados: list[uuid.UUID] = []
+
+    class SesionLote:
+        def scalars(self, _consulta: object) -> list[SimpleNamespace]:
+            return [retirado, siguiente]
+
+        def rollback(self) -> None:
+            pass
+
+        def get(self, _modelo: object, documento_id: uuid.UUID) -> SimpleNamespace:
+            assert documento_id == retirado.id
+            return retirado
+
+        def refresh(self, _documento: SimpleNamespace) -> None:
+            pass
+
+        def commit(self) -> None:
+            pass
+
+    def procesar(
+        _session: object,
+        _settings: object,
+        _almacen: object,
+        _hoy: date,
+        documento: SimpleNamespace,
+        **_kwargs: object,
+    ) -> SimpleNamespace:
+        procesados.append(documento.id)
+        if documento.id == retirado.id:
+            raise HTTPException(status_code=404, detail="Documento no encontrado")
+        return SimpleNamespace(relacionado=False, estado="REVISION_REQUERIDA")
+
+    monkeypatch.setattr(documentos_routes, "_aplicar_ambito_documentos", lambda q, _auth: q)
+    monkeypatch.setattr(documentos_routes, "_automatizacion_ya_evaluada", lambda _d: False)
+    monkeypatch.setattr(documentos_routes, "_procesar_y_aplicar", procesar)
+    resultado = documentos_routes.procesar_pendientes(
+        SesionLote(), object(), object(), date.today(), uuid.uuid4(),
+        object(), limit=50,
+    )
+    assert procesados == [retirado.id, siguiente.id]
+    assert resultado.relacionados == 0
+    assert resultado.revision_requerida == 1
+    assert resultado.fallidos == 0
+
+
+def test_lote_no_silencia_404_de_documento_vigente(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    vigente = SimpleNamespace(id=uuid.uuid4(), deleted_at=None)
+
+    class SesionLote:
+        def scalars(self, _consulta: object) -> list[SimpleNamespace]:
+            return [vigente]
+
+        def rollback(self) -> None:
+            pass
+
+        def get(self, _modelo: object, _id: uuid.UUID) -> SimpleNamespace:
+            return vigente
+
+        def refresh(self, _documento: SimpleNamespace) -> None:
+            pass
+
+    def fallo(*_args: object, **_kwargs: object) -> None:
+        raise HTTPException(status_code=404, detail="Otra entidad inexistente")
+
+    monkeypatch.setattr(documentos_routes, "_aplicar_ambito_documentos", lambda q, _auth: q)
+    monkeypatch.setattr(documentos_routes, "_automatizacion_ya_evaluada", lambda _d: False)
+    monkeypatch.setattr(documentos_routes, "_procesar_y_aplicar", fallo)
+    with pytest.raises(HTTPException) as error:
+        documentos_routes.procesar_pendientes(
+            SesionLote(), object(), object(), date.today(), uuid.uuid4(),
+            object(), limit=50,
+        )
+    assert error.value.status_code == 404
