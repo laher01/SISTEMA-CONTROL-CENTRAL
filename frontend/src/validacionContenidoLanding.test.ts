@@ -13,6 +13,14 @@ describe("validación editorial de landing", () => {
     expect(errores.some((error) => error.campo === "titulo")).toBe(true);
   });
 
+  it("valida el encabezado de beneficios y no lo omite", () => {
+    const errores = validarContenidoLanding({
+      ...contenidoLandingInicial,
+      beneficiosTitulo: "<script>inseguro</script>",
+    });
+    expect(errores.some((error) => error.campo === "beneficiosTitulo")).toBe(true);
+  });
+
   it("bloquea etiquetas HTML y caracteres de control", () => {
     const errores = validarContenidoLanding({
       ...contenidoLandingInicial,
