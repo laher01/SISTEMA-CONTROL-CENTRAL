@@ -30,7 +30,37 @@ def test_solicitud_aprobacion_no_borra_expediente(
     )
     assert duplicada.status_code == 409
 
-    auth_prueba.como_admin()
+    from dataclasses import replace
+
+    from app.models import CuentaAcceso, Miembro
+
+    administrador = Miembro(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="ADMIN-MISD",
+        nombre="Aprobador MISD",
+        rol="ADMINISTRADOR",
+        activo=True,
+    )
+    session.add(administrador)
+    session.flush()
+    cuenta_admin = CuentaAcceso(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        login="ADMIN-MISD",
+        password_hash="hash-pruebas",
+        miembro_id=administrador.id,
+        activo=True,
+        cambio_clave_obligatorio=False,
+    )
+    session.add(cuenta_admin)
+    session.commit()
+    auth_prueba.contexto = replace(
+        auth_prueba.contexto,
+        cuenta_id=cuenta_admin.id,
+        miembro_id=administrador.id,
+        rol="ADMINISTRADOR",
+        usuario_id=None,
+        gestor_id=None,
+    )
     lista = client.get("/api/v1/misd/solicitudes")
     assert lista.status_code == 200, lista.text
     assert any(item["id"] == solicitud_id for item in lista.json())
