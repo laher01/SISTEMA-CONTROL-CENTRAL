@@ -49,13 +49,9 @@ def cambiar_estado(
     if not isinstance(actor_id, uuid.UUID):
         raise PermissionError("Identidad editorial requerida")
 
-    actual = (
-        session.execute(
-            select(revision_table).where(revision_table.c.id == 1).with_for_update()
-        )
-        .mappings()
-        .one_or_none()
-    )
+    consulta = select(revision_table).where(revision_table.c.id == 1).with_for_update()
+    filas = session.execute(consulta)
+    actual = filas.mappings().one_or_none()
     if actual is None:
         raise LookupError("Inicialice un borrador aprobado antes de transicionar")
 
