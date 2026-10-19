@@ -1,5 +1,8 @@
 """Creación manual de expediente cuando OCR no proporciona campos."""
 
+import uuid
+from dataclasses import replace
+
 from fastapi.testclient import TestClient
 
 
@@ -52,3 +55,35 @@ def test_confirmacion_manual_sin_ocr_y_colision_fiscal(client: TestClient) -> No
     assert conflicto.status_code == 409, conflicto.text
     assert conflicto.json()["detail"]["duplicado"] is True
     assert conflicto.json()["detail"]["expediente_id"] == expediente_id
+
+
+def test_creacion_manual_no_cruza_tenant(client: TestClient, auth_prueba: object) -> None:
+    registro = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("aislamiento.pdf", b"%PDF-1.7 aislamiento fiscal")},
+    )
+    assert registro.status_code == 201, registro.text
+    documento_id = registro.json()["id"]
+    contexto_original = auth_prueba.contexto
+    auth_prueba.contexto = replace(contexto_original, tenant_id=uuid.uuid4())
+    try:
+        campos = {
+            "serie": "F091",
+            "correlativo": "00007270",
+            "ruc_emisor": "20175642341",
+            "ruc_receptor": "20538821374",
+            "fecha_emision": "2026-10-07",
+            "moneda": "PEN",
+            "importe_total": "9400.00",
+        }
+        confirmar = client.put(
+            f"/api/v1/documentos/{documento_id}/extraccion-confirmada", json=campos
+        )
+        assert confirmar.status_code == 404
+        crear = client.post(
+            f"/api/v1/documentos/{documento_id}/crear-expediente",
+            json={"tipo_comprobante": "FACT", "requiere_guia": False},
+        )
+        assert crear.status_code == 404
+    finally:
+        auth_prueba.contexto = contexto_original
