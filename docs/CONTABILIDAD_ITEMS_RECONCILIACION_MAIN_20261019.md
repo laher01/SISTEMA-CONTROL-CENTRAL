@@ -29,3 +29,19 @@
 - Revisiones y protecciones de main deben confirmarse antes de I. No borrar ramas previas por quedar obsoletas.
 
 Sin modificación de main, ramas ajenas, VPS o datos productivos. Sin merge ni deploy.
+
+## Resultado de CI de candidata reconciliada — 19/10/2026
+- HEAD de código sometido a CI: `0160e88ac55e7ada17839a0f4ca97e12ceaf61ea`.
+- Workflow **backend** SUCCESS, run `39213158218`; log pytest **559 passed, 10 warnings in 128.49s**. Ruff check, Ruff format, mypy y pytest completaron satisfactoriamente.
+- Workflow **frontend** SUCCESS run `39213158222`.
+- Workflow **recepcion-documental-ci** SUCCESS run `39213158267`.
+- Workflow **roles-real-integration** SUCCESS run `39213158237`.
+- Workflow **roles-browser-isolated** SUCCESS run `39213158278`.
+- Test `tests/test_contabilidad_items_persistencia.py`: **8 pruebas** aprobadas, incluyendo idempotencia, separación tenant, PDF/SCORPIO, rechazo por documento ajeno/eliminado e **inserción concurrente en PostgreSQL**.
+- Test `tests/test_contabilidad_items_reescaneo.py`: **15 pruebas** aprobadas sobre vistas previas, lectura con hash y control de acceso a rutas, recuperación de fallos y reintentos.
+- Test `tests/test_items_product_invoice_links.py`: **1 prueba** HTTP aprobada con búsqueda, filtro categoría, CSV filtrado, tenant, roles, fechas y documento retirado.
+- Test `tests/test_alembic_0034_integracion.py`: **1 prueba** aprobada con migración Alembic PostgreSQL en base de datos efímera; `tests/test_migraciones.py` también aprobado. No se copiaron migraciones antiguas ni se ejecutaron en producción.
+- **Conclusión**: código candidato reconciliado supera CI **5/5** en SHA `0160e88a`. La evidencia aplica a ese SHA. Este agregado documental modifica el HEAD, por lo que su ejecución posterior debe inspeccionarse por separado.
+- **Pendientes de integración crítica**: aprobaciones formales de revisión y protecciones de main no verificadas; SHA de main debe reconfirmarse al solicitar I. No fusionar automáticamente ramas #186/#281/#320/#325: sus funcionalidades relevantes fueron reconciliadas conservando novedades en main.
+
+No merge, no cambios a main, no VPS, no deploy.
