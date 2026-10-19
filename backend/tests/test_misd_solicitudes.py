@@ -53,9 +53,7 @@ def test_solicitud_aprobacion_no_borra_expediente(
     assert repeticion.status_code == 409
 
 
-def test_secretaria_no_puede_solicitar_retiro(
-    client: TestClient, auth_prueba: AuthPrueba
-) -> None:
+def test_secretaria_no_puede_solicitar_retiro(client: TestClient, auth_prueba: AuthPrueba) -> None:
     from dataclasses import replace
 
     respuesta = client.post(
