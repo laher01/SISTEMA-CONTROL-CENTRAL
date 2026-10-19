@@ -72,6 +72,26 @@ def test_search_and_linked_invoices_are_tenant_scoped(
     assert missing.status_code == 200
     assert missing.json() == []
 
+    category = summary.json()[0]["categoria"]
+    by_category = client.get(
+        "/api/v1/contabilidad-items",
+        params={"buscar": "congelada", "categoria": category},
+    )
+    assert by_category.status_code == 200, by_category.text
+    assert len(by_category.json()) == 1
+    export = client.get(
+        "/api/v1/contabilidad-items/exportar-csv",
+        params={"buscar": "pota", "categoria": category},
+    )
+    assert export.status_code == 200, export.text
+    assert "Pota congelada" in export.text
+    empty_export = client.get(
+        "/api/v1/contabilidad-items/exportar-csv",
+        params={"buscar": "anchoveta"},
+    )
+    assert empty_export.status_code == 200, empty_export.text
+    assert "Pota congelada" not in empty_export.text
+
     invoices = client.get(f"/api/v1/contabilidad-items/productos/{product_id}/facturas")
     assert invoices.status_code == 200, invoices.text
     assert len(invoices.json()) == 1
