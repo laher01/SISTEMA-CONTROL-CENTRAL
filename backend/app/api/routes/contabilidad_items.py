@@ -135,6 +135,64 @@ def resumen(
     ]
 
 
+@router.get("/cobertura")
+def cobertura_items(
+    session: SessionDep,
+    auth: OperativeAuthDep,
+    desde: date | None = None,
+    hasta: date | None = None,
+    emisor_id: uuid.UUID | None = None,
+    receptor_id: uuid.UUID | None = None,
+) -> dict[str, int]:
+    """Cobertura documental y de líneas persistidas, sin inferir productos faltantes.
+
+    Los números se calculan sobre expedientes distintos, filtrados por tenant y
+    alcance operativo. No se confunden documentos con comprobantes.
+    """
+    if desde is not None and hasta is not None and desde > hasta:
+        raise HTTPException(422, "La fecha inicial no puede ser posterior a la final")
+    documentos = select(Documento.id).where(
+        Documento.tenant_id == auth.tenant_id,
+        Documento.expediente_id == Expediente.id,
+        Documento.deleted_at.is_(None),
+    )
+    lineas = (
+        select(LineaComprobanteItem.id)
+        .join(Documento, Documento.id == LineaComprobanteItem.documento_id)
+        .where(
+            LineaComprobanteItem.tenant_id == auth.tenant_id,
+            Documento.tenant_id == auth.tenant_id,
+            Documento.expediente_id == Expediente.id,
+            Documento.deleted_at.is_(None),
+        )
+    )
+    stmt = select(
+        func.count(Expediente.id).label("expedientes"),
+        func.count(Expediente.id).filter(documentos.exists()).label("con_documentos"),
+        func.count(Expediente.id).filter(lineas.exists()).label("con_lineas"),
+    ).where(
+        Expediente.tenant_id == auth.tenant_id,
+        Expediente.deleted_at.is_(None),
+        _alcance(auth),
+    )
+    if desde is not None:
+        stmt = stmt.where(Expediente.fecha_emision >= desde)
+    if hasta is not None:
+        stmt = stmt.where(Expediente.fecha_emision <= hasta)
+    if emisor_id is not None:
+        stmt = stmt.where(Expediente.emisor_id == emisor_id)
+    if receptor_id is not None:
+        stmt = stmt.where(Expediente.receptor_id == receptor_id)
+    fila = session.execute(stmt).one()
+    return {
+        "expedientes": fila.expedientes,
+        "con_documentos": fila.con_documentos,
+        "sin_documentos": fila.expedientes - fila.con_documentos,
+        "con_lineas": fila.con_lineas,
+        "sin_lineas": fila.expedientes - fila.con_lineas,
+    }
+
+
 @router.get("/conciliacion")
 def conciliacion(
     session: SessionDep,
