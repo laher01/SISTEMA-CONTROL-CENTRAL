@@ -972,7 +972,7 @@ def distribuir_pedido(
 
 @router.get("/resumen")
 def resumen_equipo(
-    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
+    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep, mes: str | None = None
 ) -> dict[str, object]:
     if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
@@ -989,6 +989,25 @@ def resumen_equipo(
             .order_by(Miembro.codigo)
         )
     )
+    fechas_produccion = []
+    if mes is not None:
+        try:
+            if len(mes) != 7 or mes[4] != "-":
+                raise ValueError("Formato inválido")
+            desde_mes = date.fromisoformat(f"{mes}-01")
+        except ValueError as exc:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "Mes inválido (AAAA-MM)"
+            ) from exc
+        hasta_mes = (
+            date(desde_mes.year + 1, 1, 1)
+            if desde_mes.month == 12
+            else date(desde_mes.year, desde_mes.month + 1, 1)
+        )
+        fechas_produccion = [
+            Expediente.fecha_emision >= desde_mes,
+            Expediente.fecha_emision < hasta_mes,
+        ]
     ids = [u.id for u in usuarios]
     tasas_por_usuario = {usuario.id: usuario for usuario in usuarios}
     clientes = []
@@ -1011,6 +1030,7 @@ def resumen_equipo(
             Empresa.deleted_at.is_(None),
             Expediente.usuario_id.in_(ids),
             Expediente.deleted_at.is_(None),
+            *fechas_produccion,
         )
         .group_by(
             Expediente.usuario_id,
