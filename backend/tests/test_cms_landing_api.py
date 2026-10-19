@@ -46,7 +46,8 @@ def test_otros_roles_no_leen_ni_modifican_cms(rol: str) -> None:
     with pytest.raises(HTTPException) as exc:
         guardar_cms(
             BorradorCms.model_validate({"version": 0, "contenido": CONTENIDO}),
-            session, cuenta,
+            session,
+            cuenta,
         )
     assert exc.value.status_code == 403
     with pytest.raises(HTTPException) as exc:
@@ -70,10 +71,12 @@ def test_backend_rechaza_html_e_identificadores_duplicados() -> None:
     with pytest.raises(ValidationError):
         ContenidoCms.model_validate({**CONTENIDO, "titulo": "<script>malicioso</script>"})
     with pytest.raises(ValidationError):
-        ContenidoCms.model_validate({
-            **CONTENIDO,
-            "beneficios": [CONTENIDO["beneficios"][0], CONTENIDO["beneficios"][0]],
-        })
+        ContenidoCms.model_validate(
+            {
+                **CONTENIDO,
+                "beneficios": [CONTENIDO["beneficios"][0], CONTENIDO["beneficios"][0]],
+            }
+        )
 
 
 def test_backend_rechaza_campos_desconocidos() -> None:
