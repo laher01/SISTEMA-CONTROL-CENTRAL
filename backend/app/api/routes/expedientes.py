@@ -44,7 +44,7 @@ from app.services.expedientes import (
 from app.services.ingesta import crear_expediente
 from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.misd_autorizaciones import dentro_ventana_correccion
-from app.services.misd_pagos import motivo_bloqueo_liquidacion
+from app.services.misd_pagos import motivo_bloqueo_liquidacion, motivo_bloqueo_voucher
 from app.services.pdf_consolidado import pdf_con_documentos
 from app.services.permisos import (
     PERMISO_ELIMINAR_REGISTROS,
@@ -983,6 +983,13 @@ def eliminar(
             status.HTTP_409_CONFLICT,
             f"Eliminación bloqueada: {bloqueo}",
         )
+
+    if any(
+        documento.deleted_at is None
+        and motivo_bloqueo_voucher(session, tenant_id, documento.id) is not None
+        for documento in expediente.documentos
+    ):
+        raise HTTPException(409, "Expediente contiene un voucher vinculado a un pago")
 
     marca_eliminacion = ahora()
     expediente.deleted_at = marca_eliminacion
