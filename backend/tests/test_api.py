@@ -1700,3 +1700,12 @@ def test_misd_cliente_autorizado_requiere_administrador(
     assert client.delete(f"/api/v1/expedientes/{registro.id}").status_code == 404
     auth_prueba.como_admin()
     assert client.delete(f"/api/v1/expedientes/{registro.id}").status_code == 204
+
+
+def test_misd_solo_administrador_puede_retirar_cliente_autorizado() -> None:
+    from app.services.permisos import requiere_autorizacion_administrativa
+
+    for rol in ("GESTOR", "USUARIO", "RESPONSABLE", "GERENTE", "SECRETARIA"):
+        assert requiere_autorizacion_administrativa(rol, True)
+        assert not requiere_autorizacion_administrativa(rol, False)
+    assert not requiere_autorizacion_administrativa("ADMINISTRADOR", True)
