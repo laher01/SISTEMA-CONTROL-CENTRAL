@@ -80,3 +80,31 @@ def transicionar_cms(datos: TransicionCms, session: SessionDep, auth: AuthDep) -
         session.rollback()
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"version": nueva.version, "estado": nueva.estado, "existe": True}
+
+
+@router.get("/publico")
+def contenido_cms_publico(session: SessionDep) -> dict[str, object]:
+    """Solo contenido aprobado y publicado; no expone borradores ni identidades."""
+    from app.models import ConfiguracionLandingGlobal
+
+    configuracion = session.get(ConfiguracionLandingGlobal, 1)
+    if configuracion is None or configuracion.activa is not True:
+        return {"disponible": False, "contenido": None}
+    fila = (
+        session.execute(
+            select(revision_table).where(
+                revision_table.c.id == 1,
+                revision_table.c.estado == EstadoEditorial.PUBLICADO.value,
+            )
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if fila is None:
+        return {"disponible": False, "contenido": None}
+    # Validar de nuevo en salida, incluso ante datos antiguos de base de datos.
+    try:
+        contenido = ContenidoCms.model_validate(fila["contenido"])
+    except ValueError:
+        return {"disponible": False, "contenido": None}
+    return {"disponible": True, "contenido": contenido.model_dump()}
