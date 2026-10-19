@@ -13,18 +13,16 @@ from app.models import Expediente, Miembro, PagoERP, PagoGestor, PagoResponsable
 
 
 def motivo_bloqueo_liquidacion(session: Session, expediente: Expediente) -> str | None:
-    def filtros(modelo: type) -> tuple:
-        return (
-            modelo.tenant_id == expediente.tenant_id,
-            modelo.periodo_desde <= expediente.fecha_emision,
-            modelo.periodo_hasta >= expediente.fecha_emision,
-            modelo.moneda == expediente.moneda,
-        )
-
     if expediente.usuario_id is not None:
         pago_usuario = session.scalar(
             select(PagoERP.id)
-            .where(*filtros(PagoERP), PagoERP.usuario_id == expediente.usuario_id)
+            .where(
+                PagoERP.tenant_id == expediente.tenant_id,
+                PagoERP.periodo_desde <= expediente.fecha_emision,
+                PagoERP.periodo_hasta >= expediente.fecha_emision,
+                PagoERP.moneda == expediente.moneda,
+                PagoERP.usuario_id == expediente.usuario_id,
+            )
             .limit(1)
         )
         if pago_usuario is not None:
@@ -33,7 +31,13 @@ def motivo_bloqueo_liquidacion(session: Session, expediente: Expediente) -> str 
     if expediente.gestor_id is not None:
         pago_gestor = session.scalar(
             select(PagoGestor.id)
-            .where(*filtros(PagoGestor), PagoGestor.gestor_id == expediente.gestor_id)
+            .where(
+                PagoGestor.tenant_id == expediente.tenant_id,
+                PagoGestor.periodo_desde <= expediente.fecha_emision,
+                PagoGestor.periodo_hasta >= expediente.fecha_emision,
+                PagoGestor.moneda == expediente.moneda,
+                PagoGestor.gestor_id == expediente.gestor_id,
+            )
             .limit(1)
         )
         if pago_gestor is not None:
@@ -50,7 +54,10 @@ def motivo_bloqueo_liquidacion(session: Session, expediente: Expediente) -> str 
             pago_responsable = session.scalar(
                 select(PagoResponsableERP.id)
                 .where(
-                    *filtros(PagoResponsableERP),
+                    PagoResponsableERP.tenant_id == expediente.tenant_id,
+                    PagoResponsableERP.periodo_desde <= expediente.fecha_emision,
+                    PagoResponsableERP.periodo_hasta >= expediente.fecha_emision,
+                    PagoResponsableERP.moneda == expediente.moneda,
                     PagoResponsableERP.responsable_id == responsable_id,
                 )
                 .limit(1)
