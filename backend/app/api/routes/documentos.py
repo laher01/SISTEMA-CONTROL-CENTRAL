@@ -1622,6 +1622,8 @@ def crear_expediente_asistido(
             .limit(100)
         )
         for pendiente in pendientes:
+            if pendiente.tipo_documento is None:
+                continue
             sugerencias = sugerir_relaciones(session, pendiente)
             if len(sugerencias) != 1 or sugerencias[0].expediente.id != expediente.id:
                 continue
