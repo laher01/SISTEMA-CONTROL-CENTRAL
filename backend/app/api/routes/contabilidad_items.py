@@ -5,7 +5,7 @@ import io
 import uuid
 from datetime import date
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
@@ -43,8 +43,8 @@ def resumen(
     emisor_id: uuid.UUID | None = None,
     receptor_id: uuid.UUID | None = None,
     limite: int = Query(100, ge=1, le=500),
-    buscar: str | None = Query(None, max_length=150),
-    categoria: str | None = Query(None, max_length=80),
+    buscar: Annotated[str | None, Query(max_length=150)] = None,
+    categoria: Annotated[str | None, Query(max_length=80)] = None,
 ) -> list[dict[str, str]]:
     """No mezcla unidades ni incluye facturas pendientes de auditoría."""
     if desde is not None and hasta is not None and desde > hasta:
@@ -346,8 +346,8 @@ def exportar_csv(
     hasta: date | None = None,
     emisor_id: uuid.UUID | None = None,
     receptor_id: uuid.UUID | None = None,
-    buscar: str | None = Query(None, max_length=150),
-    categoria: str | None = Query(None, max_length=80),
+    buscar: Annotated[str | None, Query(max_length=150)] = None,
+    categoria: Annotated[str | None, Query(max_length=80)] = None,
 ) -> Response:
     """Exportación de acumulados autorizados; no expone comprobantes ajenos al tenant."""
     filas = resumen(
