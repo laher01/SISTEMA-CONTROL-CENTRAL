@@ -24,6 +24,7 @@ from app.models import (
     PlanLiquidacion,
     SaldoCompraERP,
 )
+from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
 from app.services import auditoria
 
 router = APIRouter(prefix="/responsable", tags=["responsable"])
@@ -676,6 +677,7 @@ def programar_pago_usuario(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> dict[str, str]:
+    bloquear_tenant_financiero(session, tenant_id)
     _autorizar_pago(session, tenant_id, auth, datos.usuario_id)
     anterior = session.scalar(
         select(PagoERP.id).where(
