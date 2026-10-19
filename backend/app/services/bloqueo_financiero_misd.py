@@ -3,6 +3,7 @@
 El lock debe adquirirse antes de leer producción, validar pagos o bloquear filas
 específicas. Se mantiene hasta commit/rollback de la misma sesión.
 """
+
 import uuid
 
 from sqlalchemy import text
