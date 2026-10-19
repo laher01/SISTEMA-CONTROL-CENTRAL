@@ -70,7 +70,6 @@ def _es_aprobador(
     return False
 
 
-
 def _aprobacion_sigue_vigente(
     solicitud: SolicitudRetiroMISD, expediente: Expediente, session: SessionDep
 ) -> bool:
