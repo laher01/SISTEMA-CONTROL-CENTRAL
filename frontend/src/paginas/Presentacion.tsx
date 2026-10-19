@@ -1,9 +1,10 @@
 import "../presentacion.css";
 import { Link } from "react-router-dom";
 import { PiePublico } from "./PaginasPublicas";
-import { contenidoLandingInicial as contenido } from "../contenidoLanding";
+import { contenidoLandingInicial } from "../contenidoLanding";
+import type { ContenidoLanding } from "../contenidoLanding";
 
-export default function Presentacion() {
+export default function Presentacion({ contenido = contenidoLandingInicial }: { contenido?: ContenidoLanding }) {
   return (
     <main className="presentacion">
       <header className="presentacion-cabecera">
