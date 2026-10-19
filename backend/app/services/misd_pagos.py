@@ -4,6 +4,8 @@ No altera producción ni pagos. La comprobación es conservadora: cualquier
 liquidación coincidente con período, moneda y ámbito congela el expediente.
 """
 
+import uuid
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -55,4 +57,17 @@ def motivo_bloqueo_liquidacion(session: Session, expediente: Expediente) -> str 
             )
             if pago_responsable is not None:
                 return "Liquidación de RESPONSABLE generada para este período"
+    return None
+
+
+def motivo_bloqueo_voucher(session: Session, tenant_id: uuid.UUID, documento_id: uuid.UUID) -> str | None:
+    """Un voucher ya vinculado a liquidación no puede eliminarse individualmente."""
+    pago_id = session.scalar(
+        select(PagoERP.id).where(
+            PagoERP.tenant_id == tenant_id,
+            PagoERP.voucher_documento_id == documento_id,
+        ).limit(1)
+    )
+    if pago_id is not None:
+        return "Voucher vinculado a liquidación generada"
     return None
