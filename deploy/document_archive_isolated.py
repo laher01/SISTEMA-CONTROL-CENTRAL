@@ -7,8 +7,6 @@ No es un snapshot consistente frente a escrituras concurrentes.
 
 import argparse
 import hashlib
-import io
-import os
 import tarfile
 import tempfile
 from pathlib import Path
