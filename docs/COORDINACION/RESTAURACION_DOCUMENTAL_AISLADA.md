@@ -1,6 +1,6 @@
 # Prototipo de recuperación documental aislada — PR de infraestructura
 
-Este procedimiento es **offline y experimental**. No lee credenciales, no se conecta a la VPS, no copia por sí mismo el volumen Docker productivo y no está conectado a Actions/deploy.
+Este procedimiento es **offline y experimental**. Incluye SHA-256 por bloques, límites configurables mediante `--max-entradas` y `--max-bytes`, validación previa del árbol TAR y restauración privada publicada al finalizar. No lee credenciales, no se conecta a la VPS, no copia por sí mismo el volumen Docker productivo y no está conectado a Actions/deploy.
 
 ## Alcance de la prueba
 1. Preparar una **instantánea documental estable**, previamente obtenida y montada en un directorio de pruebas; no utilizar el volumen productivo en vivo ni asumir consistencia mientras ocurren escrituras.
@@ -18,3 +18,8 @@ Este procedimiento es **offline y experimental**. No lee credenciales, no se con
 - Faltan pruebas de archivos extremadamente grandes, cuotas y cortes por falta de espacio; no se debe conectar al gate de despliegue hasta completar controles.
 
 La integración de este PR y PR #328 debe revisarse en infraestructura; PR #323 tiene objetivo distinto (sesiones tenant). Nunca fusionar el PR temporal #331.
+
+## Condiciones adicionales de seguridad
+- La publicación por renombrado funciona cuando el directorio temporal y el destino comparten sistema de archivos. No elimina todos los riesgos de concurrencia ni prueba recuperación tras apagado.
+- La validación con SHA-256 no autentica el origen: debe protegerse la huella mediante custodia independiente y cifrar los respaldos reales.
+- Continúa **BLOQUEANTE** la consistencia temporal y recuperación conjunta PostgreSQL/documentos; no usar este prototipo como gate de despliegue.
