@@ -149,7 +149,7 @@ def guardar_borrador(
             .where(revision_table.c.id == 1)
             .where(revision_table.c.version == version_esperada)
             .values(
-                contenido=contenido, version=nueva.version, actualizado_por=actor_id,
+                contenido=contenido,\n                version=nueva.version,\n                actualizado_por=actor_id,
             )
         )
         if getattr(cambiado, "rowcount", None) != 1:
