@@ -39,8 +39,13 @@ def verificar(base: Path, filas: list[list[str]]) -> tuple[int, int]:
         ):
             errores += 1
             continue
-        archivo = (raiz / relativa).resolve()
-        if not archivo.is_relative_to(raiz) or not archivo.is_file():
+        origen = raiz / relativa
+        if any(parte.is_symlink() for parte in (origen, *origen.parents) if parte != raiz):
+            errores += 1
+            continue
+        archivo = origen.resolve()
+        tenant_root = raiz / tenant
+        if not archivo.is_relative_to(tenant_root) or not archivo.is_file():
             errores += 1
             continue
         digest = hashlib.sha256()
