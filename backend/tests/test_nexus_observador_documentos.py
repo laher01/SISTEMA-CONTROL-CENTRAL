@@ -36,6 +36,7 @@ def test_nexus_no_inventa_documentos_al_consultar_vacio(client: TestClient) -> N
     assert respuesta.status_code == 200, respuesta.text
     assert respuesta.json()["accion"] == "RESUMEN_DOCUMENTOS"
 
+
 @pytest.mark.parametrize("rol", ["ADMINISTRADOR", "GERENTE", "USUARIO"])
 def test_nexus_documentos_respeta_rol_activo_sin_datos(
     client: TestClient, auth_prueba, rol: str
