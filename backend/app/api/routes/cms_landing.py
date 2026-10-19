@@ -53,8 +53,11 @@ def guardar_cms(datos: BorradorCms, session: SessionDep, auth: AuthDep) -> dict[
     _exigir_superadmin(auth)
     try:
         nueva = guardar_borrador(
-            session, contenido=datos.contenido.model_dump(),
-            version_esperada=datos.version, rol=auth.rol, actor_id=auth.cuenta_id,
+            session,
+            contenido=datos.contenido.model_dump(),
+            version_esperada=datos.version,
+            rol=auth.rol,
+            actor_id=auth.cuenta_id,
         )
     except ValueError as exc:
         session.rollback()
@@ -63,14 +66,15 @@ def guardar_cms(datos: BorradorCms, session: SessionDep, auth: AuthDep) -> dict[
 
 
 @router.post("/transicion")
-def transicionar_cms(
-    datos: TransicionCms, session: SessionDep, auth: AuthDep
-) -> dict[str, object]:
+def transicionar_cms(datos: TransicionCms, session: SessionDep, auth: AuthDep) -> dict[str, object]:
     _exigir_superadmin(auth)
     try:
         nueva = cambiar_estado(
-            session, destino=datos.destino, version_esperada=datos.version,
-            rol=auth.rol, actor_id=auth.cuenta_id,
+            session,
+            destino=datos.destino,
+            version_esperada=datos.version,
+            rol=auth.rol,
+            actor_id=auth.cuenta_id,
         )
     except (ValueError, LookupError) as exc:
         session.rollback()
