@@ -2,6 +2,7 @@
 
 No sustituye autorización del servidor ni el gate fail-closed de landing.
 """
+
 from dataclasses import dataclass, replace
 from enum import StrEnum
 
