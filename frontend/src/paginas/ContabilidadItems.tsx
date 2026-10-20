@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { conParametros, useDatos } from "../api";
 
+type DetalleExpediente = { expediente_id: string; moneda: string; estado_auditoria: string; lineas: { documento_id: string; numero_linea: number; categoria: string; descripcion: string; unidad: string; cantidad: string; importe: string }[] };
 type EmpresaVinculada = { id: string; ruc: string; razon_social: string };
 type VistaItems = "dashboard" | "items" | "proveedor" | "cliente";
 
@@ -30,6 +31,7 @@ type Conciliacion = {
 
 export default function ContabilidadItems() {
   const [vista, setVista] = useState<VistaItems>("dashboard");
+  const [expedienteSeleccionado, setExpedienteSeleccionado] = useState<string | null>(null);
   const [empresaSeleccionada, setEmpresaSeleccionada] = useState<EmpresaVinculada | null>(null);
   const [buscarEmpresa, setBuscarEmpresa] = useState("");
   const [buscar, setBuscar] = useState("");
@@ -55,6 +57,7 @@ export default function ContabilidadItems() {
   const rutaFacturas = productoSeleccionado ? conParametros(`/api/v1/contabilidad-items/productos/${productoSeleccionado}/facturas`, { desde: filtros.desde, hasta: filtros.hasta, emisor_id: filtros.emisor_id, receptor_id: filtros.receptor_id }) : null;
   const { datos: facturas, error: errorFacturas, cargando: cargandoFacturas } = useDatos<FacturaItem[]>(rutaFacturas);
   const conciliacion = useDatos<Conciliacion[]>(conParametros("/api/v1/contabilidad-items/conciliacion", filtros));
+  const { datos: detalle, cargando: cargandoDetalle, error: errorDetalle } = useDatos<DetalleExpediente>(expedienteSeleccionado ? `/api/v1/contabilidad-items/expedientes/${expedienteSeleccionado}/detalle` : null);
   const rutaEmpresas = vista === "proveedor" || vista === "cliente"
     ? conParametros("/api/v1/contabilidad-items/empresas-vinculadas", {
         tipo: vista, buscar: buscarEmpresa,
@@ -66,6 +69,7 @@ export default function ContabilidadItems() {
     setVista(siguiente);
     setEmpresaSeleccionada(null);
     setProductoSeleccionado(null);
+    setExpedienteSeleccionado(null);
     setBuscarEmpresa("");
     setEmisorId("");
     setReceptorId("");
@@ -74,6 +78,7 @@ export default function ContabilidadItems() {
   const seleccionarEmpresa = (empresa: EmpresaVinculada) => {
     setEmpresaSeleccionada(empresa);
     setProductoSeleccionado(null);
+    setExpedienteSeleccionado(null);
     setFiltros((actual) => ({
       ...actual,
       emisor_id: vista === "proveedor" ? empresa.id : "",
@@ -254,11 +259,36 @@ export default function ContabilidadItems() {
                 <tr key={factura.documento_id + ":" + factura.comprobante + ":" + factura.descripcion_original}>
                   <td>{factura.comprobante}</td><td>{factura.fecha_emision}</td><td>{factura.descripcion_original}</td>
                   <td>{factura.cantidad} {factura.unidad}</td><td>{factura.importe} {factura.moneda}</td>
-                  <td><a href={`/expedientes/${factura.expediente_id}`}>Abrir expediente</a></td>
+                  <td><button type="button" onClick={() => setExpedienteSeleccionado(factura.expediente_id)}>Ver todos los productos</button> <a href={`/expedientes/${factura.expediente_id}`}>Abrir expediente</a></td>
                 </tr>
               ))}</tbody>
             </table>
           </div>}
+        </section>
+      )}
+      {expedienteSeleccionado && (
+        <section aria-label="Detalle de todos los ítems del expediente">
+          <h3>Todos los ítems del comprobante seleccionado</h3>
+          <button type="button" onClick={() => setExpedienteSeleccionado(null)}>Cerrar</button>
+          {cargandoDetalle && <p>Consultando detalle…</p>}
+          {errorDetalle && <p role="alert">{errorDetalle}</p>}
+          {detalle && (
+            <>
+              <p>Moneda: {detalle.moneda}. Estado de auditoría: {detalle.estado_auditoria}.</p>
+              {detalle.lineas.length === 0 ? <p>Este expediente no tiene líneas recuperables.</p> : (
+                <div style={{ overflowX: "auto" }}>
+                  <table><thead><tr><th>Línea</th><th>Categoría</th><th>Descripción</th><th>Cantidad</th><th>Importe</th></tr></thead>
+                    <tbody>{detalle.lineas.map((linea) => (
+                      <tr key={linea.documento_id + ":" + linea.numero_linea}>
+                        <td>{linea.numero_linea}</td><td>{linea.categoria}</td><td>{linea.descripcion}</td>
+                        <td>{linea.cantidad} {linea.unidad}</td><td>{linea.importe} {detalle.moneda}</td>
+                      </tr>
+                    ))}</tbody></table>
+                </div>
+              )}
+              <a href={`/expedientes/${detalle.expediente_id}`}>Abrir expediente original</a>
+            </>
+          )}
         </section>
       )}
       </>}
