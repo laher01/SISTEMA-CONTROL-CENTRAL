@@ -1,0 +1,350 @@
+"""Pruebas de límites del semáforo de pedidos — Issue #242."""
+
+from decimal import Decimal
+from pathlib import Path
+from types import SimpleNamespace
+from uuid import uuid4
+
+import pytest
+from fastapi import HTTPException
+from sqlalchemy import Engine, text
+from sqlalchemy.exc import OperationalError
+
+from app.api.routes.pagos import (
+    _resumen_pedido,
+    agregar_asignacion_pedido,
+    eliminar_asignacion_pedido,
+)
+from app.enums import RolMiembro
+from app.schemas import PedidoGerenciaOut
+from app.services.pedido_avance import (
+    calcular_avance_consolidado,
+    calcular_avance_pedido,
+    requiere_alerta_exceso,
+    validar_distribucion_presupuesto,
+)
+
+
+@pytest.mark.parametrize(
+    ("ejecutado", "estado"),
+    [
+        ("0", "VERDE"),
+        ("99.99", "VERDE"),
+        ("100", "NARANJA"),
+        ("120", "NARANJA"),
+        ("120.01", "ROJO"),
+    ],
+)
+def test_limites_semaforo(ejecutado: str, estado: str) -> None:
+    porcentaje, actual = calcular_avance_pedido(Decimal("100"), Decimal(ejecutado))
+    assert porcentaje == Decimal(ejecutado)
+    assert actual == estado
+
+
+def test_exceso_no_se_recorta() -> None:
+    porcentaje, estado = calcular_avance_pedido(Decimal("100"), Decimal("170"))
+    assert porcentaje == Decimal("170")
+    assert estado == "ROJO"
+
+
+@pytest.mark.parametrize(("presupuesto", "ejecutado"), [("0", "1"), ("-5", "2"), ("5", "-1")])
+def test_importes_invalidos(presupuesto: str, ejecutado: str) -> None:
+    with pytest.raises(ValueError):
+        calcular_avance_pedido(Decimal(presupuesto), Decimal(ejecutado))
+
+
+def test_importes_grandes_con_precision_decimal() -> None:
+    porcentaje, estado = calcular_avance_pedido(Decimal("500000"), Decimal("600000"))
+    assert porcentaje == Decimal("120")
+    assert estado == "NARANJA"
+
+
+def test_consolidado_pondera_importes_no_porcentajes() -> None:
+    porcentaje, estado = calcular_avance_consolidado(
+        [
+            (Decimal("900"), Decimal("900")),
+            (Decimal("100"), Decimal("0")),
+        ]
+    )
+    assert porcentaje == Decimal("90")
+    assert estado == "VERDE"
+
+
+def test_consolidado_con_exceso() -> None:
+    porcentaje, estado = calcular_avance_consolidado(
+        [
+            (Decimal("200"), Decimal("250")),
+            (Decimal("300"), Decimal("350")),
+        ]
+    )
+    assert porcentaje == Decimal("120")
+    assert estado == "NARANJA"
+
+
+def test_consolidado_vacio_o_invalido() -> None:
+    with pytest.raises(ValueError):
+        calcular_avance_consolidado([])
+    with pytest.raises(ValueError):
+        calcular_avance_consolidado([(Decimal("10"), Decimal("-1"))])
+
+
+@pytest.mark.parametrize("invalido", ["NaN", "Infinity", "-Infinity"])
+def test_importes_no_finitos_rechazados(invalido: str) -> None:
+    with pytest.raises(ValueError):
+        calcular_avance_pedido(Decimal(invalido), Decimal("1"))
+    with pytest.raises(ValueError):
+        calcular_avance_pedido(Decimal("10"), Decimal(invalido))
+    with pytest.raises(ValueError):
+        calcular_avance_consolidado([(Decimal("10"), Decimal(invalido))])
+
+
+@pytest.mark.parametrize(
+    ("ejecutado", "estado"),
+    [
+        ("99.9999", "VERDE"),
+        ("100.0000", "NARANJA"),
+        ("120.0000", "NARANJA"),
+        ("120.0001", "ROJO"),
+    ],
+)
+def test_limites_sin_redondeo_previo(ejecutado: str, estado: str) -> None:
+    porcentaje, actual = calcular_avance_pedido(Decimal("100"), Decimal(ejecutado))
+    assert porcentaje == Decimal(ejecutado)
+    assert actual == estado
+
+
+@pytest.mark.parametrize(
+    ("ejecutado", "alerta"),
+    [("99.99", False), ("100", False), ("120", False), ("120.01", True)],
+)
+def test_alerta_exceso_respeta_umbral(ejecutado: str, alerta: bool) -> None:
+    assert requiere_alerta_exceso(Decimal("100"), Decimal(ejecutado)) is alerta
+
+
+def test_alerta_exceso_no_oculta_importes_invalidos() -> None:
+    with pytest.raises(ValueError):
+        requiere_alerta_exceso(Decimal("0"), Decimal("1"))
+
+
+def test_contrato_api_expone_semaforo() -> None:
+    campo = PedidoGerenciaOut.model_fields["semaforo_avance"]
+    assert campo.is_required()
+    assert set(campo.annotation.__args__) == {"VERDE", "NARANJA", "ROJO"}
+
+
+def test_distribucion_parcial_y_completa() -> None:
+    assert validar_distribucion_presupuesto(
+        Decimal("1000"), [Decimal("200"), Decimal("300")]
+    ) == Decimal("500")
+    assert validar_distribucion_presupuesto(
+        Decimal("1000"), [Decimal("200"), Decimal("800")]
+    ) == Decimal("0")
+
+
+@pytest.mark.parametrize("monto", ["100.01", "-1", "0", "NaN", "Infinity"])
+def test_distribucion_rechaza_exceso_o_importes_invalidos(monto: str) -> None:
+    with pytest.raises(ValueError):
+        validar_distribucion_presupuesto(Decimal("100"), [Decimal(monto)])
+
+
+def test_presupuesto_distribucion_no_confunde_ejecucion_real() -> None:
+    saldo = validar_distribucion_presupuesto(Decimal("100"), [])
+    porcentaje, estado = calcular_avance_pedido(Decimal("100"), Decimal("125"))
+    assert saldo == Decimal("100")
+    assert porcentaje == Decimal("125")
+    assert estado == "ROJO"
+
+
+def test_actualizar_asignacion_sin_contarla_dos_veces() -> None:
+    presupuesto = Decimal("1000")
+    otras_asignaciones = [Decimal("300"), Decimal("150")]
+    nuevo_monto_de_asignacion_existente = Decimal("400")
+    saldo = validar_distribucion_presupuesto(
+        presupuesto,
+        otras_asignaciones + [nuevo_monto_de_asignacion_existente],
+    )
+    assert saldo == Decimal("150")
+
+
+def test_reemplazo_excesivo_de_asignacion_se_rechaza() -> None:
+    with pytest.raises(ValueError, match="exceden"):
+        validar_distribucion_presupuesto(
+            Decimal("1000"),
+            [Decimal("650"), Decimal("400")],
+        )
+
+
+def test_distribucion_vacia_conserva_presupuesto_original() -> None:
+    assert validar_distribucion_presupuesto(Decimal("2500"), []) == Decimal("2500")
+
+
+def test_rutas_distribucion_exigen_responsable_asignado() -> None:
+    """Regresión sobre ambos endpoints, sin ampliar el permiso general de pagos."""
+    ruta = Path(__file__).resolve().parents[1] / "app/api/routes/pagos.py"
+    codigo = ruta.read_text(encoding="utf-8")
+    alta = codigo.split("def agregar_asignacion_pedido(", 1)[1].split("@router.delete(", 1)[0]
+    bloque_eliminacion = codigo.split("def eliminar_asignacion_pedido(", 1)[1]
+    baja = bloque_eliminacion.split('@router.post("/planes"', 1)[0]
+    for bloque in (alta, baja):
+        assert "RolMiembro.RESPONSABLE, RolMiembro.ADMINISTRADOR" in bloque
+        assert "pedido.responsable_id != auth.miembro_id" in bloque
+        assert "RolMiembro.SUPERADMIN" not in bloque
+
+
+@pytest.mark.parametrize("rol", [RolMiembro.GERENTE, RolMiembro.USUARIO, RolMiembro.SUPERADMIN])
+@pytest.mark.parametrize("operacion", ["alta", "baja"])
+def test_distribucion_deniega_roles_no_autorizados(rol: RolMiembro, operacion: str) -> None:
+    class SinConsultas:
+        def get(self, *_args: object) -> None:
+            raise AssertionError("No se debe consultar la base de datos")
+
+    auth = SimpleNamespace(rol=rol, miembro_id=uuid4())
+    args = (SinConsultas(), uuid4(), auth, uuid4())
+    with pytest.raises(HTTPException) as exc:
+        if operacion == "alta":
+            agregar_asignacion_pedido(*args, datos=None)
+        else:
+            eliminar_asignacion_pedido(*args, asignacion_id=uuid4())
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.parametrize("operacion", ["alta", "baja"])
+def test_responsable_no_modifica_pedido_de_otro(operacion: str) -> None:
+    tenant_id, pedido_id = uuid4(), uuid4()
+    pedido = SimpleNamespace(tenant_id=tenant_id, responsable_id=uuid4())
+
+    class SesionPedido:
+        def get(self, _modelo: object, identificador: object) -> object:
+            assert identificador == pedido_id
+            return pedido
+
+    auth = SimpleNamespace(rol=RolMiembro.RESPONSABLE, miembro_id=uuid4())
+    args = (SesionPedido(), tenant_id, auth, pedido_id)
+    with pytest.raises(HTTPException) as exc:
+        if operacion == "alta":
+            agregar_asignacion_pedido(*args, datos=None)
+        else:
+            eliminar_asignacion_pedido(*args, asignacion_id=uuid4())
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.parametrize("operacion", ["alta", "baja"])
+def test_responsable_no_accede_a_pedido_de_otro_tenant(operacion: str) -> None:
+    tenant_actual, tenant_ajeno, pedido_id = uuid4(), uuid4(), uuid4()
+    auth = SimpleNamespace(rol=RolMiembro.RESPONSABLE, miembro_id=uuid4())
+    pedido = SimpleNamespace(tenant_id=tenant_ajeno, responsable_id=auth.miembro_id)
+
+    class SesionPedido:
+        def get(self, _modelo: object, identificador: object) -> object:
+            assert identificador == pedido_id
+            return pedido
+
+    args = (SesionPedido(), tenant_actual, auth, pedido_id)
+    with pytest.raises(HTTPException) as exc:
+        if operacion == "alta":
+            agregar_asignacion_pedido(*args, datos=None)
+        else:
+            eliminar_asignacion_pedido(*args, asignacion_id=uuid4())
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.parametrize("operacion", ["alta", "baja"])
+def test_administrador_no_accede_a_pedido_de_otro_tenant(operacion: str) -> None:
+    tenant_actual, tenant_ajeno, pedido_id = uuid4(), uuid4(), uuid4()
+    auth = SimpleNamespace(rol=RolMiembro.ADMINISTRADOR, miembro_id=uuid4())
+    pedido = SimpleNamespace(tenant_id=tenant_ajeno, responsable_id=uuid4())
+
+    class SesionPedido:
+        def get(self, _modelo: object, identificador: object) -> object:
+            assert identificador == pedido_id
+            return pedido
+
+    args = (SesionPedido(), tenant_actual, auth, pedido_id)
+    with pytest.raises(HTTPException) as exc:
+        if operacion == "alta":
+            agregar_asignacion_pedido(*args, datos=None)
+        else:
+            eliminar_asignacion_pedido(*args, asignacion_id=uuid4())
+    assert exc.value.status_code == 404
+
+
+def test_bloqueo_del_pedido_antes_de_contabilizar_asignaciones() -> None:
+    """El candado debe tomarse antes de consultar otras asignaciones."""
+    ruta = Path(__file__).resolve().parents[1] / "app/api/routes/pagos.py"
+    codigo = ruta.read_text(encoding="utf-8")
+    alta = codigo.split("def agregar_asignacion_pedido(", 1)[1].split("@router.delete(", 1)[0]
+    bloqueo = alta.index("session.refresh(pedido, with_for_update=True)")
+    lectura = alta.index("consulta_montos = select(AsignacionPedidoGerencia.monto_asignado)")
+    validacion = alta.index("validar_distribucion_presupuesto(")
+    assert bloqueo < lectura < validacion
+
+
+def test_postgres_impide_modificacion_simultanea_de_fila(engine: Engine) -> None:
+    """Verifica con dos conexiones el bloqueo usado al repartir presupuesto."""
+    if engine.dialect.name != "postgresql":
+        pytest.skip("La prueba de bloqueo requiere PostgreSQL")
+    with engine.begin() as conexion:
+        conexion.execute(text("CREATE TABLE prueba_bloqueo_gerencia (id int PRIMARY KEY)"))
+        conexion.execute(text("INSERT INTO prueba_bloqueo_gerencia (id) VALUES (1)"))
+    try:
+        with engine.connect() as primera, engine.connect() as segunda:
+            with primera.begin():
+                primera.execute(
+                    text("SELECT id FROM prueba_bloqueo_gerencia WHERE id=1 FOR UPDATE")
+                )
+                with pytest.raises(OperationalError), segunda.begin():
+                    segunda.execute(
+                        text("SELECT id FROM prueba_bloqueo_gerencia WHERE id=1 FOR UPDATE NOWAIT")
+                    )
+            with segunda.begin():
+                assert (
+                    segunda.execute(
+                        text("SELECT id FROM prueba_bloqueo_gerencia WHERE id=1 FOR UPDATE")
+                    ).scalar_one()
+                    == 1
+                )
+    finally:
+        with engine.begin() as conexion:
+            conexion.execute(text("DROP TABLE prueba_bloqueo_gerencia"))
+
+
+@pytest.mark.parametrize("operacion", ["alta", "baja"])
+def test_responsable_sin_identidad_no_distribuye(operacion: str) -> None:
+    tenant_id, pedido_id = uuid4(), uuid4()
+    pedido = SimpleNamespace(tenant_id=tenant_id, responsable_id=uuid4())
+
+    class SesionPedido:
+        def get(self, _modelo: object, identificador: object) -> object:
+            assert identificador == pedido_id
+            return pedido
+
+    auth = SimpleNamespace(rol=RolMiembro.RESPONSABLE, miembro_id=None)
+    args = (SesionPedido(), tenant_id, auth, pedido_id)
+    with pytest.raises(HTTPException) as exc:
+        if operacion == "alta":
+            agregar_asignacion_pedido(*args, datos=None)
+        else:
+            eliminar_asignacion_pedido(*args, asignacion_id=uuid4())
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.parametrize("cliente_invalido", ["otro_tenant", "eliminado", "inexistente"])
+def test_resumen_no_acepta_cliente_ajeno_o_eliminado(cliente_invalido: str) -> None:
+    tenant_id, cliente_id = uuid4(), uuid4()
+    cliente = SimpleNamespace(tenant_id=tenant_id, deleted_at=None)
+    if cliente_invalido == "otro_tenant":
+        cliente.tenant_id = uuid4()
+    elif cliente_invalido == "eliminado":
+        cliente.deleted_at = "2026-10-17"
+    elif cliente_invalido == "inexistente":
+        cliente = None
+
+    class Sesion:
+        def get(self, _modelo: object, identificador: object) -> object:
+            assert identificador == cliente_id
+            return cliente
+
+    pedido = SimpleNamespace(cliente_id=cliente_id)
+    with pytest.raises(HTTPException) as exc:
+        _resumen_pedido(Sesion(), tenant_id, pedido)
+    assert exc.value.status_code == 409
