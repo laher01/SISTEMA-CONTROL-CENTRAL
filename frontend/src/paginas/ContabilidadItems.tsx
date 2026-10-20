@@ -136,7 +136,15 @@ export default function ContabilidadItems() {
       {cargando && <p>Consultando ítems…</p>}
       {error && <p role="alert">No se pudo consultar: {error}</p>}
       {!cargando && !error && datos?.length === 0 && (
-        <p>No se encontraron líneas de comprobantes para el período seleccionado.</p>
+        <div role="status">
+          <p>No hay líneas de productos visibles con los filtros y permisos actuales.</p>
+          {conciliacion.datos?.some((fila) => Number(fila.total_documentos) > 0) && (
+            <p>Existen comprobantes en la conciliación, pero eso no confirma que sus líneas se hayan extraído. Revise la disponibilidad de XML/UBL, la extracción, la clasificación y el alcance autorizado antes de interpretar el resultado como cero productos.</p>
+          )}
+          {(filtros.buscar || filtros.categoria || filtros.desde || filtros.hasta || filtros.emisor_id || filtros.receptor_id) && (
+            <p>Los filtros aplicados también pueden excluir productos existentes.</p>
+          )}
+        </div>
       )}
       {datos && datos.length > 0 && (
         <div style={{ overflowX: "auto" }}>
