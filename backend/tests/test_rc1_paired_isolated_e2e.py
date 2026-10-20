@@ -2,6 +2,7 @@
 
 No simula pg_restore ni certifica snapshots de producción.
 """
+
 import hashlib
 import importlib.util
 from pathlib import Path
@@ -33,13 +34,12 @@ def test_par_ficticio_restaurado_y_cotejado(tmp_path: Path) -> None:
     pareja = tmp_path / "pareja"
     evidencia = empaquetar.crear_par(dump, original, pareja, escritores_detenidos=True)
     recuperado = tmp_path / "volumen-recuperado"
-    assert archivos.restaurar(
-        pareja / "documentos.tar", recuperado, evidencia["documentos_sha256"]
-    ) == 1
-    manifiesto = tmp_path / "restored-db-manifest.tsv"
-    manifiesto.write_text(
-        f"{tenant}\t{tenant}/{sha[:2]}/{sha}\t{sha}\n", encoding="utf-8"
+    assert (
+        archivos.restaurar(pareja / "documentos.tar", recuperado, evidencia["documentos_sha256"])
+        == 1
     )
+    manifiesto = tmp_path / "restored-db-manifest.tsv"
+    manifiesto.write_text(f"{tenant}\t{tenant}/{sha[:2]}/{sha}\t{sha}\n", encoding="utf-8")
     assert cotejo.cotejar(manifiesto, recuperado, 1) == (1, 0)
     assert (pareja / "postgres.dump").read_bytes() == dump.read_bytes()
     (recuperado / tenant / sha[:2] / sha).write_bytes(b"alterado")
