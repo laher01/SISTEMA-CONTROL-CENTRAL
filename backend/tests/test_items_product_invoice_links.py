@@ -93,11 +93,22 @@ def test_search_and_linked_invoices_are_tenant_scoped(
     product_id = summary.json()[0]["producto_id"]
     assert Decimal(summary.json()[0]["cantidad"]) == 12
 
+    classified = client.post(
+        f"/api/v1/contabilidad-items/productos/{product_id}/categoria",
+        json={"categoria": "Hidrobiológicos"},
+    )
+    assert classified.status_code == 200, classified.text
+    assert classified.json()["categoria"] == "Hidrobiológicos"
+    repeated = client.post(
+        f"/api/v1/contabilidad-items/productos/{product_id}/categoria",
+        json={"categoria": "Hidrobiológicos"},
+    )
+    assert repeated.status_code == 200
     missing = client.get("/api/v1/contabilidad-items", params={"buscar": "anchoveta"})
     assert missing.status_code == 200
     assert missing.json() == []
 
-    category = summary.json()[0]["categoria"]
+    category = "Hidrobiológicos"
     by_category = client.get(
         "/api/v1/contabilidad-items",
         params={"buscar": "congelada", "categoria": category},
