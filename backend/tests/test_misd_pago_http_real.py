@@ -53,7 +53,6 @@ def test_programacion_pago_http_bloquea_retiro_posterior(
                 "desde": date(2026, 9, 1).isoformat(),
                 "hasta": date(2026, 9, 30).isoformat(),
                 "moneda": expediente.moneda,
-                "porcentaje_manual": "1.0000",
             },
         )
 
