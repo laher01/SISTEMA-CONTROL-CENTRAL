@@ -182,6 +182,7 @@ def solicitar(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> dict[str, str]:
+    bloquear_tenant_financiero(session, tenant_id)
     expediente = session.scalar(
         select(Expediente).where(
             Expediente.id == datos.expediente_id,
@@ -280,6 +281,8 @@ def resolver(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> dict[str, str]:
+    # Mismo advisory lock que las liquidaciones; antes del FOR UPDATE de la solicitud.
+    bloquear_tenant_financiero(session, tenant_id)
     solicitud = session.scalar(
         select(SolicitudRetiroMISD)
         .where(
