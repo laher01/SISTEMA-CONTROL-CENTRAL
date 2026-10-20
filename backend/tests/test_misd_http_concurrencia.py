@@ -1,6 +1,6 @@
 """Regresión HTTP MISD: solicitar y resolver respetan el advisory lock financiero."""
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from dataclasses import replace
 from threading import Event
 
@@ -88,8 +88,8 @@ def test_misd_http_espera_lock_financiero(
             resultado = pool.submit(realizar_peticion)
             try:
                 assert iniciada.wait(timeout=10)
-                assert not resultado.done()
-                assert not resultado.done() or resultado.result().status_code == esperado
+                with pytest.raises(FutureTimeoutError):
+                    resultado.result(timeout=0.3)
             finally:
                 tenedora.rollback()
             respuesta = resultado.result(timeout=20)
