@@ -1,0 +1,87 @@
+name: rc1-restore-isolated
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/rc1-restore-isolated.yml"
+      - "deploy/document_archive_isolated.py"
+      - "deploy/export_restored_manifest.py"
+      - "deploy/check_restored_pair.py"
+      - "backend/tests/test_rc1_paired_isolated_e2e.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  restore-fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: fact
+          POSTGRES_PASSWORD: fixture_only
+          POSTGRES_DB: fact_central_fixture
+        ports:
+          - 15432:5432
+        options: >-
+          --health-cmd "pg_isready -U fact -d fact_central_fixture"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Instalar dependencias Python del backend
+        working-directory: backend
+        run: uv sync --locked
+      - name: Crear documentos ficticios, dump real y restaurar PostgreSQL
+        env:
+          PGHOST: localhost
+          PGPORT: "15432"
+          PGUSER: fact
+          PGPASSWORD: fixture_only
+          PGDATABASE: fact_central_fixture
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          WORK="$(mktemp -d)"
+          echo "WORK=$WORK" >> "$GITHUB_ENV"
+          export WORK
+          TENANT="11111111-1111-4111-8111-111111111111"
+          printf 'fact-central-rc1-documento-ficticio\n' > "$WORK/contenido"
+          SHA="$(sha256sum "$WORK/contenido" | cut -d' ' -f1)"
+          mkdir -p "$WORK/docs/$TENANT/${SHA:0:2}"
+          cp "$WORK/contenido" "$WORK/docs/$TENANT/${SHA:0:2}/$SHA"
+          docker exec "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U fact -d fact_central_fixture \
+            -c "CREATE TABLE documentos (tenant_id uuid NOT NULL, ruta_storage text NOT NULL, sha256 text NOT NULL);"
+          docker exec "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U fact -d fact_central_fixture \
+            -c "INSERT INTO documentos VALUES ('$TENANT', '$TENANT/${SHA:0:2}/$SHA', '$SHA');"
+          docker exec "${{ job.services.postgres.id }}" pg_dump -U fact -d fact_central_fixture -Fc > "$WORK/postgres.dump"
+          test -s "$WORK/postgres.dump"
+          docker exec -i "${{ job.services.postgres.id }}" pg_restore --list < "$WORK/postgres.dump" > /dev/null
+          docker exec "${{ job.services.postgres.id }}" createdb -U fact factcentral_restore_rc1
+          docker exec -i "${{ job.services.postgres.id }}" pg_restore -U fact -d factcentral_restore_rc1 --exit-on-error < "$WORK/postgres.dump"
+          python3 deploy/document_archive_isolated.py backup --origen "$WORK/docs" --archivo "$WORK/documentos.tar" > "$WORK/hash.txt"
+          HASH="$(awk '/SHA256_ARCHIVO:/ {print $2}' "$WORK/hash.txt")"
+          python3 deploy/document_archive_isolated.py restore --archivo "$WORK/documentos.tar" --destino "$WORK/recuperado" --sha256 "$HASH"
+          export SHA TENANT
+      - name: Exportar manifiesto de PostgreSQL RESTAURADO y cotejar
+        working-directory: backend
+        env:
+          PGPASSWORD: fixture_only
+        run: |
+          set -Eeuo pipefail
+          uv run python ../deploy/export_restored_manifest.py \
+            --dsn "host=localhost port=15432 user=fact password=fixture_only dbname=factcentral_restore_rc1" \
+            --salida "$WORK/manifest.tsv"
+          uv run python ../deploy/check_restored_pair.py \
+            --manifiesto "$WORK/manifest.tsv" --documentos "$WORK/recuperado" --esperados 1
+          echo "RC1_ISOLATED_POSTGRES_RESTORE_AND_DOCUMENT_HASH_OK"
+      - name: Eliminar archivos temporales
+        if: always()
+        run: |
+          if [ -n "${WORK:-}" ] && [ -d "$WORK" ]; then rm -rf -- "$WORK"; fi
