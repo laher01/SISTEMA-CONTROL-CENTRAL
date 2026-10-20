@@ -1,4 +1,7 @@
-"""Regresiones de autorización financiera por jerarquía y tenant."""
+"""Regresiones de autorización financiera por jerarquía y tenant.
+
+La aprobación documental no sustituye una aprobación financiera independiente.
+"""
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
