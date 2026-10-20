@@ -1,8 +1,6 @@
 name: deploy-staging
 
 on:
-  push:
-    branches: [main]
   pull_request:
     paths:
       - '.github/workflows/deploy-staging.yml'
@@ -64,7 +62,7 @@ jobs:
       - run: npm run build
 
   deploy:
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     needs: [verify-backend, verify-frontend]
     runs-on: ubuntu-latest
     environment: staging
@@ -114,7 +112,7 @@ jobs:
       - name: Verificar evento y commit de main
         run: |
           case "${{ github.event_name }}" in
-            push|workflow_dispatch) ;;
+            workflow_dispatch) ;;
             *) echo "::error::Evento no autorizado"; exit 1 ;;
           esac
           test "${{ github.ref_name }}" = "main" || {
