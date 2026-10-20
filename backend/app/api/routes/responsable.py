@@ -190,6 +190,9 @@ def _base_pago_usuario(
             Expediente.tenant_id == tenant_id,
             Expediente.usuario_id == datos.usuario_id,
             Expediente.deleted_at.is_(None),
+            # No devengar comisiones por receptoras pendientes de autorización.
+            # Esto NO representa una aprobación financiera independiente.
+            Expediente.pendiente_aprobacion.is_(False),
             Expediente.moneda == datos.moneda,
             Expediente.fecha_emision >= datos.desde,
             Expediente.fecha_emision <= datos.hasta,
