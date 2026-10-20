@@ -13,3 +13,7 @@
 - No guardar contraseñas, tokens o claves SSH en repositorio.
 - No confundir PROYECTADO, INTEGRADO, DESPLEGADO y VERIFICADO.
 - Etapa 7 (Landing, CMS, planes y NEXUS comercial) está asignada a otro chat: no modificarla aquí.
+
+## Comando maestro de continuidad `zz...`
+
+Cuando el usuario invoque `zz...`, seguir [el protocolo de continuidad](docs/PROTOCOLO_ZZ_CONTINUIDAD.md): avanzar autónomamente por análisis, corrección y pruebas, sin solicitar un `C` o `S` en cada paso menor. Respetar los controles de CI, autorizaciones críticas, pertenencia de archivos, seguridad y la distinción entre INTEGRADO, DESPLEGADO y VERIFICADO. No prometer procesos en segundo plano si no existe automatización configurada.
