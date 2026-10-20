@@ -68,14 +68,16 @@ def test_pago_http_equipo_espera_lock_y_protege_retiro(
         }
     else:
         responsable_id, _ = _preparar(session, auth_prueba)
-        usuario = session.scalar(
+        responsable = session.scalar(
             select(Miembro).where(
                 Miembro.tenant_id == contexto_usuario.tenant_id,
-                Miembro.codigo == "USU-01",
+                Miembro.codigo == "RESP-01",
             )
         )
-        assert usuario is not None
-        expediente.usuario_id = usuario.id
+        assert responsable is not None
+        propietario = session.get(Miembro, contexto_usuario.usuario_id)
+        assert propietario is not None
+        propietario.responsable_id = responsable.id
         expediente.gerente_id = contexto_usuario.miembro_id
         session.commit()
         auth_prueba.como_gerente()
