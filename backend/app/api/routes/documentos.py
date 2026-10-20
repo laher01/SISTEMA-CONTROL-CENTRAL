@@ -1518,6 +1518,10 @@ def crear_expediente_asistido(
         emisor_ruc,
         receptor_ruc,
     )
+    if existente is not None and documento.expediente_id != existente.id:
+        # Nunca incorporar un nuevo archivo a una identidad fiscal existente
+        # sin comparación explícita. La asociación puede revisarse en Gestor.
+        raise _comprobante_duplicado(session, auth, existente.id)
     creado = existente is None
     razon_receptor = (
         solicitud.razon_social_receptor
