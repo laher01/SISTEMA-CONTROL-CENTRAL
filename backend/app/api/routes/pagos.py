@@ -52,6 +52,7 @@ from app.security import cuenta_administradora_responsable
 from app.services import auditoria
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.distribucion_jonatan import calcular_distribucion_jonatan
+from app.services.pedido_avance import calcular_avance_pedido, validar_distribucion_presupuesto
 
 router = APIRouter(prefix="/pagos", tags=["pagos"])
 
@@ -890,11 +891,8 @@ def _resumen_pedido(
     diferencia = solicitado - ejecutado
     pendiente = max(diferencia, Decimal("0"))
     exceso = max(-diferencia, Decimal("0"))
-    avance = (
-        (ejecutado * Decimal("100") / solicitado).quantize(Decimal("0.01"))
-        if solicitado > 0
-        else Decimal("0")
-    )
+    avance_exacto, semaforo = calcular_avance_pedido(solicitado, ejecutado)
+    avance = avance_exacto.quantize(Decimal("0.01"))
 
     return PedidoGerenciaOut(
         id=pedido.id,
@@ -911,6 +909,7 @@ def _resumen_pedido(
         saldo_pendiente=pendiente,
         exceso=exceso,
         avance_porcentaje=avance,
+        semaforo_avance=semaforo,
         modalidad=pedido.modalidad,
         modo_distribucion=pedido.modo_distribucion,
         estado=pedido.estado,
@@ -1276,14 +1275,13 @@ def agregar_asignacion_pedido(
     pedido_id: uuid.UUID,
     datos: AsignacionPedidoGerenciaIn,
 ) -> PedidoGerenciaOut:
-    _validar_acceso(auth.rol)
-    if auth.rol == RolMiembro.GERENTE:
+    if auth.rol not in (RolMiembro.RESPONSABLE, RolMiembro.ADMINISTRADOR):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Distribución reservada al Responsable")
     pedido = _pedido_valido(session, tenant_id, pedido_id, auth)
-    if pedido.responsable_id is not None:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN, "El pedido corresponde al Responsable asignado"
-        )
+    if auth.rol == RolMiembro.RESPONSABLE and (
+        auth.miembro_id is None or pedido.responsable_id != auth.miembro_id
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pedido no asignado al Responsable")
     usuario = _usuario_valido(session, tenant_id, datos.usuario_id)
 
     gestor = None
@@ -1314,6 +1312,9 @@ def agregar_asignacion_pedido(
                 "La empresa seleccionada no es un Proveedor activo",
             )
 
+    # Bloquea el pedido antes de leer asignaciones para serializar distribuciones.
+    session.refresh(pedido, with_for_update=True)
+
     duplicada = session.scalar(
         select(AsignacionPedidoGerencia).where(
             AsignacionPedidoGerencia.tenant_id == tenant_id,
@@ -1323,6 +1324,21 @@ def agregar_asignacion_pedido(
             AsignacionPedidoGerencia.proveedor_id == datos.proveedor_id,
         )
     )
+    consulta_montos = select(AsignacionPedidoGerencia.monto_asignado).where(
+        AsignacionPedidoGerencia.tenant_id == tenant_id,
+        AsignacionPedidoGerencia.pedido_id == pedido.id,
+    )
+    if duplicada is not None:
+        consulta_montos = consulta_montos.where(AsignacionPedidoGerencia.id != duplicada.id)
+    otros_montos = list(session.scalars(consulta_montos))
+    try:
+        validar_distribucion_presupuesto(
+            Decimal(pedido.monto_solicitado),
+            [Decimal(monto) for monto in otros_montos] + [datos.monto_asignado],
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+
     if duplicada is not None:
         duplicada.monto_asignado = datos.monto_asignado
         asignacion = duplicada
@@ -1368,10 +1384,13 @@ def eliminar_asignacion_pedido(
     pedido_id: uuid.UUID,
     asignacion_id: uuid.UUID,
 ) -> PedidoGerenciaOut:
-    _validar_acceso(auth.rol)
-    if auth.rol == RolMiembro.GERENTE:
+    if auth.rol not in (RolMiembro.RESPONSABLE, RolMiembro.ADMINISTRADOR):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Distribución reservada al Responsable")
     pedido = _pedido_valido(session, tenant_id, pedido_id, auth)
+    if auth.rol == RolMiembro.RESPONSABLE and (
+        auth.miembro_id is None or pedido.responsable_id != auth.miembro_id
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pedido no asignado al Responsable")
     asignacion = session.get(AsignacionPedidoGerencia, asignacion_id)
     if asignacion is None or asignacion.tenant_id != tenant_id or asignacion.pedido_id != pedido.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Asignación no encontrada")
