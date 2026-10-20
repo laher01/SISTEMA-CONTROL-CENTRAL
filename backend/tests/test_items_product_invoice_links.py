@@ -79,10 +79,13 @@ def test_search_and_linked_invoices_are_tenant_scoped(
     assert customers.status_code == 200, customers.text
     assert len(customers.json()) == 1
     assert customers.json()[0]["ruc"] == "20200000001"
-    assert client.get(
-        "/api/v1/contabilidad-items/empresas-vinculadas",
-        params={"tipo": "proveedor", "buscar": "20100000002"},
-    ).json() == []
+    assert (
+        client.get(
+            "/api/v1/contabilidad-items/empresas-vinculadas",
+            params={"tipo": "proveedor", "buscar": "20100000002"},
+        ).json()
+        == []
+    )
 
     summary = client.get("/api/v1/contabilidad-items", params={"buscar": "pota"})
     assert summary.status_code == 200, summary.text
