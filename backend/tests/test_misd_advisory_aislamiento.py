@@ -17,9 +17,7 @@ def _requiere_postgresql(engine: Engine) -> None:
         pytest.skip("La prueba requiere PostgreSQL y advisory locks reales")
 
 
-def test_tenants_distintos_no_se_bloquean(
-    engine: Engine, auth_prueba: AuthPrueba
-) -> None:
+def test_tenants_distintos_no_se_bloquean(engine: Engine, auth_prueba: AuthPrueba) -> None:
     _requiere_postgresql(engine)
     fabrica = sessionmaker(engine)
     retenido = Event()
@@ -52,9 +50,7 @@ def test_tenants_distintos_no_se_bloquean(
         tarea_b.result(timeout=20)
 
 
-def test_rollback_libera_lock_financiero(
-    engine: Engine, auth_prueba: AuthPrueba
-) -> None:
+def test_rollback_libera_lock_financiero(engine: Engine, auth_prueba: AuthPrueba) -> None:
     _requiere_postgresql(engine)
     fabrica = sessionmaker(engine)
     tenant_id = auth_prueba.contexto.tenant_id
