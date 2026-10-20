@@ -21,6 +21,8 @@ describe("configuración separada por rol", () => {
     const html = htmlPara("SUPERADMIN");
     expect(html).toContain("Consola SaaS");
     expect(html).toContain("Administraciones SaaS");
+    expect(html).toContain("Creación de tenant");
+    expect(html).not.toContain("Luis Arevalo Herrera");
     expect(html).not.toContain(">Configuración de acceso</button>");
     expect(html).not.toContain(">Empresas registradas</button>");
     expect(html).not.toContain(">Mantenimiento</button>");

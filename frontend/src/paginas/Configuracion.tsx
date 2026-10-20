@@ -920,8 +920,8 @@ function AdministracionesPanel() {
     "/api/v1/configuracion/administraciones",
   );
   const [texto, setTexto] = useState("");
-  const [nombreAdministrador, setNombreAdministrador] = useState("Luis Arevalo Herrera");
-  const [nombreEspacio, setNombreEspacio] = useState("Administración Luis Arévalo Herrera");
+  const [nombreAdministrador, setNombreAdministrador] = useState("");
+  const [nombreEspacio, setNombreEspacio] = useState("");
   const [subdominio, setSubdominio] = useState("");
   const [nuevaCuenta, setNuevaCuenta] = useState<{ codigo: string; login: string; clave_temporal: string } | null>(null);
   const [mensaje, setMensaje] = useState("");
@@ -949,7 +949,7 @@ function AdministracionesPanel() {
   );
   return (
     <section className="panel-configuracion">
-      <h3>Administradores / Administraciones SaaS</h3>
+      <h3>Creación de tenant · Administraciones SaaS</h3>
       <form onSubmit={(e) => void crear(e)} className="filtros">
         <label>Nombre del Administrador
           <input required value={nombreAdministrador} onChange={(e) => setNombreAdministrador(e.target.value)} />
@@ -971,7 +971,7 @@ function AdministracionesPanel() {
         <p className="tenue">La contraseña no volverá a mostrarse. Se exigirá cambiarla al ingresar.</p>
       </div>}
       <p className="tenue">
-        Exclusivo de SUPERADMIN. Cada Administración conserva su propio espacio y datos.
+        Creación de tenant: se genera un espacio lógico nuevo y ADMIN01 con credenciales independientes.\n        Se reutilizan el código y la estructura del SaaS, nunca los registros ni documentos del tenant original.\n        Exclusivo de SUPERADMIN. Cada Administración conserva su propio espacio y datos.
         Las cuentas activas son credenciales habilitadas, no sesiones conectadas actualmente.
         El estado comercial de suscripción todavía no está implementado.
       </p>

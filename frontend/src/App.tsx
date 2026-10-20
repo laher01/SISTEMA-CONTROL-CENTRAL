@@ -1,4 +1,5 @@
 import ContabilidadItems from "./paginas/ContabilidadItems";
+import InfraestructuraSuperadmin from "./paginas/InfraestructuraSuperadmin";
 import { useCallback, useState } from "react";
 import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 
@@ -169,7 +170,11 @@ export default function App() {
   };
 
   const menu = sesion.rol === "SUPERADMIN"
-    ? [{ a: "/configuracion", texto: "Consola SaaS", icono: "⚙", roles: ["SUPERADMIN" as RolSesion] }]
+    ? [
+        { a: "/configuracion", texto: "Consola SaaS", icono: "⚙", roles: ["SUPERADMIN" as RolSesion] },
+        { a: "/configuracion/crear-tenant", texto: "Creación de tenant", icono: "▣", roles: ["SUPERADMIN" as RolSesion] },
+        { a: "/superadmin/infraestructura", texto: "Infraestructura VPS", icono: "▤", roles: ["SUPERADMIN" as RolSesion] },
+      ]
     : MENU.filter((item) => item.roles.includes(sesion.rol) && (sesion.rol !== "SECRETARIA" || (
       (item.a !== "/registros" || activaciones?.registros !== false) &&
       (item.a !== "/secretaria" || activaciones?.control_documental !== false) &&
@@ -219,6 +224,8 @@ export default function App() {
           {sesion.rol === "SUPERADMIN" ? (
             <>
               <Route path="/configuracion" element={<Configuracion sesion={sesion} />} />
+              <Route path="/configuracion/crear-tenant" element={<Configuracion sesion={sesion} />} />
+              <Route path="/superadmin/infraestructura" element={<InfraestructuraSuperadmin />} />
               <Route path="*" element={<Navigate to="/configuracion" replace />} />
             </>
           ) : (
