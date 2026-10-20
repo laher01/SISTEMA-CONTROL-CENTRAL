@@ -18,6 +18,7 @@ from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, TipoComprobante, TipoDocumento
 from app.models import Documento, Empresa, Expediente
 from app.services import auditoria
+from app.services.casos_ocr import registrar_caso
 from app.services.contabilidad_items_ubl import registrar_items_pdf_estacion
 from app.services.expedientes import buscar_expediente, obtener_o_crear_empresa
 from app.services.extraccion_campos import razon_social_confiable
@@ -76,6 +77,7 @@ def registrar_fallo(
     motivo: str,
 ) -> ResultadoAutomatizacion:
     _guardar_estado(documento, "FALLIDO", (motivo,))
+    registrar_caso(session, documento)
     auditoria.registrar(
         session,
         documento.tenant_id,
