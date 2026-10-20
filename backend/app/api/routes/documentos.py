@@ -1463,8 +1463,14 @@ def _procesar_y_aplicar(
     # Conservar los cambios OCR pendientes antes de refrescar la fila: refresh
     # descarta atributos no volcados y provocaba pérdida de la extracción.
     session.flush()
-    # Si MISD retiró el documento durante la extracción, no aplicar vínculos.
-    # No sustituye un protocolo transaccional compartido entre OCR y MISD.
+    # El bloqueo de fila protege también la ruta que reutiliza OCR en caché:
+    # MISD no puede confirmar una retirada mientras se aplican las relaciones.
+    # PostgreSQL mantiene el bloqueo hasta el commit/rollback de la petición.
+    bloqueado = session.scalar(
+        select(Documento).where(Documento.id == documento.id).with_for_update()
+    )
+    if bloqueado is None:
+        raise no_encontrado("Documento")
     session.refresh(documento)
     if documento.deleted_at is not None:
         raise no_encontrado("Documento")
