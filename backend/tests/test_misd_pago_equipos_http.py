@@ -2,7 +2,6 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
-from datetime import date
 from decimal import Decimal
 from threading import Event
 
