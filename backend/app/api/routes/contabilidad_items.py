@@ -15,7 +15,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.api.deps import OperativeAuthDep, SessionDep
 from app.item_models import AuditoriaFacturaItem, LineaComprobanteItem, ProductoItem
-from app.models import Documento, Expediente, Miembro
+from app.models import Documento, Empresa, Expediente, Miembro
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.contabilidad_items_auditoria import registrar_decision, resolver_propuesta
 
@@ -41,6 +41,67 @@ def _alcance(auth: OperativeAuthDep) -> ColumnElement[bool]:
     if auth.rol == "GESTOR":
         return Expediente.gestor_id == auth.gestor_id
     raise HTTPException(403, "Rol sin acceso al módulo")
+
+
+
+@router.get("/empresas-vinculadas")
+def empresas_vinculadas(
+    session: SessionDep,
+    auth: OperativeAuthDep,
+    tipo: Literal["proveedor", "cliente"],
+    buscar: Annotated[str | None, Query(max_length=150)] = None,
+    limite: int = Query(100, ge=1, le=200),
+) -> list[dict[str, str]]:
+    """Empresas que aparecen en líneas visibles; no expone cartera ajena."""
+    empresa_id = Expediente.emisor_id if tipo == "proveedor" else Expediente.receptor_id
+    ultimo_estado = (
+        select(AuditoriaFacturaItem.estado)
+        .where(
+            AuditoriaFacturaItem.expediente_id == Expediente.id,
+            AuditoriaFacturaItem.tenant_id == auth.tenant_id,
+        )
+        .order_by(AuditoriaFacturaItem.created_at.desc(), AuditoriaFacturaItem.id.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    stmt = (
+        select(Empresa.id, Empresa.ruc, Empresa.razon_social)
+        .join(Expediente, empresa_id == Empresa.id)
+        .join(Documento, Documento.expediente_id == Expediente.id)
+        .join(LineaComprobanteItem, LineaComprobanteItem.documento_id == Documento.id)
+        .join(ProductoItem, ProductoItem.id == LineaComprobanteItem.producto_id)
+        .where(
+            Empresa.tenant_id == auth.tenant_id,
+            Empresa.deleted_at.is_(None),
+            Expediente.tenant_id == auth.tenant_id,
+            Expediente.deleted_at.is_(None),
+            Documento.tenant_id == auth.tenant_id,
+            Documento.deleted_at.is_(None),
+            LineaComprobanteItem.tenant_id == auth.tenant_id,
+            ProductoItem.tenant_id == auth.tenant_id,
+            ProductoItem.activo.is_(True),
+            _alcance(auth),
+            or_(
+                ultimo_estado.is_(None),
+                ultimo_estado.not_in(
+                    ["OBSERVADA", "INVALIDADA_CONFIRMADA",
+                     "INVALIDADA_PENDIENTE", "REACTIVACION_PENDIENTE"]
+                ),
+            ),
+        )
+        .distinct()
+        .order_by(Empresa.razon_social, Empresa.id)
+        .limit(limite)
+    )
+    if buscar and buscar.strip():
+        termino = f"%{buscar.strip()}%"
+        stmt = stmt.where(
+            or_(Empresa.ruc.ilike(termino), Empresa.razon_social.ilike(termino))
+        )
+    return [
+        {"id": str(row.id), "ruc": row.ruc, "razon_social": row.razon_social}
+        for row in session.execute(stmt)
+    ]
 
 
 @router.get("")
