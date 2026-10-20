@@ -135,7 +135,7 @@ export default function ContabilidadItems() {
         }
         setErrorFiltros("");
         setProductoSeleccionado(null);
-        setFiltros({ desde, hasta, emisor_id: emisorId.trim(), receptor_id: receptorId.trim(), buscar: buscar.trim(), categoria: categoria.trim() });
+        setFiltros({ desde, hasta, emisor_id: vista === "proveedor" ? (empresaSeleccionada?.id ?? "") : emisorId.trim(), receptor_id: vista === "cliente" ? (empresaSeleccionada?.id ?? "") : receptorId.trim(), buscar: buscar.trim(), categoria: categoria.trim() });
         recargar();
       }}>
         <label htmlFor="items-buscar">Buscar producto o servicio</label>
