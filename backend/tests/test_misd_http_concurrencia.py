@@ -1,6 +1,7 @@
 """Regresión HTTP MISD: solicitar y resolver respetan el advisory lock financiero."""
 
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import replace
 from threading import Event
 
