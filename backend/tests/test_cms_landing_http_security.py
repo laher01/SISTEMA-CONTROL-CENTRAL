@@ -17,31 +17,30 @@ def test_cms_http_requiere_sesion(client: TestClient) -> None:
 
     app.dependency_overrides[get_contexto_actual] = denegar
     assert client.get(URL).status_code == 401
-    assert client.put(
-        URL + "/borrador",
-        headers=ORIGEN,
-        json={"version": 0, "contenido": CONTENIDO},
-    ).status_code == 401
+    respuesta = client.put(
+        URL + "/borrador", headers=ORIGEN, json={"version": 0, "contenido": CONTENIDO}
+    )
+    assert respuesta.status_code == 401
 
 
 def test_cms_http_no_autoriza_rol_tenant(client: TestClient) -> None:
     assert client.get(URL).status_code == 403
-    assert client.post(
-        URL + "/transicion",
-        headers=ORIGEN,
-        json={"version": 1, "destino": "publicado"},
-    ).status_code == 403
+    respuesta = client.post(
+        URL + "/transicion", headers=ORIGEN, json={"version": 1, "destino": "publicado"}
+    )
+    assert respuesta.status_code == 403
 
 
 def test_cms_http_superadmin_origen_y_version(client: TestClient, auth_prueba) -> None:
     auth_prueba.como_superadmin()
     solicitud = {"version": 0, "contenido": CONTENIDO}
     assert client.put(URL + "/borrador", json=solicitud).status_code == 403
-    assert client.put(
+    externo = client.put(
         URL + "/borrador",
         headers={"Origin": "https://otro-dominio.example"},
         json=solicitud,
-    ).status_code == 403
+    )
+    assert externo.status_code == 403
     creada = client.put(URL + "/borrador", headers=ORIGEN, json=solicitud)
     assert creada.status_code == 200
     assert creada.json()["version"] == 1
