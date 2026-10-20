@@ -1,4 +1,5 @@
 """Pruebas de empaquetado RC1 con dump ficticio y documentos aislados."""
+
 import hashlib
 import importlib.util
 import json
@@ -22,9 +23,7 @@ def test_paquete_contiene_dos_resguardos_con_hash(tmp_path: Path) -> None:
     salida = tmp_path / "paquete"
     evidencia = MOD.crear_par(dump, documentos, salida, escritores_detenidos=True)
     assert evidencia["postgres_sha256"] == hashlib.sha256(dump.read_bytes()).hexdigest()
-    assert evidencia["documentos_sha256"] == MOD.ARCHIVO.huella(
-        salida / "documentos.tar"
-    )
+    assert evidencia["documentos_sha256"] == MOD.ARCHIVO.huella(salida / "documentos.tar")
     assert (salida / "postgres.dump").read_bytes() == dump.read_bytes()
     assert json.loads((salida / "evidencia.json").read_text()) == evidencia
 
@@ -56,6 +55,4 @@ def test_rechaza_salida_dentro_del_volumen(tmp_path: Path) -> None:
     documentos = tmp_path / "docs"
     documentos.mkdir()
     with pytest.raises(ValueError, match="dentro"):
-        MOD.crear_par(
-            dump, documentos, documentos / "salida", escritores_detenidos=True
-        )
+        MOD.crear_par(dump, documentos, documentos / "salida", escritores_detenidos=True)
