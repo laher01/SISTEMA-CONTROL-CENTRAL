@@ -10,6 +10,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
 from sqlalchemy import case, func, or_, select
@@ -43,11 +44,69 @@ from app.services.ingesta import crear_expediente
 from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.pdf_consolidado import pdf_con_documentos
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
+from app.services.reparacion_escorpio import (
+    ReparacionBloqueada,
+    aplicar_lote_verificado,
+)
+from app.services.reparacion_escorpio import vista_previa as vista_previa_escorpio
 
 NUMERO_RE = re.compile(r"^([a-z0-9]{4})-0*(\d+)$")
 NUMERO_RHE_RE = re.compile(r"^rhe-([a-z0-9]{4})-0*(\d+)$")
 
 router = APIRouter(prefix="/expedientes", tags=["expedientes"])
+
+
+@router.get("/diagnostico-escorpio-p0")
+def diagnostico_escorpio_p0(
+    session: SessionDep,
+    almacen: AlmacenDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> list[dict[str, object]]:
+    """Solo lectura: requiere administrador, sin aplicar modificaciones."""
+    if auth.rol not in (RolMiembro.ADMINISTRADOR, RolMiembro.SUPERADMIN):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo administradores")
+    return vista_previa_escorpio(session, almacen, tenant_id)
+
+
+class AprobacionEscorpio(BaseModel):
+    expediente_id: str
+    documento_id: str
+    antes: str
+    despues: str
+    pdf_sha256: str
+
+
+class ReparacionEscorpioIn(BaseModel):
+    confirmacion: str
+    aprobaciones: list[AprobacionEscorpio] = Field(min_length=6, max_length=6)
+
+
+@router.post("/reparar-escorpio-p0")
+def reparar_escorpio_p0(
+    solicitud: ReparacionEscorpioIn,
+    session: SessionDep,
+    almacen: AlmacenDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, object]:
+    """No ejecuta sin seis evidencias exactas y autorización explícita."""
+    if auth.rol not in (RolMiembro.ADMINISTRADOR, RolMiembro.SUPERADMIN):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo administradores")
+    if solicitud.confirmacion != "AUTORIZO REPARAR SEIS EXPEDIENTES ESCORPIO":
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Confirmación incorrecta")
+    try:
+        ids = aplicar_lote_verificado(
+            session,
+            almacen,
+            tenant_id,
+            [a.model_dump() for a in solicitud.aprobaciones],
+        )
+        session.commit()
+    except (ReparacionBloqueada, IntegrityError) as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    return {"reparados": len(ids), "expedientes": ids}
 
 
 @router.post("", response_model=ExpedienteOut, status_code=status.HTTP_201_CREATED)
