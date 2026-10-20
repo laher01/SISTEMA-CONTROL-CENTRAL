@@ -31,6 +31,8 @@ type Conciliacion = {
 
 export default function ContabilidadItems() {
   const [vista, setVista] = useState<VistaItems>("dashboard");
+  const [categoriaEditable, setCategoriaEditable] = useState<Record<string, string>>({});
+  const [mensajeCategoria, setMensajeCategoria] = useState("");
   const [expedienteSeleccionado, setExpedienteSeleccionado] = useState<string | null>(null);
   const [empresaSeleccionada, setEmpresaSeleccionada] = useState<EmpresaVinculada | null>(null);
   const [buscarEmpresa, setBuscarEmpresa] = useState("");
@@ -208,6 +210,7 @@ export default function ContabilidadItems() {
         </table>
       </div>}
       </>}
+      {mensajeCategoria && <p role="status">{mensajeCategoria}</p>}
       {cargando && <p>Consultando ítems…</p>}
       {error && <p role="alert">No se pudo consultar: {error}</p>}
       {!cargando && !error && filasVisibles?.length === 0 && (
@@ -232,7 +235,27 @@ export default function ContabilidadItems() {
               {filasVisibles.map((fila, indice) => (
                 <tr key={fila.producto_id + ":" + fila.unidad + ":" + fila.moneda}>
                   <td>{indice + 1}</td>
-                  <td>{fila.categoria}</td>
+                  <td>{fila.categoria}{vista === "items" && (
+                    <details>
+                      <summary>Clasificar</summary>
+                      <label>Asignar categoría
+                        <input aria-label={"Categoría de " + fila.descripcion} value={categoriaEditable[fila.producto_id] ?? fila.categoria} onChange={(e) => setCategoriaEditable((anterior) => ({ ...anterior, [fila.producto_id]: e.target.value }))} />
+                      </label>
+                      <button type="button" onClick={async () => {
+                        const categoriaNueva = (categoriaEditable[fila.producto_id] ?? fila.categoria).trim();
+                        if (categoriaNueva.length < 2) { setMensajeCategoria("Indique una categoría válida."); return; }
+                        try {
+                          const respuesta = await fetch((import.meta.env.VITE_API_URL ?? "") + "/api/v1/contabilidad-items/productos/" + fila.producto_id + "/categoria", {
+                            method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ categoria: categoriaNueva }),
+                          });
+                          if (!respuesta.ok) { throw new Error(respuesta.status === 403 ? "Solo Administración puede clasificar productos." : "No se pudo clasificar (HTTP " + respuesta.status + ")."); }
+                          setMensajeCategoria("Categoría confirmada y auditada.");
+                          recargar();
+                        } catch (fallo) { setMensajeCategoria(fallo instanceof Error ? fallo.message : String(fallo)); }
+                      }}>Guardar categoría</button>
+                    </details>
+                  )}</td>
                   <td>{fila.descripcion}</td>
                   <td>{fila.unidad}</td>
                   <td>{fila.cantidad}</td>
