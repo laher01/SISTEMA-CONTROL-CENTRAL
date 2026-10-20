@@ -15,18 +15,24 @@ SPEC.loader.exec_module(MOD)
 def test_captura_bloquea_nuevo_escritor(tmp_path: Path) -> None:
     lock = tmp_path / "lock"
     documento = tmp_path / "documento"
-    with MOD.candado(lock, exclusivo=True), pytest.raises(BlockingIOError):
-        with MOD.candado(lock, exclusivo=False, no_bloquear=True):
-            documento.write_bytes(b"indebido")
+    with (
+        MOD.candado(lock, exclusivo=True),
+        pytest.raises(BlockingIOError),
+        MOD.candado(lock, exclusivo=False, no_bloquear=True),
+    ):
+        documento.write_bytes(b"indebido")
     MOD.escribir_fixture(lock, documento, b"permitido")
     assert documento.read_bytes() == b"permitido"
 
 
 def test_escritor_impide_captura(tmp_path: Path) -> None:
     lock = tmp_path / "lock"
-    with MOD.candado(lock, exclusivo=False), pytest.raises(BlockingIOError):
-        with MOD.candado(lock, exclusivo=True, no_bloquear=True):
-            pass
+    with (
+        MOD.candado(lock, exclusivo=False),
+        pytest.raises(BlockingIOError),
+        MOD.candado(lock, exclusivo=True, no_bloquear=True),
+    ):
+        pass
 
 
 def test_rechaza_candado_simbolico(tmp_path: Path) -> None:
