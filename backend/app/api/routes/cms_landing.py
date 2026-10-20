@@ -3,7 +3,9 @@
 La publicación editorial no activa automáticamente la página pública.
 """
 
-from fastapi import APIRouter, HTTPException
+from urllib.parse import urlsplit
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -31,6 +33,24 @@ class TransicionCms(BaseModel):
     destino: EstadoEditorial
 
 
+def exigir_origen_cms(request: Request, auth: AuthDep) -> None:
+    """Las mutaciones por cookie solo admiten solicitudes del mismo origen."""
+    _exigir_superadmin(auth)
+    origen = request.headers.get("origin")
+    if not origen:
+        raise HTTPException(status_code=403, detail="Origen de solicitud requerido")
+    candidato = urlsplit(origen)
+    actual = request.url
+    if (
+        candidato.scheme != actual.scheme
+        or candidato.netloc != actual.netloc
+        or candidato.path not in ("", "/")
+        or candidato.query
+        or candidato.fragment
+    ):
+        raise HTTPException(status_code=403, detail="Origen no autorizado")
+
+
 @router.get("")
 def consultar_cms(session: SessionDep, auth: AuthDep) -> dict[str, object]:
     _exigir_superadmin(auth)
@@ -49,7 +69,7 @@ def consultar_cms(session: SessionDep, auth: AuthDep) -> dict[str, object]:
     }
 
 
-@router.put("/borrador")
+@router.put("/borrador", dependencies=[Depends(exigir_origen_cms)])
 def guardar_cms(datos: BorradorCms, session: SessionDep, auth: AuthDep) -> dict[str, object]:
     _exigir_superadmin(auth)
     try:
@@ -66,7 +86,7 @@ def guardar_cms(datos: BorradorCms, session: SessionDep, auth: AuthDep) -> dict[
     return {"version": nueva.version, "estado": nueva.estado, "existe": True}
 
 
-@router.post("/transicion")
+@router.post("/transicion", dependencies=[Depends(exigir_origen_cms)])
 def transicionar_cms(datos: TransicionCms, session: SessionDep, auth: AuthDep) -> dict[str, object]:
     _exigir_superadmin(auth)
     try:
