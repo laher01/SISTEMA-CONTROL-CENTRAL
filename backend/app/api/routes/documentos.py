@@ -1396,6 +1396,11 @@ def _procesar_y_aplicar(
     reutilizar: bool = False,
     forzar_cache: bool = False,
 ) -> ResultadoAutomatizacion:
+    # Volver a consultar la fila: la selección del lote pudo quedar obsoleta
+    # mientras otro operador retiraba el documento mediante MISD.
+    session.refresh(documento)
+    if documento.deleted_at is not None:
+        raise no_encontrado("Documento")
     datos = documento.datos_extraidos or {}
     existente = datos.get("procesamiento_documental")
     if reutilizar and isinstance(existente, dict):
@@ -1416,6 +1421,14 @@ def _procesar_y_aplicar(
             )
         aplicar_perfiles_aprendidos(session, documento, procesamiento)
         guardar_procesamiento(session, documento, procesamiento)
+    # Conservar los cambios OCR pendientes antes de refrescar la fila: refresh
+    # descarta atributos no volcados y provocaba pérdida de la extracción.
+    session.flush()
+    # Si MISD retiró el documento durante la extracción, no aplicar vínculos.
+    # No sustituye un protocolo transaccional compartido entre OCR y MISD.
+    session.refresh(documento)
+    if documento.deleted_at is not None:
+        raise no_encontrado("Documento")
     return aplicar_automaticamente(session, settings, hoy, documento, procesamiento)
 
 
@@ -1518,6 +1531,10 @@ def crear_expediente_asistido(
         emisor_ruc,
         receptor_ruc,
     )
+    if existente is not None and documento.expediente_id != existente.id:
+        # Nunca incorporar un nuevo archivo a una identidad fiscal existente
+        # sin comparación explícita. La asociación puede revisarse en Gestor.
+        raise _comprobante_duplicado(session, auth, existente.id)
     creado = existente is None
     razon_receptor = (
         solicitud.razon_social_receptor
