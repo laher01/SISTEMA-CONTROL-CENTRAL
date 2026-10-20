@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { conParametros, useDatos } from "../api";
 
+type EmpresaVinculada = { id: string; ruc: string; razon_social: string };
+type VistaItems = "dashboard" | "items" | "proveedor" | "cliente";
+
 type FacturaItem = { expediente_id: string; documento_id: string; comprobante: string; fecha_emision: string; moneda: string; descripcion_original: string; cantidad: string; unidad: string; importe: string; };
 
 type FilaItem = {
@@ -26,6 +29,9 @@ type Conciliacion = {
 };
 
 export default function ContabilidadItems() {
+  const [vista, setVista] = useState<VistaItems>("dashboard");
+  const [empresaSeleccionada, setEmpresaSeleccionada] = useState<EmpresaVinculada | null>(null);
+  const [buscarEmpresa, setBuscarEmpresa] = useState("");
   const [buscar, setBuscar] = useState("");
   const [categoria, setCategoria] = useState("");
   const [productoSeleccionado, setProductoSeleccionado] = useState<string | null>(null);
@@ -49,6 +55,31 @@ export default function ContabilidadItems() {
   const rutaFacturas = productoSeleccionado ? conParametros(`/api/v1/contabilidad-items/productos/${productoSeleccionado}/facturas`, { desde: filtros.desde, hasta: filtros.hasta, emisor_id: filtros.emisor_id, receptor_id: filtros.receptor_id }) : null;
   const { datos: facturas, error: errorFacturas, cargando: cargandoFacturas } = useDatos<FacturaItem[]>(rutaFacturas);
   const conciliacion = useDatos<Conciliacion[]>(conParametros("/api/v1/contabilidad-items/conciliacion", filtros));
+  const rutaEmpresas = vista === "proveedor" || vista === "cliente"
+    ? conParametros("/api/v1/contabilidad-items/empresas-vinculadas", {
+        tipo: vista, buscar: buscarEmpresa,
+      })
+    : null;
+  const { datos: empresas, cargando: cargandoEmpresas, error: errorEmpresas } = useDatos<EmpresaVinculada[]>(rutaEmpresas);
+  const filasVisibles = vista === "proveedor" || vista === "cliente" ? (empresaSeleccionada ? datos : null) : datos;
+  const cambiarVista = (siguiente: VistaItems) => {
+    setVista(siguiente);
+    setEmpresaSeleccionada(null);
+    setProductoSeleccionado(null);
+    setBuscarEmpresa("");
+    setEmisorId("");
+    setReceptorId("");
+    setFiltros((actual) => ({ ...actual, emisor_id: "", receptor_id: "" }));
+  };
+  const seleccionarEmpresa = (empresa: EmpresaVinculada) => {
+    setEmpresaSeleccionada(empresa);
+    setProductoSeleccionado(null);
+    setFiltros((actual) => ({
+      ...actual,
+      emisor_id: vista === "proveedor" ? empresa.id : "",
+      receptor_id: vista === "cliente" ? empresa.id : "",
+    }));
+  };
 
   return (
     <section aria-label="Contabilidad de ítems">
@@ -57,6 +88,44 @@ export default function ContabilidadItems() {
         Resumen operativo de las líneas confirmadas de comprobantes. Las cantidades
         no se convierten automáticamente entre unidades distintas.
       </p>
+      <nav aria-label="Vistas de Contabilidad de Ítems">
+        {(["dashboard", "items", "proveedor", "cliente"] as const).map((opcion) => (
+          <button key={opcion} type="button" aria-current={vista === opcion ? "page" : undefined}
+            onClick={() => cambiarVista(opcion)}>
+            {{ dashboard: "Dashboard", items: "Por ítem", proveedor: "Por proveedor", cliente: "Por cliente" }[opcion]}
+          </button>
+        ))}
+      </nav>
+      {vista === "dashboard" && (
+        <section aria-label="Resumen documental informativo">
+          <h3>Indicadores de comprobantes registrados</h3>
+          <p>La conciliación refleja comprobantes, no cobertura de extracción de líneas.</p>
+          {conciliacion.cargando && <p>Cargando indicadores…</p>}
+          {conciliacion.error && <p role="alert">{conciliacion.error}</p>}
+          {conciliacion.datos?.map((dato) => (
+            <p key={dato.moneda}>{dato.moneda}: {dato.total_documentos} comprobantes, {dato.aprobados} aprobados, {dato.observados} observados y {dato.otros} en otros estados.</p>
+          ))}
+          <p>Productos visibles en esta consulta: {datos?.length ?? "consultando"}. Este valor no equivale al total histórico de líneas procesadas.</p>
+          <p>El diagnóstico de facturas pendientes de extracción se desarrolla por separado (Issue #365).</p>
+        </section>
+      )}
+      {(vista === "proveedor" || vista === "cliente") && (
+        <section aria-label="Selección de empresa vinculada">
+          <h3>{vista === "proveedor" ? "Proveedores con ítems documentados" : "Clientes con ítems documentados"}</h3>
+          <label htmlFor="items-buscar-empresa">Buscar por RUC o razón social</label>
+          <input id="items-buscar-empresa" value={buscarEmpresa} onChange={(e) => setBuscarEmpresa(e.target.value)} />
+          {cargandoEmpresas && <p>Consultando empresas…</p>}
+          {errorEmpresas && <p role="alert">{errorEmpresas}</p>}
+          {empresas && empresas.length === 0 && <p>No se encontraron empresas con ítems visibles en su ámbito autorizado.</p>}
+          {empresas?.map((empresa) => (
+            <p key={empresa.id}><button type="button" onClick={() => seleccionarEmpresa(empresa)}>
+              {empresa.razon_social} — {empresa.ruc}
+            </button></p>
+          ))}
+          {empresaSeleccionada && <p>Mostrando productos de: <strong>{empresaSeleccionada.razon_social}</strong> ({empresaSeleccionada.ruc}).</p>}
+        </section>
+      )}
+      {vista !== "dashboard" && <>
       <form onSubmit={(evento) => {
         evento.preventDefault();
         const uuidValido = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -118,7 +187,7 @@ export default function ContabilidadItems() {
         </button>
       </p>
       {errorDescarga && <p role="alert">{errorDescarga}</p>}
-      <h3>Conciliación de comprobantes por moneda</h3>
+      {vista === "items" && <><h3>Conciliación de comprobantes por moneda</h3>
       <p>Importe total = aprobado + observado + otros estados internos. Los valores corresponden a comprobantes, no a la suma de líneas de productos.</p>
       {conciliacion.error && <p role="alert">No se pudo conciliar: {conciliacion.error}</p>}
       {conciliacion.cargando && <p>Calculando conciliación…</p>}
@@ -133,16 +202,18 @@ export default function ContabilidadItems() {
           </tr>)}</tbody>
         </table>
       </div>}
+      </>}
       {cargando && <p>Consultando ítems…</p>}
       {error && <p role="alert">No se pudo consultar: {error}</p>}
-      {!cargando && !error && datos?.length === 0 && (
+      {!cargando && !error && filasVisibles?.length === 0 && (
         <p>No se encontraron líneas de comprobantes para el período seleccionado.</p>
       )}
-      {datos && datos.length > 0 && (
+      {filasVisibles && filasVisibles.length > 0 && (
         <div style={{ overflowX: "auto" }}>
           <table>
             <thead>
               <tr>
+                <th scope="col">N.º</th>
                 <th scope="col">Categoría</th>
                 <th scope="col">Producto</th>
                 <th scope="col">Unidad</th>
@@ -153,8 +224,9 @@ export default function ContabilidadItems() {
               </tr>
             </thead>
             <tbody>
-              {datos.map((fila) => (
+              {filasVisibles.map((fila, indice) => (
                 <tr key={fila.producto_id + ":" + fila.unidad + ":" + fila.moneda}>
+                  <td>{indice + 1}</td>
                   <td>{fila.categoria}</td>
                   <td>{fila.descripcion}</td>
                   <td>{fila.unidad}</td>
@@ -189,6 +261,7 @@ export default function ContabilidadItems() {
           </div>}
         </section>
       )}
+      </>}
     </section>
   );
 }
