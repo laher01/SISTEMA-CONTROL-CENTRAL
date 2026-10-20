@@ -87,6 +87,56 @@ def clasificar_producto(
     return {"producto_id": str(producto.id), "categoria": categoria}
 
 
+@router.get("/observaciones")
+def observaciones_items(
+    session: SessionDep,
+    auth: OperativeAuthDep,
+    limite: int = Query(100, ge=1, le=200),
+) -> list[dict[str, str]]:
+    """Comprobantes observados del ámbito visible; no infiere rubros incompatibles."""
+    ultimo = (
+        select(AuditoriaFacturaItem.id)
+        .where(
+            AuditoriaFacturaItem.expediente_id == Expediente.id,
+            AuditoriaFacturaItem.tenant_id == auth.tenant_id,
+        )
+        .order_by(AuditoriaFacturaItem.created_at.desc(), AuditoriaFacturaItem.id.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    consulta = (
+        select(
+            Expediente.id,
+            Expediente.serie,
+            Expediente.correlativo,
+            AuditoriaFacturaItem.estado,
+            AuditoriaFacturaItem.motivo,
+        )
+        .join(AuditoriaFacturaItem, AuditoriaFacturaItem.expediente_id == Expediente.id)
+        .where(
+            Expediente.tenant_id == auth.tenant_id,
+            Expediente.deleted_at.is_(None),
+            AuditoriaFacturaItem.tenant_id == auth.tenant_id,
+            AuditoriaFacturaItem.id == ultimo,
+            AuditoriaFacturaItem.estado.in_(
+                ["OBSERVADA", "INVALIDADA_PENDIENTE", "REACTIVACION_PENDIENTE"]
+            ),
+            _alcance(auth),
+        )
+        .order_by(Expediente.id)
+        .limit(limite)
+    )
+    return [
+        {
+            "expediente_id": str(fila.id),
+            "comprobante": f"{fila.serie}-{fila.correlativo}",
+            "estado": fila.estado,
+            "motivo": fila.motivo,
+        }
+        for fila in session.execute(consulta)
+    ]
+
+
 @router.get("/empresas-vinculadas")
 def empresas_vinculadas(
     session: SessionDep,
