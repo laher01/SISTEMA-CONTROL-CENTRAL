@@ -230,3 +230,50 @@ def test_lote_no_silencia_404_de_documento_vigente(
             limit=50,
         )
     assert error.value.status_code == 404
+
+
+def test_ocr_cache_bloquea_fila_antes_de_aplicar_relaciones(
+    client: TestClient,
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """La ruta OCR con caché también debe usar FOR UPDATE en PostgreSQL."""
+    from sqlalchemy.dialects import postgresql
+
+    respuesta = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("cache-ocr.pdf", b"%PDF-1.7 documento de prueba")},
+    )
+    assert respuesta.status_code == 201, respuesta.text
+    documento = session.get(Documento, uuid.UUID(respuesta.json()["id"]))
+    assert documento is not None
+    documento.datos_extraidos = {"procesamiento_documental": {"texto": "cacheada"}}
+    session.flush()
+
+    consultas_bloqueadas: list[str] = []
+    scalar_original = session.scalar
+
+    def scalar_con_inspeccion(sentencia: object, *args: object, **kwargs: object) -> object:
+        sql = str(sentencia.compile(dialect=postgresql.dialect()))
+        if "FOR UPDATE" in sql:
+            consultas_bloqueadas.append(sql)
+        return scalar_original(sentencia, *args, **kwargs)
+
+    def prohibido(*args: object, **kwargs: object) -> None:
+        raise AssertionError("No volver a procesar una extracción en caché")
+
+    def aplicar(*args: object, **kwargs: object) -> str:
+        assert consultas_bloqueadas, "Se debe bloquear la fila antes de aplicar relaciones"
+        return "aplicado"
+
+    monkeypatch.setattr(session, "scalar", scalar_con_inspeccion)
+    monkeypatch.setattr(documentos_routes, "procesar_con_cache", prohibido)
+    monkeypatch.setattr(documentos_routes, "aplicar_automaticamente", aplicar)
+
+    assert (
+        documentos_routes._procesar_y_aplicar(
+            session, object(), object(), date.today(), documento, reutilizar=True
+        )
+        == "aplicado"
+    )
+    assert consultas_bloqueadas
