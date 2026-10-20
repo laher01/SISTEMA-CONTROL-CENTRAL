@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import InstrumentedAttribute
@@ -440,10 +440,34 @@ def resumen_filtrado(
         select(
             func.count(base.c.id),
             func.coalesce(
-                func.sum(case((base.c.moneda == "PEN", base.c.importe_total), else_=0)), 0
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                base.c.moneda == "PEN",
+                                base.c.pendiente_aprobacion.is_(False),
+                            ),
+                            base.c.importe_total,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
             ),
             func.coalesce(
-                func.sum(case((base.c.moneda == "USD", base.c.importe_total), else_=0)), 0
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                base.c.moneda == "USD",
+                                base.c.pendiente_aprobacion.is_(False),
+                            ),
+                            base.c.importe_total,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
             ),
         )
     ).one()

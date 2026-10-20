@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.routes import documentos as documentos_routes
 from app.core.config import Settings
-from app.models import Empresa, Expediente
+from app.models import Documento, Empresa, Expediente, Gestor
 from app.services import procesamiento_documental
 from app.services.procesamiento_documental import ResultadoProcesamiento, sugerir_tipo
 from tests.conftest import AuthPrueba, Reloj
@@ -197,8 +197,8 @@ def test_alertas_y_dashboard(client: TestClient) -> None:
     assert resumen["alertas_abiertas"]["RECEPTOR_NO_AUTORIZADO"] == 2
     assert resumen["documentos_pendientes"]["PENDIENTE_CLASIFICACION"] == 1
     montos = {m["moneda"]: m for m in resumen["montos"]}
-    assert montos["PEN"]["bancarizable"] == "2500.00"
-    assert montos["USD"]["bancarizable"] == "800.00"
+    assert Decimal(montos["PEN"]["bancarizable"]) == 0
+    assert Decimal(montos["USD"]["bancarizable"]) == 0
 
 
 def test_validaciones_de_carga(client: TestClient) -> None:
@@ -569,6 +569,167 @@ def test_eliminar_documento_es_logico_y_deja_de_listarlo(
     assert all(d["id"] != documento_id for d in listado.json())
 
 
+def test_documento_eliminado_puede_reingresarse_con_mismo_hash(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    contenido = b"%PDF-1.7 documento de prueba para reingreso"
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+    original = subir(client, "original.pdf", contenido)
+    auth_prueba.como_admin()
+
+    respuesta = client.delete(f"/api/v1/documentos/{original['id']}")
+    assert respuesta.status_code == 204, respuesta.text
+    auth_prueba.como_usuario(usuario_id)
+
+    recarga = client.post("/api/v1/documentos", files={"archivo": ("recargado.pdf", contenido)})
+    assert recarga.status_code == 201, recarga.text
+    assert recarga.json()["id"] != original["id"]
+    assert client.get(f"/api/v1/documentos/{original['id']}").status_code == 404
+
+
+def test_no_permitir_borrado_parcial_de_documento_con_expediente(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    documento = subir(client, "factura-vinculada.xml", factura(numero="F001-00000789"))
+    assert documento["expediente_id"] is not None
+    auth_prueba.como_admin()
+
+    respuesta = client.delete(f"/api/v1/documentos/{documento['id']}")
+    assert respuesta.status_code == 409, respuesta.text
+    assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
+
+
+def test_archivo_vigente_sigue_rechazando_duplicados_tras_reingreso(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    contenido = b"%PDF-1.7 control de duplicado activo tras recarga"
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+    inicial = subir(client, "inicial.pdf", contenido)
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/documentos/{inicial['id']}").status_code == 204
+    auth_prueba.como_usuario(usuario_id)
+
+    recargado = subir(client, "nuevo.pdf", contenido)
+    assert recargado["id"] != inicial["id"]
+    duplicado = client.post("/api/v1/documentos", files={"archivo": ("tercero.pdf", contenido)})
+    assert duplicado.status_code == 409
+    assert duplicado.json()["detail"]["duplicado"] is True
+
+
+def test_superadmin_no_puede_eliminar_archivos_huerfanos(
+    client: TestClient, auth_prueba: AuthPrueba
+) -> None:
+    documento = subir(client, "no_asignado.pdf", b"%PDF-1.7 sin asignar para seguridad")
+    auth_prueba.como_superadmin()
+
+    respuesta = client.delete(f"/api/v1/documentos/{documento['id']}")
+    assert respuesta.status_code == 403, respuesta.text
+    assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 403
+
+
+def test_admin_no_elimina_documento_asignado_a_gestor_sin_expediente(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    documento = subir(client, "asignado-sin-expediente.pdf", b"%PDF-1.7 asignado a gestor")
+    registro = session.get(Documento, documento["id"])
+    assert registro is not None
+    gestor = Gestor(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="DUENO-280",
+        nombre="Gestor propietario",
+    )
+    session.add(gestor)
+    session.flush()
+    registro.gestor_id = gestor.id
+    session.commit()
+    auth_prueba.como_admin()
+
+    respuesta = client.delete(f"/api/v1/documentos/{documento['id']}")
+    assert respuesta.status_code == 403, respuesta.text
+    assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
+
+
+def test_gestor_propietario_elimina_factura_integral_y_reingresa_mismo_xml(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+    contenido = factura(numero="F001-00000871", importe="230.00")
+    documento = subir(client, "integral-original.xml", contenido)
+    expediente_id = documento["expediente_id"]
+    assert expediente_id is not None
+    ajeno = subir(client, "otra-factura.xml", factura(numero="F001-00000872"))
+    voucher = subir(client, "voucher-del-expediente.pdf", b"%PDF-1.7 pago relacionado")
+    vinculado = client.post(
+        f"/api/v1/documentos/{voucher['id']}/vincular",
+        json={"expediente_id": expediente_id, "tipo_documento": "VCHR"},
+    )
+    assert vinculado.status_code == 200, vinculado.text
+
+    gestor = Gestor(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="GESTOR-ELIMINACION-INTEGRAL",
+        nombre="Gestor titular",
+    )
+    session.add(gestor)
+    session.flush()
+    doc = session.get(Documento, documento["id"])
+    exp = session.get(Expediente, expediente_id)
+    assert doc is not None and exp is not None
+    adjunto = session.get(Documento, voucher["id"])
+    assert adjunto is not None
+    doc.gestor_id = gestor.id
+    adjunto.gestor_id = gestor.id
+    exp.gestor_id = gestor.id
+    session.commit()
+
+    auth_prueba.como_gestor(gestor.id, usuario_id)
+    borrado = client.delete(f"/api/v1/documentos/{documento['id']}")
+    assert borrado.status_code == 204, borrado.text
+    assert session.get(Documento, documento["id"]) is None
+    assert session.get(Documento, voucher["id"]) is None
+    assert session.get(Expediente, expediente_id) is None
+    assert session.get(Documento, ajeno["id"]) is not None
+
+    auth_prueba.como_usuario(usuario_id)
+    recargado = subir(client, "integral-otra-vez.xml", contenido)
+    assert recargado["id"] != documento["id"]
+    assert recargado["expediente_id"] != expediente_id
+
+
+def test_otro_gestor_no_elimina_factura_ajena(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+    doc = subir(client, "ajena.xml", factura(numero="F001-00000875"))
+    propietario = Gestor(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="GESTOR-PROPIETARIO-280",
+        nombre="Propietario",
+    )
+    otro = Gestor(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="GESTOR-AJENO-280",
+        nombre="Gestor sin permiso",
+    )
+    session.add_all([propietario, otro])
+    session.flush()
+    registro = session.get(Documento, doc["id"])
+    expediente = session.get(Expediente, doc["expediente_id"])
+    assert registro is not None and expediente is not None
+    registro.gestor_id = propietario.id
+    expediente.gestor_id = propietario.id
+    session.commit()
+
+    auth_prueba.como_gestor(otro.id, usuario_id)
+    respuesta = client.delete(f"/api/v1/documentos/{doc['id']}")
+    assert respuesta.status_code == 409, respuesta.text
+    assert session.get(Documento, doc["id"]) is not None
+
+
 def test_reprocesamiento_masivo_repara_razones_sociales(
     client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -853,7 +1014,7 @@ Total Neto Recibido : 1,500.00 SOLES""",
     assert datos["expedientes_total"] == 3
     montos = {m["moneda"]: m for m in datos["montos"]}
     total_pen = Decimal(montos["PEN"]["bancarizable"]) + Decimal(montos["PEN"]["no_bancarizable"])
-    assert total_pen == Decimal("4500.00")
+    assert total_pen == 0
 
 
 def test_empresas_eliminadas_no_se_reactivan_por_ingesta_automatica(
