@@ -359,7 +359,7 @@ function Procesar({
       <ConfirmarCampos
         documentoId={documento.id}
         campos={[]}
-        confirmado={false}
+        confirmado={Boolean(resultado.datos_extraidos?.extraccion_confirmada)}
         alConfirmar={setResultado}
         alCrear={alCompletar}
       />
