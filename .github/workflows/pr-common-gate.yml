@@ -1,0 +1,33 @@
+name: pr-common-gate
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  common-gate:
+    name: common-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate pull request event
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request)
+              test "$BASE_REF" = "main"
+              ;;
+            merge_group)
+              ;;
+            *)
+              echo "::error::Unexpected event: $EVENT_NAME"
+              exit 1
+              ;;
+          esac
+          echo "PR common gate completed; no deployment credentials or servers used."
