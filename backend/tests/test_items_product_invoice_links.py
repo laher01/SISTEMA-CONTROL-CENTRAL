@@ -141,6 +141,11 @@ def test_search_and_linked_invoices_are_tenant_scoped(
     auth_prueba.como_superadmin()
     denied = client.get(f"/api/v1/contabilidad-items/productos/{product_id}/facturas")
     assert denied.status_code == 403
+    denied_suppliers = client.get(
+        "/api/v1/contabilidad-items/empresas-vinculadas",
+        params={"tipo": "proveedor"},
+    )
+    assert denied_suppliers.status_code == 403
     auth_prueba.como_admin()
 
     own_doc = session.get(Documento, invoices.json()[0]["documento_id"])
