@@ -43,7 +43,6 @@ def _alcance(auth: OperativeAuthDep) -> ColumnElement[bool]:
     raise HTTPException(403, "Rol sin acceso al módulo")
 
 
-
 @router.get("/empresas-vinculadas")
 def empresas_vinculadas(
     session: SessionDep,
@@ -84,8 +83,12 @@ def empresas_vinculadas(
             or_(
                 ultimo_estado.is_(None),
                 ultimo_estado.not_in(
-                    ["OBSERVADA", "INVALIDADA_CONFIRMADA",
-                     "INVALIDADA_PENDIENTE", "REACTIVACION_PENDIENTE"]
+                    [
+                        "OBSERVADA",
+                        "INVALIDADA_CONFIRMADA",
+                        "INVALIDADA_PENDIENTE",
+                        "REACTIVACION_PENDIENTE",
+                    ]
                 ),
             ),
         )
@@ -95,9 +98,7 @@ def empresas_vinculadas(
     )
     if buscar and buscar.strip():
         termino = f"%{buscar.strip()}%"
-        stmt = stmt.where(
-            or_(Empresa.ruc.ilike(termino), Empresa.razon_social.ilike(termino))
-        )
+        stmt = stmt.where(or_(Empresa.ruc.ilike(termino), Empresa.razon_social.ilike(termino)))
     return [
         {"id": str(row.id), "ruc": row.ruc, "razon_social": row.razon_social}
         for row in session.execute(stmt)
