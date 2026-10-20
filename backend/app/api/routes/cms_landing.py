@@ -108,7 +108,12 @@ def contenido_cms_publico(session: SessionDep) -> dict[str, object]:
     """Solo contenido aprobado y publicado; no expone borradores ni identidades."""
     from app.models import ConfiguracionLandingGlobal
 
-    configuracion = session.get(ConfiguracionLandingGlobal, 1)
+    # Bloqueo compartido: desactivar la landing espera hasta terminar esta lectura.
+    configuracion = session.scalar(
+        select(ConfiguracionLandingGlobal)
+        .where(ConfiguracionLandingGlobal.id == 1)
+        .with_for_update(read=True)
+    )
     if configuracion is None or configuracion.activa is not True:
         return {"disponible": False, "contenido": None}
     fila = (
