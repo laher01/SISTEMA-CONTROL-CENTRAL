@@ -15,7 +15,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.api.deps import OperativeAuthDep, SessionDep
 from app.item_models import AuditoriaFacturaItem, LineaComprobanteItem, ProductoItem
-from app.models import Documento, Expediente, Miembro
+from app.models import Auditoria, Documento, Empresa, Expediente, Miembro
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.contabilidad_items_auditoria import registrar_decision, resolver_propuesta
 
@@ -41,6 +41,163 @@ def _alcance(auth: OperativeAuthDep) -> ColumnElement[bool]:
     if auth.rol == "GESTOR":
         return Expediente.gestor_id == auth.gestor_id
     raise HTTPException(403, "Rol sin acceso al módulo")
+
+
+class CategoriaItemIn(BaseModel):
+    categoria: str = Field(min_length=2, max_length=80)
+
+
+@router.post("/productos/{producto_id}/categoria")
+def clasificar_producto(
+    producto_id: uuid.UUID,
+    datos: CategoriaItemIn,
+    session: SessionDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str]:
+    """La clasificación es metadato del catálogo, sin alterar originales ni liquidaciones."""
+    if auth.rol != "ADMINISTRADOR":
+        raise HTTPException(403, "Solo Administración puede clasificar el catálogo")
+    categoria = datos.categoria.strip()
+    if len(categoria) < 2:
+        raise HTTPException(422, "Categoría insuficiente")
+    producto = session.scalar(
+        select(ProductoItem)
+        .where(
+            ProductoItem.id == producto_id,
+            ProductoItem.tenant_id == auth.tenant_id,
+            ProductoItem.activo.is_(True),
+        )
+        .with_for_update()
+    )
+    if producto is None:
+        raise HTTPException(404, "Producto no encontrado")
+    anterior = producto.categoria
+    producto.categoria = categoria
+    producto.clasificacion_confirmada = True
+    session.add(
+        Auditoria(
+            tenant_id=auth.tenant_id,
+            accion="ITEMS_CATEGORIA_CONFIRMADA",
+            entidad="producto_item",
+            entidad_id=producto.id,
+            datos={"anterior": anterior, "nueva": categoria, "cuenta_id": str(auth.cuenta_id)},
+        )
+    )
+    session.commit()
+    return {"producto_id": str(producto.id), "categoria": categoria}
+
+
+@router.get("/observaciones")
+def observaciones_items(
+    session: SessionDep,
+    auth: OperativeAuthDep,
+    limite: int = Query(100, ge=1, le=200),
+) -> list[dict[str, str]]:
+    """Comprobantes observados del ámbito visible; no infiere rubros incompatibles."""
+    ultimo = (
+        select(AuditoriaFacturaItem.id)
+        .where(
+            AuditoriaFacturaItem.expediente_id == Expediente.id,
+            AuditoriaFacturaItem.tenant_id == auth.tenant_id,
+        )
+        .order_by(AuditoriaFacturaItem.created_at.desc(), AuditoriaFacturaItem.id.desc())
+        .limit(1)
+        .correlate(Expediente)
+        .scalar_subquery()
+    )
+    consulta = (
+        select(
+            Expediente.id,
+            Expediente.serie,
+            Expediente.correlativo,
+            AuditoriaFacturaItem.estado,
+            AuditoriaFacturaItem.motivo,
+        )
+        .join(AuditoriaFacturaItem, AuditoriaFacturaItem.expediente_id == Expediente.id)
+        .where(
+            Expediente.tenant_id == auth.tenant_id,
+            Expediente.deleted_at.is_(None),
+            AuditoriaFacturaItem.tenant_id == auth.tenant_id,
+            AuditoriaFacturaItem.id == ultimo,
+            AuditoriaFacturaItem.estado.in_(
+                ["OBSERVADA", "INVALIDADA_PENDIENTE", "REACTIVACION_PENDIENTE"]
+            ),
+            _alcance(auth),
+        )
+        .order_by(Expediente.id)
+        .limit(limite)
+    )
+    return [
+        {
+            "expediente_id": str(fila.id),
+            "comprobante": f"{fila.serie}-{fila.correlativo}",
+            "estado": fila.estado,
+            "motivo": fila.motivo,
+        }
+        for fila in session.execute(consulta)
+    ]
+
+
+@router.get("/empresas-vinculadas")
+def empresas_vinculadas(
+    session: SessionDep,
+    auth: OperativeAuthDep,
+    tipo: Literal["proveedor", "cliente"],
+    buscar: Annotated[str | None, Query(max_length=150)] = None,
+    limite: int = Query(100, ge=1, le=200),
+) -> list[dict[str, str]]:
+    """Empresas que aparecen en líneas visibles; no expone cartera ajena."""
+    empresa_id = Expediente.emisor_id if tipo == "proveedor" else Expediente.receptor_id
+    ultimo_estado = (
+        select(AuditoriaFacturaItem.estado)
+        .where(
+            AuditoriaFacturaItem.expediente_id == Expediente.id,
+            AuditoriaFacturaItem.tenant_id == auth.tenant_id,
+        )
+        .order_by(AuditoriaFacturaItem.created_at.desc(), AuditoriaFacturaItem.id.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    stmt = (
+        select(Empresa.id, Empresa.ruc, Empresa.razon_social)
+        .join(Expediente, empresa_id == Empresa.id)
+        .join(Documento, Documento.expediente_id == Expediente.id)
+        .join(LineaComprobanteItem, LineaComprobanteItem.documento_id == Documento.id)
+        .join(ProductoItem, ProductoItem.id == LineaComprobanteItem.producto_id)
+        .where(
+            Empresa.tenant_id == auth.tenant_id,
+            Empresa.deleted_at.is_(None),
+            Expediente.tenant_id == auth.tenant_id,
+            Expediente.deleted_at.is_(None),
+            Documento.tenant_id == auth.tenant_id,
+            Documento.deleted_at.is_(None),
+            LineaComprobanteItem.tenant_id == auth.tenant_id,
+            ProductoItem.tenant_id == auth.tenant_id,
+            ProductoItem.activo.is_(True),
+            _alcance(auth),
+            or_(
+                ultimo_estado.is_(None),
+                ultimo_estado.not_in(
+                    [
+                        "OBSERVADA",
+                        "INVALIDADA_CONFIRMADA",
+                        "INVALIDADA_PENDIENTE",
+                        "REACTIVACION_PENDIENTE",
+                    ]
+                ),
+            ),
+        )
+        .distinct()
+        .order_by(Empresa.razon_social, Empresa.id)
+        .limit(limite)
+    )
+    if buscar and buscar.strip():
+        termino = f"%{buscar.strip()}%"
+        stmt = stmt.where(or_(Empresa.ruc.ilike(termino), Empresa.razon_social.ilike(termino)))
+    return [
+        {"id": str(row.id), "ruc": row.ruc, "razon_social": row.razon_social}
+        for row in session.execute(stmt)
+    ]
 
 
 @router.get("")

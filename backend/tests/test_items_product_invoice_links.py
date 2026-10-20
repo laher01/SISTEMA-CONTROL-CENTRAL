@@ -65,17 +65,50 @@ def test_search_and_linked_invoices_are_tenant_scoped(
         assert registrar_items_ubl(session, tenant, documento.id, XML) == 1
     session.commit()
 
+    suppliers = client.get(
+        "/api/v1/contabilidad-items/empresas-vinculadas",
+        params={"tipo": "proveedor", "buscar": "20100000001"},
+    )
+    assert suppliers.status_code == 200, suppliers.text
+    assert len(suppliers.json()) == 1
+    assert suppliers.json()[0]["ruc"] == "20100000001"
+    customers = client.get(
+        "/api/v1/contabilidad-items/empresas-vinculadas",
+        params={"tipo": "cliente", "buscar": "20200000001"},
+    )
+    assert customers.status_code == 200, customers.text
+    assert len(customers.json()) == 1
+    assert customers.json()[0]["ruc"] == "20200000001"
+    assert (
+        client.get(
+            "/api/v1/contabilidad-items/empresas-vinculadas",
+            params={"tipo": "proveedor", "buscar": "20100000002"},
+        ).json()
+        == []
+    )
+
     summary = client.get("/api/v1/contabilidad-items", params={"buscar": "pota"})
     assert summary.status_code == 200, summary.text
     assert len(summary.json()) == 1
     product_id = summary.json()[0]["producto_id"]
     assert Decimal(summary.json()[0]["cantidad"]) == 12
 
+    classified = client.post(
+        f"/api/v1/contabilidad-items/productos/{product_id}/categoria",
+        json={"categoria": "Hidrobiológicos"},
+    )
+    assert classified.status_code == 200, classified.text
+    assert classified.json()["categoria"] == "Hidrobiológicos"
+    repeated = client.post(
+        f"/api/v1/contabilidad-items/productos/{product_id}/categoria",
+        json={"categoria": "Hidrobiológicos"},
+    )
+    assert repeated.status_code == 200
     missing = client.get("/api/v1/contabilidad-items", params={"buscar": "anchoveta"})
     assert missing.status_code == 200
     assert missing.json() == []
 
-    category = summary.json()[0]["categoria"]
+    category = "Hidrobiológicos"
     by_category = client.get(
         "/api/v1/contabilidad-items",
         params={"buscar": "congelada", "categoria": category},
@@ -116,9 +149,26 @@ def test_search_and_linked_invoices_are_tenant_scoped(
     )
     assert invalid_range.status_code == 422
 
+    observed = client.get("/api/v1/contabilidad-items/observaciones")
+    assert observed.status_code == 200
+    assert observed.json() == []
+
     auth_prueba.como_superadmin()
     denied = client.get(f"/api/v1/contabilidad-items/productos/{product_id}/facturas")
     assert denied.status_code == 403
+    assert client.get("/api/v1/contabilidad-items/observaciones").status_code == 403
+    assert (
+        client.post(
+            f"/api/v1/contabilidad-items/productos/{product_id}/categoria",
+            json={"categoria": "Ajena"},
+        ).status_code
+        == 403
+    )
+    denied_suppliers = client.get(
+        "/api/v1/contabilidad-items/empresas-vinculadas",
+        params={"tipo": "proveedor"},
+    )
+    assert denied_suppliers.status_code == 403
     auth_prueba.como_admin()
 
     own_doc = session.get(Documento, invoices.json()[0]["documento_id"])
