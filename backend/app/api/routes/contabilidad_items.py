@@ -15,7 +15,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.api.deps import OperativeAuthDep, SessionDep
 from app.item_models import AuditoriaFacturaItem, LineaComprobanteItem, ProductoItem
-from app.models import Documento, Empresa, Expediente, Miembro
+from app.models import Auditoria, Documento, Empresa, Expediente, Miembro
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.contabilidad_items_auditoria import registrar_decision, resolver_propuesta
 
@@ -41,6 +41,50 @@ def _alcance(auth: OperativeAuthDep) -> ColumnElement[bool]:
     if auth.rol == "GESTOR":
         return Expediente.gestor_id == auth.gestor_id
     raise HTTPException(403, "Rol sin acceso al módulo")
+
+
+class CategoriaItemIn(BaseModel):
+    categoria: str = Field(min_length=2, max_length=80)
+
+
+@router.post("/productos/{producto_id}/categoria")
+def clasificar_producto(
+    producto_id: uuid.UUID,
+    datos: CategoriaItemIn,
+    session: SessionDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str]:
+    """La clasificación es metadato del catálogo, sin alterar originales ni liquidaciones."""
+    if auth.rol != "ADMINISTRADOR":
+        raise HTTPException(403, "Solo Administración puede clasificar el catálogo")
+    categoria = datos.categoria.strip()
+    if len(categoria) < 2:
+        raise HTTPException(422, "Categoría insuficiente")
+    producto = session.scalar(
+        select(ProductoItem)
+        .where(
+            ProductoItem.id == producto_id,
+            ProductoItem.tenant_id == auth.tenant_id,
+            ProductoItem.activo.is_(True),
+        )
+        .with_for_update()
+    )
+    if producto is None:
+        raise HTTPException(404, "Producto no encontrado")
+    anterior = producto.categoria
+    producto.categoria = categoria
+    producto.clasificacion_confirmada = True
+    session.add(
+        Auditoria(
+            tenant_id=auth.tenant_id,
+            accion="ITEMS_CATEGORIA_CONFIRMADA",
+            entidad="producto_item",
+            entidad_id=producto.id,
+            datos={"anterior": anterior, "nueva": categoria, "cuenta_id": str(auth.cuenta_id)},
+        )
+    )
+    session.commit()
+    return {"producto_id": str(producto.id), "categoria": categoria}
 
 
 @router.get("/empresas-vinculadas")
