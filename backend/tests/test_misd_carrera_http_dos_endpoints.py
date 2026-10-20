@@ -68,9 +68,7 @@ def test_pago_gestor_y_retiro_misd_http_simultaneos(
 
     def retirar() -> object:
         retiro_iniciado.set()
-        return client.post(
-            f"/api/v1/misd/solicitudes/{solicitud.json()['id']}/ejecutar"
-        )
+        return client.post(f"/api/v1/misd/solicitudes/{solicitud.json()['id']}/ejecutar")
 
     with sessionmaker(engine)() as tenedora:
         bloquear_tenant_financiero(tenedora, tenant_id)
