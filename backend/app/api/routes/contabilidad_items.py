@@ -102,6 +102,7 @@ def observaciones_items(
         )
         .order_by(AuditoriaFacturaItem.created_at.desc(), AuditoriaFacturaItem.id.desc())
         .limit(1)
+        .correlate(Expediente)
         .scalar_subquery()
     )
     consulta = (
