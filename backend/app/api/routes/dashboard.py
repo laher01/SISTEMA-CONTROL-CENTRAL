@@ -461,7 +461,11 @@ def resumen(
             select(
                 func.coalesce(func.sum(case((es_bancarizable, Expediente.importe_total))), 0),
                 func.coalesce(func.sum(case((~es_bancarizable, Expediente.importe_total))), 0),
-            ).where(*vigentes, Expediente.moneda == moneda)
+            ).where(
+                *vigentes,
+                Expediente.moneda == moneda,
+                Expediente.pendiente_aprobacion.is_(False),
+            )
         ).one()
         montos.append(
             MontosMoneda(

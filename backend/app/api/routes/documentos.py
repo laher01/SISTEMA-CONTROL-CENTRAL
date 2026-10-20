@@ -17,17 +17,19 @@ from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, Setti
 from app.api.errores import no_encontrado
 from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, RolMiembro, TipoDocumento
+from app.item_models import LineaComprobanteItem
 from app.models import (
     AlertaManual,
+    CorreccionIA,
     Documento,
     Empresa,
     Expediente,
     Gestor,
     Miembro,
+    PagoERP,
     ReferenciaGRE,
     RelacionDocumento,
     SolicitudCargaEmisor,
-    ahora,
 )
 from app.schemas import (
     DocumentoOut,
@@ -53,8 +55,13 @@ from app.services.automatizacion_documental import (
     guardar_procesamiento,
     registrar_fallo,
 )
+from app.services.bloqueo_documental import bloquear_tenant_documental
 from app.services.cache_ocr import procesar_con_cache
-from app.services.expedientes import actualizar_expediente, buscar_expediente
+from app.services.eliminacion_expediente_gestor import (
+    EliminacionNoSegura,
+    eliminar_expediente_del_gestor,
+)
+from app.services.expedientes import buscar_expediente
 from app.services.identidad_cotizaciones import identidad_cotizacion
 from app.services.ingesta import (
     ArchivoSubido,
@@ -68,8 +75,12 @@ from app.services.ingesta import (
 from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.lotes_imagenes import MAX_IMAGENES_POR_SUBLOTE
 from app.services.metadatos_documento import metadatos_individuales
-from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
+from app.services.recuperacion_eliminaciones import (
+    reconciliar_intento,
+    registrar_intento,
+    sincronizar_movimientos,
+)
 from app.services.relaciones_documentales import sugerir_relaciones
 from app.services.separador_pdf import analizar_paquete, extraer_fragmento
 from app.services.ubl import UblInvalido, parece_xml, parse_ubl
@@ -992,11 +1003,33 @@ def resumen_documentos(
         select(
             func.count(Expediente.id),
             func.coalesce(
-                func.sum(case((Expediente.moneda == "PEN", Expediente.importe_total), else_=0)),
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                Expediente.moneda == "PEN",
+                                Expediente.pendiente_aprobacion.is_(False),
+                            ),
+                            Expediente.importe_total,
+                        ),
+                        else_=0,
+                    )
+                ),
                 0,
             ),
             func.coalesce(
-                func.sum(case((Expediente.moneda == "USD", Expediente.importe_total), else_=0)),
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                Expediente.moneda == "USD",
+                                Expediente.pendiente_aprobacion.is_(False),
+                            ),
+                            Expediente.importe_total,
+                        ),
+                        else_=0,
+                    )
+                ),
                 0,
             ),
         )
@@ -1211,42 +1244,128 @@ def eliminar_documento(
     hoy: HoyDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
+    almacen: AlmacenDep,
     documento_id: uuid.UUID,
 ) -> None:
+    # Se autoriza únicamente un archivo sin cliente/expediente y sin dependencias:
+    # documentos asociados requieren una operación de eliminación integral distinta.
+    bloquear_tenant_documental(session, tenant_id)
     documento = _documento(session, tenant_id, documento_id)
-    _validar_ambito_documento(auth, documento, session)
-    if not permiso_habilitado(
-        session,
-        tenant_id,
-        auth.rol,
-        PERMISO_ELIMINAR_REGISTROS,
-    ):
+    if auth.rol == RolMiembro.SUPERADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin autorización para eliminar")
+    if documento.expediente_id is None:
+        # Sin expediente no implica sin dueño: respetar la titularidad del gestor.
+        if documento.gestor_id is not None and (
+            auth.rol != "GESTOR" or auth.gestor_id != documento.gestor_id
+        ):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Solo el gestor propietario puede eliminar"
+            )
+        # Todo rol operativo del tenant puede eliminar documentos realmente no asignados.
+        if auth.rol not in (
+            "GESTOR",
+            RolMiembro.USUARIO,
+            RolMiembro.RESPONSABLE,
+            RolMiembro.SECRETARIA,
+            RolMiembro.GERENTE,
+            RolMiembro.ADMINISTRADOR,
+        ):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Rol no autorizado")
+        referencias = (
+            select(RelacionDocumento.id).where(
+                or_(
+                    RelacionDocumento.origen_id == documento_id,
+                    RelacionDocumento.destino_id == documento_id,
+                )
+            ),
+            select(ReferenciaGRE.id).where(ReferenciaGRE.documento_id == documento_id),
+            select(CorreccionIA.id).where(CorreccionIA.documento_id == documento_id),
+            select(PagoERP.id).where(PagoERP.voucher_documento_id == documento_id),
+            select(LineaComprobanteItem.id).where(
+                LineaComprobanteItem.documento_id == documento_id
+            ),
+        )
+        if any(session.scalar(consulta.limit(1)) is not None for consulta in referencias):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Documento con referencias; requiere eliminación integral",
+            )
+        ruta = documento.ruta_storage
+        # Validar ámbito físico antes de liberar el registro y el hash.
+        if not ruta.startswith(f"{tenant_id}/") or ".." in ruta.split("/"):
+            raise HTTPException(status.HTTP_409_CONFLICT, "Ruta del documento inválida")
+        archivo = almacen.ruta_absoluta(ruta)
+        raiz_tenant = (almacen.base / str(tenant_id)).resolve()
+        if not archivo.is_relative_to(raiz_tenant):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "Original fuera del almacenamiento del tenant"
+            )
+        compartido = session.scalar(
+            select(Documento.id)
+            .where(Documento.ruta_storage == ruta, Documento.id != documento.id)
+            .limit(1)
+        )
+        if compartido is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "Original todavía referenciado por otro documento"
+            )
+        # Apartar el original ANTES de liberar el hash para que una recarga
+        # concurrente no pierda el contenido recién importado.
+        temporal = archivo.with_name(f".eliminando-{documento.id}")
+        if temporal.exists():
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Existe una eliminación anterior pendiente de recuperación",
+            )
+        if not archivo.is_file():
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "Original no disponible para eliminación completa"
+            )
+        diario = registrar_intento(almacen, tenant_id, [(documento.id, archivo, temporal)])
+        try:
+            archivo.replace(temporal)
+            sincronizar_movimientos([(archivo, temporal)])
+        except OSError:
+            reconciliar_intento(session, almacen, tenant_id, diario)
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE, "No se pudo preparar la eliminación física"
+            ) from None
+        try:
+            auditoria.registrar(
+                session,
+                tenant_id,
+                "DOCUMENTO_ELIMINADO_DEFINITIVAMENTE",
+                "documento",
+                documento.id,
+                {"sha256": documento.sha256},
+            )
+            session.delete(documento)
+            session.commit()
+        except Exception:
+            session.rollback()
+            reconciliar_intento(session, almacen, tenant_id, diario)
+            raise
+        session.expire_all()
+        reconciliar_intento(session, almacen, tenant_id, diario)
+        return
+    if auth.rol != "GESTOR" or auth.gestor_id is None:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            "No tiene permiso para eliminar registros",
+            "Solo el gestor propietario puede eliminar documentos de su expediente",
         )
-    expediente = documento.expediente
-    documento.deleted_at = ahora()
-    auditoria.registrar(
-        session,
-        tenant_id,
-        "DOCUMENTO_ELIMINADO",
-        "documento",
-        documento.id,
-        {
-            "nombre_original": documento.nombre_original,
-            "sha256": documento.sha256,
-            "expediente_id": str(documento.expediente_id) if documento.expediente_id else None,
-            "tipo_documento": documento.tipo_documento,
-        },
-    )
-    if expediente is not None and expediente.deleted_at is None:
-        # Persistir el borrado lógico antes de consultar documentos activos.
-        # Evita que el cálculo de importes conserve la evidencia retirada
-        # cuando el recálculo hace SELECT con autoflush deshabilitado.
-        session.flush()
-        actualizar_expediente(session, expediente, hoy, settings)
-    session.commit()
+    # Eliminar la factura principal retira integralmente su expediente y anexos.
+    # Para una guía/voucher con expediente se exige una operación específica posterior.
+    if documento.tipo_documento != TipoDocumento.FACT:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Eliminar anexos individualmente requiere conciliación documental",
+        )
+    try:
+        eliminar_expediente_del_gestor(
+            session, almacen, tenant_id, documento.expediente_id, auth.gestor_id
+        )
+    except EliminacionNoSegura as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
 
 
 MIME_EN_LINEA = frozenset(

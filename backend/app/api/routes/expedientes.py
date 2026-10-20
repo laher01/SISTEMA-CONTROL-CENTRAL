@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import InstrumentedAttribute
@@ -22,7 +22,7 @@ from starlette.background import BackgroundTask
 from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado
 from app.enums import EstadoExpediente, RolMiembro
-from app.models import Documento, Empresa, Expediente, Gestor, Miembro, ahora
+from app.models import Documento, Empresa, Expediente, Gestor, Miembro
 from app.schemas import (
     ExpedienteDetalle,
     ExpedienteIn,
@@ -33,6 +33,10 @@ from app.schemas import (
 from app.security import cuenta_administradora_responsable
 from app.services import auditoria
 from app.services.ambito_gerencia import alcance_expedientes_gerente, expediente_visible_gerente
+from app.services.eliminacion_expediente_gestor import (
+    EliminacionNoSegura,
+    eliminar_expediente_del_gestor,
+)
 from app.services.expedientes import (
     buscar_expediente,
     documentos_faltantes,
@@ -42,7 +46,6 @@ from app.services.expedientes import (
 from app.services.ingesta import crear_expediente
 from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.pdf_consolidado import pdf_con_documentos
-from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 
 NUMERO_RE = re.compile(r"^([a-z0-9]{4})-0*(\d+)$")
 NUMERO_RHE_RE = re.compile(r"^rhe-([a-z0-9]{4})-0*(\d+)$")
@@ -312,7 +315,15 @@ def resumen_empresas_por_rol(
                 Empresa.razon_social,
                 Expediente.moneda,
                 func.count(Expediente.id),
-                func.coalesce(func.sum(Expediente.importe_total), 0),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (Expediente.pendiente_aprobacion.is_(False), Expediente.importe_total),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
             )
             .join(Empresa, (Empresa.id == campo) & (Empresa.tenant_id == tenant_id))
             .where(*condiciones)
@@ -440,10 +451,34 @@ def resumen_filtrado(
         select(
             func.count(base.c.id),
             func.coalesce(
-                func.sum(case((base.c.moneda == "PEN", base.c.importe_total), else_=0)), 0
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                base.c.moneda == "PEN",
+                                base.c.pendiente_aprobacion.is_(False),
+                            ),
+                            base.c.importe_total,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
             ),
             func.coalesce(
-                func.sum(case((base.c.moneda == "USD", base.c.importe_total), else_=0)), 0
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                base.c.moneda == "USD",
+                                base.c.pendiente_aprobacion.is_(False),
+                            ),
+                            base.c.importe_total,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
             ),
         )
     ).one()
@@ -930,6 +965,7 @@ def detalle(
 @router.delete("/{expediente_id}", status_code=status.HTTP_204_NO_CONTENT)
 def eliminar(
     session: SessionDep,
+    almacen: AlmacenDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
     expediente_id: uuid.UUID,
@@ -937,46 +973,12 @@ def eliminar(
     expediente = session.get(Expediente, expediente_id)
     if expediente is None or expediente.tenant_id != tenant_id or expediente.deleted_at:
         raise no_encontrado("Expediente")
-    if auth.rol == "GESTOR" and expediente.gestor_id != auth.gestor_id:
-        raise no_encontrado("Expediente")
-    if not _visible_para_auth(expediente, auth, session):
-        raise no_encontrado("Expediente")
-    if not permiso_habilitado(
-        session,
-        tenant_id,
-        auth.rol,
-        PERMISO_ELIMINAR_REGISTROS,
-    ):
+    if auth.rol != "GESTOR" or auth.gestor_id is None:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            "No tiene permiso para eliminar registros",
+            "Solo el gestor propietario puede eliminar expedientes de clientes",
         )
-
-    marca_eliminacion = ahora()
-    expediente.deleted_at = marca_eliminacion
-    # Una eliminación integral debe ocultar también las evidencias de los
-    # demás menús, sin perder la trazabilidad ni borrar archivos físicos.
-    for documento in expediente.documentos:
-        if documento.deleted_at is None:
-            documento.deleted_at = marca_eliminacion
-            auditoria.registrar(
-                session,
-                tenant_id,
-                "DOCUMENTO_ELIMINADO_CON_EXPEDIENTE",
-                "documento",
-                documento.id,
-                {"expediente_id": str(expediente.id), "sha256": documento.sha256},
-            )
-    auditoria.registrar(
-        session,
-        tenant_id,
-        "EXPEDIENTE_ELIMINADO",
-        "expediente",
-        expediente.id,
-        {
-            "tipo": expediente.tipo_comprobante,
-            "serie": expediente.serie,
-            "correlativo": expediente.correlativo,
-        },
-    )
-    session.commit()
+    try:
+        eliminar_expediente_del_gestor(session, almacen, tenant_id, expediente_id, auth.gestor_id)
+    except EliminacionNoSegura as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error

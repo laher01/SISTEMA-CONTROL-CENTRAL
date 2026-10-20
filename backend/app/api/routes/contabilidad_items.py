@@ -298,6 +298,7 @@ def conciliacion(
         .where(
             Expediente.tenant_id == auth.tenant_id,
             Expediente.deleted_at.is_(None),
+            Expediente.pendiente_aprobacion.is_(False),
             _alcance(auth),
         )
         .group_by(Expediente.moneda)
