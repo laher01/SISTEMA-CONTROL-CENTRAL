@@ -65,6 +65,25 @@ def test_search_and_linked_invoices_are_tenant_scoped(
         assert registrar_items_ubl(session, tenant, documento.id, XML) == 1
     session.commit()
 
+    suppliers = client.get(
+        "/api/v1/contabilidad-items/empresas-vinculadas",
+        params={"tipo": "proveedor", "buscar": "20100000001"},
+    )
+    assert suppliers.status_code == 200, suppliers.text
+    assert len(suppliers.json()) == 1
+    assert suppliers.json()[0]["ruc"] == "20100000001"
+    customers = client.get(
+        "/api/v1/contabilidad-items/empresas-vinculadas",
+        params={"tipo": "cliente", "buscar": "20200000001"},
+    )
+    assert customers.status_code == 200, customers.text
+    assert len(customers.json()) == 1
+    assert customers.json()[0]["ruc"] == "20200000001"
+    assert client.get(
+        "/api/v1/contabilidad-items/empresas-vinculadas",
+        params={"tipo": "proveedor", "buscar": "20100000002"},
+    ).json() == []
+
     summary = client.get("/api/v1/contabilidad-items", params={"buscar": "pota"})
     assert summary.status_code == 200, summary.text
     assert len(summary.json()) == 1
