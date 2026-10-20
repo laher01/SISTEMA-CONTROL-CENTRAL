@@ -55,3 +55,11 @@ def test_cms_publico_no_filtra_snapshot_sin_activacion(client: TestClient) -> No
     r = client.get(URL + "/publico")
     assert r.status_code == 200
     assert r.json() == {"disponible": False, "contenido": None}
+
+
+def test_cms_http_token_invalido_sin_override_devuelve_401(client: TestClient, settings) -> None:
+    # El token no existe en la base de datos: probar dependencia real de cookie.
+    app.dependency_overrides.pop(get_contexto_actual, None)
+    client.cookies.set(settings.session_cookie_name, "token-inexistente-o-revocado")
+    respuesta = client.get(URL)
+    assert respuesta.status_code == 401
