@@ -81,6 +81,15 @@ jobs:
           uv run python ../deploy/check_restored_pair.py \
             --manifiesto "$WORK/manifest.tsv" --documentos "$WORK/recuperado" --esperados 1
           echo "RC1_ISOLATED_POSTGRES_RESTORE_AND_DOCUMENT_HASH_OK"
+          DOCUMENTO="$(find "$WORK/recuperado" -type f -print -quit)"
+          test -n "$DOCUMENTO"
+          printf "contenido-alterado\\n" > "$DOCUMENTO"
+          if uv run python ../deploy/check_restored_pair.py \\
+            --manifiesto "$WORK/manifest.tsv" --documentos "$WORK/recuperado" --esperados 1; then
+            echo "::error::El cotejo aceptó un documento manipulado"
+            exit 1
+          fi
+          echo "RC1_CORRUPTION_REJECTED_OK"
       - name: Eliminar archivos temporales
         if: always()
         run: |
