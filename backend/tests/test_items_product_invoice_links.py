@@ -149,9 +149,18 @@ def test_search_and_linked_invoices_are_tenant_scoped(
     )
     assert invalid_range.status_code == 422
 
+    observed = client.get("/api/v1/contabilidad-items/observaciones")
+    assert observed.status_code == 200
+    assert observed.json() == []
+
     auth_prueba.como_superadmin()
     denied = client.get(f"/api/v1/contabilidad-items/productos/{product_id}/facturas")
     assert denied.status_code == 403
+    assert client.get("/api/v1/contabilidad-items/observaciones").status_code == 403
+    assert client.post(
+        f"/api/v1/contabilidad-items/productos/{product_id}/categoria",
+        json={"categoria": "Ajena"},
+    ).status_code == 403
     denied_suppliers = client.get(
         "/api/v1/contabilidad-items/empresas-vinculadas",
         params={"tipo": "proveedor"},
