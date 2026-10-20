@@ -30,7 +30,7 @@ type Conciliacion = {
   importe_otros: string;
 };
 
-export default function ContabilidadItems() {
+export default function ContabilidadItems({ rol }: { rol: string }) {
   const [vista, setVista] = useState<VistaItems>("dashboard");
   const [categoriaEditable, setCategoriaEditable] = useState<Record<string, string>>({});
   const [mensajeCategoria, setMensajeCategoria] = useState("");
@@ -245,7 +245,7 @@ export default function ContabilidadItems() {
               {filasVisibles.map((fila, indice) => (
                 <tr key={fila.producto_id + ":" + fila.unidad + ":" + fila.moneda}>
                   <td>{indice + 1}</td>
-                  <td>{fila.categoria}{vista === "items" && (
+                  <td>{fila.categoria}{vista === "items" && rol === "ADMINISTRADOR" && (
                     <details>
                       <summary>Clasificar</summary>
                       <label>Asignar categoría
