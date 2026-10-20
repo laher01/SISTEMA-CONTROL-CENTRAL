@@ -369,7 +369,7 @@ function PedidosGerencia({
                 <td className="num">{formatearMonto(p.moneda, p.monto_ejecutado)}</td>
                 <td className="num">{formatearMonto(p.moneda, p.saldo_pendiente)}</td>
                 <td className="num">{formatearMonto(p.moneda, p.exceso)}</td>
-                <td className="num">{p.avance_porcentaje}%</td>
+                <td className="num">{p.avance_porcentaje}% · {p.semaforo_avance === "VERDE" ? "🟢" : p.semaforo_avance === "NARANJA" ? "🟠" : "🔴"} {p.semaforo_avance}</td>
                 <td>
                   {p.concentracion_maxima_proveedor}%
                   {p.proveedor_mayor_concentracion && (
