@@ -135,6 +135,16 @@ export default function ContabilidadItems() {
       </div>}
       {cargando && <p>Consultando ítems…</p>}
       {error && <p role="alert">No se pudo consultar: {error}</p>}
+      {!cargando && !error && !conciliacion.cargando && !conciliacion.error &&
+        datos?.length === 0 &&
+        (conciliacion.datos ?? []).some((fila) => fila.total_documentos > 0) && (
+          <p role="status">
+            Atención: existen comprobantes en la conciliación, pero no hay líneas de
+            productos visibles para estos filtros. Esto no confirma que los ítems
+            hayan sido extraídos. Revise si los documentos cuentan con XML/UBL,
+            extracción de líneas y clasificación antes de usar este resumen.
+          </p>
+        )}
       {!cargando && !error && datos?.length === 0 && (
         <p>No se encontraron líneas de comprobantes para el período seleccionado.</p>
       )}
