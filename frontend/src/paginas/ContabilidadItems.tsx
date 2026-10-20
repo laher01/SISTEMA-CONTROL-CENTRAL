@@ -2,6 +2,7 @@ import { useState } from "react";
 import { conParametros, useDatos } from "../api";
 
 type DetalleExpediente = { expediente_id: string; moneda: string; estado_auditoria: string; lineas: { documento_id: string; numero_linea: number; categoria: string; descripcion: string; unidad: string; cantidad: string; importe: string }[] };
+type ObservacionItem = { expediente_id: string; comprobante: string; estado: string; motivo: string };
 type EmpresaVinculada = { id: string; ruc: string; razon_social: string };
 type VistaItems = "dashboard" | "items" | "proveedor" | "cliente";
 
@@ -59,6 +60,7 @@ export default function ContabilidadItems() {
   const rutaFacturas = productoSeleccionado ? conParametros(`/api/v1/contabilidad-items/productos/${productoSeleccionado}/facturas`, { desde: filtros.desde, hasta: filtros.hasta, emisor_id: filtros.emisor_id, receptor_id: filtros.receptor_id }) : null;
   const { datos: facturas, error: errorFacturas, cargando: cargandoFacturas } = useDatos<FacturaItem[]>(rutaFacturas);
   const conciliacion = useDatos<Conciliacion[]>(conParametros("/api/v1/contabilidad-items/conciliacion", filtros));
+  const observaciones = useDatos<ObservacionItem[]>(vista === "dashboard" ? "/api/v1/contabilidad-items/observaciones" : null);
   const { datos: detalle, cargando: cargandoDetalle, error: errorDetalle } = useDatos<DetalleExpediente>(expedienteSeleccionado ? `/api/v1/contabilidad-items/expedientes/${expedienteSeleccionado}/detalle` : null);
   const rutaEmpresas = vista === "proveedor" || vista === "cliente"
     ? conParametros("/api/v1/contabilidad-items/empresas-vinculadas", {
@@ -114,6 +116,14 @@ export default function ContabilidadItems() {
           ))}
           <p>Productos visibles en esta consulta: {datos?.length ?? "consultando"}. Este valor no equivale al total histórico de líneas procesadas.</p>
           <p>El diagnóstico de facturas pendientes de extracción se desarrolla por separado (Issue #365).</p>
+          <h4>Comprobantes observados o pendientes de revisión</h4>
+          {observaciones.cargando && <p>Cargando observaciones…</p>}
+          {observaciones.error && <p role="alert">No se pudieron consultar observaciones: {observaciones.error}</p>}
+          {observaciones.datos?.length === 0 && <p>No hay observaciones registradas visibles en este ámbito.</p>}
+          {observaciones.datos?.map((fila) => (
+            <p key={fila.expediente_id}><strong>{fila.comprobante}</strong> — {fila.estado}: {fila.motivo} <a href={"/expedientes/" + fila.expediente_id}>Ver expediente</a></p>
+          ))}
+          <p>La incompatibilidad con el rubro requiere una regla validada por empresa; no se marca automáticamente un producto como irregular.</p>
         </section>
       )}
       {(vista === "proveedor" || vista === "cliente") && (
