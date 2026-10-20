@@ -86,8 +86,15 @@ def get_contexto_operativo(
             in {
                 "/api/v1/contabilidad-items",
                 "/api/v1/contabilidad-items/conciliacion",
+                "/api/v1/contabilidad-items/observaciones",
+                "/api/v1/contabilidad-items/empresas-vinculadas",
                 "/api/v1/contabilidad-items/exportar-csv",
             }
+            or (
+                request.method == "GET"
+                and request.url.path.startswith("/api/v1/contabilidad-items/productos/")
+                and request.url.path.endswith("/facturas")
+            )
             or (
                 request.method == "GET"
                 and request.url.path.startswith("/api/v1/contabilidad-items/expedientes/")
