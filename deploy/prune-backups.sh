@@ -10,7 +10,7 @@ test ! -L "$dir" || { echo "Directorio de respaldos enlazado: bloqueo" >&2; exit
 # Preservar siempre los dos respaldos más recientes y sus sumas SHA256 si existen.
 mapfile -d '' dumps < <(find "$dir" -maxdepth 2 -type f \( -name 'factcentral_predeploy_*.dump' -o -name 'fact_central_bootstrap_*.dump' -o -name 'fact_central_*.dump' \) -print0)
 if (( ${#dumps[@]} < 3 )); then exit 0; fi
-mapfile -t newest < <(printf '%s\n' "${dumps[@]}" | while IFS= read -r f; do stat -c '%Y %n' -- "$f"; done | sort -nr | head -n 2 | cut -d' ' -f2-)
+mapfile -t newest < <(printf '%s\n' "${dumps[@]}" | while IFS= read -r f; do stat -c '%Y %n' -- "$f"; done | sort -nr | sed -n '1,2p' | cut -d' ' -f2-)
 for f in "${dumps[@]}"; do
   case "$f" in "$dir"/fact_central_*.dump|"$dir"/audit/factcentral_predeploy_*.dump) ;; *) continue ;; esac
   [[ "$f" == "${newest[0]}" || "$f" == "${newest[1]}" ]] && continue
