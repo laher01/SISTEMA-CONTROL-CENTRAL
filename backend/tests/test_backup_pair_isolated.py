@@ -1,4 +1,5 @@
 """Pruebas del coordinador offline; nunca necesitan PostgreSQL ni VPS."""
+
 import hashlib
 import importlib.util
 import json
@@ -25,9 +26,7 @@ def test_solo_bases_de_laboratorio():
         mod.conexion("factcentral_recovery_prueba", "postgres")
     with pytest.raises(ValueError):
         mod.conexion("factcentral_fixture_test", "postgres;rm")
-    assert mod.conexion("factcentral_fixture_test", "operador")[0:2] == [
-        "-h", "127.0.0.1"
-    ]
+    assert mod.conexion("factcentral_fixture_test", "operador")[0:2] == ["-h", "127.0.0.1"]
     assert mod.conexion("factcentral_recovery_test", "operador", True)
 
 
@@ -36,9 +35,9 @@ def test_manifiesto_desde_base_restaurada():
     contenido = b"documento ficticio"
     sha = hashlib.sha256(contenido).hexdigest()
     ruta = f"{tenant}/{sha[:2]}/{sha}"
-    with patch.object(mod, "ejecutar", side_effect=[
-        b"1\n", f'{tenant}\t{ruta}\t{sha}\n'.encode()
-    ]) as comando:
+    with patch.object(
+        mod, "ejecutar", side_effect=[b"1\n", f"{tenant}\t{ruta}\t{sha}\n".encode()]
+    ) as comando:
         filas = mod.manifest_desde_restaurada("factcentral_recovery_test", "operador")
     assert filas == [[tenant, ruta, sha]]
     assert all("factcentral_recovery_test" in str(c) for c in comando.call_args_list)
@@ -47,12 +46,16 @@ def test_manifiesto_desde_base_restaurada():
 def test_manifiesto_rechaza_rutas_cruzadas_y_recuento():
     tenant = "4e24e14a-e96b-4c50-97aa-b233c70b9b11"
     sha = "a" * 64
-    with patch.object(mod, "ejecutar", side_effect=[
-        b"1\n", f'{tenant}\t../../otro/{sha}\t{sha}\n'.encode()
-    ]), pytest.raises(ValueError, match="canónica"):
+    with (
+        patch.object(
+            mod, "ejecutar", side_effect=[b"1\n", f"{tenant}\t../../otro/{sha}\t{sha}\n".encode()]
+        ),
+        pytest.raises(ValueError, match="canónica"),
+    ):
         mod.manifest_desde_restaurada("factcentral_recovery_test", "operador")
-    with patch.object(mod, "ejecutar", side_effect=[b"2\n", b""]), pytest.raises(
-        ValueError, match="Recuento"
+    with (
+        patch.object(mod, "ejecutar", side_effect=[b"2\n", b""]),
+        pytest.raises(ValueError, match="Recuento"),
     ):
         mod.manifest_desde_restaurada("factcentral_recovery_test", "operador")
 
@@ -75,11 +78,18 @@ def test_rechaza_par_corrupto_y_rutas_modificadas(tmp_path):
     dump.write_bytes(b"postgres ficticio")
     tar.write_bytes(b"tar ficticio")
     registro = {
-        "formato": 1, "consistencia": "QUIESCENCIA_EXTERNA_NO_VERIFICADA",
-        "postgres": {"archivo": "postgres.dump", "sha256": mod.huella(dump),
-                     "bytes": dump.stat().st_size},
-        "documentos": {"archivo": "documentos.tar", "sha256": mod.huella(tar),
-                       "bytes": tar.stat().st_size},
+        "formato": 1,
+        "consistencia": "QUIESCENCIA_EXTERNA_NO_VERIFICADA",
+        "postgres": {
+            "archivo": "postgres.dump",
+            "sha256": mod.huella(dump),
+            "bytes": dump.stat().st_size,
+        },
+        "documentos": {
+            "archivo": "documentos.tar",
+            "sha256": mod.huella(tar),
+            "bytes": tar.stat().st_size,
+        },
     }
     pareja = tmp_path / "pareja.json"
     pareja.write_text(json.dumps(registro))
