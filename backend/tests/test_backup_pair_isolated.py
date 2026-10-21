@@ -10,7 +10,9 @@ import pytest
 
 DEPLOY = Path(__file__).resolve().parents[2] / "deploy"
 sys.path.insert(0, str(DEPLOY))
-spec = importlib.util.spec_from_file_location("backup_pair_isolated", DEPLOY / "backup_pair_isolated.py")
+spec = importlib.util.spec_from_file_location(
+    "backup_pair_isolated", DEPLOY / "backup_pair_isolated.py"
+)
 assert spec and spec.loader
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
@@ -47,21 +49,23 @@ def test_manifiesto_rechaza_rutas_cruzadas_y_recuento():
     sha = "a" * 64
     with patch.object(mod, "ejecutar", side_effect=[
         b"1\n", f'{tenant}\t../../otro/{sha}\t{sha}\n'.encode()
-    ]):
-        with pytest.raises(ValueError, match="canónica"):
-            mod.manifest_desde_restaurada("factcentral_recovery_test", "operador")
-    with patch.object(mod, "ejecutar", side_effect=[b"2\n", b""]):
-        with pytest.raises(ValueError, match="Recuento"):
-            mod.manifest_desde_restaurada("factcentral_recovery_test", "operador")
+    ]), pytest.raises(ValueError, match="canónica"):
+        mod.manifest_desde_restaurada("factcentral_recovery_test", "operador")
+    with patch.object(mod, "ejecutar", side_effect=[b"2\n", b""]), pytest.raises(
+        ValueError, match="Recuento"
+    ):
+        mod.manifest_desde_restaurada("factcentral_recovery_test", "operador")
 
 
 def test_no_restaurar_sobre_base_con_tablas(tmp_path):
     pareja = tmp_path / "pareja.json"
     pareja.write_text("{}")
-    with patch.object(mod, "_leer_par", return_value=(tmp_path / "p", tmp_path / "t", "a" * 64)):
-        with patch.object(mod, "ejecutar", return_value=b"1\n") as ejecutar:
-            with pytest.raises(ValueError, match="vacía"):
-                mod.probar(pareja, "factcentral_recovery_test", "operador", tmp_path / "nuevo")
+    with (
+        patch.object(mod, "_leer_par", return_value=(tmp_path / "p", tmp_path / "t", "a" * 64)),
+        patch.object(mod, "ejecutar", return_value=b"1\n") as ejecutar,
+        pytest.raises(ValueError, match="vacía"),
+    ):
+        mod.probar(pareja, "factcentral_recovery_test", "operador", tmp_path / "nuevo")
     assert ejecutar.call_count == 1
 
 
@@ -93,12 +97,13 @@ def test_verificacion_falla_cerrada_ante_hash_incorrecto(tmp_path):
     tenant = "4e24e14a-e96b-4c50-97aa-b233c70b9b11"
     sha = hashlib.sha256(b"contenido original").hexdigest()
     filas = [[tenant, f"{tenant}/{sha[:2]}/{sha}", sha]]
-    with patch.object(mod, "_leer_par", return_value=(tmp_path / "db", tmp_path / "tar", sha)):
-        with patch.object(mod, "ejecutar", return_value=b"0\n"):
-            with patch.object(mod, "restaurar") as restaura:
-                with patch.object(mod, "manifest_desde_restaurada", return_value=filas):
-                    raiz = tmp_path / "restaurado"
-                    with pytest.raises(ValueError, match="verificación documental"):
-                        mod.probar(tmp_path / "pareja.json",
-                                   "factcentral_recovery_test", "operador", raiz)
-                    restaura.assert_called_once()
+    with (
+        patch.object(mod, "_leer_par", return_value=(tmp_path / "db", tmp_path / "tar", sha)),
+        patch.object(mod, "ejecutar", return_value=b"0\n"),
+        patch.object(mod, "restaurar") as restaura,
+        patch.object(mod, "manifest_desde_restaurada", return_value=filas),
+        pytest.raises(ValueError, match="verificación documental"),
+    ):
+        raiz = tmp_path / "restaurado"
+        mod.probar(tmp_path / "pareja.json", "factcentral_recovery_test", "operador", raiz)
+    restaura.assert_called_once()
