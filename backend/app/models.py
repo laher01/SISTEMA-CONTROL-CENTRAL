@@ -80,7 +80,7 @@ class Empresa(ConId, ConTenant, ConCreacion, Base):
         String(20), default="SIN_CLASIFICAR", server_default="SIN_CLASIFICAR", index=True
     )
     clasificacion_proveedor: Mapped[str | None] = mapped_column(String(1), index=True)
-    autorizada: Mapped[bool] = mapped_column(default=False, server_default="false"))
+    autorizada: Mapped[bool] = mapped_column(default=False, server_default="false")
     agente_retencion: Mapped[bool] = mapped_column(default=False, server_default="false")
     updated_at: Mapped[datetime] = mapped_column(
         default=ahora, onupdate=ahora, server_default=func.now()
@@ -547,7 +547,7 @@ class CuentaPagoERP(ConId, ConTenant, ConCreacion, Base):
     numero_cuenta: Mapped[str | None] = mapped_column(String(80))
     cci: Mapped[str | None] = mapped_column(String(40))
     porcentaje_distribucion: Mapped[Decimal] = mapped_column(Numeric(7, 4), default=Decimal("100"))
-    activa: Mapped[bool] = mapped_column(default=False, server_default="false"
+    activa: Mapped[bool] = mapped_column(default=False, server_default="false")
 
 
 class AdelantoERP(ConId, ConTenant, ConCreacion, Base):
