@@ -136,7 +136,7 @@ def test_filtro_proveedor_escapa_like_sin_ampliar_resultados(
             fila[0]
             for fila in db.execute(
                 "SELECT razon_social FROM empresas "
-                "WHERE razon_social LIKE ? ESCAPE '\\\\' ORDER BY razon_social",
+                "WHERE razon_social LIKE ? ESCAPE '\\' ORDER BY razon_social",
                 (f"%{_escapar_like(consulta)}%",),
             )
         ]
