@@ -139,7 +139,11 @@ def responder_items(
     """Toda unión comprueba tenant_id y el ámbito de expedientes del actor."""
     condiciones = condiciones_expedientes(session, auth)
     Emisor = aliased(Empresa)
-    filtro_emisor = [Emisor.razon_social.ilike(f"%{_escapar_like(proveedor)}%", escape="\\")] if proveedor else []
+    filtro_emisor = (
+        [Emisor.razon_social.ilike(f"%{_escapar_like(proveedor)}%", escape="\\")]
+        if proveedor
+        else []
+    )
     consulta = (
         select(Expediente, Empresa.razon_social, LineaComprobanteItem.descripcion_original)
         .join(Documento, Documento.expediente_id == Expediente.id)
