@@ -42,6 +42,9 @@ jobs:
           restore = Path("deploy/preflight-backup-restore-items.sh").read_text()
           deploy = Path("deploy/deploy.sh").read_text()
           assert deploy.index("FACT CENTRAL desplegado correctamente") < deploy.index('bash "$DEPLOY_DIR/deploy/prune-backups.sh"')
+          assert 'pg_database_size(current_database())' in script
+          assert '3 * database_bytes + 2147483648' in script
+          assert 'free_bytes < minimum_bytes' in script
           assert 'git diff --quiet' in script
           assert 'git diff --cached --quiet' in script
           assert 'ls-files", "--others", "--exclude-standard", "-z' in script
