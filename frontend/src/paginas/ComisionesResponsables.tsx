@@ -73,6 +73,7 @@ function Historial({ fila }: { fila: Fila }) {
 export default function ComisionesResponsables({ sesion }: { sesion: SesionActual }) {
   const inicial = mesActual();
   const [desde, setDesde] = useState(inicial.desde);
+  const [mesFiltro, setMesFiltro] = useState(inicial.desde.slice(0, 7));
   const [hasta, setHasta] = useState(inicial.hasta);
   const [moneda, setMoneda] = useState<"PEN" | "USD">("PEN");
   const [responsableSeleccionado, setResponsableSeleccionado] = useState("");
@@ -112,6 +113,14 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
       ...filas.map((f): [string, string] => [f.responsable_id, f.responsable_nombre]),
     ]).entries(),
   );
+  const cambiarMes = (valor: string) => {
+    if (!/^\d{4}-\d{2}$/.test(valor)) return;
+    const [anio, mes] = valor.split("-").map(Number);
+    const ultimo = new Date(anio, mes, 0).getDate();
+    setMesFiltro(valor);
+    setDesde(`${valor}-01`);
+    setHasta(`${valor}-${String(ultimo).padStart(2, "0")}`);
+  };
   const puedeProgramar = sesion.rol === "GERENTE";
   const puedePagar = sesion.rol === "GERENTE";
 
@@ -248,6 +257,7 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
       cuando el rango es parcial. Exceder un pedido genera aviso y no impide el pago.
     </p>
     <div className="filtros">
+      <label>Mes <input type="month" value={mesFiltro} onChange={e => cambiarMes(e.target.value)} /></label>
       <label>Desde <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} /></label>
       <label>Hasta <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} /></label>
       <label>Moneda <select value={moneda} onChange={(e) => setMoneda(e.target.value as "PEN" | "USD")}>
