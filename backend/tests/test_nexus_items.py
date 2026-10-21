@@ -1,11 +1,15 @@
 """Consultas factuales NEXUS sobre ítems: sin inventar productos o acceder a otros tenants."""
 
+import sqlite3
+
+import pytest
 from fastapi.testclient import TestClient
 
 from app.schemas import NexusMensajeHistorial
 from app.services.nexus_items import (
     _contiene_termino,
     _diesel_en_factura_procesada,
+    _escapar_like,
     _grupos_coincidentes,
     consulta_items_solicitada,
     seguimiento_proveedor,
@@ -107,3 +111,33 @@ def test_seguimiento_proveedor_conserva_producto() -> None:
     historial = [NexusMensajeHistorial(autor="usuario", texto="¿Cuántas facturas tienen DIESEL?")]
     assert seguimiento_proveedor("¿Cuántas son de Escorpio?", historial) == ("petroleo", "escorpio")
     assert seguimiento_proveedor("¿Cuántas son de Escorpio?", []) is None
+
+
+@pytest.mark.parametrize(
+    ("consulta", "esperado"),
+    [
+        ("Escorpio", ["Escorpio"]),
+        ("50%", ["Frío 50% Sur"]),
+        ("A_B", ["Proveedor A_B"]),
+        (r"Ruta\\1", [r"Ruta\\1"]),
+        ("%", ["Frío 50% Sur"]),
+        ("_", ["Proveedor A_B"]),
+        (r"\\", [r"Ruta\\1"]),
+    ],
+)
+def test_filtro_proveedor_escapa_like_sin_ampliar_resultados(
+    consulta: str, esperado: list[str]
+) -> None:
+    proveedores = ["Escorpio", "Frío 50% Sur", "Proveedor A_B", r"Ruta\\1", "ABC", "Proveedor AXB"]
+    with sqlite3.connect(":memory:") as db:
+        db.execute("CREATE TABLE empresas (razon_social TEXT NOT NULL)")
+        db.executemany("INSERT INTO empresas VALUES (?)", [(nombre,) for nombre in proveedores])
+        nombres = [
+            fila[0]
+            for fila in db.execute(
+                "SELECT razon_social FROM empresas "
+                "WHERE razon_social LIKE ? ESCAPE '\\\\' ORDER BY razon_social",
+                (f"%{_escapar_like(consulta)}%",),
+            )
+        ]
+    assert nombres == esperado
