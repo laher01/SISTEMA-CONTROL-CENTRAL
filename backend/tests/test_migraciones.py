@@ -30,7 +30,12 @@ def test_migraciones_coinciden_con_modelos() -> None:
             ).scalar_one()
             is False
         )
-        assert conexion.execute(text("SELECT to_regclass('public.solicitudes_retiro_misd')")).scalar_one() is not None
+        assert (
+            conexion.execute(
+                text("SELECT to_regclass('public.solicitudes_retiro_misd')")
+            ).scalar_one()
+            is not None
+        )
 
     # Conservación editorial al retroceder y re-aplicar 0041→0042.
     for activa in (True, False):
