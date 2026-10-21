@@ -45,9 +45,9 @@ def test_preflight() -> None:
         for name in ("curl", "docker"):
             path = fakebin / name
             if name == "docker":
-                path.write_text('#!/bin/sh\\ncase "$*" in *"pg_database_size(current_database())"*) echo 1024;; esac\\nexit 0\\n')
+                path.write_text('#!/bin/sh\ncase "$*" in *"pg_database_size(current_database())"*) echo 1024;; esac\nexit 0\n')
             else:
-                path.write_text("#!/bin/sh\\nexit 0\\n")
+                path.write_text("#!/bin/sh\nexit 0\n")
             path.chmod(0o755)
         env = dict(os.environ, EXPECTED_COMMIT=target, PATH=str(fakebin) + os.pathsep + os.environ["PATH"])
 
