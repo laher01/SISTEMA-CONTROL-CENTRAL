@@ -131,6 +131,38 @@ def aplicar_automaticamente(
             )
             if previo is not None:
                 raise ComprobanteYaRegistrado(documento.expediente_id)
+        # Una vinculación previa no autoriza a ignorar el contenido real.
+        # Comparar solo cuando la identidad fiscal extraída sea fiable.
+        if documento.tipo_documento in (TipoDocumento.FACT, TipoDocumento.RHE):
+            campos, confianzas, _ = _leer_extraccion(
+                procesamiento.get("extraccion_estructurada")
+            )
+            identidad = ("serie", "correlativo", "ruc_emisor", "ruc_receptor")
+            if all(
+                nombre in campos
+                and confianzas.get(nombre, 0) >= settings.confianza_minima_expediente
+                for nombre in identidad
+            ):
+                expediente_actual = documento.expediente
+                if expediente_actual is not None:
+                    try:
+                        mismo = (
+                            campos["serie"].strip().upper() == expediente_actual.serie.upper()
+                            and str(int(campos["correlativo"]))
+                            == str(int(expediente_actual.correlativo))
+                            and campos["ruc_emisor"] == expediente_actual.emisor.ruc
+                            and campos["ruc_receptor"] == expediente_actual.receptor.ruc
+                        )
+                    except ValueError:
+                        mismo = False
+                    if not mismo:
+                        return _revision(
+                            documento,
+                            [
+                                "Identidad fiscal extraída diferente a la del expediente "
+                                "vinculado; revisión obligatoria"
+                            ],
+                        )
         _reparar_partes_vinculadas(session, settings, documento, procesamiento)
         resultado = ResultadoAutomatizacion(
             "COMPLETADO", relacionado=True, expediente_id=documento.expediente_id
