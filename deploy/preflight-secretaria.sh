@@ -64,6 +64,13 @@ if [ "$(df -Pk "$DEPLOY_DIR" | awk 'NR==2 {print $4}')" -lt 2097152 ]; then
   echo "::error::Menos de 2 GiB libres: bloquear despliegue."
   exit 1
 fi
+# El espacio mínimo absoluto no basta si PostgreSQL ocupa varios GiB.
+# La comprobación adicional es de solo lectura y deja margen para tres dumps
+# consecutivos y para la construcción de contenedores. Nunca borra respaldos.
+if [ -d deploy/backups ]; then
+  backup_bytes="$(du -sb deploy/backups | awk '{print $1}')"
+  echo "Ocupación actual de backups (bytes): $backup_bytes"
+fi
 if [ ! -s deploy/.env.production ]; then
   echo "::error::No se encontró archivo de configuración de producción."
   exit 1
