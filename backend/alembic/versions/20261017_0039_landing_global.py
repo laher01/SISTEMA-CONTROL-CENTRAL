@@ -20,7 +20,7 @@ def upgrade() -> None:
     op.create_table(
         "configuracion_landing_global",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("activa", sa.Boolean(), server_default=sa.true(), nullable=False),
+        sa.Column("activa", sa.Boolean(), server_default=sa.false(), nullable=False),
         sa.Column("version", sa.Integer(), server_default="1", nullable=False),
         sa.Column("actualizado_por", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id")),
         sa.Column(
@@ -30,7 +30,12 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.execute("INSERT INTO configuracion_landing_global (id, activa, version) VALUES (1, TRUE, 1)")
+    op.execute(
+        """
+        INSERT INTO configuracion_landing_global (id, activa, version)
+        VALUES (1, FALSE, 1)
+        """
+    )
     op.create_table(
         "auditoria_landing_global",
         sa.Column("id", sa.Uuid(), primary_key=True),
