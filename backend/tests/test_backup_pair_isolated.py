@@ -110,7 +110,9 @@ def test_verificacion_falla_cerrada_ante_hash_incorrecto(tmp_path):
     with (
         patch.object(mod, "_leer_par", return_value=(tmp_path / "db", tmp_path / "tar", sha)),
         patch.object(mod, "ejecutar", return_value=b"0\n"),
-        patch.object(mod, "restaurar") as restaura,
+        patch.object(
+            mod, "restaurar", side_effect=lambda _tar, destino, _sha: destino.mkdir()
+        ) as restaura,
         patch.object(mod, "manifest_desde_restaurada", return_value=filas),
         pytest.raises(ValueError, match="verificación documental"),
     ):
