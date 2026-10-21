@@ -53,9 +53,12 @@ def test_migraciones_coinciden_con_modelos() -> None:
                 ).scalar_one()
                 is activa
             )
-            assert conexion.execute(
-                text("SELECT to_regclass('public.solicitudes_retiro_misd')")
-            ).scalar_one() is not None
+            assert (
+                conexion.execute(
+                    text("SELECT to_regclass('public.solicitudes_retiro_misd')")
+                ).scalar_one()
+                is not None
+            )
 
     with engine.connect() as conexion:
         diferencias = compare_metadata(MigrationContext.configure(conexion), Base.metadata)
