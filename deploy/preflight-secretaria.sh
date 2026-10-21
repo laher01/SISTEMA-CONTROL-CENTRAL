@@ -64,6 +64,11 @@ if [ "$(df -Pk "$DEPLOY_DIR" | awk 'NR==2 {print $4}')" -lt 2097152 ]; then
   echo "::error::Menos de 2 GiB libres: bloquear despliegue."
   exit 1
 fi
+# Inventario informativo; no implica capacidad suficiente para respaldos nuevos.
+if [ -d deploy/backups ]; then
+  backup_bytes="$(du -sb deploy/backups | awk '{print $1}')"
+  echo "Ocupación actual de backups (bytes): $backup_bytes"
+fi
 if [ ! -s deploy/.env.production ]; then
   echo "::error::No se encontró archivo de configuración de producción."
   exit 1
@@ -78,6 +83,19 @@ if ! command -v docker >/dev/null; then
   exit 1
 fi
 docker compose version
+# Margen conservador: tres respaldos del tamaño lógico de PostgreSQL más
+# 2 GiB para construcción. Bloquear ante errores de consulta o espacio.
+compose=(docker compose --env-file deploy/.env.production -f deploy/docker-compose.production.yml)
+database_bytes="$("${compose[@]}" exec -T db sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "select pg_database_size(current_database())"' </dev/null)"
+[[ "$database_bytes" =~ ^[0-9]+$ ]] || { echo "::error::No se obtuvo tamaño válido de PostgreSQL"; exit 1; }
+free_bytes="$(df -PB1 "$DEPLOY_DIR" | awk 'NR==2 {print $4}')"
+[[ "$free_bytes" =~ ^[0-9]+$ ]] || { echo "::error::No se obtuvo espacio libre"; exit 1; }
+minimum_bytes=$(( 3 * database_bytes + 2147483648 ))
+echo "Capacidad calculada (libre/requerida, bytes): $free_bytes / $minimum_bytes"
+if (( free_bytes < minimum_bytes )); then
+  echo "::error::Espacio insuficiente para tres respaldos estimados y construcción"
+  exit 1
+fi
 echo "Almacenamiento de respaldos:"
 if [ -d deploy/backups ]; then
   find deploy/backups -maxdepth 1 -type f -name 'fact_central_*.dump' -printf '%TY-%Tm-%Td %TH:%TM %s bytes\n' | tail -n 5

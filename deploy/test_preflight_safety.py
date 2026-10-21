@@ -44,7 +44,10 @@ def test_preflight() -> None:
         fakebin.mkdir()
         for name in ("curl", "docker"):
             path = fakebin / name
-            path.write_text("#!/bin/sh\nexit 0\n")
+            if name == "docker":
+                path.write_text('#!/bin/sh\ncase "$*" in *"pg_database_size(current_database())"*) echo "${FAKE_PG_BYTES:-1024}";; esac\nexit 0\n')
+            else:
+                path.write_text("#!/bin/sh\nexit 0\n")
             path.chmod(0o755)
         env = dict(os.environ, EXPECTED_COMMIT=target, PATH=str(fakebin) + os.pathsep + os.environ["PATH"])
 
@@ -53,9 +56,20 @@ def test_preflight() -> None:
                 ["bash", "-s"], input=SOURCE, text=True, capture_output=True, cwd=server, env=env
             )
 
-        assert preflight().returncode == 0, "Debe preservar archivos locales sin colisión"
+        first = preflight()
+        assert first.returncode == 0, "Debe preservar archivos locales sin colisión: " + first.stdout + first.stderr
         assert (server / "deploy" / "private" / "secreto.conf").read_text() == "privado"
         assert (server / "deploy" / "local-backups" / "backup.dump").read_bytes() == b"BACKUP"
+
+        env["FAKE_PG_BYTES"] = "invalid"
+        bad_size = preflight()
+        assert bad_size.returncode != 0, "Debe rechazar consulta PostgreSQL inválida"
+        assert "tamaño válido" in bad_size.stdout, bad_size.stdout + bad_size.stderr
+        env["FAKE_PG_BYTES"] = "999999999999999"
+        insufficient = preflight()
+        assert insufficient.returncode != 0, "Debe bloquear espacio insuficiente"
+        assert "Espacio insuficiente" in insufficient.stdout, insufficient.stdout + insufficient.stderr
+        env["FAKE_PG_BYTES"] = "1024"
 
         (server / "tracked.txt").write_text("modificado localmente")
         assert preflight().returncode != 0, "Debe bloquear modificaciones versionadas"
@@ -70,4 +84,4 @@ def test_preflight() -> None:
 
 if __name__ == "__main__":
     test_preflight()
-    print("Preflight: 3 pruebas de comportamiento aprobadas")
+    print("Preflight: 5 pruebas de comportamiento aprobadas")

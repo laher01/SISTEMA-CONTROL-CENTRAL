@@ -7,6 +7,9 @@ on:
       - "deploy/bootstrap-main.sh"
       - "deploy/preflight-backup-restore-items.sh"
       - "deploy/test_preflight_safety.py"
+      - "deploy/prune-backups.sh"
+      - "deploy/deploy.sh"
+      - "deploy/test_prune_backups.py"
       - ".github/workflows/deploy-staging.yml"
       - ".github/workflows/preflight-safety-ci.yml"
 
@@ -23,8 +26,12 @@ jobs:
           bash -n deploy/preflight-secretaria.sh
           bash -n deploy/bootstrap-main.sh
           bash -n deploy/preflight-backup-restore-items.sh
+          bash -n deploy/prune-backups.sh
+          bash -n deploy/deploy.sh
       - name: Probar preflight sin afectar la VPS
         run: python3 deploy/test_preflight_safety.py
+      - name: Probar retención de respaldos sin tocar VPS
+        run: python3 deploy/test_prune_backups.py
       - name: Verificar reglas de protección
         run: |
           python3 - <<'PY'
@@ -33,12 +40,21 @@ jobs:
           workflow = Path(".github/workflows/deploy-staging.yml").read_text()
           bootstrap = Path("deploy/bootstrap-main.sh").read_text()
           restore = Path("deploy/preflight-backup-restore-items.sh").read_text()
+          deploy = Path("deploy/deploy.sh").read_text()
+          assert deploy.index("FACT CENTRAL desplegado correctamente") < deploy.index('bash "$DEPLOY_DIR/deploy/prune-backups.sh"')
+          assert 'pg_database_size(current_database())' in script
+          assert '3 * database_bytes + 2147483648' in script
+          assert 'free_bytes < minimum_bytes' in script
           assert 'git diff --quiet' in script
           assert 'git diff --cached --quiet' in script
           assert 'ls-files", "--others", "--exclude-standard", "-z' in script
           assert 'git merge-base --is-ancestor' in script
           assert 'actions/checkout@v4' in workflow.split("  deploy:", 1)[1]
           assert "EXPECTED_COMMIT:" in workflow.split("  deploy:", 1)[1]
+          assert "push:" in workflow and "branches: [main]" in workflow
+          assert "github.ref == 'refs/heads/main'" in workflow
+          assert "github.event_name == 'push'" in workflow
+          assert "needs: [verify-backend, verify-frontend]" in workflow
           assert "github.sha" in workflow.split("  deploy:", 1)[1]
           assert "pg_dump" in bootstrap
           assert bootstrap.index("pg_dump") < bootstrap.index("git merge --ff-only")

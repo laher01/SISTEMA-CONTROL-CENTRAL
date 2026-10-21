@@ -81,6 +81,8 @@ for _ in $(seq 1 30); do
   if curl --fail --silent --show-error http://127.0.0.1:18080/health >/dev/null; then
     "${compose[@]}" ps
     echo "FACT CENTRAL desplegado correctamente en $current_commit"
+    # Ejecutar la política de retención únicamente tras un healthcheck satisfactorio.
+    bash "$DEPLOY_DIR/deploy/prune-backups.sh"
     exit 0
   fi
   sleep 2
