@@ -78,6 +78,23 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
   return (
     <>
       <h2>Dashboard</h2>
+      {sesion.rol === "USUARIO" && <section aria-label="Seguimiento de mis Gestores">
+        <h3>Mis Gestores · Seguimiento documental</h3>
+        <p className="tenue">Seleccione un Gestor para consultar sus expedientes y receptoras. El porcentaje de ejecución de pedidos se incorporará cuando el presupuesto y las asignaciones estén vinculados a la documentación.</p>
+        <div className="filtros" style={{ display: "flex", flexWrap: "wrap", gap: "0.65rem" }}>
+          <button type="button" onClick={() => { setGestorId(""); setAgruparPor("receptor"); }}
+            aria-pressed={!gestorId}>Todos mis Gestores</button>
+          {(opciones?.gestores ?? []).map(g => <button key={g.id} type="button"
+            aria-pressed={gestorId === g.id} onClick={() => {
+              setGestorId(g.id); setEmisorId(""); setReceptorId(""); setAgruparPor("receptor");
+            }} style={{ fontWeight: gestorId === g.id ? 700 : 400 }}>
+            {g.nombre}
+          </button>)}
+        </div>
+        {gestorId && <p><strong>Gestor seleccionado:</strong> {(opciones?.gestores ?? []).find(g => g.id === gestorId)?.nombre ?? "Seleccionado"}. El desglose inferior muestra sus empresas receptoras.</p>}
+        {opciones && opciones.gestores.length === 0 && <p className="tenue">No hay Gestores vinculados a su acceso actual.</p>}
+      </section>}
+
       <Estado cargando={cargando} error={error} vacio={!datos}>
         {datos && (
           <>
