@@ -22,6 +22,36 @@ def test_migraciones_coinciden_con_modelos() -> None:
     config = Config(Path(__file__).parent.parent / "alembic.ini")
     config.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
     command.upgrade(config, "head")
+    # Instalación limpia combinada: Etapa 7 (0039/0041) y MISD (0042).
+    with engine.begin() as conexion:
+        assert (
+            conexion.execute(
+                text("SELECT activa FROM configuracion_landing_global WHERE id = 1")
+            ).scalar_one()
+            is False
+        )
+        assert conexion.execute(text("SELECT to_regclass('public.solicitudes_retiro_misd')")).scalar_one() is not None
+
+    # Conservación editorial al retroceder y re-aplicar 0041→0042.
+    for activa in (True, False):
+        with engine.begin() as conexion:
+            conexion.execute(
+                text("UPDATE configuracion_landing_global SET activa = :activa WHERE id = 1"),
+                {"activa": activa},
+            )
+        command.downgrade(config, "0040")
+        command.upgrade(config, "head")
+        with engine.connect() as conexion:
+            assert (
+                conexion.execute(
+                    text("SELECT activa FROM configuracion_landing_global WHERE id = 1")
+                ).scalar_one()
+                is activa
+            )
+            assert conexion.execute(
+                text("SELECT to_regclass('public.solicitudes_retiro_misd')")
+            ).scalar_one() is not None
+
     with engine.connect() as conexion:
         diferencias = compare_metadata(MigrationContext.configure(conexion), Base.metadata)
     assert diferencias == []
