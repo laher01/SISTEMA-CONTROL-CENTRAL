@@ -136,7 +136,29 @@ export default function ContabilidadItems() {
       {cargando && <p>Consultando ítems…</p>}
       {error && <p role="alert">No se pudo consultar: {error}</p>}
       {!cargando && !error && datos?.length === 0 && (
-        <p>No se encontraron líneas de comprobantes para el período seleccionado.</p>
+        <div role="status" aria-live="polite">
+          <h3>Sin líneas de productos disponibles</h3>
+          {conciliacion.datos && conciliacion.datos.some((fila) => fila.total_documentos > 0) ? (
+            <>
+              <p>
+                Se encontraron comprobantes en la conciliación, pero no hay líneas de productos
+                visibles con los filtros y permisos actuales. Los importes conciliados son de
+                comprobantes completos; no prueban que sus ítems hayan sido extraídos.
+              </p>
+              <p>
+                Es necesario verificar la disponibilidad de XML/UBL, extracción, persistencia,
+                clasificación y estados de auditoría. No es posible determinar la causa desde
+                este resumen y no se generarán cantidades estimadas.
+              </p>
+            </>
+          ) : conciliacion.error ? (
+            <p>No se pudo verificar si hay comprobantes relacionados porque falló la conciliación.</p>
+          ) : conciliacion.cargando || !conciliacion.datos ? (
+            <p>Verificando el total de comprobantes antes de determinar el estado de la consulta…</p>
+          ) : (
+            <p>No se encontraron líneas ni comprobantes conciliados para el alcance y filtros aplicados.</p>
+          )}
+        </div>
       )}
       {datos && datos.length > 0 && (
         <div style={{ overflowX: "auto" }}>
