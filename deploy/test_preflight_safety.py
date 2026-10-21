@@ -56,7 +56,8 @@ def test_preflight() -> None:
                 ["bash", "-s"], input=SOURCE, text=True, capture_output=True, cwd=server, env=env
             )
 
-        assert preflight().returncode == 0, "Debe preservar archivos locales sin colisión"
+        first = preflight()
+        assert first.returncode == 0, "Debe preservar archivos locales sin colisión: " + first.stdout + first.stderr
         assert (server / "deploy" / "private" / "secreto.conf").read_text() == "privado"
         assert (server / "deploy" / "local-backups" / "backup.dump").read_bytes() == b"BACKUP"
 
