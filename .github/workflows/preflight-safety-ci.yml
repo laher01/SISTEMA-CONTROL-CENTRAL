@@ -7,6 +7,9 @@ on:
       - "deploy/bootstrap-main.sh"
       - "deploy/preflight-backup-restore-items.sh"
       - "deploy/test_preflight_safety.py"
+      - "deploy/prune-backups.sh"
+      - "deploy/deploy.sh"
+      - "deploy/test_prune_backups.py"
       - ".github/workflows/deploy-staging.yml"
       - ".github/workflows/preflight-safety-ci.yml"
 
@@ -23,8 +26,12 @@ jobs:
           bash -n deploy/preflight-secretaria.sh
           bash -n deploy/bootstrap-main.sh
           bash -n deploy/preflight-backup-restore-items.sh
+          bash -n deploy/prune-backups.sh
+          bash -n deploy/deploy.sh
       - name: Probar preflight sin afectar la VPS
         run: python3 deploy/test_preflight_safety.py
+      - name: Probar retención de respaldos sin tocar VPS
+        run: python3 deploy/test_prune_backups.py
       - name: Verificar reglas de protección
         run: |
           python3 - <<'PY'
@@ -33,6 +40,8 @@ jobs:
           workflow = Path(".github/workflows/deploy-staging.yml").read_text()
           bootstrap = Path("deploy/bootstrap-main.sh").read_text()
           restore = Path("deploy/preflight-backup-restore-items.sh").read_text()
+          deploy = Path("deploy/deploy.sh").read_text()
+          assert deploy.index("FACT CENTRAL desplegado correctamente") < deploy.index('bash "$DEPLOY_DIR/deploy/prune-backups.sh"')
           assert 'git diff --quiet' in script
           assert 'git diff --cached --quiet' in script
           assert 'ls-files", "--others", "--exclude-standard", "-z' in script
