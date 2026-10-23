@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { conParametros, eliminar, enviarJson, obtener, urlArchivo, useDatos } from "../api";
+import { ErrorApi, conParametros, eliminar, enviarJson, obtener, urlArchivo, useDatos } from "../api";
 import { Estado, Paginacion } from "../componentes";
 import {
   ETIQUETA_ESTADO_DOCUMENTO,
@@ -308,8 +308,7 @@ function Procesar({
             <pre className="texto-extraido">{lectura.texto}</pre>
           </details>
         )}
-        {lectura.campos.length > 0 && (
-          <ConfirmarCampos
+        <ConfirmarCampos
             documentoId={documento.id}
             campos={lectura.campos}
             confirmado={lectura.confirmada}
@@ -317,7 +316,6 @@ function Procesar({
             alConfirmar={setResultado}
             alCrear={alCompletar}
           />
-        )}
         <button onClick={procesar} disabled={procesando}>
           {procesando ? "Procesando…" : "Reprocesar"}
         </button>
@@ -358,6 +356,13 @@ function Procesar({
   }
   return (
     <div className="formulario-linea">
+      <ConfirmarCampos
+        documentoId={documento.id}
+        campos={[]}
+        confirmado={Boolean(resultado.datos_extraidos?.extraccion_confirmada)}
+        alConfirmar={setResultado}
+        alCrear={alCompletar}
+      />
       <button onClick={procesar} disabled={procesando}>
         {procesando ? "Procesando…" : "Extraer texto"}
       </button>
@@ -424,9 +429,16 @@ function ConfirmarCampos({
   alConfirmar: (documento: Documento) => void;
   alCrear: () => void;
 }) {
-  const [valores, setValores] = useState<Record<string, string>>(
-    Object.fromEntries(campos.map((campo) => [campo.nombre, campo.valor])),
-  );
+  const [valores, setValores] = useState<Record<string, string>>({
+    moneda: "PEN",
+    ...Object.fromEntries(campos.map((campo) => [campo.nombre, campo.valor])),
+  });
+  const [mostrarManual, setMostrarManual] = useState(false);
+  const nombresCampos = [
+    "serie", "correlativo", "ruc_emisor", "ruc_receptor",
+    "fecha_emision", "moneda", "importe_total",
+    "razon_social_emisor", "razon_social_receptor",
+  ];
   const [guardando, setGuardando] = useState(false);
   const [creando, setCreando] = useState(false);
   const [tipoComprobante, setTipoComprobante] = useState<"FACT" | "RHE">(
@@ -440,6 +452,7 @@ function ConfirmarCampos({
   );
   const [requiereGuia, setRequiereGuia] = useState(tipoSugerido !== "RHE");
   const [error, setError] = useState("");
+  const [duplicado, setDuplicado] = useState<Expediente | null>(null);
   const guardar = async () => {
     setGuardando(true);
     setError("");
@@ -459,6 +472,7 @@ function ConfirmarCampos({
   const crearExpediente = async () => {
     setCreando(true);
     setError("");
+    setDuplicado(null);
     try {
       await enviarJson(
         `/api/v1/documentos/${documentoId}/crear-expediente`,
@@ -473,30 +487,55 @@ function ConfirmarCampos({
       alCrear();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      if (e instanceof ErrorApi && e.status === 409 && e.detalle && typeof e.detalle === "object") {
+        const detalle = e.detalle as { duplicado?: boolean; expediente_id?: string };
+        if (detalle.duplicado && detalle.expediente_id) {
+          try {
+            const existente = await obtener<Expediente>(
+              `/api/v1/expedientes/${detalle.expediente_id}`,
+            );
+            setDuplicado(existente);
+          } catch {
+            // El backend controla el ámbito: no mostrar información no autorizada.
+          }
+        }
+      }
     } finally {
       setCreando(false);
     }
   };
   return (
-    <details>
-      <summary>
-        Datos sugeridos ({campos.length}){confirmado ? " · Confirmados" : ""}
-      </summary>
+    <div>
+      <button type="button" onClick={() => setMostrarManual((actual) => !actual)}>
+        {mostrarManual ? "Cerrar creación manual" : "Crear expediente manualmente"}
+      </button>
+      {mostrarManual && (
+      <div className="crear-expediente-asistido">
+      <p>Datos sugeridos ({campos.length}){confirmado ? " · Confirmados" : ""}</p>
+      <p>Confirme los datos del comprobante antes de crear el expediente. Si ya existe la misma identidad fiscal, el sistema debe rechazar la duplicación.</p>
       <dl className="campos-extraidos">
-        {campos.map((campo) => (
-          <div key={campo.nombre}>
-            <dt>{ETIQUETAS_CAMPOS[campo.nombre] ?? campo.nombre}</dt>
+        {nombresCampos.map((nombre) => {
+          const campo = campos.find((item) => item.nombre === nombre);
+          return (
+          <div key={nombre}>
+            <dt>{ETIQUETAS_CAMPOS[nombre] ?? nombre}</dt>
             <dd>
               <input
-                aria-label={ETIQUETAS_CAMPOS[campo.nombre] ?? campo.nombre}
-                value={valores[campo.nombre] ?? ""}
-                onChange={(e) => setValores({ ...valores, [campo.nombre]: e.target.value })}
+                aria-label={ETIQUETAS_CAMPOS[nombre] ?? nombre}
+                value={valores[nombre] ?? ""}
+                type={nombre === "fecha_emision" ? "date" : "text"}
+                onChange={(e) => setValores({ ...valores, [nombre]: e.target.value })}
               />
-              <span> {Math.round(campo.confianza * 100)} % · {campo.fuente}</span>
-              <small title={campo.evidencia}>Evidencia: {campo.evidencia}</small>
+              {campo && (
+                <>
+                  <span> {Math.round(campo.confianza * 100)} % · {campo.fuente}</span>
+                  <small title={campo.evidencia}>Evidencia: {campo.evidencia}</small>
+                </>
+              )}
             </dd>
           </div>
-        ))}
+          );
+        })}
       </dl>
       <button disabled={guardando} onClick={guardar}>
         {guardando ? "Guardando…" : confirmado ? "Actualizar confirmación" : "Confirmar campos"}
@@ -541,7 +580,28 @@ function ConfirmarCampos({
         </div>
       )}
       {error && <span className="error">{error}</span>}
-    </details>
+      {duplicado && (
+        <div role="alert">
+          <strong>Ya existe un expediente con esta identidad fiscal. No se creó otro.</strong>
+          <table>
+            <thead><tr><th>Campo</th><th>Confirmación manual</th><th>Expediente existente</th></tr></thead>
+            <tbody>
+              <tr><td>Serie</td><td>{valores.serie}</td><td>{duplicado.serie}</td></tr>
+              <tr><td>Número</td><td>{valores.correlativo}</td><td>{duplicado.correlativo}</td></tr>
+              <tr><td>RUC emisor</td><td>{valores.ruc_emisor}</td><td>{duplicado.emisor.ruc}</td></tr>
+              <tr><td>RUC receptor</td><td>{valores.ruc_receptor}</td><td>{duplicado.receptor.ruc}</td></tr>
+              <tr><td>Fecha</td><td>{valores.fecha_emision}</td><td>{duplicado.fecha_emision}</td></tr>
+              <tr><td>Moneda</td><td>{valores.moneda}</td><td>{duplicado.moneda}</td></tr>
+              <tr><td>Importe</td><td>{valores.importe_total}</td><td>{duplicado.importe_total}</td></tr>
+            </tbody>
+          </table>
+          <Link to={`/expedientes/${duplicado.id}`}>Revisar expediente existente</Link>
+          <p>La comparación es informativa. No se autoriza crear otro expediente ni contabilizar dos veces.</p>
+        </div>
+      )}
+      </div>
+      )}
+    </div>
   );
 }
 
