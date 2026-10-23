@@ -999,6 +999,32 @@ def resumen_documentos(
                 func.sum(case((Expediente.moneda == "USD", Expediente.importe_total), else_=0)),
                 0,
             ),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            (Expediente.moneda == "PEN")
+                            & Expediente.pendiente_aprobacion.is_(False),
+                            Expediente.importe_total,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            (Expediente.moneda == "USD")
+                            & Expediente.pendiente_aprobacion.is_(False),
+                            Expediente.importe_total,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ),
         )
         .join(expedientes_unicos, Expediente.id == expedientes_unicos.c.expediente_id)
         .where(Expediente.tenant_id == tenant_id, Expediente.deleted_at.is_(None))
@@ -1007,7 +1033,9 @@ def resumen_documentos(
         "total_documentos": int(cantidad),
         "total_expedientes": int(total[0]),
         "total_pen": Decimal(total[1]),
+        "total_pen_autorizado": Decimal(total[3]),
         "total_usd": Decimal(total[2]),
+        "total_usd_autorizado": Decimal(total[4]),
     }
 
 
@@ -1360,6 +1388,17 @@ def procesar_pendientes(
                 reutilizar=not forzar,
                 forzar_cache=forzar,
             )
+        except HTTPException as exc:
+            # MISD puede retirar un candidato después de seleccionar el lote.
+            # Saltarlo sin impedir el procesamiento de los siguientes archivos.
+            session.rollback()
+            vigente = session.get(Documento, documento.id)
+            if exc.status_code != status.HTTP_404_NOT_FOUND or vigente is None:
+                raise
+            session.refresh(vigente)
+            if vigente.deleted_at is None:
+                raise
+            continue
         except DocumentoNoProcesable as exc:
             resultado = registrar_fallo(session, documento, str(exc))
         except ComprobanteYaRegistrado as exc:
@@ -1396,6 +1435,11 @@ def _procesar_y_aplicar(
     reutilizar: bool = False,
     forzar_cache: bool = False,
 ) -> ResultadoAutomatizacion:
+    # Volver a consultar la fila: la selección del lote pudo quedar obsoleta
+    # mientras otro operador retiraba el documento mediante MISD.
+    session.refresh(documento)
+    if documento.deleted_at is not None:
+        raise no_encontrado("Documento")
     datos = documento.datos_extraidos or {}
     existente = datos.get("procesamiento_documental")
     if reutilizar and isinstance(existente, dict):
@@ -1416,6 +1460,20 @@ def _procesar_y_aplicar(
             )
         aplicar_perfiles_aprendidos(session, documento, procesamiento)
         guardar_procesamiento(session, documento, procesamiento)
+    # Conservar los cambios OCR pendientes antes de refrescar la fila: refresh
+    # descarta atributos no volcados y provocaba pérdida de la extracción.
+    session.flush()
+    # El bloqueo de fila protege también la ruta que reutiliza OCR en caché:
+    # MISD no puede confirmar una retirada mientras se aplican las relaciones.
+    # PostgreSQL mantiene el bloqueo hasta el commit/rollback de la petición.
+    bloqueado = session.scalar(
+        select(Documento).where(Documento.id == documento.id).with_for_update()
+    )
+    if bloqueado is None:
+        raise no_encontrado("Documento")
+    session.refresh(documento)
+    if documento.deleted_at is not None:
+        raise no_encontrado("Documento")
     return aplicar_automaticamente(session, settings, hoy, documento, procesamiento)
 
 
@@ -1518,6 +1576,10 @@ def crear_expediente_asistido(
         emisor_ruc,
         receptor_ruc,
     )
+    if existente is not None and documento.expediente_id != existente.id:
+        # Nunca incorporar un nuevo archivo a una identidad fiscal existente
+        # sin comparación explícita. La asociación puede revisarse en Gestor.
+        raise _comprobante_duplicado(session, auth, existente.id)
     creado = existente is None
     razon_receptor = (
         solicitud.razon_social_receptor
@@ -1558,6 +1620,45 @@ def crear_expediente_asistido(
         except ComprobanteYaRegistrado as exc:
             session.rollback()
             raise _comprobante_duplicado(session, auth, exc.expediente_id) from exc
+    # Vinculación conservadora de documentos ya extraídos y sin expediente.
+    # Solo si existe una única coincidencia, con referencia y ambos RUC,
+    # dentro del mismo tenant, usuario y ámbito gestor.
+    if creado:
+        pendientes = session.scalars(
+            select(Documento)
+            .where(
+                Documento.tenant_id == tenant_id,
+                Documento.usuario_id == documento.usuario_id,
+                Documento.gestor_id == documento.gestor_id,
+                Documento.expediente_id.is_(None),
+                Documento.deleted_at.is_(None),
+                Documento.tipo_documento.is_not(None),
+                Documento.tipo_documento != TipoDocumento.FACT,
+            )
+            .order_by(Documento.created_at.desc())
+            .limit(100)
+        )
+        for pendiente in pendientes:
+            if pendiente.tipo_documento is None:
+                continue
+            sugerencias = sugerir_relaciones(session, pendiente)
+            if len(sugerencias) != 1 or sugerencias[0].expediente.id != expediente.id:
+                continue
+            evidencias = sugerencias[0].evidencias
+            if not (
+                any(item.startswith("Comprobante ") for item in evidencias)
+                and any(item.startswith("RUC emisor ") for item in evidencias)
+                and any(item.startswith("RUC receptor ") for item in evidencias)
+            ):
+                continue
+            vincular_documento(
+                session,
+                settings,
+                hoy,
+                pendiente,
+                expediente.id,
+                TipoDocumento(pendiente.tipo_documento),
+            )
     session.commit()
     return ExpedienteAsistidoOut(
         expediente=ExpedienteOut.model_validate(expediente),
