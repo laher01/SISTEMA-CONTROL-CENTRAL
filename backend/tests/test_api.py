@@ -1133,7 +1133,6 @@ def test_restaurar_documento_retirado_conserva_original(
     assert client.post(ruta + "/restaurar").status_code == 409
 
 
-
 def test_recarga_identica_de_retirado_restaura_sin_crear_duplicado(
     client: TestClient,
     auth_prueba: AuthPrueba,
