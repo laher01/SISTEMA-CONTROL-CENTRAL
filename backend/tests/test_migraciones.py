@@ -47,6 +47,9 @@ def test_migraciones_coinciden_con_modelos() -> None:
                 ).scalar_one()
                 is activa
             )
+    # Tras comprobar 0041, restablecer el HEAD completo (incluida 0042 MISD)
+    # antes de comparar el esquema con todos los modelos ORM actuales.
+    command.upgrade(config, "head")
     with engine.connect() as conexion:
         diferencias = compare_metadata(MigrationContext.configure(conexion), Base.metadata)
     assert diferencias == []
