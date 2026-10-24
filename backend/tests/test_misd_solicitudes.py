@@ -1,11 +1,14 @@
 """Solicitud persistente y autorización MISD: sin borrar expedientes."""
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models import Auditoria, ChatMensaje, Expediente, SolicitudRetiroMISD
 from tests.conftest import AuthPrueba
 from tests.xml import factura
+
+pytestmark = pytest.mark.usefixtures("permiso_retiro_usuario")
 
 
 def test_solicitud_aprobacion_no_borra_expediente(
