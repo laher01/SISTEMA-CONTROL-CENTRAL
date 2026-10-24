@@ -51,3 +51,33 @@ def test_misd_borrado_fisico_permanece_deshabilitado_en_api() -> None:
 
     fuente = getsource(capacidades_documentales)
     assert '"puede_eliminar_definitivamente": False' in fuente
+
+
+def test_misd_politica_sintetica_bloquea_retiro_con_pago() -> None:
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    from app.services.misd_autorizaciones import politica_retiro
+
+    instante = datetime.now(timezone.utc)
+    expediente_sintetico = SimpleNamespace(created_at=instante)
+    bloqueada = politica_retiro(expediente_sintetico, "GESTOR", instante, True)
+    assert bloqueada["puede_solicitar"] is False
+    assert bloqueada["requiere_aprobacion"] is False
+    assert bloqueada["bloqueado_por_pago"] is True
+
+
+def test_misd_politica_sintetica_distingue_ventana_y_aprobacion() -> None:
+    from datetime import datetime, timedelta, timezone
+    from types import SimpleNamespace
+
+    from app.services.misd_autorizaciones import politica_retiro
+
+    instante = datetime.now(timezone.utc)
+    expediente_sintetico = SimpleNamespace(created_at=instante - timedelta(minutes=31))
+    revision = politica_retiro(expediente_sintetico, "GESTOR", instante, False)
+    assert revision["puede_solicitar"] is True
+    assert revision["requiere_aprobacion"] is True
+    assert "RESPONSABLE" in revision["roles_aprobadores"]
+    sin_permiso = politica_retiro(expediente_sintetico, "SECRETARIA", instante, False)
+    assert sin_permiso["puede_solicitar"] is False
