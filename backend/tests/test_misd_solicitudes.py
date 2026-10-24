@@ -141,6 +141,35 @@ def test_misd_solicitud_tenant_ajeno_no_se_puede_consultar_ni_resolver(
     assert client.get(f"/api/v1/expedientes/{subida.json()['expediente_id']}").status_code == 200
 
 
+def test_misd_tenant_ajeno_no_puede_ejecutar_retiro(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    from dataclasses import replace
+    from uuid import uuid4
+
+    subida = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("misd-ejecutar-tenant.xml", factura())},
+    )
+    assert subida.status_code == 201, subida.text
+    expediente_id = subida.json()["expediente_id"]
+    creada = client.post(
+        "/api/v1/misd/solicitudes",
+        json={"expediente_id": expediente_id, "motivo": "Corrección documental requerida"},
+    )
+    assert creada.status_code == 201, creada.text
+    solicitud_id = creada.json()["id"]
+    original = auth_prueba.contexto
+    try:
+        auth_prueba.contexto = replace(original, tenant_id=uuid4())
+        ajeno = client.post(f"/api/v1/misd/solicitudes/{solicitud_id}/ejecutar")
+        assert ajeno.status_code == 404, ajeno.text
+    finally:
+        auth_prueba.contexto = original
+    assert session.get(Expediente, expediente_id).deleted_at is None
+    assert session.get(SolicitudRetiroMISD, solicitud_id).estado == "PENDIENTE"
+
+
 def test_ejecutar_misd_en_ventana_sin_pagos_consume_solicitud(
     client: TestClient, auth_prueba: AuthPrueba, session: Session
 ) -> None:
