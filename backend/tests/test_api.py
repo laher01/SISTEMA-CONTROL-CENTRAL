@@ -1163,7 +1163,6 @@ def test_recarga_identica_de_retirado_restaura_sin_crear_duplicado(
     assert duplicado.status_code == 409
 
 
-
 def test_restaurar_sin_documento_retirado_devuelve_404(client: TestClient) -> None:
     respuesta = client.post("/api/v1/documentos/00000000-0000-0000-0000-000000000001/restaurar")
     assert respuesta.status_code == 404
