@@ -47,6 +47,7 @@ def test_registros_totalizan_y_filtran_por_emisor(
 
 def test_usuario_puede_retirar_registro_de_su_ambito_sin_cliente_autorizado(
     client: TestClient,
+    permiso_retiro_usuario: None,
 ) -> None:
     documento = _subir_factura(client, "F001-00000093", "150.00")
     respuesta = client.delete(f"/api/v1/expedientes/{documento['expediente_id']}")
