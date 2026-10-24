@@ -20,6 +20,8 @@ from app.models import (
 from tests.conftest import AuthPrueba
 from tests.xml import factura
 
+pytestmark = pytest.mark.usefixtures("permiso_retiro_usuario")
+
 
 def test_pago_generado_bloquea_documento_y_expediente_incluso_para_admin(
     client: TestClient,
