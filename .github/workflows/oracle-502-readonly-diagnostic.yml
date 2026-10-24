@@ -17,13 +17,32 @@ jobs:
   verify-policy:
     runs-on: ubuntu-latest
     steps:
-      - name: Validate no mutation in diagnostic script
+      - uses: actions/checkout@v4
+      - name: Validate YAML and restricted remote execution
         shell: bash
         run: |
           set -euo pipefail
-          echo 'READ_ONLY_POLICY=GET, docker ps/inspect/log-summary, no writes'
-          echo 'SSH_PR_EXECUTION=DISABLED'
-          echo 'CLOUD_ORACLE_DEPLOY=DISABLED'
+          ruby -e "require 'yaml'; YAML.load_file('.github/workflows/oracle-502-readonly-diagnostic.yml')"
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path(".github/workflows/oracle-502-readonly-diagnostic.yml")
+          src = p.read_text()
+          assert "if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'" in src
+          assert "environment: staging" in src
+          assert "permissions:\\n  contents: read".replace("\\n", "\n") in src
+          assert "StrictHostKeyChecking=yes" in src
+          assert 'test "$VPS_HOST" = "132.145.233.172"' in src
+          assert 'test "$VPS_DEPLOY_PATH" = "/home/ubuntu/fact-central"' in src
+          remote = src.split("<<'REMOTE'", 1)[1].split("\n          REMOTE", 1)[0]
+          prohibited = ("docker compose up", "docker compose down", "docker restart",
+                        "docker start", "docker stop", "git pull", "git checkout",
+                        "pg_restore", "pg_dump", " alembic upgrade", "systemctl restart",
+                        "curl -X POST", "wget --post-data")
+          assert not any(op in remote for op in prohibited)
+          assert "logs --no-color --tail=40" in remote
+          assert "NO_SERVICE_CHANGES=TRUE" in remote
+          print("WORKFLOW_SYNTAX_AND_READONLY_GUARDS=PASS")
+          PY
 
   inspect-oracle:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
