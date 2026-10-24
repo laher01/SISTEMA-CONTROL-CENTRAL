@@ -47,7 +47,7 @@ def test_misd_storage_y_bloqueo_pago_siguen_presentes() -> None:
 def test_misd_borrado_fisico_permanece_deshabilitado_en_api() -> None:
     from inspect import getsource
 
-    from app.api.routes.documentos import capacidades
+    from app.api.routes.documentos import capacidades_documentales
 
-    fuente = getsource(capacidades)
+    fuente = getsource(capacidades_documentales)
     assert '"puede_eliminar_definitivamente": False' in fuente
