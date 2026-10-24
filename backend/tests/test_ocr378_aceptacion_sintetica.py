@@ -54,9 +54,10 @@ def test_aceptacion_ingreso_manual_duplicado_y_voucher(client: TestClient) -> No
     )
     assert duplicada.status_code == 201, duplicada.text
     repetida_id = duplicada.json()["id"]
-    assert client.put(
+    confirmacion_duplicada = client.put(
         f"/api/v1/documentos/{repetida_id}/extraccion-confirmada", json=campos
-    ).status_code == 200
+    )
+    assert confirmacion_duplicada.status_code == 200
     rechazo = client.post(
         f"/api/v1/documentos/{repetida_id}/crear-expediente",
         json={"tipo_comprobante": "FACT", "requiere_guia": False},
@@ -90,7 +91,7 @@ def test_aceptacion_no_cruza_tenant(client: TestClient, auth_prueba: object) -> 
     auth_prueba.contexto = replace(contexto_original, tenant_id=uuid.uuid4())
     try:
         assert client.get(f"/api/v1/documentos/{documento_id}").status_code == 404
-        assert client.put(
+        respuesta_fuera_tenant = client.put(
             f"/api/v1/documentos/{documento_id}/extraccion-confirmada",
             json={
                 "serie": "F001",
@@ -101,6 +102,7 @@ def test_aceptacion_no_cruza_tenant(client: TestClient, auth_prueba: object) -> 
                 "moneda": "PEN",
                 "importe_total": "145.00",
             },
-        ).status_code == 404
+        )
+        assert respuesta_fuera_tenant.status_code == 404
     finally:
         auth_prueba.contexto = contexto_original
