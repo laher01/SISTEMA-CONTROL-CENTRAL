@@ -1253,6 +1253,12 @@ def previsualizar_retirada(
         ):
             resultados.append({"id": str(documento_id), "estado": "BLOQUEADO"})
             continue
+        if auth.rol in ("GESTOR", "USUARIO") and (
+            (expediente is not None and not dentro_ventana_correccion(expediente, ahora()))
+            or (expediente is None and (ahora() - documento.created_at).total_seconds() > 1800)
+        ):
+            resultados.append({"id": str(documento_id), "estado": "BLOQUEADO"})
+            continue
         if motivo_bloqueo_voucher(session, tenant_id, documento.id) is not None:
             resultados.append({"id": str(documento_id), "estado": "BLOQUEADO"})
             continue
