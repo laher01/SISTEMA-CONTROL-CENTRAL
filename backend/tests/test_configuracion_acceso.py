@@ -472,3 +472,37 @@ def test_reintento_archivos_no_procesa_otro_tenant(
     assert pendiente.estado == "PENDIENTE"
     assert pendiente.intentos == 0
     assert ruta.exists()
+
+
+def test_reintento_protege_ruta_referenciada(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba, settings
+) -> None:
+    from app.models import Documento, EliminacionArchivoPendiente
+
+    auth_prueba.como_admin()
+    ruta_storage = "pruebas/original-compartido.pdf"
+    ruta = settings.storage_dir / ruta_storage
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.write_bytes(b"contenido original de prueba")
+    documento = Documento(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        creado_por_cuenta_id=auth_prueba.contexto.cuenta_id,
+        sha256="f" * 64,
+        nombre_original="original-compartido.pdf",
+        mime_type="application/pdf",
+        tamano_bytes=27,
+        ruta_storage=ruta_storage,
+        estado="PENDIENTE",
+    )
+    pendiente = EliminacionArchivoPendiente(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        ruta_storage=ruta_storage,
+    )
+    session.add_all([documento, pendiente])
+    session.commit()
+    respuesta = client.post("/api/v1/configuracion/mantenimiento/reintentar-archivos")
+    assert respuesta.status_code == 200
+    assert respuesta.json() == {"procesados": 1, "completados": 0}
+    session.refresh(pendiente)
+    assert pendiente.estado == "BLOQUEADO"
+    assert ruta.is_file()
