@@ -394,4 +394,3 @@ def test_misd_tenant_ajeno_no_puede_ejecutar_retiro(
         auth_prueba.contexto = original
     assert session.get(Expediente, expediente_id).deleted_at is None
     assert session.get(SolicitudRetiroMISD, solicitud_id).estado == "PENDIENTE"
-
