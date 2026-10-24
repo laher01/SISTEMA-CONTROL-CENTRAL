@@ -26,11 +26,11 @@ jobs:
           from pathlib import Path
           import subprocess
           import sys
-          import yaml
+          import json
 
           path = Path(".github/workflows/oracle-502-readonly-diagnostic.yml")
           text = path.read_text()
-          workflow = yaml.safe_load(text)
+          workflow = json.loads(subprocess.check_output(['ruby', '-ryaml', '-rjson', '-e', 'puts JSON.generate(YAML.load_file(ARGV[0]))', str(path)], text=True))
           assert workflow["permissions"] == {"contents": "read"}
           jobs = workflow["jobs"]
           assert set(jobs) == {"verify-policy", "inspect-oracle"}
@@ -49,9 +49,6 @@ jobs:
           assert "secrets." not in steps[1]["run"]
           assert set(steps[1]["env"]) == {"VPS_HOST","VPS_USER","VPS_SSH_PRIVATE_KEY","VPS_SSH_KNOWN_HOSTS"}
           script = steps[1]["run"].split("<<'REMOTE'", 1)[1].rsplit("\n          REMOTE", 1)[0]
-          allowed = ("set ", "cd ", "test ", "compose=", "echo ", "for ", "if ", "else", "fi", "done",
-                     "probe()", "local ", "shift", "code=", "rc=", "case ", "esac", "*)", ";;",
-                     "\"$" )
           prohibited = ("eval ", "source ", "sudo ", "docker run", "docker compose up", "docker compose down",
                         "restart", "kill ", "rm ", "mv ", "cp ", "touch ", "tee ", "sed -i",
                         "git pull", "git checkout", "git reset", "pg_restore", "pg_dump",
