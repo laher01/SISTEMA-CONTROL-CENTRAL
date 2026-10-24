@@ -20,6 +20,7 @@ from app.models import (
     Miembro,
     PagoERP,
     PlanLiquidacion,
+    SolicitudRetiroMISD,
 )
 from app.schemas import (
     MantenimientoAdministradorOut,
@@ -270,6 +271,25 @@ def limpiar(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "La frase de confirmación no coincide",
         )
+
+    # La limpieza histórica no debe destruir solicitudes MISD ni generar
+    # un fallo de clave foránea a mitad de la operación.
+    if "expedientes" in datos.tipos:
+        filtros_expedientes = _filtros(Expediente, tenant_id, datos)
+        expedientes_solicitados = select(Expediente.id).where(*filtros_expedientes)
+        solicitud_existente = session.scalar(
+            select(SolicitudRetiroMISD.id)
+            .where(
+                SolicitudRetiroMISD.tenant_id == tenant_id,
+                SolicitudRetiroMISD.expediente_id.in_(expedientes_solicitados),
+            )
+            .limit(1)
+        )
+        if solicitud_existente is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Hay expedientes con solicitudes MISD; la limpieza no puede eliminarlos",
+            )
 
     eliminados = {nombre: 0 for nombre in datos.tipos}
     rutas_archivo: list[str] = []
