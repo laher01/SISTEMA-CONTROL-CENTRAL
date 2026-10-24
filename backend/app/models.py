@@ -795,6 +795,29 @@ class PagoGestor(ConId, ConTenant, ConCreacion, Base):
     estado: Mapped[str] = mapped_column(String(20), default="PROGRAMADO")
 
 
+class SolicitudRetiroMISD(ConId, ConTenant, ConCreacion, Base):
+    """Solicitud auditable; aprobar no borra sin una ejecución segura posterior."""
+
+    __tablename__ = "solicitudes_retiro_misd"
+    __table_args__ = (Index("ix_solicitudes_retiro_misd_tenant_estado", "tenant_id", "estado"),)
+
+    expediente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("expedientes.id"), index=True)
+    solicitante_cuenta_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("cuentas_acceso.id"), index=True
+    )
+    solicitante_rol: Mapped[str] = mapped_column(String(20))
+    solicitante_miembro_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"))
+    solicitante_gestor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"))
+    motivo: Mapped[str] = mapped_column(String(500))
+    estado: Mapped[str] = mapped_column(String(20), default="PENDIENTE")
+    notificado_a: Mapped[JsonDict] = mapped_column(default=dict)
+    aprobado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cuentas_acceso.id")
+    )
+    decidido_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decision_motivo: Mapped[str | None] = mapped_column(String(500))
+
+
 class Auditoria(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "auditoria"
 

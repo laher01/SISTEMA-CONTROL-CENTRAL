@@ -8,6 +8,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 from pypdf import PdfReader
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -53,6 +54,7 @@ from app.services.automatizacion_documental import (
     guardar_procesamiento,
     registrar_fallo,
 )
+from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
 from app.services.cache_ocr import procesar_con_cache
 from app.services.expedientes import actualizar_expediente, buscar_expediente
 from app.services.identidad_cotizaciones import identidad_cotizacion
@@ -68,7 +70,13 @@ from app.services.ingesta import (
 from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.lotes_imagenes import MAX_IMAGENES_POR_SUBLOTE
 from app.services.metadatos_documento import metadatos_individuales
-from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
+from app.services.misd_autorizaciones import dentro_ventana_correccion
+from app.services.misd_pagos import motivo_bloqueo_liquidacion, motivo_bloqueo_voucher
+from app.services.permisos import (
+    PERMISO_ELIMINAR_REGISTROS,
+    permiso_habilitado,
+    requiere_autorizacion_administrativa,
+)
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 from app.services.relaciones_documentales import sugerir_relaciones
 from app.services.separador_pdf import analizar_paquete, extraer_fragmento
@@ -1220,6 +1228,131 @@ def provisionales_gre(
     ]
 
 
+@router.get("/capacidades")
+def capacidades_documentales(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, bool]:
+    """Permisos generales efectivos; el ámbito individual se valida en cada acción."""
+    permitido = auth.rol != RolMiembro.SUPERADMIN and permiso_habilitado(
+        session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS
+    )
+    return {
+        "puede_retirar": permitido,
+        "puede_restaurar": permitido,
+        "puede_eliminar_definitivamente": False,
+    }
+
+
+class PrevisualizacionRetiradaIn(BaseModel):
+    documentos_ids: list[uuid.UUID] = Field(min_length=1, max_length=100)
+
+
+@router.post("/previsualizar-retirada")
+def previsualizar_retirada(
+    datos: PrevisualizacionRetiradaIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, object]:
+    """Verifica retiradas sin modificar estado ni exponer documentos fuera del ámbito."""
+    if auth.rol == RolMiembro.SUPERADMIN or not permiso_habilitado(
+        session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No tiene permiso para retirar registros")
+    if len(set(datos.documentos_ids)) != len(datos.documentos_ids):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "IDs repetidos en el lote")
+    resultados: list[dict[str, str]] = []
+    for documento_id in datos.documentos_ids:
+        documento = session.get(Documento, documento_id)
+        if documento is None or documento.tenant_id != tenant_id or documento.deleted_at:
+            resultados.append({"id": str(documento_id), "estado": "NO_DISPONIBLE"})
+            continue
+        try:
+            _validar_ambito_documento(auth, documento, session)
+        except HTTPException:
+            resultados.append({"id": str(documento_id), "estado": "NO_DISPONIBLE"})
+            continue
+        expediente = documento.expediente
+        if expediente is not None and (
+            requiere_autorizacion_administrativa(auth.rol, expediente.receptor.autorizada)
+            or motivo_bloqueo_liquidacion(session, expediente) is not None
+        ):
+            resultados.append({"id": str(documento_id), "estado": "BLOQUEADO"})
+            continue
+        if auth.rol in ("GESTOR", "USUARIO") and (
+            (expediente is not None and not dentro_ventana_correccion(expediente, ahora()))
+            or (expediente is None and (ahora() - documento.created_at).total_seconds() > 1800)
+        ):
+            resultados.append({"id": str(documento_id), "estado": "BLOQUEADO"})
+            continue
+        if motivo_bloqueo_voucher(session, tenant_id, documento.id) is not None:
+            resultados.append({"id": str(documento_id), "estado": "BLOQUEADO"})
+            continue
+        resultados.append({"id": str(documento_id), "estado": "APTO_RETIRADA"})
+    return {
+        "total": len(resultados),
+        "aptos": sum(fila["estado"] == "APTO_RETIRADA" for fila in resultados),
+        "resultados": resultados,
+        "solo_previsualizacion": True,
+    }
+
+
+@router.post("/retirar-lote")
+def retirar_documentos_lote(
+    datos: PrevisualizacionRetiradaIn,
+    session: SessionDep,
+    settings: SettingsDep,
+    hoy: HoyDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, object]:
+    """Reutiliza la retirada lógica y su auditoría, con resultado individual."""
+    if auth.rol == RolMiembro.SUPERADMIN or not permiso_habilitado(
+        session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No tiene permiso para retirar registros")
+    if len(set(datos.documentos_ids)) != len(datos.documentos_ids):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "IDs repetidos en el lote")
+    resultados: list[dict[str, str]] = []
+    for documento_id in datos.documentos_ids:
+        try:
+            eliminar_documento(session, settings, hoy, tenant_id, auth, documento_id)
+        except HTTPException as exc:
+            session.rollback()
+            resultados.append(
+                {"id": str(documento_id), "estado": "NO_RETIRADO", "codigo": str(exc.status_code)}
+            )
+        else:
+            resultados.append({"id": str(documento_id), "estado": "RETIRADO"})
+    return {
+        "total": len(resultados),
+        "retirados": sum(fila["estado"] == "RETIRADO" for fila in resultados),
+        "resultados": resultados,
+    }
+
+
+@router.get("/retirados", response_model=list[DocumentoOut])
+def listar_documentos_retirados(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> list[Documento]:
+    """Consulta de retirados en el ámbito autorizado, sin exponer originales ajenos."""
+    if auth.rol == RolMiembro.SUPERADMIN or not permiso_habilitado(
+        session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No tiene permiso para restaurar documentos")
+    consulta = select(Documento).where(
+        Documento.tenant_id == tenant_id,
+        Documento.deleted_at.is_not(None),
+    )
+    consulta = _aplicar_ambito_documentos(consulta, auth)
+    return list(session.scalars(consulta.order_by(Documento.deleted_at.desc()).limit(limit)))
+
+
 @router.get("/{documento_id}", response_model=DocumentoOut)
 def obtener_documento(
     session: SessionDep,
@@ -1241,9 +1374,10 @@ def eliminar_documento(
     auth: OperativeAuthDep,
     documento_id: uuid.UUID,
 ) -> None:
+    bloquear_tenant_financiero(session, tenant_id)
     documento = _documento(session, tenant_id, documento_id)
     _validar_ambito_documento(auth, documento, session)
-    if not permiso_habilitado(
+    if auth.rol == RolMiembro.SUPERADMIN or not permiso_habilitado(
         session,
         tenant_id,
         auth.rol,
@@ -1254,6 +1388,28 @@ def eliminar_documento(
             "No tiene permiso para eliminar registros",
         )
     expediente = documento.expediente
+    if auth.rol in ("GESTOR", "USUARIO") and (
+        (expediente is not None and not dentro_ventana_correccion(expediente, ahora()))
+        or (expediente is None and (ahora() - documento.created_at).total_seconds() > 1800)
+    ):
+        raise HTTPException(409, "Fuera de ventana: retire mediante autorización MISD")
+    if expediente is not None and requiere_autorizacion_administrativa(
+        auth.rol, expediente.receptor.autorizada
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "El cliente está autorizado: debe solicitar aprobación a ADMINISTRACIÓN",
+        )
+    if expediente is not None:
+        bloqueo = motivo_bloqueo_liquidacion(session, expediente)
+        if bloqueo is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"Eliminación bloqueada: {bloqueo}",
+            )
+    bloqueo_voucher = motivo_bloqueo_voucher(session, tenant_id, documento.id)
+    if bloqueo_voucher is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"Eliminación bloqueada: {bloqueo_voucher}")
     documento.deleted_at = ahora()
     auditoria.registrar(
         session,
@@ -1275,6 +1431,76 @@ def eliminar_documento(
         session.flush()
         actualizar_expediente(session, expediente, hoy, settings)
     session.commit()
+
+
+@router.post("/{documento_id}/restaurar", response_model=DocumentoOut)
+def restaurar_documento(
+    session: SessionDep,
+    almacen: AlmacenDep,
+    settings: SettingsDep,
+    hoy: HoyDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    documento_id: uuid.UUID,
+) -> Documento:
+    """Restaurar un documento retirado sin reemplazar su original ni otros registros."""
+    documento = session.get(Documento, documento_id)
+    if documento is None or documento.tenant_id != tenant_id:
+        raise no_encontrado("Documento")
+    _validar_ambito_documento(auth, documento, session)
+    if auth.rol == RolMiembro.SUPERADMIN or not permiso_habilitado(
+        session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No tiene permiso para restaurar documentos")
+    if documento.deleted_at is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "El documento ya se encuentra activo")
+    if documento.expediente_id is not None and (
+        documento.expediente is None or documento.expediente.deleted_at is not None
+    ):
+        raise HTTPException(status.HTTP_409_CONFLICT, "El expediente asociado no está activo")
+    original = almacen.ruta_absoluta(documento.ruta_storage)
+    if not original.is_file():
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "No existe el archivo original para restaurar"
+        )
+    if hashlib.sha256(original.read_bytes()).hexdigest() != documento.sha256:
+        raise HTTPException(status.HTTP_409_CONFLICT, "La huella del archivo original no coincide")
+    colision = session.scalar(
+        select(Documento.id).where(
+            Documento.tenant_id == tenant_id,
+            Documento.id != documento_id,
+            Documento.deleted_at.is_(None),
+            or_(
+                Documento.sha256 == documento.sha256,
+                and_(
+                    Documento.huella_comercial.is_not(None),
+                    Documento.huella_comercial == documento.huella_comercial,
+                ),
+            ),
+        )
+    )
+    if colision is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ya existe un documento activo equivalente")
+    documento.deleted_at = None
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "DOCUMENTO_RESTAURADO",
+        "documento",
+        documento.id,
+        {"expediente_id": str(documento.expediente_id) if documento.expediente_id else None},
+    )
+    try:
+        session.flush()
+        if documento.expediente is not None:
+            actualizar_expediente(session, documento.expediente, hoy, settings)
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "El documento entra en conflicto con otro registro"
+        ) from exc
+    return documento
 
 
 MIME_EN_LINEA = frozenset(
