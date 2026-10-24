@@ -22,17 +22,25 @@ def test_resumen_autorizado_y_produccion_comisiones_con_pendiente(
     assert usuario_id is not None
     emisor = Empresa(tenant_id=tenant_id, ruc="20111111111", razon_social="Emisor prueba")
     receptor = Empresa(
-        tenant_id=tenant_id, ruc="20222222222",
-        razon_social="Receptor autorizado", autorizada=True,
+        tenant_id=tenant_id,
+        ruc="20222222222",
+        razon_social="Receptor autorizado",
+        autorizada=True,
     )
     session.add_all([emisor, receptor])
     session.flush()
     expedientes = [
         Expediente(
-            tenant_id=tenant_id, emisor_id=emisor.id, receptor_id=receptor.id,
-            tipo_comprobante="01", serie="F001", correlativo=correlativo,
-            fecha_emision=date(2026, 10, 19), moneda="PEN",
-            importe_total=importe, usuario_id=usuario_id,
+            tenant_id=tenant_id,
+            emisor_id=emisor.id,
+            receptor_id=receptor.id,
+            tipo_comprobante="01",
+            serie="F001",
+            correlativo=correlativo,
+            fecha_emision=date(2026, 10, 19),
+            moneda="PEN",
+            importe_total=importe,
+            usuario_id=usuario_id,
             pendiente_aprobacion=pendiente,
         )
         for correlativo, importe, pendiente in (
@@ -49,8 +57,10 @@ def test_resumen_autorizado_y_produccion_comisiones_con_pendiente(
     assert Decimal(str(resumen.json()["total_pen_autorizado"])) == Decimal("300.00")
 
     parametros = {
-        "usuario_id": str(usuario_id), "desde": "2026-10-01",
-        "hasta": "2026-10-31", "moneda": "PEN",
+        "usuario_id": str(usuario_id),
+        "desde": "2026-10-01",
+        "hasta": "2026-10-31",
+        "moneda": "PEN",
     }
     produccion = client.get("/api/v1/comisiones/produccion-receptores", params=parametros)
     assert produccion.status_code == 200, produccion.text
