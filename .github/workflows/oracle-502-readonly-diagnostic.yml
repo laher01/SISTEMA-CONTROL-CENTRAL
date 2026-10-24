@@ -1,0 +1,102 @@
+name: oracle-502-readonly-diagnostic
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/oracle-502-readonly-diagnostic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oracle-502-readonly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate no mutation in diagnostic script
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'READ_ONLY_POLICY=GET, docker ps/inspect/log-summary, no writes'
+          echo 'SSH_PR_EXECUTION=DISABLED'
+          echo 'CLOUD_ORACLE_DEPLOY=DISABLED'
+
+  inspect-oracle:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: verify-policy
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 8
+    steps:
+      - name: Verify authorized destination and available secrets
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test "$VPS_HOST" = "132.145.233.172"
+          test "$VPS_USER" = "ubuntu"
+          test "$VPS_DEPLOY_PATH" = "/home/ubuntu/fact-central"
+          for name in VPS_SSH_PRIVATE_KEY VPS_SSH_KNOWN_HOSTS; do
+            test -n "${!name:-}"
+          done
+          echo 'ORACLE_DESTINATION=VERIFIED'
+      - name: Inspect host and container reachability (read only)
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -uo pipefail
+          cd /home/ubuntu/fact-central || exit 1
+          test -r deploy/.env.production || exit 1
+          compose=(docker compose --env-file deploy/.env.production -f deploy/docker-compose.production.yml)
+          echo "DEPLOYED_SHA=$(git rev-parse HEAD)"
+          for service in backend frontend tunnel db; do
+            if "${compose[@]}" ps --status running --services | grep -Fxq "$service"; then
+              echo "SERVICE_${service}=RUNNING"
+            else
+              echo "SERVICE_${service}=NOT_RUNNING"
+            fi
+          done
+          probe() {
+            local label="$1"
+            shift
+            local code
+            code="$("$@" 2>/dev/null)"
+            local rc=$?
+            case "$code" in
+              200|401|403|404|500|502|503|504) ;;
+              *) code="OTHER";;
+            esac
+            echo "${label}_HTTP=${code} EXIT=${rc}"
+          }
+          probe VPS_FRONTEND_HEALTH curl -sS --max-time 8 -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/health
+          probe VPS_FRONTEND_DOCUMENTOS curl -sS --max-time 8 -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/v1/documentos
+          probe FRONTEND_TO_BACKEND "${compose[@]}" exec -T frontend wget -q --timeout=8 -O /dev/null -S http://backend:8000/health
+          # Last check uses wget exit status only; never emit response body.
+          for service in frontend backend tunnel; do
+            # Summary counts only: no raw logs (may contain PII or session data).
+            count=$("${compose[@]}" logs --no-color --tail=40 "$service" 2>/dev/null | grep -Eic 'connect\(\) failed|connection refused|no live upstream|bad gateway|error|unhealthy' || true)
+            echo "LOG_ERROR_MATCHES_${service}=${count}"
+          done
+          echo 'TUNNEL_CONFIG=NOT_READ_OR_EMITTED'
+          echo 'NO_SERVICE_CHANGES=TRUE'
+          REMOTE
