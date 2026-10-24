@@ -54,12 +54,12 @@ def test_misd_borrado_fisico_permanece_deshabilitado_en_api() -> None:
 
 
 def test_misd_politica_sintetica_bloquea_retiro_con_pago() -> None:
-    from datetime import datetime, timezone
+    from datetime import UTC, datetime
     from types import SimpleNamespace
 
     from app.services.misd_autorizaciones import politica_retiro
 
-    instante = datetime.now(timezone.utc)
+    instante = datetime.now(UTC)
     expediente_sintetico = SimpleNamespace(created_at=instante)
     bloqueada = politica_retiro(expediente_sintetico, "GESTOR", instante, True)
     assert bloqueada["puede_solicitar"] is False
@@ -68,12 +68,12 @@ def test_misd_politica_sintetica_bloquea_retiro_con_pago() -> None:
 
 
 def test_misd_politica_sintetica_distingue_ventana_y_aprobacion() -> None:
-    from datetime import datetime, timedelta, timezone
+    from datetime import UTC, datetime, timedelta
     from types import SimpleNamespace
 
     from app.services.misd_autorizaciones import politica_retiro
 
-    instante = datetime.now(timezone.utc)
+    instante = datetime.now(UTC)
     expediente_sintetico = SimpleNamespace(created_at=instante - timedelta(minutes=31))
     revision = politica_retiro(expediente_sintetico, "GESTOR", instante, False)
     assert revision["puede_solicitar"] is True
