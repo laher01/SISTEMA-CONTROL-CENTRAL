@@ -1140,13 +1140,15 @@ def test_recarga_identica_de_retirado_restaura_sin_crear_duplicado(
 ) -> None:
     contenido = b"%PDF-1.7 recarga de original retirado"
     original = subir(client, "recarga.pdf", contenido)
+    propietario_id = auth_prueba.contexto.usuario_id
+    assert propietario_id is not None
     auth_prueba.como_admin()
     ruta = f"/api/v1/documentos/{original['id']}"
     assert client.delete(ruta).status_code == 204
     assert client.get(ruta).status_code == 404
 
     # La recarga explícita reutiliza la restauración segura y el mismo ID.
-    auth_prueba.como_usuario()
+    auth_prueba.como_usuario(propietario_id)
     recarga = client.post(
         "/api/v1/documentos",
         files={"archivo": ("recarga.pdf", contenido, "application/pdf")},
