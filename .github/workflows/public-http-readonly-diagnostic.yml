@@ -1,0 +1,75 @@
+name: public-http-readonly-diagnostic
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/public-http-readonly-diagnostic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-http-readonly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  public-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify restricted target, tools, and DNS
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v curl
+          command -v openssl
+          getent ahostsv4 factcentral.online | awk '{print $1}' | sort -u
+          echo 'DNS_PUBLIC_CHECK=OK'
+
+      - name: TLS certificate and expiry (no credentials)
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 15 bash -c 'echo | openssl s_client -connect factcentral.online:443 -servername factcentral.online -verify_return_error 2>/dev/null' |
+            openssl x509 -noout -checkend 604800
+          echo 'TLS_CERT_VALID_NEXT_7_DAYS=OK'
+
+      - name: HTTPS, public health and anonymous access controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Each request is a no-credential GET. Bodies are discarded.
+          # No redirected host is contacted; redirects remain observable as HTTP 3xx.
+          probe() {
+            local path="$1" status
+            status="$(curl --proto '=https' --tlsv1.2 --silent --show-error --output /dev/null \
+              --max-time 15 --connect-timeout 8 \
+              --write-out '%{http_code}' "https://factcentral.online${path}")"
+            printf 'PUBLIC_PROBE %s HTTP_%s\n' "$path" "$status"
+            REPLY="$status"
+          }
+          failed=0
+          probe '/'
+          case "$REPLY" in 200|301|302|307|308) ;; *) failed=1;; esac
+          probe '/health'
+          case "$REPLY" in 200) ;; *) echo "::error::Public /health returned HTTP_$REPLY"; failed=1;; esac
+          for endpoint in '/api/v1/documentos' '/api/v1/expedientes'; do
+            probe "$endpoint"
+            # 404/405 is not proof of auth protection; fail closed and
+            # require review of proxy routing, rather than calling it secure.
+            case "$REPLY" in
+              401|403) echo "ANONYMOUS_ACCESS_REJECTED=$endpoint";;
+              *) echo "::error::Unexpected anonymous status $REPLY at $endpoint; review routing and auth"; failed=1;;
+            esac
+          done
+          exit "$failed"
+
+      - name: Security and isolation limitations
+        run: |
+          echo 'SAFE_METHODS=GET_ONLY'
+          echo 'NO_CREDENTIALS=TRUE'
+          echo 'NO_RESPONSE_BODIES_STORED=TRUE'
+          echo 'NO_DATABASE_ACCESS=TRUE'
+          echo 'STAGING_ISOLATION=NOT_DETERMINABLE_FROM_PUBLIC_HTTP'
+          echo 'AUTHENTICATED_OCR_E2E=NOT_EXECUTED'
