@@ -1137,6 +1137,7 @@ def test_restaurar_documento_retirado_conserva_original(
 def test_recarga_identica_de_retirado_restaura_sin_crear_duplicado(
     client: TestClient,
     auth_prueba: AuthPrueba,
+    permiso_retiro_usuario: None,
 ) -> None:
     contenido = b"%PDF-1.7 recarga de original retirado"
     original = subir(client, "recarga.pdf", contenido)
@@ -1147,22 +1148,14 @@ def test_recarga_identica_de_retirado_restaura_sin_crear_duplicado(
     assert client.delete(ruta).status_code == 204
     assert client.get(ruta).status_code == 404
 
-    # La recarga explícita reutiliza la restauración segura y el mismo ID.
     auth_prueba.como_usuario(propietario_id)
     recarga = client.post(
         "/api/v1/documentos",
         files={"archivo": ("recarga.pdf", contenido, "application/pdf")},
     )
-    # El permiso MISD debe autorizar la reactivación: nunca basta subir el archivo.
-    if recarga.status_code == 403:
-        assert client.get(ruta).status_code == 404
-        auth_prueba.como_admin()
-        assert client.post(ruta + "/restaurar").status_code == 200
-    else:
-        assert recarga.status_code == 201, recarga.text
-        assert recarga.json()["id"] == original["id"]
-        auth_prueba.como_admin()
-        assert client.get(ruta).status_code == 200
+    assert recarga.status_code == 201, recarga.text
+    assert recarga.json()["id"] == original["id"]
+    assert client.get(ruta).status_code == 200
     duplicado = client.post(
         "/api/v1/documentos",
         files={"archivo": ("recarga.pdf", contenido, "application/pdf")},
