@@ -1,23 +1,20 @@
-"""Primitiva de bloqueo del contrato MISD / liquidaciones.
+"""Compatibilidad MISD: un único bloqueo compartido para pagos y retiradas.
 
-Ninguna ruta está protegida hasta que TODOS los productores de pagos y retiros
-adquieran este bloqueo antes de consultar elegibilidad. No llamar fuera de transacción.
+Toda ruta debe tomar el mismo bloqueo ANTES de leer producción y mantener
+la transacción hasta commit/rollback. No combina FOR UPDATE con advisory locks.
 """
 
 import uuid
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Tenant
+from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
 
 
 def bloquear_tenant_para_produccion(session: Session, tenant_id: uuid.UUID) -> None:
-    """Serializa mutaciones de producción por tenant en PostgreSQL.
+    """Alias compatible con el contrato transaccional financiero MISD.
 
-    El bloqueo vive hasta COMMIT o ROLLBACK. SQLite no implementa FOR UPDATE:
-    los ensayos de concurrencia deben ejecutarse con PostgreSQL.
+    El aislamiento real se comprueba en PostgreSQL. Este alias evita que
+    consumidores antiguos adquieran una primitiva incompatible.
     """
-    encontrado = session.scalar(select(Tenant.id).where(Tenant.id == tenant_id).with_for_update())
-    if encontrado is None:
-        raise ValueError("Tenant inexistente para bloqueo transaccional")
+    bloquear_tenant_financiero(session, tenant_id)
