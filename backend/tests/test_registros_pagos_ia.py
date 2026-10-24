@@ -45,10 +45,14 @@ def test_registros_totalizan_y_filtran_por_emisor(
     assert filtrada.json()["total_registros"] == 2
 
 
-def test_usuario_no_puede_eliminar_registro_por_defecto(client: TestClient) -> None:
+def test_usuario_puede_retirar_registro_de_su_ambito_sin_cliente_autorizado(
+    client: TestClient,
+    permiso_retiro_usuario: None,
+) -> None:
     documento = _subir_factura(client, "F001-00000093", "150.00")
     respuesta = client.delete(f"/api/v1/expedientes/{documento['expediente_id']}")
-    assert respuesta.status_code == 403
+    assert respuesta.status_code == 204, respuesta.text
+    assert client.get(f"/api/v1/expedientes/{documento['expediente_id']}").status_code == 404
 
 
 def test_pago_erp_calcula_produccion_adelanto_y_saldo(
