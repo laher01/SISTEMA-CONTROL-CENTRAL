@@ -339,3 +339,29 @@ def test_aprobacion_revocada_no_es_valida_para_ejecutar(
     ejecutada = client.post(f"/api/v1/misd/solicitudes/{solicitud.id}/ejecutar")
     assert ejecutada.status_code == 409, ejecutada.text
     assert client.get(f"/api/v1/expedientes/{expediente.id}").status_code == 200
+
+
+def test_misd_previsualizacion_respetar_ventana_vencida(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    from datetime import timedelta
+
+    from app.models import ahora
+
+    subida = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("misd-previa-vencida.xml", factura())},
+    )
+    assert subida.status_code == 201, subida.text
+    expediente = session.get(Expediente, subida.json()["expediente_id"])
+    assert expediente is not None
+    expediente.created_at = ahora() - timedelta(minutes=31)
+    session.commit()
+
+    previa = client.post(
+        "/api/v1/documentos/previsualizar-retirada",
+        json={"documentos_ids": [subida.json()["id"]]},
+    )
+    assert previa.status_code == 200, previa.text
+    assert previa.json()["aptos"] == 0
+    assert previa.json()["resultados"][0]["estado"] == "BLOQUEADO"
