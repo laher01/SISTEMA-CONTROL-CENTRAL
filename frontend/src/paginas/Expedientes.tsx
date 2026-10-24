@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { conParametros, descargarPdfExpedientes, imprimirExpedientes, obtener, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
+import { conParametros, descargarPdfExpedientes, eliminar, imprimirExpedientes, obtener, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
 import { Estado, Paginacion, Semaforo } from "../componentes";
 import FiltroJerarquia from "../componentes/FiltroJerarquia";
 import { ETIQUETA_ESTADO, formatearFecha, formatearMonto, numeroExpediente } from "../formato";
@@ -69,7 +69,20 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
     ...filtrosBase,
     limit: "1000",
   });
-  const { datos, error, cargando } = useDatos<Expediente[]>(ruta);
+  const { datos, error, cargando, recargar } = useDatos<Expediente[]>(ruta);
+  const { datos: capacidades } = useDatos<{ puede_retirar: boolean }>("/api/v1/documentos/capacidades");
+  const retirarExpediente = async (id: string) => {
+    if (!window.confirm("¿Retirar este expediente y sus documentos? No se borran originales físicos. Si el cliente está autorizado, debe aprobar ADMINISTRACIÓN.")) return;
+    setMensaje("");
+    try {
+      await eliminar("/api/v1/expedientes/" + id);
+      setMensaje("Expediente retirado del sistema operativo.");
+      recargar();
+    } catch (err) {
+      setMensaje(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   const { datos: greProvisionales, error: errorGre } = useDatos<GreProvisional[]>(
     "/api/v1/documentos/provisionales-gre?limit=2000",
   );
@@ -293,6 +306,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
               <th>Receptor</th>
               <th className="num">Importe</th>
               <th>Descarga</th>
+              {capacidades?.puede_retirar && <th>Acciones</th>}
             </tr>
           </thead>
           <tbody>
@@ -336,6 +350,18 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
                   {" · "}
                   <a href={urlZipExpediente(e.id)}>ZIP completo</a>
                 </td>
+                {capacidades?.puede_retirar && (
+                  <td>
+                    <button
+                      type="button"
+                      disabled={!e.puede_eliminar}
+                      title={e.puede_eliminar ? "Retirar expediente" : "Eliminación no autorizada o bloqueada por liquidación"}
+                      onClick={() => void retirarExpediente(e.id)}
+                    >
+                      {e.puede_eliminar ? "Retirar" : "Bloqueado"}
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

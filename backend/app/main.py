@@ -30,6 +30,7 @@ from app.api.routes import (
     registros,
     responsable,
     solicitudes_carga_emisor,
+    solicitudes_retiro_misd,
 )
 from app.core.config import get_settings
 
@@ -55,6 +56,7 @@ for modulo in (
     administraciones,
     asignaciones_emisores,
     solicitudes_carga_emisor,
+    solicitudes_retiro_misd,
     correo,
     documentos,
     chat,

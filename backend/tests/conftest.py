@@ -14,7 +14,7 @@ from app.api.deps import get_contexto_actual, get_hoy
 from app.core.config import Settings, get_settings
 from app.core.db import get_session
 from app.main import app
-from app.models import Base, CuentaAcceso, Miembro
+from app.models import Base, CuentaAcceso, Miembro, PermisoConfigurado
 from app.security import ContextoAcceso
 from app.services.expedientes import obtener_tenant
 
@@ -193,3 +193,17 @@ def client(
     with TestClient(app, base_url="https://testserver") as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def permiso_retiro_usuario(session: Session, auth_prueba: AuthPrueba) -> None:
+    """Los casos que ejercitan MISD conceden el permiso explícitamente."""
+    session.add(
+        PermisoConfigurado(
+            tenant_id=auth_prueba.contexto.tenant_id,
+            rol="USUARIO",
+            permiso="ELIMINAR_REGISTROS",
+            habilitado=True,
+        )
+    )
+    session.commit()
