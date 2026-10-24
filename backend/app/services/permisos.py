@@ -18,7 +18,9 @@ def permiso_habilitado(
         # La política MISD nunca concede retiro a roles técnicos o Secretaría.
         if rol in ("SUPERADMIN", "SECRETARIA"):
             return False
-        if rol in ("ADMINISTRADOR", "GERENTE", "RESPONSABLE", "USUARIO", "GESTOR"):
+        # Administrador, Responsable y Gestor mantienen su política MISD
+        # jerárquica; Gerente y Usuario obedecen la configuración del tenant.
+        if rol in ("ADMINISTRADOR", "RESPONSABLE", "GESTOR"):
             return True
     configurado = session.scalar(
         select(PermisoConfigurado).where(
