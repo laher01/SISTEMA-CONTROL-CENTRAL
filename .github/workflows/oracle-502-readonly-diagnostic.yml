@@ -90,8 +90,17 @@ jobs:
           }
           probe VPS_FRONTEND_HEALTH curl -sS --max-time 8 -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/health
           probe VPS_FRONTEND_DOCUMENTOS curl -sS --max-time 8 -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/v1/documentos
-          probe FRONTEND_TO_BACKEND "${compose[@]}" exec -T frontend wget -q --timeout=8 -O /dev/null -S http://backend:8000/health
-          # Last check uses wget exit status only; never emit response body.
+          # Check upstream connectivity from frontend without printing headers or body.
+          if "${compose[@]}" exec -T frontend wget -q --timeout=8 -O /dev/null http://backend:8000/health </dev/null >/dev/null 2>&1; then
+            echo 'FRONTEND_TO_BACKEND=REACHABLE'
+          else
+            echo 'FRONTEND_TO_BACKEND=FAILED'
+          fi
+          if "${compose[@]}" exec -T backend uv run python -c "import urllib.request; r=urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=5); assert r.status == 200" </dev/null >/dev/null 2>&1; then
+            echo 'BACKEND_LOOPBACK_HEALTH=OK'
+          else
+            echo 'BACKEND_LOOPBACK_HEALTH=FAILED'
+          fi
           for service in frontend backend tunnel; do
             # Summary counts only: no raw logs (may contain PII or session data).
             count=$("${compose[@]}" logs --no-color --tail=40 "$service" 2>/dev/null | grep -Eic 'connect\(\) failed|connection refused|no live upstream|bad gateway|error|unhealthy' || true)
