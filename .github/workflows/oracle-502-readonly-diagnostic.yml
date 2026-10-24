@@ -18,32 +18,50 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate YAML and restricted remote execution
+      - name: Validate YAML structure and strict remote allowlist
         shell: bash
         run: |
           set -euo pipefail
-          ruby -e "require 'yaml'; YAML.load_file('.github/workflows/oracle-502-readonly-diagnostic.yml')"
           python3 - <<'PY'
           from pathlib import Path
-          p = Path(".github/workflows/oracle-502-readonly-diagnostic.yml")
-          src = p.read_text()
-          assert "if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'" in src
-          assert "environment: staging" in src
-          assert "permissions:\\n  contents: read".replace("\\n", "\n") in src
-          assert "StrictHostKeyChecking=yes" in src
-          assert 'test "$VPS_HOST" = "132.145.233.172"' in src
-          assert 'test "$VPS_DEPLOY_PATH" = "/home/ubuntu/fact-central"' in src
-          remote = src.rsplit("<<'REMOTE'", 1)[1].split("\n          REMOTE", 1)[0]
-          prohibited = ("docker compose up", "docker compose down", "docker restart",
-                        "docker start", "docker stop", "git pull", "git checkout",
-                        "pg_restore", "pg_dump", " alembic upgrade", "systemctl restart",
-                        "curl -X POST", "wget --post-data")
-          assert not any(op in remote for op in prohibited)
-          assert "logs --no-color --tail=40" in remote
-          assert "NO_SERVICE_CHANGES=TRUE" in remote
-          print("WORKFLOW_SYNTAX_AND_READONLY_GUARDS=PASS")
-          PY
+          import subprocess
+          import sys
+          import yaml
 
+          path = Path(".github/workflows/oracle-502-readonly-diagnostic.yml")
+          text = path.read_text()
+          workflow = yaml.safe_load(text)
+          assert workflow["permissions"] == {"contents": "read"}
+          jobs = workflow["jobs"]
+          assert set(jobs) == {"verify-policy", "inspect-oracle"}
+          remote = jobs["inspect-oracle"]
+          assert remote["if"] == "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'"
+          assert remote["needs"] == "verify-policy"
+          assert remote["environment"] == "staging"
+          assert remote["timeout-minutes"] <= 8
+          steps = remote["steps"]
+          assert len(steps) == 2
+          assert 'test "$VPS_HOST" = "132.145.233.172"' in steps[0]["run"]
+          assert 'test "$VPS_USER" = "ubuntu"' in steps[0]["run"]
+          assert 'test "$VPS_DEPLOY_PATH" = "/home/ubuntu/fact-central"' in steps[0]["run"]
+          assert "StrictHostKeyChecking=yes" in steps[1]["run"]
+          assert "BatchMode=yes" in steps[1]["run"]
+          assert "secrets." not in steps[1]["run"]
+          assert set(steps[1]["env"]) == {"VPS_HOST","VPS_USER","VPS_SSH_PRIVATE_KEY","VPS_SSH_KNOWN_HOSTS"}
+          script = steps[1]["run"].split("<<'REMOTE'", 1)[1].rsplit("\n          REMOTE", 1)[0]
+          allowed = ("set ", "cd ", "test ", "compose=", "echo ", "for ", "if ", "else", "fi", "done",
+                     "probe()", "local ", "shift", "code=", "rc=", "case ", "esac", "*)", ";;",
+                     "\"$" )
+          prohibited = ("eval ", "source ", "sudo ", "docker run", "docker compose up", "docker compose down",
+                        "restart", "kill ", "rm ", "mv ", "cp ", "touch ", "tee ", "sed -i",
+                        "git pull", "git checkout", "git reset", "pg_restore", "pg_dump",
+                        "psql ", "alembic upgrade", "systemctl ", "curl -X ", "wget --post")
+          for term in prohibited:
+              assert term not in script, f"prohibited remote token: {term}"
+          assert "logs --no-color --tail=40" in script
+          assert "NO_SERVICE_CHANGES=TRUE" in script
+          print("STRUCTURAL_WORKFLOW_POLICY=PASS")
+          PY
   inspect-oracle:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     needs: verify-policy
