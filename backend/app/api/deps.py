@@ -173,6 +173,17 @@ def get_contexto_operativo(
             and request.url.path.endswith("/distribuir")
         )
     )
+    # MISD restringe cada solicitud por tenant, cartera y jerarquía en su ruta.
+    # Autorizar entrada a la API no concede autorización sobre un expediente.
+    permitido_responsable = (
+        permitido_responsable
+        or (request.url.path == "/api/v1/misd/solicitudes" and request.method in {"GET", "POST"})
+        or (
+            request.method == "POST"
+            and request.url.path.startswith("/api/v1/misd/solicitudes/")
+            and request.url.path.endswith(("/resolver", "/ejecutar"))
+        )
+    )
     if contexto.rol == "RESPONSABLE" and not permitido_responsable:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,

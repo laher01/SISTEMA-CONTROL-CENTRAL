@@ -66,6 +66,9 @@ export default function Pendientes() {
       offset: String(pagina * POR_PAGINA),
     }),
   );
+  const { datos: capacidades } = useDatos<{ puede_retirar: boolean }>(
+    "/api/v1/documentos/capacidades",
+  );
   const { datos: provisionales, recargar: recargarProvisionales } = useDatos<ProvisionalGRE[]>(
     "/api/v1/documentos/provisionales-gre?limit=2000",
   );
@@ -91,6 +94,64 @@ export default function Pendientes() {
   const [procesandoLote, setProcesandoLote] = useState(false);
   const [resultadoLote, setResultadoLote] = useState<ResultadoLote>();
   const [errorLote, setErrorLote] = useState("");
+  const [seleccionados, setSeleccionados] = useState<string[]>([]);
+  const [retirandoSeleccionados, setRetirandoSeleccionados] = useState(false);
+  const [resultadoRetirada, setResultadoRetirada] = useState("");
+  const [errorRetirada, setErrorRetirada] = useState("");
+
+  const retirarSeleccionados = async () => {
+    const visibles = (datos ?? []).filter((d) => seleccionados.includes(d.id));
+    if (!visibles.length || retirandoSeleccionados) return;
+    try {
+      const vista = await enviarJson<{
+        total: number;
+        aptos: number;
+        resultados: { id: string; estado: string }[];
+      }>("/api/v1/documentos/previsualizar-retirada", "POST", {
+        documentos_ids: visibles.map((d) => d.id),
+      });
+      if (vista.aptos !== visibles.length) {
+        setErrorRetirada(
+          `Solo ${vista.aptos} de ${visibles.length} documentos tienen autorización para retirarse. Actualice la bandeja.`,
+        );
+        return;
+      }
+    } catch (error) {
+      setErrorRetirada(error instanceof Error ? error.message : String(error));
+      return;
+    }
+    if (!window.confirm(`¿Retirar ${visibles.length} documentos pendientes? Los originales se conservarán.`)) return;
+    setRetirandoSeleccionados(true);
+    setErrorRetirada("");
+    setResultadoRetirada("");
+    const retirados: string[] = [];
+    const errores: string[] = [];
+    try {
+      const resultado = await enviarJson<{
+        retirados: number;
+        resultados: { id: string; estado: string; codigo?: string }[];
+      }>("/api/v1/documentos/retirar-lote", "POST", {
+        documentos_ids: visibles.map((d) => d.id),
+      });
+      for (const fila of resultado.resultados) {
+        if (fila.estado === "RETIRADO") retirados.push(fila.id);
+        else {
+          const documento = visibles.find((d) => d.id === fila.id);
+          errores.push(`${documento?.nombre_original ?? fila.id}: error ${fila.codigo ?? "desconocido"}`);
+        }
+      }
+    } catch (error) {
+      setErrorRetirada(error instanceof Error ? error.message : String(error));
+      setRetirandoSeleccionados(false);
+      return;
+    }
+    setSeleccionados((actual) => actual.filter((id) => !retirados.includes(id)));
+    setResultadoRetirada(`${retirados.length} de ${visibles.length} documentos retirados.`);
+    setErrorRetirada(errores.join(" | "));
+    setRetirandoSeleccionados(false);
+    recargar();
+    recargarProvisionales();
+  };
 
   const procesarAutomaticamente = async () => {
     setProcesandoLote(true);
@@ -110,8 +171,10 @@ export default function Pendientes() {
     }
   };
 
-  const cambiar = (siguienteEstado: string, siguientePagina: number) =>
+  const cambiar = (siguienteEstado: string, siguientePagina: number) => {
+    setSeleccionados([]);
     setParametros({ estado: siguienteEstado, pagina: String(siguientePagina) });
+  };
 
   return (
     <>
@@ -169,10 +232,20 @@ export default function Pendientes() {
         </p>
       )}
       {errorLote && <p className="error">{errorLote}</p>}
+      <div className="acciones-documento">
+        <strong>{(datos ?? []).filter((d) => seleccionados.includes(d.id)).length} pendientes seleccionados</strong>
+        <button className="peligro" disabled={!capacidades?.puede_retirar || retirandoSeleccionados || !(datos ?? []).some((d) => seleccionados.includes(d.id))} onClick={() => void retirarSeleccionados()}>
+          {retirandoSeleccionados ? "Retirando…" : "Eliminar seleccionados"}
+        </button>
+        <button className="secundario" disabled={retirandoSeleccionados || !seleccionados.length} onClick={() => setSeleccionados([])}>Limpiar selección</button>
+      </div>
+      {resultadoRetirada && <p role="status">{resultadoRetirada}</p>}
+      {errorRetirada && <p role="alert" className="error">{errorRetirada}</p>}
       <Estado cargando={cargando} error={error} vacio={datos?.length === 0}>
         <table>
           <thead>
             <tr>
+              <th><input type="checkbox" aria-label="Seleccionar pendientes visibles" checked={(datos?.length ?? 0) > 0 && (datos ?? []).every((d) => seleccionados.includes(d.id))} onChange={(e) => setSeleccionados(e.target.checked ? (datos ?? []).map((d) => d.id) : [])} /></th>
               <th>Archivo</th>
               <th>Subido</th>
               <th>Lectura</th>
@@ -181,7 +254,7 @@ export default function Pendientes() {
             </tr>
           </thead>
           <tbody>
-            {datos?.map((d) => <FilaPendiente key={d.id} documento={d} alVincular={recargar} />)}
+            {datos?.map((d) => <FilaPendiente key={d.id} documento={d} alVincular={recargar} puedeRetirar={capacidades?.puede_retirar ?? false} seleccionado={seleccionados.includes(d.id)} alSeleccionar={(activo) => setSeleccionados((actual) => activo ? [...new Set([...actual, d.id])] : actual.filter((id) => id !== d.id))} />)}
           </tbody>
         </table>
       </Estado>
@@ -197,9 +270,15 @@ export default function Pendientes() {
 function FilaPendiente({
   documento,
   alVincular,
+  seleccionado,
+  alSeleccionar,
+  puedeRetirar,
 }: {
   documento: Documento;
   alVincular: () => void;
+  seleccionado: boolean;
+  alSeleccionar: (activo: boolean) => void;
+  puedeRetirar: boolean;
 }) {
   const [seleccion, setSeleccion] = useState<SeleccionSugerida>();
   const [eliminando, setEliminando] = useState(false);
@@ -221,6 +300,7 @@ function FilaPendiente({
   };
   return (
     <tr>
+      <td><input type="checkbox" aria-label={`Seleccionar ${documento.nombre_original}`} checked={seleccionado} onChange={(e) => alSeleccionar(e.target.checked)} /></td>
       <td>
         <a href={urlArchivo(documento.id)} target="_blank" rel="noreferrer">
           {documento.nombre_original}
@@ -239,9 +319,9 @@ function FilaPendiente({
         />
       </td>
       <td>
-        <button className="peligro" onClick={retirar} disabled={eliminando}>
+        {puedeRetirar && <button className="peligro" onClick={retirar} disabled={eliminando}>
           {eliminando ? "Eliminando…" : "Eliminar"}
-        </button>
+        </button>}
         {errorEliminar && <small role="alert" className="error bloque">{errorEliminar}</small>}
       </td>
     </tr>
