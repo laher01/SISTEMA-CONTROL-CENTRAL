@@ -49,19 +49,21 @@ jobs:
             printf 'PUBLIC_PROBE %s HTTP_%s\n' "$path" "$status"
             REPLY="$status"
           }
+          failed=0
           probe '/'
-          case "$REPLY" in 200|301|302|307|308) ;; *) exit 1;; esac
+          case "$REPLY" in 200|301|302|307|308) ;; *) failed=1;; esac
           probe '/health'
-          case "$REPLY" in 200) ;; *) exit 1;; esac
+          case "$REPLY" in 200) ;; *) echo "::error::Public /health returned HTTP_$REPLY"; failed=1;; esac
           for endpoint in '/api/v1/documentos' '/api/v1/expedientes'; do
             probe "$endpoint"
             # 404/405 is not proof of auth protection; fail closed and
             # require review of proxy routing, rather than calling it secure.
             case "$REPLY" in
               401|403) echo "ANONYMOUS_ACCESS_REJECTED=$endpoint";;
-              *) echo "::error::Unexpected anonymous status $REPLY at $endpoint; review routing and auth"; exit 1;;
+              *) echo "::error::Unexpected anonymous status $REPLY at $endpoint; review routing and auth"; failed=1;;
             esac
           done
+          exit "$failed"
 
       - name: Security and isolation limitations
         run: |
