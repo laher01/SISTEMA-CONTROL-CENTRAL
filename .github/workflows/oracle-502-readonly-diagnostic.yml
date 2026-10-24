@@ -33,7 +33,7 @@ jobs:
           assert "StrictHostKeyChecking=yes" in src
           assert 'test "$VPS_HOST" = "132.145.233.172"' in src
           assert 'test "$VPS_DEPLOY_PATH" = "/home/ubuntu/fact-central"' in src
-          remote = src.split("<<'REMOTE'", 1)[1].split("\n          REMOTE", 1)[0]
+          remote = src.rsplit("<<'REMOTE'", 1)[1].split("\n          REMOTE", 1)[0]
           prohibited = ("docker compose up", "docker compose down", "docker restart",
                         "docker start", "docker stop", "git pull", "git checkout",
                         "pg_restore", "pg_dump", " alembic upgrade", "systemctl restart",
