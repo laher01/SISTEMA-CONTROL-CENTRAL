@@ -590,6 +590,25 @@ async def subir_documento(
                 registrar_fallo(session, documento, str(exc))
         session.commit()
     except DocumentoDuplicado as exc:
+        # Una recarga idéntica de un documento retirado solicita la restauración
+        # del MISMO registro; no crea una segunda identidad fiscal ni elimina bytes.
+        # La restauración existente valida ámbito, permiso, expediente, archivo,
+        # SHA y colisiones activas, y registra su propia auditoría.
+        anterior = session.get(Documento, exc.documento_id)
+        if anterior is not None and anterior.tenant_id == tenant_id and anterior.deleted_at:
+            if expediente_id is not None and anterior.expediente_id != expediente_id:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    "Documento retirado vinculado a otro expediente; revise su restauración",
+                ) from exc
+            if tipo_documento is not None and anterior.tipo_documento != tipo_documento:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    "Documento retirado con otro tipo documental; revise su restauración",
+                ) from exc
+            return restaurar_documento(
+                session, almacen, settings, hoy, tenant_id, auth, anterior.id
+            )
         raise _duplicado(session, auth, exc.documento_id) from exc
     except ComprobanteYaRegistrado as exc:
         session.rollback()
