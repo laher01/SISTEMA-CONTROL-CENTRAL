@@ -151,6 +151,7 @@ export interface Expediente {
   gestor_codigo?: string | null;
   estado: EstadoExpediente;
   pendiente_aprobacion: boolean;
+  puede_eliminar?: boolean;
   fecha_carga?: string | null;
   created_at: string;
 }

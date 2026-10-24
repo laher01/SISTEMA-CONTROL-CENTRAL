@@ -13,6 +13,7 @@ from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
 from app.models import Empresa, Expediente, Gestor, PagoGestor
 from app.services import auditoria
+from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
 
 router = APIRouter(prefix="/pagos-gestores", tags=["pagos-gestores"])
 
@@ -123,6 +124,7 @@ def cotizar(
 def programar(
     datos: SolicitudGestor, session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
 ) -> dict[str, str]:
+    bloquear_tenant_financiero(session, tenant_id)
     if auth.rol != RolMiembro.USUARIO or auth.usuario_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Usuario")
     gestor = _gestor_propio(session, tenant_id, auth.usuario_id, datos.gestor_id)
