@@ -1,7 +1,7 @@
 # MISD 3-2.23 — Recarga de documentos retirados (hallazgo y contrato de corrección)
 
 **Rama aislada:** `test/misd-reingreso-retirados-20261024`, creada desde PR #390 SHA `501290199ef1128d72d23401776b65aa7ea25b20`.
-**Estado:** diagnóstico del defecto completado; **no habilitar purga física ni cambiar unicidad sin migración y pruebas integrales**.
+**Estado:** corrección acotada propuesta en rama: ante recarga idéntica de registro retirado, se invoca la restauración existente con validación de permisos y colisiones; **no habilitar purga física ni cambiar unicidad sin migración y pruebas integrales**. CI específico pendiente de completar.
 
 ## Problema reproducible por inspección
 
@@ -32,4 +32,4 @@
 - Purga de material **sintético y jurídicamente elegible**, sin referencias, cola durable; re-upload permitido; verificación de auditoría e integridad FK.
 - Alembic `upgrade`, `downgrade` solo con datos sintéticos, `compare_metadata` y CI backend/frontend/OCR/roles.
 
-**No aplicar una solución superficial eliminando un registro o quitando el UNIQUE.** Resolver con una migración y lógica de negocio revisadas conjuntamente con propietarios MISD/OCR y conservación fiscal. Ningún cambio de código productivo realizado en esta nota.
+**No aplicar una solución superficial eliminando un registro o quitando el UNIQUE.** Resolver con una migración y lógica de negocio revisadas conjuntamente con propietarios MISD/OCR y conservación fiscal. El cambio acotado en `backend/app/api/routes/documentos.py` devuelve el mismo ID al restaurar un registro retirado con el mismo SHA; **no crea nueva identidad fiscal ni elimina físicamente el original**. El reingreso como identidad nueva después de purga legítima y la política de limpieza física requieren fase posterior y pruebas específicas.
