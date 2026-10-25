@@ -5,6 +5,8 @@ on:
     paths:
       - '.github/workflows/deploy-staging.yml'
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -62,7 +64,9 @@ jobs:
       - run: npm run build
 
   deploy:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    # La automatización permanece DESACTIVADA hasta habilitar explícitamente la variable.
+    # La fusión de este PR no activa un despliegue: valor ausente equivale a false.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && vars.ORACLE_AUTO_DEPLOY_ENABLED == 'true'))
     needs: [verify-backend, verify-frontend]
     runs-on: ubuntu-latest
     environment: staging
@@ -113,6 +117,12 @@ jobs:
         run: |
           case "${{ github.event_name }}" in
             workflow_dispatch) ;;
+            push)
+              test "${{ vars.ORACLE_AUTO_DEPLOY_ENABLED }}" = "true" || {
+                echo "::error::Despliegue automatico no habilitado"
+                exit 1
+              }
+              ;;
             *) echo "::error::Evento no autorizado"; exit 1 ;;
           esac
           test "${{ github.ref_name }}" = "main" || {
