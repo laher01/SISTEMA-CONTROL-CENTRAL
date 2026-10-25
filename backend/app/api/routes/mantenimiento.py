@@ -338,6 +338,22 @@ def limpiar(
     if "documentos" in datos.tipos:
         filtros = _filtros(Documento, tenant_id, datos)
         documentos = list(session.scalars(select(Documento).where(*filtros)))
+        # Las operaciones de mantenimiento no pueden purgar originales ligados
+        # a expedientes ni evidencias fiscales: requieren autorización y
+        # comprobación de obligaciones en un flujo MISD específico.
+        protegidos = [
+            item
+            for item in documentos
+            if item.expediente_id is not None
+            or item.tipo_documento is not None
+            or item.huella_comercial is not None
+        ]
+        if protegidos:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Existen documentos fiscales o vinculados a expedientes; "
+                "su purga física requiere el procedimiento MISD protegido",
+            )
         ids = [item.id for item in documentos]
         rutas_archivo = [item.ruta_storage for item in documentos]
         if ids:
