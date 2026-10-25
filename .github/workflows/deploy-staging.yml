@@ -69,7 +69,8 @@ jobs:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && vars.ORACLE_AUTO_DEPLOY_ENABLED == 'true'))
     needs: [verify-backend, verify-frontend]
     runs-on: ubuntu-latest
-    environment: staging
+    # Separar credenciales/aprobaciones: manual usa staging; automatico usa entorno exclusivo.
+    environment: ${{ github.event_name == 'push' && 'oracle-autodeploy' || 'staging' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -130,6 +131,17 @@ jobs:
             exit 1
           }
 
+      - name: Verificar precondiciones de recuperacion para despliegue automatico
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          RECOVERY_READY: ${{ vars.ORACLE_RECOVERY_VERIFIED }}
+        run: |
+          set -euo pipefail
+          test "$RECOVERY_READY" = "true" || {
+            echo "::error::Recuperacion no certificada en oracle-autodeploy: bloquear actualizacion"
+            exit 1
+          }
       - name: Verificar backup y restauración aislada antes del despliegue
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
