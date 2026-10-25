@@ -419,6 +419,66 @@ def test_mantenimiento_no_purga_original_fiscal(
     assert ruta.exists()
 
 
+def test_mantenimiento_purga_sintetico_y_permite_reingreso(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba, settings
+) -> None:
+    import hashlib
+
+    from app.models import Documento
+    from app.storage import AlmacenLocal
+
+    contenido = b"%PDF-1.7 original sintetico sin referencias"
+    tenant_id = auth_prueba.contexto.tenant_id
+    cuenta_id = auth_prueba.contexto.cuenta_id
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+    sha256 = hashlib.sha256(contenido).hexdigest()
+    almacen = AlmacenLocal(settings.storage_dir)
+    ruta_storage = almacen.guardar(tenant_id, sha256, contenido)
+    original = Documento(
+        tenant_id=tenant_id,
+        creado_por_cuenta_id=cuenta_id,
+        usuario_id=usuario_id,
+        sha256=sha256,
+        nombre_original="sintetico.pdf",
+        mime_type="application/pdf",
+        tamano_bytes=len(contenido),
+        ruta_storage=ruta_storage,
+        estado="PENDIENTE",
+    )
+    session.add(original)
+    session.commit()
+    original_id = original.id
+
+    auth_prueba.como_admin()
+    respuesta = client.post(
+        "/api/v1/configuracion/mantenimiento/limpiar",
+        json={
+            "cuenta_ids": [str(cuenta_id)],
+            "incluir_sin_trazabilidad": False,
+            "tipos": ["documentos"],
+            "fecha_desde": None,
+            "fecha_hasta": None,
+            "confirmacion": "ELIMINAR-DATOS-OPERATIVOS",
+        },
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["eliminados"]["documentos"] == 1
+    assert respuesta.json()["archivos_eliminados"] == 1
+    session.expire_all()
+    assert session.get(Documento, original_id) is None
+    assert not almacen.ruta_absoluta(ruta_storage).exists()
+
+    auth_prueba.como_usuario(usuario_id)
+    recarga = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("sintetico.pdf", contenido, "application/pdf")},
+    )
+    assert recarga.status_code == 201, recarga.text
+    assert recarga.json()["id"] != str(original_id)
+    assert almacen.ruta_absoluta(ruta_storage).is_file()
+
+
 def test_limpieza_fallo_de_archivo_deja_pendiente_recuperacion(
     client: TestClient, session: Session, auth_prueba: AuthPrueba, settings, monkeypatch
 ) -> None:
