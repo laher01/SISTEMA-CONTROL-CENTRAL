@@ -380,6 +380,45 @@ def test_limpieza_rechaza_confirmacion_invalida_sin_borrar_datos(
     assert session.get(Documento, documento.id) is not None
 
 
+def test_mantenimiento_no_purga_original_fiscal(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba, settings
+) -> None:
+    from app.models import Documento
+
+    auth_prueba.como_admin()
+    ruta = settings.storage_dir / "pruebas" / "fiscal-protegido.pdf"
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.write_bytes(b"original fiscal de prueba")
+    documento = Documento(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        creado_por_cuenta_id=auth_prueba.contexto.cuenta_id,
+        sha256="f" * 64,
+        nombre_original="fiscal-protegido.pdf",
+        mime_type="application/pdf",
+        tamano_bytes=24,
+        ruta_storage="pruebas/fiscal-protegido.pdf",
+        tipo_documento="FACT",
+        estado="PENDIENTE",
+    )
+    session.add(documento)
+    session.commit()
+    respuesta = client.post(
+        "/api/v1/configuracion/mantenimiento/limpiar",
+        json={
+            "cuenta_ids": [str(auth_prueba.contexto.cuenta_id)],
+            "incluir_sin_trazabilidad": False,
+            "tipos": ["documentos"],
+            "fecha_desde": None,
+            "fecha_hasta": None,
+            "confirmacion": "ELIMINAR-DATOS-OPERATIVOS",
+        },
+    )
+    assert respuesta.status_code == 409, respuesta.text
+    session.expire_all()
+    assert session.get(Documento, documento.id) is not None
+    assert ruta.exists()
+
+
 def test_limpieza_fallo_de_archivo_deja_pendiente_recuperacion(
     client: TestClient, session: Session, auth_prueba: AuthPrueba, settings, monkeypatch
 ) -> None:
