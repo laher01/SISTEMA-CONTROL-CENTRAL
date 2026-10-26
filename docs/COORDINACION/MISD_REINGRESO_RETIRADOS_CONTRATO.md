@@ -1,4 +1,4 @@
-# MISD 3-2.23 — Recarga de documentos retirados (hallazgo y contrato de corrección)
+# MISD — Eliminación definitiva, auditoría y nuevo ingreso
 
 **Rama aislada:** `test/misd-reingreso-retirados-20261024`, creada desde PR #390 SHA `501290199ef1128d72d23401776b65aa7ea25b20`.
 **Estado:** corrección acotada propuesta en rama: ante recarga idéntica de registro retirado, se invoca la restauración existente con validación de permisos y colisiones; **no habilitar purga física ni cambiar unicidad sin migración y pruebas integrales**. CI específico pendiente de completar.
