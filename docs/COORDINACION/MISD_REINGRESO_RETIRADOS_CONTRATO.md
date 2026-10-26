@@ -1,48 +1,52 @@
-# MISD — Eliminación definitiva, auditoría y nuevo ingreso
+# MISD — Contrato de eliminación definitiva de documentos y expedientes
 
-**Rama aislada:** `test/misd-reingreso-retirados-20261024`, creada desde PR #390 SHA `501290199ef1128d72d23401776b65aa7ea25b20`.
-**Estado:** corrección acotada propuesta en rama: ante recarga idéntica de registro retirado, se invoca la restauración existente con validación de permisos y colisiones; **no habilitar purga física ni cambiar unicidad sin migración y pruebas integrales**. CI específico pendiente de completar.
+**Estado:** especificación funcional acordada; todavía no implementada por completo en el candidato #396.
 
-## Problema reproducible por inspección
+## Comportamiento solicitado
 
-- `backend/app/services/ingesta.py::ingerir_documento` consulta por `Documento.tenant_id` + `Documento.sha256` **sin** filtrar `deleted_at`, y eleva `DocumentoDuplicado` aunque el registro esté retirado.
-- `backend/app/models.py::Documento` declara `UniqueConstraint("tenant_id","sha256")` y `UniqueConstraint("tenant_id","huella_comercial")`: filtrar la consulta sin revisar estas restricciones produciría una colisión en INSERT.
-- `backend/app/storage.py::AlmacenLocal.guardar` almacena por tenant/SHA; el archivo existente no equivale necesariamente a documento activo.
-- `backend/app/api/routes/documentos.py`: DELETE lógico mantiene el original y el endpoint POST `/{documento_id}/restaurar` requiere permiso, expediente activo, existencia y hash del original y ausencia de colisión activa.
-- `backend/app/api/routes/mantenimiento.py::_intentar_eliminar_archivo` bloquea eliminación física si **cualquier** Documento aún referencia la ruta, incluso retirado; esto protege originales restaurables.
-- El diseño `docs/IMPLEMENTACION_ELIMINACION_DOCUMENTAL_INTEGRAL.md` plantea purga física tras commit en cola durable e idempotente, pero **no certifica** que esté desarrollada.
+**Eliminar significa quitar el elemento de la lógica operativa y borrar su archivo físico del almacenamiento. La eliminación es definitiva: no hay papelera ni restauración.** Una carga posterior es un ingreso nuevo, con nuevo identificador y procesamiento desde cero.
 
-## Contrato de comportamiento requerido
+### Eliminación individual
 
-1. **Activo con mismo SHA o huella fiscal:** no duplicar; respuesta clara y permiso/ámbito respetados.
-2. **Retirado lógico:** ofrecer restauración del mismo documento, o reingreso de nueva identidad **solo tras** revisión de dependencia fiscal, permiso, auditoría, expediente y colisión. Nunca restauración automática con permisos más débiles que el endpoint explícito.
-3. **Archivo físico existente sin referencia activa:** reutilización de bytes con verificación SHA y propiedad de tenant; el objeto físico no debe impedir por sí mismo el reingreso.
-4. **Purgado legítimamente:** nuevo ingreso sin resucitar identificadores, conservando auditoría histórica mínima y registros fiscales legalmente protegidos.
-5. **Fiscalmente protegido o relacionado con GRE, pagos, voucher, liquidación o auditoría:** impedir purga destructiva; reutilización/restauración autorizada donde proceda.
-6. **Concurrencia:** transacción PostgreSQL + bloqueo de ámbito, restricciones de unicidad por estado activo **solo tras analizar migración Alembic**, para que dos cargas o carga/restauración simultáneas no produzcan doble factura.
-7. **Storage:** nunca `unlink` si persiste referencia física, incluso de un documento retirado restaurable; borrar solo mediante cola postcommit, pruebas de idempotencia y conservación fiscal.
+Desde **Registros** o **Documentos**, la acción elimina únicamente el elemento seleccionado y se aplica de forma individual. Debe desaparecer de la contabilidad, listados, conteos, pendientes y expedientes operativos; también se eliminan sus datos derivados y vínculos exclusivos.
 
-## Pruebas de aceptación pendientes
+La auditoría conserva un evento separado y mínimo —tenant, actor, fecha, motivo, identificador/hash y resultado— para dejar evidencia de la operación, pero no conserva una copia recuperable del documento ni mantiene activo el registro contable eliminado.
 
-- Documento SHA A activo, retiro y segundo upload A; retorno autorizado, sin error de fichero existente y sin duplicado activo.
-- Upload A de otro tenant; aislamiento de rutas/identidad y prohibición de restaurar registro ajeno.
-- Restauración con SHA alterado, archivo ausente, expediente retirado y usuario sin permiso: denegación.
-- Documento activo con mismo SHA/factura: duplicado bloqueado; dos uploads concurrentes: un único activo.
-- Retirado con pago/voucher, GRE u obligación fiscal: nunca purga física; preservación de evidencia.
-- Purga de material **sintético y jurídicamente elegible**, sin referencias, cola durable; re-upload permitido; verificación de auditoría e integridad FK.
-- Alembic `upgrade`, `downgrade` solo con datos sintéticos, `compare_metadata` y CI backend/frontend/OCR/roles.
+### Eliminación de un expediente
 
-**No aplicar una solución superficial eliminando un registro o quitando el UNIQUE.** Resolver con una migración y lógica de negocio revisadas conjuntamente con propietarios MISD/OCR y conservación fiscal. El cambio acotado en `backend/app/api/routes/documentos.py` devuelve el mismo ID al restaurar un registro retirado con el mismo SHA; **no crea nueva identidad fiscal ni elimina físicamente el original**. El reingreso como identidad nueva después de purga legítima y la política de limpieza física requieren fase posterior y pruebas específicas.
+Al eliminar un expediente, se elimina el expediente completo y todos los documentos que le pertenecen o dependen exclusivamente de él: factura, guías, vouchers y demás adjuntos. Antes de confirmar, la vista previa debe mostrar el expediente y el detalle/cantidad de archivos que se eliminarán.
 
+No se deben eliminar silenciosamente elementos compartidos o vinculados a otros expedientes. Si existen dependencias que no se pueden resolver con seguridad, la operación completa se bloquea y explica el motivo.
 
-## Aclaración funcional del botón «Eliminar» (26/10/2026)
+### Nueva carga
 
-**Eliminar es definitivo y no ofrece restauración.** La operación quita el documento de la lógica operativa que permite contabilizarlo y borra su archivo físico del almacenamiento. No es una retirada temporal ni una marca `deleted_at` destinada a recuperarse.
+Después de una eliminación completada, subir nuevamente el mismo archivo crea un ingreso nuevo. No se reactiva el ID anterior ni se recuperan su extracción, relaciones, permisos o estado previo. La carga ejecuta de nuevo OCR, validaciones de identidad fiscal, deduplicación y asignación de ámbito.
 
-- **Documento o registro individual:** elimina únicamente el elemento seleccionado, sus datos derivados y sus vínculos exclusivos. La interfaz y API deben dejar de incluirlo en conteos, expedientes, pendientes y contabilidad. Conserva únicamente un evento de auditoría separado con los metadatos mínimos de quién, cuándo, tenant, motivo y resultado; no conserva una copia recuperable del archivo.
-- **Expediente:** elimina el expediente y todos los documentos que contiene o que dependen de él, incluidos factura, guías, vouchers y demás adjuntos. Debe calcular y presentar el alcance completo antes de confirmar. No debe borrar datos compartidos o ajenos al expediente sin comprobar y resolver sus referencias.
-- **Volver a subir:** tras eliminar, una carga posterior se procesa desde cero como un nuevo ingreso. No se restaura el ID, extracción, relaciones ni estado anterior; se vuelven a validar el archivo, la identidad fiscal, los duplicados y los permisos.
-- **Ejecución física:** el servidor valida tenant, ámbito, permiso, motivo, referencias, pagos, voucher, liquidación, GRE, dependencias y reglas de conservación. Registra el evento de auditoría y prepara el borrado mediante una cola durable e idempotente después del commit. El sistema no informa que terminó mientras el archivo siga pendiente de borrar; muestra el resultado pendiente o el error.
-- **Protecciones:** si un documento está sujeto a conservación fiscal o tiene una dependencia que no puede eliminarse legal y consistentemente, bloquea toda la operación, explica el motivo y conserva el expediente/documento. La confirmación del botón por sí sola no sustituye la autorización específica ni la revisión legal requerida.
+## Controles obligatorios
 
-**Estado de implementación:** el candidato #396 todavía aplica retirada lógica (`deleted_at`) y permite restaurar documentos; por tanto, no cumple esta definición. Deben cambiarse conjuntamente API, modelo/migraciones, cascada del expediente, cola de almacenamiento, auditoría, pantallas y pruebas. No habilitar el nuevo comportamiento hasta demostrar que la carga posterior crea una identidad limpia y que las relaciones, tenants y obligaciones fiscales quedan protegidos.
+- Validar tenant, propietario/jerarquía, permiso, motivo y alcance exacto en servidor; nunca confiar solo en la selección mostrada por la interfaz.
+- Inspeccionar referencias a expedientes, relaciones documentales, GRE, voucher, pagos, liquidaciones y obligaciones de conservación antes de borrar.
+- No borrar el archivo físico si otra referencia válida aún lo usa. El almacenamiento está direccionado por tenant y SHA-256, así que la cola debe verificar referencias antes de cada borrado.
+- Confirmar el cambio lógico y el evento de auditoría en transacción; borrar bytes después del commit con cola durable, idempotente y reintentable. La interfaz informa “borrado físico pendiente” hasta confirmar el borrado del archivo y presenta cualquier error sin declarar éxito completo.
+- Comprobantes fiscales protegidos u otra evidencia sujeta a conservación quedan bloqueados mientras no exista autorización y revisión legal específica. El botón general no sustituye esa autorización.
+- No cambiar importes, fórmulas económicas ni registros de pagos como efecto lateral. Si una dependencia financiera impide el borrado, bloquearlo y conservar íntegro el expediente.
+
+## Estado de código comprobado
+
+- En el candidato #396, `DELETE /documentos/{id}` solo asigna `deleted_at`; el archivo permanece.
+- El flujo actual ofrece listado/restauración y al volver a subir el mismo SHA puede restaurar el registro anterior. Ambos comportamientos contradicen este contrato para la acción **Eliminar**.
+- `AlmacenLocal` guarda por tenant/SHA. El mantenimiento cuenta con lógica de limpieza de archivos, pero la ruta de eliminación individual todavía no cumple el contrato completo de dependencias, auditoría y confirmación física.
+- En la rama del PR #396, los cambios P1/P2 de aprobación administrativa y colisión de factura al restaurar aparecen en el código; sus hilos de revisión siguen abiertos. Esa restauración existente no debe confundirse con el nuevo comportamiento definitivo.
+- El SHA actual de #396 requiere CI propio. Los resultados 8/8 publicados en comentarios corresponden a otro SHA y no certifican el HEAD vigente.
+
+## Pruebas de aceptación
+
+1. Eliminación individual de un documento elegible: desaparece del registro operativo y de cálculos; archivo físico borrado; auditoría mínima disponible; sin restauración.
+2. Eliminación individual bloqueada por permiso, tenant, pago, voucher, GRE, referencia, conservación fiscal o dependencia: sin cambios parciales ni borrado de bytes.
+3. Eliminación de expediente: vista previa enumera factura, guías, vouchers y adjuntos; al confirmar, se eliminan todos los elementos exclusivos del expediente.
+4. Fallo del trabajador de almacenamiento: queda pendiente reintentable y la interfaz no afirma que terminó.
+5. Reingreso del mismo archivo tras eliminación completada: nuevo ID y nuevo procesamiento, sin reutilizar datos contables anteriores.
+6. Dos cargas/eliminaciones concurrentes: no crean registros duplicados ni borran un archivo todavía referenciado.
+7. Pruebas de migración, integridad de claves foráneas, permisos por rol/tenant, OCR, pantallas y regresión completa en el SHA final.
+
+**Criterio de cierre:** no habilitar el botón como eliminación definitiva hasta que estos casos pasen en el candidato actualizado y su CI. Mantener el PR en borrador; sin merge ni despliegue por esta tarea.
