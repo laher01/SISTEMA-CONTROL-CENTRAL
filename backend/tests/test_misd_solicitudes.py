@@ -597,7 +597,7 @@ def test_responsable_no_aprueba_receptor_autorizado(
         auth_prueba.contexto = contexto_responsable
         lista = client.get("/api/v1/misd/solicitudes")
         assert lista.status_code == 200, lista.text
-        assert any(fila["id"] == solicitud_id for fila in lista.json())
+        assert not any(fila["id"] == solicitud_id for fila in lista.json())
         decision = client.post(
             f"/api/v1/misd/solicitudes/{solicitud_id}/resolver",
             json={"aprobar": True, "motivo": "Responsable aprueba retiro"},
