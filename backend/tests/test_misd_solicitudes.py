@@ -447,7 +447,7 @@ def test_misd_mantenimiento_rechaza_solicitud_vinculada_sin_borrar(
         json={
             "tipos": ["expedientes"],
             "cuenta_ids": [str(cuenta_origen)],
-            "incluir_sin_trazabilidad": False,
+            "incluir_sin_trazabilidad": True,
             "confirmacion": "ELIMINAR-DATOS-OPERATIVOS",
         },
     )
