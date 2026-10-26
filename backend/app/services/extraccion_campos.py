@@ -250,7 +250,7 @@ def extraer_campos(
                 coincidencia
                 for coincidencia in TOTAL.finditer(texto)
                 if not re.search(
-                    r"\\bSUB[\\s/-]+$",
+                    r"\bSUB[\s/-]+$",
                     texto[max(0, coincidencia.start() - 24) : coincidencia.start()],
                     re.IGNORECASE,
                 )
