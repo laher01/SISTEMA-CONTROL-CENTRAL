@@ -2003,13 +2003,14 @@ def test_restauracion_fact_rechaza_segunda_factura_activa_en_expediente(
 ) -> None:
     from app.models import Documento
 
+    contexto_operativo = auth_prueba.contexto
     original = subir(client, "fact-restaurar-principal.xml", factura())
     auth_prueba.como_admin()
     ruta = f"/api/v1/documentos/{original['id']}"
     assert client.delete(ruta).status_code == 204
 
     # La carga de documentos es una función operativa, no del Administrador.
-    auth_prueba.como_usuario()
+    auth_prueba.contexto = contexto_operativo
     sustituta = subir(client, "fact-sustituta.xml", factura(numero="F001-00000239"))
     auth_prueba.como_admin()
     reemplazo = session.get(Documento, sustituta["id"])
