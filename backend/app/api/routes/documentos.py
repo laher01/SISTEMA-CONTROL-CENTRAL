@@ -1502,10 +1502,27 @@ def restaurar_documento(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "No tiene permiso para restaurar documentos")
     if documento.deleted_at is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "El documento ya se encuentra activo")
-    if documento.expediente_id is not None and (
-        documento.expediente is None or documento.expediente.deleted_at is not None
-    ):
-        raise HTTPException(status.HTTP_409_CONFLICT, "El expediente asociado no está activo")
+    if documento.expediente_id is not None:
+        # Serializar con la ingesta que asigna la factura principal al expediente.
+        expediente_bloqueado = session.scalar(
+            select(Expediente)
+            .where(Expediente.id == documento.expediente_id, Expediente.tenant_id == tenant_id)
+            .with_for_update()
+        )
+        if expediente_bloqueado is None or expediente_bloqueado.deleted_at is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "El expediente asociado no está activo")
+        if documento.tipo_documento == TipoDocumento.FACT:
+            factura_activa = session.scalar(
+                select(Documento.id).where(
+                    Documento.tenant_id == tenant_id,
+                    Documento.expediente_id == documento.expediente_id,
+                    Documento.tipo_documento == TipoDocumento.FACT,
+                    Documento.deleted_at.is_(None),
+                    Documento.id != documento_id,
+                )
+            )
+            if factura_activa is not None:
+                raise HTTPException(status.HTTP_409_CONFLICT, "El expediente ya tiene una factura principal activa")
     original = almacen.ruta_absoluta(documento.ruta_storage)
     if not original.is_file():
         raise HTTPException(
