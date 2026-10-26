@@ -1146,9 +1146,7 @@ def test_recarga_identica_de_retirado_restaura_sin_crear_duplicado(
     def comprobar_reprocesamiento(*args: object, **kwargs: object) -> None:
         reprocesamientos.append(kwargs.get("forzar_cache") is True)
 
-    monkeypatch.setattr(
-        rutas_documentos, "_procesar_y_aplicar", comprobar_reprocesamiento
-    )
+    monkeypatch.setattr(rutas_documentos, "_procesar_y_aplicar", comprobar_reprocesamiento)
     contenido = b"%PDF-1.7 recarga de original retirado"
     original = subir(client, "recarga.pdf", contenido)
     propietario_id = auth_prueba.contexto.usuario_id
