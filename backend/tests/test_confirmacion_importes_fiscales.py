@@ -7,13 +7,15 @@ from app.schemas import ExtraccionConfirmar
 
 
 def test_schema_separa_importes_sin_recalcular() -> None:
-    datos = ExtraccionConfirmar.model_validate({
-        "subtotal": "108872.87",
-        "igv": "19597.13",
-        "descuentos": "0.00",
-        "importe_total": "128470.00",
-        "importe_a_pagar": "128470.00",
-    })
+    datos = ExtraccionConfirmar.model_validate(
+        {
+            "subtotal": "108872.87",
+            "igv": "19597.13",
+            "descuentos": "0.00",
+            "importe_total": "128470.00",
+            "importe_a_pagar": "128470.00",
+        }
+    )
     assert datos.subtotal == Decimal("108872.87")
     assert datos.importe_total == Decimal("128470.00")
     assert datos.importe_a_pagar == Decimal("128470.00")
