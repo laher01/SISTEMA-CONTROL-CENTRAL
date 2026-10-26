@@ -42,9 +42,7 @@ def test_cambio_de_version_ignora_cache_ocr_que_guardaba_subtotal(tmp_path) -> N
         json.dumps(
             {
                 "_cache_version": version_antigua,
-                "extraccion_estructurada": {
-                    "campos": {"importe_total": {"valor": "6101.69"}}
-                },
+                "extraccion_estructurada": {"campos": {"importe_total": {"valor": "6101.69"}}},
             }
         ),
         encoding="utf-8",
@@ -55,11 +53,7 @@ def test_cambio_de_version_ignora_cache_ocr_que_guardaba_subtotal(tmp_path) -> N
     def extraer_total_actualizado() -> dict[str, object]:
         nonlocal llamadas
         llamadas += 1
-        return {
-            "extraccion_estructurada": {
-                "campos": {"importe_total": {"valor": "7200.00"}}
-            }
-        }
+        return {"extraccion_estructurada": {"campos": {"importe_total": {"valor": "7200.00"}}}}
 
     resultado = procesar_con_cache(
         contenido,
