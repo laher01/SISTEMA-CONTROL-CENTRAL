@@ -70,7 +70,7 @@ def test_cambio_de_version_ignora_cache_ocr_que_guardaba_subtotal(tmp_path) -> N
         extraer_total_actualizado,
     )
 
-    assert VERSION_CACHE != version_antigua
+    assert version_antigua != VERSION_CACHE
     assert llamadas == 1
     assert (
         resultado["extraccion_estructurada"]["campos"]["importe_total"]["valor"]
