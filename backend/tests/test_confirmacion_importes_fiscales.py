@@ -1,4 +1,5 @@
 """Contrato de recepción de importes fiscales sin alterar reglas del parser."""
+
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
