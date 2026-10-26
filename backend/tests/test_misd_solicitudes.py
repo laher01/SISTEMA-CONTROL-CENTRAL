@@ -440,10 +440,16 @@ def test_misd_mantenimiento_rechaza_solicitud_vinculada_sin_borrar(
         json={"expediente_id": expediente_id, "motivo": "Solicitud conservada para auditoria"},
     )
     assert creada.status_code == 201, creada.text
+    cuenta_origen = auth_prueba.contexto.cuenta_id
     auth_prueba.como_admin()
     respuesta = client.post(
         "/api/v1/configuracion/mantenimiento/limpiar",
-        json={"tipos": ["expedientes"], "confirmacion": "ELIMINAR-DATOS-OPERATIVOS"},
+        json={
+            "tipos": ["expedientes"],
+            "cuenta_ids": [str(cuenta_origen)],
+            "incluir_sin_trazabilidad": False,
+            "confirmacion": "ELIMINAR-DATOS-OPERATIVOS",
+        },
     )
     assert respuesta.status_code == 409, respuesta.text
     assert session.get(Expediente, expediente_id) is not None
