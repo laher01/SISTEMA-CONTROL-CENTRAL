@@ -215,11 +215,7 @@ def test_escorpio_correlativo_largo_conserva_ceros(numero: str) -> None:
 
 
 def test_total_generico_ignora_subtotal_y_toma_importe_total() -> None:
-    texto = (
-        "Factura electrónica\n"
-        "Sub Total S/ 100.00\n"
-        "Importe Total S/ 118.00\n"
-    )
+    texto = "Factura electrónica\nSub Total S/ 100.00\nImporte Total S/ 118.00\n"
     campos = extraer_campos(texto, "TEXTO_PDF", 1.0)["campos"]
     assert campos["importe_total"]["valor"] == "118.00"
     assert campos["importe_total"]["evidencia"] == "Importe Total S/ 118.00"
