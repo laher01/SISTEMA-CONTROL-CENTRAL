@@ -1163,7 +1163,7 @@ def test_recarga_identica_de_retirado_restaura_sin_crear_duplicado(
     )
     assert recarga.status_code == 201, recarga.text
     assert recarga.json()["id"] == original["id"]
-    assert reprocesamientos == [True]
+    assert reprocesamientos == [False, True]
     assert client.get(ruta).status_code == 200
     duplicado = client.post(
         "/api/v1/documentos",
