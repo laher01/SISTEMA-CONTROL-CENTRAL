@@ -606,9 +606,34 @@ async def subir_documento(
                     status.HTTP_409_CONFLICT,
                     "Documento retirado con otro tipo documental; revise su restauración",
                 ) from exc
-            return restaurar_documento(
+            restaurado = restaurar_documento(
                 session, almacen, settings, hoy, tenant_id, auth, anterior.id
             )
+            # Recargar NO equivale a restaurar: forzar extracción nueva,
+            # invalidando la caché OCR. La restauración mantiene la identidad
+            # y sus vínculos; el procesamiento reconstruye los datos derivados.
+            if _es_procesable(restaurado):
+                try:
+                    _procesar_y_aplicar(
+                        session, settings, almacen, hoy, restaurado, forzar_cache=True
+                    )
+                except DocumentoNoProcesable as error:
+                    registrar_fallo(session, restaurado, str(error))
+                except ComprobanteYaRegistrado as error:
+                    session.rollback()
+                    raise _comprobante_duplicado(session, auth, error.expediente_id) from error
+                session.commit()
+            auditoria.registrar(
+                session,
+                tenant_id,
+                "DOCUMENTO_RECARGADO_REPROCESADO",
+                "documento",
+                restaurado.id,
+                {"sha256": restaurado.sha256, "expediente_id": str(restaurado.expediente_id)
+                 if restaurado.expediente_id else None},
+            )
+            session.commit()
+            return restaurado
         raise _duplicado(session, auth, exc.documento_id) from exc
     except ComprobanteYaRegistrado as exc:
         session.rollback()
