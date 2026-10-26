@@ -419,6 +419,63 @@ def test_mantenimiento_no_purga_original_fiscal(
     assert ruta.exists()
 
 
+def test_mantenimiento_rechaza_relaciones_documentales_activas(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba, settings
+) -> None:
+    from app.models import Documento, RelacionDocumento
+
+    auth_prueba.como_admin()
+    tenant_id = auth_prueba.contexto.tenant_id
+    cuenta_id = auth_prueba.contexto.cuenta_id
+    origen = Documento(
+        tenant_id=tenant_id,
+        creado_por_cuenta_id=cuenta_id,
+        sha256="1" * 64,
+        nombre_original="origen.pdf",
+        mime_type="application/pdf",
+        tamano_bytes=1,
+        ruta_storage="pruebas/origen-ref.pdf",
+        estado="PENDIENTE",
+    )
+    destino = Documento(
+        tenant_id=tenant_id,
+        creado_por_cuenta_id=cuenta_id,
+        sha256="2" * 64,
+        nombre_original="destino.pdf",
+        mime_type="application/pdf",
+        tamano_bytes=1,
+        ruta_storage="pruebas/destino-ref.pdf",
+        estado="PENDIENTE",
+    )
+    session.add_all([origen, destino])
+    session.flush()
+    session.add(
+        RelacionDocumento(
+            tenant_id=tenant_id,
+            origen_id=origen.id,
+            destino_id=destino.id,
+            tipo="RESPALDO",
+            evidencia="Relación de ensayo",
+        )
+    )
+    session.commit()
+    respuesta = client.post(
+        "/api/v1/configuracion/mantenimiento/limpiar",
+        json={
+            "cuenta_ids": [str(cuenta_id)],
+            "incluir_sin_trazabilidad": False,
+            "tipos": ["documentos"],
+            "fecha_desde": None,
+            "fecha_hasta": None,
+            "confirmacion": "ELIMINAR-DATOS-OPERATIVOS",
+        },
+    )
+    assert respuesta.status_code == 409, respuesta.text
+    session.expire_all()
+    assert session.get(Documento, origen.id) is not None
+    assert session.get(Documento, destino.id) is not None
+
+
 def test_mantenimiento_purga_sintetico_y_permite_reingreso(
     client: TestClient, session: Session, auth_prueba: AuthPrueba, settings
 ) -> None:
