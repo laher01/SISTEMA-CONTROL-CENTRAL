@@ -55,6 +55,8 @@ def _es_aprobador(
 ) -> bool:
     if auth.rol == "ADMINISTRADOR":
         return True
+    if expediente.receptor.autorizada:
+        return False
     if auth.rol == "RESPONSABLE" and auth.miembro_id is not None:
         return bool(
             session.scalar(
@@ -95,6 +97,8 @@ def _aprobacion_sigue_vigente(
         return False
     if miembro.rol == "ADMINISTRADOR":
         return True
+    if expediente.receptor.autorizada:
+        return False
     usuario = session.get(Miembro, expediente.usuario_id) if expediente.usuario_id else None
     if usuario is None or usuario.tenant_id != expediente.tenant_id:
         return False
