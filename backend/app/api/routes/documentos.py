@@ -1510,9 +1510,7 @@ def restaurar_documento(
             .with_for_update()
         )
         if expediente_bloqueado is None or expediente_bloqueado.deleted_at is not None:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT, "El expediente asociado no está activo"
-            )
+            raise HTTPException(status.HTTP_409_CONFLICT, "El expediente asociado no está activo")
         if documento.tipo_documento == TipoDocumento.FACT:
             factura_activa = session.scalar(
                 select(Documento.id).where(
