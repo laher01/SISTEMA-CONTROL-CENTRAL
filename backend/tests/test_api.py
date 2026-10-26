@@ -1996,3 +1996,27 @@ def test_restauracion_integral_concurrente_solo_una_operacion_activa(
         estados = [futuro.result(timeout=30) for futuro in futuros]
     assert sorted(estados) == [200, 409]
     assert client.get(f"/api/v1/expedientes/{exp_id}").status_code == 200
+
+
+def test_restauracion_fact_rechaza_segunda_factura_activa_en_expediente(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    from app.models import Documento
+
+    original = subir(client, "fact-restaurar-principal.xml", factura())
+    auth_prueba.como_admin()
+    ruta = f"/api/v1/documentos/{original['id']}"
+    assert client.delete(ruta).status_code == 204
+
+    # Una factura distinta y activa ocupa después el mismo expediente.
+    sustituta = subir(client, "fact-sustituta.xml", factura(numero="F001-00000239"))
+    reemplazo = session.get(Documento, sustituta["id"])
+    assert reemplazo is not None
+    reemplazo.expediente_id = original["expediente_id"]
+    session.commit()
+
+    rechazada = client.post(ruta + "/restaurar")
+    assert rechazada.status_code == 409, rechazada.text
+    session.expire_all()
+    assert session.get(Documento, original["id"]).deleted_at is not None
+    assert session.get(Documento, sustituta["id"]).deleted_at is None
