@@ -454,3 +454,78 @@ def test_misd_mantenimiento_rechaza_solicitud_vinculada_sin_borrar(
     assert respuesta.status_code == 409, respuesta.text
     assert session.get(Expediente, expediente_id) is not None
     assert session.get(SolicitudRetiroMISD, creada.json()["id"]) is not None
+
+
+def test_responsable_resuelve_solicitud_de_usuario_sin_acceso_a_otro_tenant(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    from dataclasses import replace
+    from uuid import uuid4
+
+    from app.models import CuentaAcceso, Miembro
+
+    solicitante = auth_prueba.contexto
+    usuario = session.get(Miembro, solicitante.usuario_id)
+    assert usuario is not None
+    responsable = Miembro(
+        tenant_id=solicitante.tenant_id,
+        codigo="RESP-MISD-TEST",
+        nombre="Responsable independiente",
+        rol="RESPONSABLE",
+        activo=True,
+    )
+    session.add(responsable)
+    session.flush()
+    usuario.responsable_id = responsable.id
+    cuenta = CuentaAcceso(
+        tenant_id=solicitante.tenant_id,
+        login="RESP-MISD-TEST",
+        password_hash="hash-pruebas",
+        miembro_id=responsable.id,
+        activo=True,
+        cambio_clave_obligatorio=False,
+    )
+    session.add(cuenta)
+    session.commit()
+
+    subida = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("misd-responsable-aislado.xml", factura())},
+    )
+    assert subida.status_code == 201, subida.text
+    creada = client.post(
+        "/api/v1/misd/solicitudes",
+        json={"expediente_id": subida.json()["expediente_id"], "motivo": "Correccion revisada"},
+    )
+    assert creada.status_code == 201, creada.text
+    solicitud_id = creada.json()["id"]
+
+    contexto_responsable = replace(
+        solicitante,
+        cuenta_id=cuenta.id,
+        miembro_id=responsable.id,
+        rol="RESPONSABLE",
+        usuario_id=None,
+        gestor_id=None,
+    )
+    try:
+        auth_prueba.contexto = replace(contexto_responsable, tenant_id=uuid4())
+        ajeno = client.post(
+            f"/api/v1/misd/solicitudes/{solicitud_id}/resolver",
+            json={"aprobar": True, "motivo": "Decision en tenant ajeno"},
+        )
+        assert ajeno.status_code == 404, ajeno.text
+        auth_prueba.contexto = contexto_responsable
+        lista = client.get("/api/v1/misd/solicitudes")
+        assert lista.status_code == 200, lista.text
+        assert any(fila["id"] == solicitud_id for fila in lista.json())
+        decision = client.post(
+            f"/api/v1/misd/solicitudes/{solicitud_id}/resolver",
+            json={"aprobar": True, "motivo": "Responsable aprueba retiro"},
+        )
+        assert decision.status_code == 200, decision.text
+        assert decision.json()["estado"] == "APROBADA"
+    finally:
+        auth_prueba.contexto = solicitante
+    session.expire_all()
+    assert session.get(SolicitudRetiroMISD, solicitud_id).estado == "APROBADA"
