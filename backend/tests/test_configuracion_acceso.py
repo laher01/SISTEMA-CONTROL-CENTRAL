@@ -380,6 +380,162 @@ def test_limpieza_rechaza_confirmacion_invalida_sin_borrar_datos(
     assert session.get(Documento, documento.id) is not None
 
 
+def test_mantenimiento_no_purga_original_fiscal(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba, settings
+) -> None:
+    from app.models import Documento
+
+    auth_prueba.como_admin()
+    ruta = settings.storage_dir / "pruebas" / "fiscal-protegido.pdf"
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.write_bytes(b"original fiscal de prueba")
+    documento = Documento(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        creado_por_cuenta_id=auth_prueba.contexto.cuenta_id,
+        sha256="f" * 64,
+        nombre_original="fiscal-protegido.pdf",
+        mime_type="application/pdf",
+        tamano_bytes=24,
+        ruta_storage="pruebas/fiscal-protegido.pdf",
+        tipo_documento="FACT",
+        estado="PENDIENTE",
+    )
+    session.add(documento)
+    session.commit()
+    respuesta = client.post(
+        "/api/v1/configuracion/mantenimiento/limpiar",
+        json={
+            "cuenta_ids": [str(auth_prueba.contexto.cuenta_id)],
+            "incluir_sin_trazabilidad": False,
+            "tipos": ["documentos"],
+            "fecha_desde": None,
+            "fecha_hasta": None,
+            "confirmacion": "ELIMINAR-DATOS-OPERATIVOS",
+        },
+    )
+    assert respuesta.status_code == 409, respuesta.text
+    session.expire_all()
+    assert session.get(Documento, documento.id) is not None
+    assert ruta.exists()
+
+
+def test_mantenimiento_rechaza_relaciones_documentales_activas(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba, settings
+) -> None:
+    from app.models import Documento, RelacionDocumento
+
+    auth_prueba.como_admin()
+    tenant_id = auth_prueba.contexto.tenant_id
+    cuenta_id = auth_prueba.contexto.cuenta_id
+    origen = Documento(
+        tenant_id=tenant_id,
+        creado_por_cuenta_id=cuenta_id,
+        sha256="1" * 64,
+        nombre_original="origen.pdf",
+        mime_type="application/pdf",
+        tamano_bytes=1,
+        ruta_storage="pruebas/origen-ref.pdf",
+        estado="PENDIENTE",
+    )
+    destino = Documento(
+        tenant_id=tenant_id,
+        creado_por_cuenta_id=cuenta_id,
+        sha256="2" * 64,
+        nombre_original="destino.pdf",
+        mime_type="application/pdf",
+        tamano_bytes=1,
+        ruta_storage="pruebas/destino-ref.pdf",
+        estado="PENDIENTE",
+    )
+    session.add_all([origen, destino])
+    session.flush()
+    session.add(
+        RelacionDocumento(
+            tenant_id=tenant_id,
+            origen_id=origen.id,
+            destino_id=destino.id,
+            tipo="RESPALDO",
+            evidencia="Relación de ensayo",
+        )
+    )
+    session.commit()
+    respuesta = client.post(
+        "/api/v1/configuracion/mantenimiento/limpiar",
+        json={
+            "cuenta_ids": [str(cuenta_id)],
+            "incluir_sin_trazabilidad": False,
+            "tipos": ["documentos"],
+            "fecha_desde": None,
+            "fecha_hasta": None,
+            "confirmacion": "ELIMINAR-DATOS-OPERATIVOS",
+        },
+    )
+    assert respuesta.status_code == 409, respuesta.text
+    session.expire_all()
+    assert session.get(Documento, origen.id) is not None
+    assert session.get(Documento, destino.id) is not None
+
+
+def test_mantenimiento_purga_sintetico_y_permite_reingreso(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba, settings
+) -> None:
+    import hashlib
+
+    from app.models import Documento
+    from app.storage import AlmacenLocal
+
+    contenido = b"%PDF-1.7 original sintetico sin referencias"
+    tenant_id = auth_prueba.contexto.tenant_id
+    cuenta_id = auth_prueba.contexto.cuenta_id
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+    sha256 = hashlib.sha256(contenido).hexdigest()
+    almacen = AlmacenLocal(settings.storage_dir)
+    ruta_storage = almacen.guardar(tenant_id, sha256, contenido)
+    original = Documento(
+        tenant_id=tenant_id,
+        creado_por_cuenta_id=cuenta_id,
+        usuario_id=usuario_id,
+        sha256=sha256,
+        nombre_original="sintetico.pdf",
+        mime_type="application/pdf",
+        tamano_bytes=len(contenido),
+        ruta_storage=ruta_storage,
+        estado="PENDIENTE",
+    )
+    session.add(original)
+    session.commit()
+    original_id = original.id
+
+    auth_prueba.como_admin()
+    respuesta = client.post(
+        "/api/v1/configuracion/mantenimiento/limpiar",
+        json={
+            "cuenta_ids": [str(cuenta_id)],
+            "incluir_sin_trazabilidad": False,
+            "tipos": ["documentos"],
+            "fecha_desde": None,
+            "fecha_hasta": None,
+            "confirmacion": "ELIMINAR-DATOS-OPERATIVOS",
+        },
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["eliminados"]["documentos"] == 1
+    assert respuesta.json()["archivos_eliminados"] == 1
+    session.expire_all()
+    assert session.get(Documento, original_id) is None
+    assert not almacen.ruta_absoluta(ruta_storage).exists()
+
+    auth_prueba.como_usuario(usuario_id)
+    recarga = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("sintetico.pdf", contenido, "application/pdf")},
+    )
+    assert recarga.status_code == 201, recarga.text
+    assert recarga.json()["id"] != str(original_id)
+    assert almacen.ruta_absoluta(ruta_storage).is_file()
+
+
 def test_limpieza_fallo_de_archivo_deja_pendiente_recuperacion(
     client: TestClient, session: Session, auth_prueba: AuthPrueba, settings, monkeypatch
 ) -> None:
@@ -472,3 +628,37 @@ def test_reintento_archivos_no_procesa_otro_tenant(
     assert pendiente.estado == "PENDIENTE"
     assert pendiente.intentos == 0
     assert ruta.exists()
+
+
+def test_reintento_protege_ruta_referenciada(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba, settings
+) -> None:
+    from app.models import Documento, EliminacionArchivoPendiente
+
+    auth_prueba.como_admin()
+    ruta_storage = "pruebas/original-compartido.pdf"
+    ruta = settings.storage_dir / ruta_storage
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.write_bytes(b"contenido original de prueba")
+    documento = Documento(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        creado_por_cuenta_id=auth_prueba.contexto.cuenta_id,
+        sha256="f" * 64,
+        nombre_original="original-compartido.pdf",
+        mime_type="application/pdf",
+        tamano_bytes=27,
+        ruta_storage=ruta_storage,
+        estado="PENDIENTE",
+    )
+    pendiente = EliminacionArchivoPendiente(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        ruta_storage=ruta_storage,
+    )
+    session.add_all([documento, pendiente])
+    session.commit()
+    respuesta = client.post("/api/v1/configuracion/mantenimiento/reintentar-archivos")
+    assert respuesta.status_code == 200
+    assert respuesta.json() == {"procesados": 1, "completados": 0}
+    session.refresh(pendiente)
+    assert pendiente.estado == "BLOQUEADO"
+    assert ruta.is_file()
