@@ -241,7 +241,22 @@ def extraer_campos(
 
     es_cotizacion = bool(re.search(r"COTIZACI[OÓ]N", texto, re.I))
     total_cotizacion = _total_cotizacion(texto) if es_cotizacion else None
-    total_match = TOTAL.search(texto) if not es_cotizacion else None
+    total_match = None
+    if not es_cotizacion:
+        # "SUB TOTAL" es una base imponible, nunca el importe final.
+        # Recorremos todas las etiquetas para no quedarnos con esa primera cifra.
+        total_match = next(
+            (
+                coincidencia
+                for coincidencia in TOTAL.finditer(texto)
+                if not re.search(
+                    r"\\bSUB[\\s/-]+$",
+                    texto[max(0, coincidencia.start() - 24) : coincidencia.start()],
+                    re.IGNORECASE,
+                )
+            ),
+            None,
+        )
     if total_cotizacion is not None:
         importe_comercial, evidencia = total_cotizacion
         campos["importe_total"] = CampoExtraido(
