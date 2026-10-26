@@ -264,7 +264,7 @@ def extraer_campos(
         ).a_dict(fuente)
     if total_match and (importe := _normalizar_importe(total_match.group(1))) is not None:
         campos["importe_total"] = CampoExtraido(
-            format(importe, ".2f"), min(0.96, 0.94 * factor), total_match.group(0)
+            format(importe, ".2f"), min(0.96, 0.94 * factor), total_match.group(0).strip()
         ).a_dict(fuente)
 
     operacion = OPERACION.search(texto)
