@@ -1,0 +1,77 @@
+name: oracle-vps159-ssh-preflight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oracle-vps159-ssh-preflight
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    environment: oracle-production
+    timeout-minutes: 8
+    steps:
+      - name: Validar destino y credenciales sin exponer secretos
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test "$VPS_HOST" = "159.112.181.198" || {
+            echo "::error::Destino bloqueado: este preflight solo admite 159.112.181.198"
+            exit 1
+          }
+          test "$VPS_USER" = "ubuntu" || {
+            echo "::error::Usuario bloqueado: este preflight solo admite ubuntu"
+            exit 1
+          }
+          for name in VPS_SSH_PRIVATE_KEY VPS_SSH_KNOWN_HOSTS; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Falta el secreto $name en oracle-production"
+              exit 1
+            fi
+          done
+
+      - name: Configurar SSH con verificación estricta de host
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Comprobar acceso remoto (solo lectura)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_ed25519 -p 22 \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
+            -o IdentitiesOnly=yes \
+            -o ConnectTimeout=15 \
+            "$VPS_USER@$VPS_HOST" '
+              set -eu
+              test "$(id -un)" = "ubuntu"
+              . /etc/os-release
+              test "$ID" = "ubuntu"
+              printf "SSH_AUTHENTICATED=1\n"
+              printf "REMOTE_USER=%s\n" "$(id -un)"
+              printf "HOSTNAME=%s\n" "$(hostname)"
+              printf "UBUNTU_VERSION=%s\n" "$VERSION_ID"
+              printf "KERNEL=%s\n" "$(uname -r)"
+            '
