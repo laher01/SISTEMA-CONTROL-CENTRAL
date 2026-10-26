@@ -2008,8 +2008,10 @@ def test_restauracion_fact_rechaza_segunda_factura_activa_en_expediente(
     ruta = f"/api/v1/documentos/{original['id']}"
     assert client.delete(ruta).status_code == 204
 
-    # Una factura distinta y activa ocupa después el mismo expediente.
+    # La carga de documentos es una función operativa, no del Administrador.
+    auth_prueba.como_usuario()
     sustituta = subir(client, "fact-sustituta.xml", factura(numero="F001-00000239"))
+    auth_prueba.como_admin()
     reemplazo = session.get(Documento, sustituta["id"])
     assert reemplazo is not None
     reemplazo.expediente_id = original["expediente_id"]
