@@ -31,12 +31,15 @@ def test_confirmacion_manual_sin_ocr_y_colision_fiscal(client: TestClient) -> No
     assert creado.json()["creado"] is True
     expediente_id = creado.json()["expediente"]["id"]
     assert expediente_id
+    # El total confirmado debe persistirse como total del expediente, no como subtotal.
+    assert str(creado.json()["expediente"]["importe_total"]) == "28800.00"
 
     # Repetición exacta desde el mismo documento: idempotencia.
     otra_vez = client.post(f"/api/v1/documentos/{documento_id}/crear-expediente", json=solicitud)
     assert otra_vez.status_code == 200, otra_vez.text
     assert otra_vez.json()["creado"] is False
     assert otra_vez.json()["expediente"]["id"] == expediente_id
+    assert str(otra_vez.json()["expediente"]["importe_total"]) == "28800.00"
 
     # Segundo archivo distinto con identidad fiscal repetida: no duplicar.
     segundo = client.post(
