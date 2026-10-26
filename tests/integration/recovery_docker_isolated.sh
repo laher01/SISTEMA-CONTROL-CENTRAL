@@ -19,10 +19,10 @@ docker exec "$db" pg_isready -U sample -d sample
 docker exec "$db" psql -v ON_ERROR_STOP=1 -U sample -d sample -c 'CREATE TABLE synthetic_tenant_documents (tenant_id text NOT NULL, document_id text PRIMARY KEY, payload text NOT NULL);'
 docker exec "$db" psql -v ON_ERROR_STOP=1 -U sample -d sample -c "INSERT INTO synthetic_tenant_documents VALUES ('alpha','doc-a','alpha-only'),('beta','doc-b','beta-only');"
 docker run --rm -v "$docs:/documents" alpine:3.20 sh -c "mkdir -p /documents/alpha /documents/beta; printf 'alpha-file' > /documents/alpha/a.pdf; printf 'beta-file' > /documents/beta/b.pdf"
-docker run --rm -v "$docs:/documents:ro" -v "$scratch:/backup" alpine:3.20 sh -c 'cd /documents && tar cf /backup/documents.tar . && sha256sum /backup/documents.tar > /backup/documents.sha256'
+docker run --rm -v "$docs:/documents:ro" -v "$scratch:/backup" alpine:3.20 sh -c 'cd /documents && tar cf /backup/documents.tar . && cd /backup && sha256sum documents.tar > documents.sha256'
 docker exec "$db" pg_dump -U sample -d sample --format=custom > "$scratch/postgresql.dump"
 test -s "$scratch/postgresql.dump"
-sha256sum "$scratch/postgresql.dump" > "$scratch/database.sha256"
+(cd "$scratch"; sha256sum postgresql.dump > database.sha256)
 (cd "$scratch"; sha256sum -c documents.sha256 database.sha256)
 # Simulate failure by removing synthetic rows/files, then restore to another isolated database/volume.
 docker exec "$db" psql -v ON_ERROR_STOP=1 -U sample -d sample -c 'TRUNCATE synthetic_tenant_documents;'
