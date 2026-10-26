@@ -67,7 +67,7 @@ class RecoveryFixtureTests(unittest.TestCase):
         self.assertIn("vars.ORACLE_AUTO_DEPLOY_ENABLED == 'true'", workflow)
         self.assertIn('test "$RECOVERY_READY" = "true"', workflow)
         self.assertIn("oracle-autodeploy", workflow)
-        self.assertIn("needs: [verify-backend, verify-frontend, verify-recovery-isolated]", workflow)
+        self.assertIn("needs: [verify-backend, verify-frontend, verify-recovery-isolated, verify-recovery-docker]", workflow)
 
 
 if __name__ == "__main__":
