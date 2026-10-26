@@ -33,3 +33,16 @@
 - Alembic `upgrade`, `downgrade` solo con datos sintéticos, `compare_metadata` y CI backend/frontend/OCR/roles.
 
 **No aplicar una solución superficial eliminando un registro o quitando el UNIQUE.** Resolver con una migración y lógica de negocio revisadas conjuntamente con propietarios MISD/OCR y conservación fiscal. El cambio acotado en `backend/app/api/routes/documentos.py` devuelve el mismo ID al restaurar un registro retirado con el mismo SHA; **no crea nueva identidad fiscal ni elimina físicamente el original**. El reingreso como identidad nueva después de purga legítima y la política de limpieza física requieren fase posterior y pruebas específicas.
+
+
+## Aclaración funcional del botón «Eliminar» (26/10/2026)
+
+El usuario define que **Eliminar** debe retirar el archivo físico del almacenamiento y quitar su registro lógico del sistema. Marcar únicamente `deleted_at` no satisface esa acción: es una retirada restaurable y debe tratarse como operación distinta.
+
+- La confirmación de **Eliminar** debe explicar que la acción es definitiva. Al completarse, ya no debe existir el documento ni sus datos derivados en las vistas o tablas operativas; solo se conserva un evento de auditoría separado con metadatos mínimos de quién, cuándo, motivo, tenant, identificador/hash y resultado, sin conservar el contenido recuperable.
+- La eliminación física se procesa de forma idempotente mediante la cola durable después del commit. La interfaz informa “eliminación física pendiente” hasta que el trabajador confirme que el archivo fue borrado; no muestra éxito completo antes de eso.
+- Antes de confirmar, el servidor verifica tenant y ámbito, permiso elevado, motivo, relaciones/documentos dependientes, pagos, voucher, liquidación, GRE, referencias compartidas, retención fiscal y estado de almacenamiento. Si queda una dependencia o el documento está protegido, bloquea la acción con un motivo claro y conserva tanto el archivo como el registro.
+- La solicitud del usuario no habilita por sí sola la purga de comprobantes fiscales protegidos ni elimina obligaciones de conservación. Estos requieren autorización y revisión legal específicas; no se purgan desde el botón general.
+- La restauración existente aplica solo a documentos previamente retirados de forma restaurable. Un elemento eliminado definitivamente no se puede restaurar desde la papelera; para volver a ingresarlo se procesa como una nueva carga y se validan de nuevo su identidad fiscal y duplicados.
+
+**Estado de implementación:** el candidato #396 todavía tiene DELETE lógico y la interfaz habla de “retirar”; esta aclaración es contrato de producto y no evidencia de que la eliminación física esté implementada. La implementación requiere actualizar conjuntamente API, cola de almacenamiento, relaciones/auditoría, interfaz y pruebas de elegibilidad, bloqueos, fallos parciales, reintentos, tenant y concurrencia. Mantener el flujo actual protegido hasta que esa implementación pase CI y revisión.
