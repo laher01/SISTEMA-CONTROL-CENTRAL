@@ -448,7 +448,7 @@ function resumenImportesConfirmados(documento: Documento): string | undefined {
     ["Descuentos", "descuentos"],
     ["A pagar", "importe_a_pagar"],
   ].flatMap(([etiqueta, clave]) => {
-    const valor = leerValorCampo(campos, clave);
+    const valor = leerValorCampo(campos, clave!);
     return valor ? [`${etiqueta}: ${formatearMonto(moneda, valor)}`] : [];
   });
   return [`Total confirmado: ${formatearMonto(moneda, total)}`, ...detalle].join(" · ");
