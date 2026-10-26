@@ -1524,7 +1524,10 @@ def restaurar_documento(
                 )
             )
             if factura_activa is not None:
-                raise HTTPException(status.HTTP_409_CONFLICT, "El expediente ya tiene una factura principal activa")
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    "El expediente ya tiene una factura principal activa",
+                )
     original = almacen.ruta_absoluta(documento.ruta_storage)
     if not original.is_file():
         raise HTTPException(
