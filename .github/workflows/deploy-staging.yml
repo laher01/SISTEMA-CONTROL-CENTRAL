@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/deploy-staging.yml'
+      - 'tests/integration/recovery_docker_isolated.sh'
   workflow_dispatch:
   push:
     branches: [main]
