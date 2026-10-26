@@ -260,6 +260,87 @@ button:disabled {
   margin: 0;
 }
 
+.pesca { max-width: 1500px; margin: 0 auto; }
+.pesca-cabecera, .pesca-titulo-detalle, .pesca-vehiculo > header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.pesca-cabecera { margin-bottom: 1.25rem; }
+.pesca-cabecera h2 { margin-bottom: .35rem; }
+.pesca-cabecera p { color: #65758b; margin: .2rem 0; }
+.sobrelinea { color: #54708c; font-size: .75rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; margin: 0 0 .25rem; }
+.pesca-columnas { display: grid; grid-template-columns: minmax(280px, 350px) minmax(0, 1fr); gap: 1rem; align-items: start; }
+.pesca-panel, .pesca-detalle, .pesca-vacio { background: white; border: 1px solid var(--borde); border-radius: 10px; padding: 1rem; }
+.pesca-panel h3 { font-size: 1rem; margin: .2rem 0 .75rem; }
+.pesca-panel h3:not(:first-child) { margin-top: 1.5rem; }
+.pesca-form { display: grid; gap: .7rem; }
+.pesca-form label { display: grid; gap: .3rem; color: #526273; font-size: .82rem; font-weight: 600; }
+.pesca-form input, .pesca-form select { width: 100%; min-height: 38px; }
+.pesca-form input[type="file"] { min-height: auto; }
+.pesca-op { display: flex; align-items: center; justify-content: space-between; text-align: left; gap: .6rem; width: 100%; background: white; border: 1px solid transparent; border-bottom-color: var(--borde); color: #27384a; padding: .75rem .45rem; }
+.pesca-op:hover, .pesca-op.seleccionada { background: #f1f6fb; border-color: #cbdced; color: #173f63; }
+.pesca-op span:first-child { display: grid; gap: .2rem; }
+.pesca-op small, .pesca-vehiculo small { display: block; color: #738194; font-size: .78rem; font-weight: 400; margin-top: .15rem; }
+.pesca-estado { display: inline-flex; align-items: center; border-radius: 999px; background: #fff4d6; color: #886400; padding: .25rem .6rem; font-size: .72rem; white-space: nowrap; }
+.pesca-estado.grande { font-size: .78rem; }
+.pesca-estado.cerrado { background: #e6f6e9; color: #26763a; }
+.pesca-titulo-detalle { padding-bottom: .75rem; border-bottom: 1px solid var(--borde); }
+.pesca-titulo-detalle h3 { margin: 0; }
+.pesca-metricas { display: grid; grid-template-columns: repeat(3, 1fr); gap: .65rem; margin: .9rem 0 1rem; }
+.pesca-metricas div { display: grid; gap: .2rem; border: 1px solid var(--borde); border-radius: 8px; background: #f8fafc; padding: .7rem; }
+.pesca-metricas small { color: #69788a; }
+.pesca-metricas strong { font-size: 1.1rem; }
+.pesca-subpaneles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.pesca-form-horizontal { border: 1px solid var(--borde); border-radius: 8px; padding: .75rem; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
+.pesca-form-horizontal h4 { grid-column: 1/-1; margin: 0; }
+.pesca-form-horizontal button { grid-column: 1/-1; }
+.pesca-detalle h4 { margin: 1.1rem 0 .55rem; }
+.pesca-chips { list-style: none; display: flex; flex-wrap: wrap; gap: .5rem; padding: 0; }
+.pesca-chips li { background: #eef4f8; border-radius: 6px; padding: .5rem .7rem; }
+.pesca-vehiculos { display: grid; gap: .75rem; }
+.pesca-vehiculo { border: 1px solid var(--borde); border-radius: 8px; padding: .8rem; }
+.pesca-vehiculo > header { padding-bottom: .6rem; border-bottom: 1px solid var(--borde); }
+.pesca-vehiculo-meta { display: flex; gap: 1rem; color: #728093; font-size: .78rem; margin: .6rem 0; }
+.pesca-carga-form { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; padding: .7rem 0; border-bottom: 1px solid var(--borde); }
+.pesca-carga-form strong { grid-column: 1/-1; font-size: .82rem; }
+.pesca-carga-form button { min-height: 37px; }
+.pesca-peso-form { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; margin-top: .65rem; }
+.pesca-peso-form button { min-height: 38px; }
+.pesca-checkbox { display: flex !important; align-items: center; gap: .5rem !important; }
+.pesca-checkbox input { width: auto !important; min-height: auto !important; }
+.pesca-diferencia { border-radius: 6px; padding: .5rem .7rem; font-size: .82rem; margin: .65rem 0; }
+.pesca-diferencia.verde { background: #e8f7eb; color: #216b34; }
+.pesca-diferencia.naranja { background: #fff1e6; color: #99500c; }
+.pesca-diferencia.rojo { background: #ffebeb; color: #a92a2a; }
+.pesca-pendiente-doc { color: #9b5b00; background: #fff6dc; padding: .45rem .6rem; border-radius: 5px; font-size: .8rem; }
+.pesca-doc-upload { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; padding: .8rem; border: 1px solid var(--borde); border-radius: 8px; margin-top: 1rem; }
+.pesca-doc-upload h4 { grid-column: 1/-1; margin: 0; }
+.pesca-documentacion { margin-top: .9rem; padding: .75rem; border-radius: 7px; background: #f8fafc; }
+.pesca-documentacion p { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; margin: .45rem 0 0; font-size: .82rem; }
+.pesca-documentacion small { color: #98600a; }
+.texto-verde { color: #247a3c; }
+.pesca-archivos { color: #506174; margin-top: .75rem; font-size: .85rem; }
+.pesca-archivos li { margin: .3rem 0; }
+.pesca-cerrar-op { margin-top: .8rem; }
+.pesca-secundario { background: #e9f1f8; color: #214f77; border-color: #d2e0ec; }
+.pesca-fechas { margin: .6rem 0; color: #526273; font-size: .82rem; }
+.pesca-fechas-form { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: .65rem 0; }
+.pesca-fechas-form button { min-height: 36px; }
+.pesca-aviso { display: flex; justify-content: space-between; align-items: center; gap: 1rem; color: #234f75; background: #eaf4fb; border: 1px solid #ccdfed; border-radius: 6px; padding: .65rem .8rem; }
+.pesca-aviso button { padding: .2rem .5rem; font-size: .75rem; }
+.pesca-error { color: var(--rojo); }
+.pesca-vacio { color: #738194; padding: 2rem; text-align: center; }
+.muted { color: #738194; }
+
+@media (max-width: 900px) {
+  .pesca-columnas { grid-template-columns: 1fr; }
+  .pesca-subpaneles { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  .contenido { padding: 1rem; }
+  .menu { width: 170px; }
+  .pesca-metricas { grid-template-columns: 1fr; }
+  .pesca-form-horizontal, .pesca-peso-form, .pesca-doc-upload, .pesca-carga-form, .pesca-fechas-form { grid-template-columns: 1fr; }
+  .pesca-form-horizontal h4, .pesca-form-horizontal button, .pesca-doc-upload h4, .pesca-carga-form strong { grid-column: auto; }
+}
+
 .campos-extraidos {
   display: grid;
   gap: 0.35rem;

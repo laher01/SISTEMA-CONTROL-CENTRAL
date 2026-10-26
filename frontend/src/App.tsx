@@ -6,6 +6,7 @@ import Empresas from "./paginas/Empresas";
 import ExpedienteDetalle from "./paginas/ExpedienteDetalle";
 import Expedientes from "./paginas/Expedientes";
 import Pendientes from "./paginas/Pendientes";
+import Pesca from "./paginas/Pesca";
 import Subir from "./paginas/Subir";
 
 const MENU = [
@@ -15,6 +16,7 @@ const MENU = [
   { a: "/pendientes", texto: "Pendientes" },
   { a: "/alertas", texto: "Alertas" },
   { a: "/empresas", texto: "Empresas" },
+  { a: "/pesca", texto: "Operaciones de pesca" },
 ];
 
 export default function App() {
@@ -39,6 +41,7 @@ export default function App() {
           <Route path="/pendientes" element={<Pendientes />} />
           <Route path="/alertas" element={<Alertas />} />
           <Route path="/empresas" element={<Empresas />} />
+          <Route path="/pesca" element={<Pesca />} />
           <Route path="*" element={<p>Página no encontrada.</p>} />
         </Routes>
       </main>

@@ -82,6 +82,10 @@ export function useDatos<T>(ruta: string) {
   const [estado, setEstado] = useState<Estado<T>>({ ruta: "", version: -1 });
 
   useEffect(() => {
+    if (!ruta) {
+      setEstado({ ruta, version });
+      return;
+    }
     let vigente = true;
     obtener<T>(ruta).then(
       (datos) => vigente && setEstado({ ruta, version, datos }),
@@ -98,7 +102,7 @@ export function useDatos<T>(ruta: string) {
   return {
     datos: actual ? estado.datos : undefined,
     error: actual ? estado.error : undefined,
-    cargando: !actual || estado.version !== version,
+    cargando: Boolean(ruta) && (!actual || estado.version !== version),
     recargar: () => setVersion((v) => v + 1),
   };
 }

@@ -14,7 +14,8 @@ Arquitectura aislada para convivir con los servicios existentes de la VPS:
    salió del soporte estándar; debe planificarse la actualización a Ubuntu 22.04 o 24.04.
 2. Clonar el repositorio público en `/home/ubuntu/fact-central`.
 3. Copiar `deploy/.env.production.example` a `deploy/.env.production` y generar una contraseña
-   PostgreSQL larga y aleatoria.
+   PostgreSQL larga y aleatoria. Confirmar `FC_TENANT_RUC`: se usa para distinguir al receptor de
+   los proveedores durante la extracción automática de comprobantes de compra.
 4. En Cloudflare Zero Trust crear un Tunnel y configurar el hostname
    `factcentral.nexomarnegocioseirl.online` con servicio `http://frontend:80`.
 5. Proteger el hostname con Cloudflare Access antes de habilitarlo, porque el MVP todavía no tiene

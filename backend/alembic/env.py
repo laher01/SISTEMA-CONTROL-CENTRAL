@@ -5,6 +5,7 @@ from sqlalchemy import create_engine
 from alembic import context
 from app.core.config import get_settings
 from app.models import Base
+from app.pesca import models as modelos_pesca  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

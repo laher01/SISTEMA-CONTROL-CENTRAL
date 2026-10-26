@@ -5,7 +5,9 @@ import { ErrorApi, enviarFormulario } from "../api";
 import { ETIQUETA_TIPO_DOCUMENTO } from "../formato";
 import type { Documento } from "../tipos";
 
-const CONCURRENCIA = 3;
+// La VPS de pruebas tiene 1 GB de RAM. El procesamiento secuencial evita que
+// varios OCR compitan por memoria; el backend también aplica este límite.
+const CONCURRENCIA = 1;
 
 type Resultado =
   | { estado: "en_cola" | "subiendo" }
@@ -92,8 +94,8 @@ export default function Subir() {
           Arrastra aquí XML, PDF o imágenes, o <strong>haz clic para elegir</strong>.
         </p>
         <p className="tenue">
-          Los XML de factura y guía SUNAT se asocian solos a su expediente. Los demás quedan en
-          Pendientes para vincularlos.
+          El sistema extrae y relaciona automáticamente XML, PDF e imágenes. Solo los casos
+          incompletos o ambiguos quedan en Pendientes para revisión.
         </p>
         <input
           ref={entrada}
@@ -144,7 +146,8 @@ function FilaCarga({ fila }: { fila: Fila }) {
       <td className={`resultado-${resultado.estado}`}>
         {resultado.estado === "en_cola" && "En cola"}
         {resultado.estado === "subiendo" && "Subiendo…"}
-        {resultado.estado === "ok" && "Subido"}
+        {resultado.estado === "ok" &&
+          (documento?.expediente_id ? "Procesado y relacionado" : "Subido · requiere revisión")}
         {(resultado.estado === "duplicado" || resultado.estado === "error") && resultado.mensaje}
       </td>
       <td>{documento?.tipo_documento ? ETIQUETA_TIPO_DOCUMENTO[documento.tipo_documento] : ""}</td>
@@ -152,7 +155,7 @@ function FilaCarga({ fila }: { fila: Fila }) {
         {documento?.expediente_id ? (
           <Link to={`/expedientes/${documento.expediente_id}`}>Ver expediente</Link>
         ) : documento ? (
-          <Link to="/pendientes">Vincular</Link>
+          <Link to="/pendientes">Revisar</Link>
         ) : null}
       </td>
     </tr>
