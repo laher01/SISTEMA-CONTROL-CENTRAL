@@ -5,6 +5,8 @@ on:
     paths:
       - '.github/workflows/deploy-staging.yml'
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -61,11 +63,36 @@ jobs:
       - run: npm test
       - run: npm run build
 
-  deploy:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-    needs: [verify-backend, verify-frontend]
+  verify-recovery-isolated:
     runs-on: ubuntu-latest
-    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Simular falla y verificar restauracion documental sintetica
+        run: python -m unittest discover -s tests -p 'test_recovery_isolated.py' -v
+
+  verify-recovery-docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar sintaxis del ensayo aislado
+        run: bash -n tests/integration/recovery_docker_isolated.sh
+      - name: Restaurar PostgreSQL, volumen documental y contenedor de prueba
+        env:
+          CI: "true"
+        run: bash tests/integration/recovery_docker_isolated.sh
+
+  deploy:
+    # La automatización permanece DESACTIVADA hasta habilitar explícitamente la variable.
+    # La fusión de este PR no activa un despliegue: valor ausente equivale a false.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && vars.ORACLE_AUTO_DEPLOY_ENABLED == 'true'))
+    needs: [verify-backend, verify-frontend, verify-recovery-isolated, verify-recovery-docker]
+    runs-on: ubuntu-latest
+    # Separar credenciales/aprobaciones: manual usa staging; automatico usa entorno exclusivo.
+    environment: ${{ github.event_name == 'push' && 'oracle-autodeploy' || 'staging' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -113,6 +140,12 @@ jobs:
         run: |
           case "${{ github.event_name }}" in
             workflow_dispatch) ;;
+            push)
+              test "${{ vars.ORACLE_AUTO_DEPLOY_ENABLED }}" = "true" || {
+                echo "::error::Despliegue automatico no habilitado"
+                exit 1
+              }
+              ;;
             *) echo "::error::Evento no autorizado"; exit 1 ;;
           esac
           test "${{ github.ref_name }}" = "main" || {
@@ -120,6 +153,17 @@ jobs:
             exit 1
           }
 
+      - name: Verificar precondiciones de recuperacion para despliegue automatico
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          RECOVERY_READY: ${{ vars.ORACLE_RECOVERY_VERIFIED }}
+        run: |
+          set -euo pipefail
+          test "$RECOVERY_READY" = "true" || {
+            echo "::error::Recuperacion no certificada en oracle-autodeploy: bloquear actualizacion"
+            exit 1
+          }
       - name: Verificar backup y restauración aislada antes del despliegue
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
