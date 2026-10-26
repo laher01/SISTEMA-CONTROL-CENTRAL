@@ -629,8 +629,12 @@ async def subir_documento(
                 "DOCUMENTO_RECARGADO_REPROCESADO",
                 "documento",
                 restaurado.id,
-                {"sha256": restaurado.sha256, "expediente_id": str(restaurado.expediente_id)
-                 if restaurado.expediente_id else None},
+                {
+                    "sha256": restaurado.sha256,
+                    "expediente_id": (
+                        str(restaurado.expediente_id) if restaurado.expediente_id else None
+                    ),
+                },
             )
             session.commit()
             return restaurado
