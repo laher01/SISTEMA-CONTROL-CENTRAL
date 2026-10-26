@@ -73,11 +73,23 @@ jobs:
       - name: Simular falla y verificar restauracion documental sintetica
         run: python -m unittest discover -s tests -p 'test_recovery_isolated.py' -v
 
+  verify-recovery-docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar sintaxis del ensayo aislado
+        run: bash -n tests/integration/recovery_docker_isolated.sh
+      - name: Restaurar PostgreSQL, volumen documental y contenedor de prueba
+        env:
+          CI: "true"
+        run: bash tests/integration/recovery_docker_isolated.sh
+
   deploy:
     # La automatización permanece DESACTIVADA hasta habilitar explícitamente la variable.
     # La fusión de este PR no activa un despliegue: valor ausente equivale a false.
     if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && vars.ORACLE_AUTO_DEPLOY_ENABLED == 'true'))
-    needs: [verify-backend, verify-frontend, verify-recovery-isolated]
+    needs: [verify-backend, verify-frontend, verify-recovery-isolated, verify-recovery-docker]
     runs-on: ubuntu-latest
     # Separar credenciales/aprobaciones: manual usa staging; automatico usa entorno exclusivo.
     environment: ${{ github.event_name == 'push' && 'oracle-autodeploy' || 'staging' }}
