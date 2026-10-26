@@ -407,9 +407,11 @@ def test_misd_permisos_configurados_deshabilitados_para_usuario_y_gerente(
 
     tenant_id = auth_prueba.contexto.tenant_id
     for rol in ("USUARIO", "GERENTE"):
-        configurado = session.query(PermisoConfigurado).filter_by(
-            tenant_id=tenant_id, rol=rol, permiso=PERMISO_ELIMINAR_REGISTROS
-        ).one_or_none()
+        configurado = (
+            session.query(PermisoConfigurado)
+            .filter_by(tenant_id=tenant_id, rol=rol, permiso=PERMISO_ELIMINAR_REGISTROS)
+            .one_or_none()
+        )
         if configurado is None:
             configurado = PermisoConfigurado(
                 tenant_id=tenant_id,
