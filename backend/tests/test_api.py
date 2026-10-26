@@ -1137,7 +1137,18 @@ def test_recarga_identica_de_retirado_restaura_sin_crear_duplicado(
     client: TestClient,
     auth_prueba: AuthPrueba,
     permiso_retiro_usuario: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from app.api.routes import documentos as rutas_documentos
+
+    reprocesamientos: list[bool] = []
+
+    def comprobar_reprocesamiento(*args: object, **kwargs: object) -> None:
+        reprocesamientos.append(kwargs.get("forzar_cache") is True)
+
+    monkeypatch.setattr(
+        rutas_documentos, "_procesar_y_aplicar", comprobar_reprocesamiento
+    )
     contenido = b"%PDF-1.7 recarga de original retirado"
     original = subir(client, "recarga.pdf", contenido)
     propietario_id = auth_prueba.contexto.usuario_id
@@ -1154,6 +1165,7 @@ def test_recarga_identica_de_retirado_restaura_sin_crear_duplicado(
     )
     assert recarga.status_code == 201, recarga.text
     assert recarga.json()["id"] == original["id"]
+    assert reprocesamientos == [True]
     assert client.get(ruta).status_code == 200
     duplicado = client.post(
         "/api/v1/documentos",
