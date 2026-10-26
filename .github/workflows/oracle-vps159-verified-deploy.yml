@@ -168,7 +168,7 @@ jobs:
             -o IdentitiesOnly=yes \
             -o ConnectTimeout=15 \
             "$VPS_USER@$VPS_HOST" \
-            'set -eu; cd -- /home/ubuntu/fact-central; script=$(mktemp deploy/.preflight-restore-XXXXXX.sh); trap '''rm -f "$script"''' EXIT; cat > "$script"; bash "$script"' \
+            "set -eu; cd -- /home/ubuntu/fact-central; script=\$(mktemp deploy/.preflight-restore-XXXXXX.sh); trap 'rm -f \"\$script\"' EXIT; cat > \"\$script\"; bash \"\$script\"" \\
             < deploy/preflight-backup-restore-items.sh
 
       - name: Desplegar exactamente el commit validado
@@ -185,5 +185,5 @@ jobs:
             -o IdentitiesOnly=yes \
             -o ConnectTimeout=15 \
             "$VPS_USER@$VPS_HOST" \
-            'set -eu; script=$(mktemp); trap '''rm -f "$script"''' EXIT; cat > "$script"; cd -- /home/ubuntu/fact-central; EXPECTED_COMMIT="$EXPECTED_COMMIT" bash "$script"; test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"; echo "Commit desplegado verificado"' \
+            "set -eu; script=\$(mktemp); trap 'rm -f \"\$script\"' EXIT; cat > \"\$script\"; cd -- /home/ubuntu/fact-central; EXPECTED_COMMIT='$EXPECTED_COMMIT' bash \"\$script\"; test \"\$(git rev-parse HEAD)\" = '$EXPECTED_COMMIT'; echo 'Commit desplegado verificado'" \\
             < deploy/bootstrap-main.sh
