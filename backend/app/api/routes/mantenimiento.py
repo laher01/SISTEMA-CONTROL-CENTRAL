@@ -20,6 +20,8 @@ from app.models import (
     Miembro,
     PagoERP,
     PlanLiquidacion,
+    ReferenciaGRE,
+    RelacionDocumento,
     SolicitudRetiroMISD,
 )
 from app.schemas import (
@@ -355,6 +357,40 @@ def limpiar(
                 "su purga física requiere el procedimiento MISD protegido",
             )
         ids = [item.id for item in documentos]
+        if ids and (
+            session.scalar(
+                select(PagoERP.id)
+                .where(
+                    PagoERP.tenant_id == tenant_id,
+                    PagoERP.voucher_documento_id.in_(ids),
+                )
+                .limit(1)
+            )
+            is not None
+            or session.scalar(
+                select(ReferenciaGRE.id)
+                .where(
+                    ReferenciaGRE.tenant_id == tenant_id,
+                    ReferenciaGRE.documento_id.in_(ids),
+                )
+                .limit(1)
+            )
+            is not None
+            or session.scalar(
+                select(RelacionDocumento.id)
+                .where(
+                    RelacionDocumento.tenant_id == tenant_id,
+                    (RelacionDocumento.origen_id.in_(ids))
+                    | (RelacionDocumento.destino_id.in_(ids)),
+                )
+                .limit(1)
+            )
+            is not None
+        ):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Existen pagos, GRE o relaciones documentales; purga bloqueada",
+            )
         rutas_archivo = [item.ruta_storage for item in documentos]
         if ids:
             session.execute(
