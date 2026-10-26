@@ -15,8 +15,9 @@ docker run -d --name "$db" -e POSTGRES_PASSWORD=synthetic -e POSTGRES_USER=sampl
 # down. Wait for initdb to finish and for the final server to answer real SQL.
 wait_sql() {
   local database="$1"
+  local result
   for i in $(seq 1 60); do
-    if docker exec "$db" psql -X -v ON_ERROR_STOP=1 -At -U sample -d "$database" -c 'SELECT 1' 2>/dev/null | grep -qx 1; then
+    if result="$(docker exec "$db" psql -X -v ON_ERROR_STOP=1 -At -U sample -d "$database" -c 'SELECT 1' 2>/dev/null)" && [[ "$result" == "1" ]]; then
       return 0
     fi
     sleep 1
@@ -25,11 +26,20 @@ wait_sql() {
   docker logs "$db" >&2 || true
   return 1
 }
-for i in $(seq 1 60); do
-  if docker logs "$db" 2>&1 | grep -q 'PostgreSQL init process complete; ready for start up'; then break; fi
-  sleep 1
-done
-docker logs "$db" 2>&1 | grep -q 'PostgreSQL init process complete; ready for start up'
+wait_initdb() {
+  local logs
+  for i in $(seq 1 60); do
+    logs="$(docker logs "$db" 2>&1 || true)"
+    if [[ "$logs" == *'PostgreSQL init process complete; ready for start up'* ]]; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "PostgreSQL initialization did not finish" >&2
+  docker logs "$db" >&2 || true
+  return 1
+}
+wait_initdb
 wait_sql sample
 docker exec "$db" psql -v ON_ERROR_STOP=1 -U sample -d sample -c 'CREATE TABLE synthetic_tenant_documents (tenant_id text NOT NULL, document_id text PRIMARY KEY, payload text NOT NULL);'
 docker exec "$db" psql -v ON_ERROR_STOP=1 -U sample -d sample -c "INSERT INTO synthetic_tenant_documents VALUES ('alpha','doc-a','alpha-only'),('beta','doc-b','beta-only');"
