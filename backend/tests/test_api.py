@@ -1172,6 +1172,50 @@ def test_recarga_identica_de_retirado_restaura_sin_crear_duplicado(
     assert duplicado.status_code == 409
 
 
+def test_recarga_reconstruye_resultado_documental_persistido(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    permiso_retiro_usuario: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.routes import documentos as rutas_documentos
+
+    contador = 0
+
+    def extraccion_simulada(*args: object) -> ResultadoProcesamiento:
+        nonlocal contador
+        contador += 1
+        return ResultadoProcesamiento(
+            texto=f"DOCUMENTO GENERICO REPROCESADO {contador}",
+            metodo="TEXTO_PDF",
+            motor="simulado",
+            paginas=1,
+            confianza=1.0,
+            sugerencia=sugerir_tipo(f"DOCUMENTO GENERICO REPROCESADO {contador}"),
+        )
+
+    monkeypatch.setattr(rutas_documentos, "procesar", extraccion_simulada)
+    contenido = pdf_vacio()
+    original = subir(client, "reprocesamiento-persistente.pdf", contenido)
+    inicial = original["datos_extraidos"]["procesamiento_documental"]
+    assert inicial["texto"] == "DOCUMENTO GENERICO REPROCESADO 1"
+    propietario_id = auth_prueba.contexto.usuario_id
+    assert propietario_id is not None
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/documentos/{original['id']}").status_code == 204
+    auth_prueba.como_usuario(propietario_id)
+    respuesta = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("reprocesamiento-persistente.pdf", contenido, "application/pdf")},
+    )
+    assert respuesta.status_code == 201, respuesta.text
+    assert respuesta.json()["id"] == original["id"]
+    nuevo = respuesta.json()["datos_extraidos"]["procesamiento_documental"]
+    assert nuevo["texto"] == "DOCUMENTO GENERICO REPROCESADO 2"
+    assert contador == 2
+    assert client.get(f"/api/v1/documentos/{original['id']}").status_code == 200
+
+
 def test_restaurar_sin_documento_retirado_devuelve_404(client: TestClient) -> None:
     respuesta = client.post("/api/v1/documentos/00000000-0000-0000-0000-000000000001/restaurar")
     assert respuesta.status_code == 404
