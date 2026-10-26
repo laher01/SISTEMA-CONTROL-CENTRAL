@@ -9,14 +9,14 @@ from app.services.extraccion_campos import extraer_campos
 
 def test_san_jose_bizlinks_usa_importe_total_y_no_subtotal() -> None:
     texto = (
-        "ESTACION DE SERVICIOS SAN JOSE SAC\\n"
-        "R.U.C. 20175642341\\n"
-        "FACTURA ELECTRONICA F091-00007229\\n"
-        "Cliente: EMPRESA DE PRUEBA E.I.R.L. RUC: 20999999991\\n"
-        "Fecha Emision: 02/10/2026\\n"
-        "Sub Total 6101.69S/\\n"
-        "Importe Total 7,200.00S/\\n"
-        "Powered by Bizlinks\\n"
+        "ESTACION DE SERVICIOS SAN JOSE SAC\n"
+        "R.U.C. 20175642341\n"
+        "FACTURA ELECTRONICA F091-00007229\n"
+        "Cliente: EMPRESA DE PRUEBA E.I.R.L. RUC: 20999999991\n"
+        "Fecha Emision: 02/10/2026\n"
+        "Sub Total 6101.69S/\n"
+        "Importe Total 7,200.00S/\n"
+        "Powered by Bizlinks\n"
     )
     resultado = extraer_campos(texto, "TEXTO_PDF", 0.99)
 
