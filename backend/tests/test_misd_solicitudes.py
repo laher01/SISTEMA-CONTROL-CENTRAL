@@ -397,3 +397,52 @@ def test_misd_tenant_ajeno_no_puede_ejecutar_retiro(
         auth_prueba.contexto = original
     assert session.get(Expediente, expediente_id).deleted_at is None
     assert session.get(SolicitudRetiroMISD, solicitud_id).estado == "PENDIENTE"
+
+
+def test_misd_permisos_configurados_deshabilitados_para_usuario_y_gerente(
+    session: Session, auth_prueba: AuthPrueba
+) -> None:
+    from app.models import PermisoConfigurado
+    from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
+
+    tenant_id = auth_prueba.contexto.tenant_id
+    for rol in ("USUARIO", "GERENTE"):
+        configurado = session.query(PermisoConfigurado).filter_by(
+            tenant_id=tenant_id, rol=rol, permiso=PERMISO_ELIMINAR_REGISTROS
+        ).one_or_none()
+        if configurado is None:
+            configurado = PermisoConfigurado(
+                tenant_id=tenant_id,
+                rol=rol,
+                permiso=PERMISO_ELIMINAR_REGISTROS,
+                habilitado=False,
+            )
+            session.add(configurado)
+        configurado.habilitado = False
+    session.commit()
+    for rol in ("USUARIO", "GERENTE"):
+        assert not permiso_habilitado(session, tenant_id, rol, PERMISO_ELIMINAR_REGISTROS)
+
+
+def test_misd_mantenimiento_rechaza_solicitud_vinculada_sin_borrar(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    subida = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("misd-mantenimiento-fk.xml", factura())},
+    )
+    assert subida.status_code == 201, subida.text
+    expediente_id = subida.json()["expediente_id"]
+    creada = client.post(
+        "/api/v1/misd/solicitudes",
+        json={"expediente_id": expediente_id, "motivo": "Solicitud conservada para auditoria"},
+    )
+    assert creada.status_code == 201, creada.text
+    auth_prueba.como_admin()
+    respuesta = client.post(
+        "/api/v1/configuracion/mantenimiento/limpiar",
+        json={"tipos": ["expedientes"], "confirmacion": "ELIMINAR-DATOS-OPERATIVOS"},
+    )
+    assert respuesta.status_code == 409, respuesta.text
+    assert session.get(Expediente, expediente_id) is not None
+    assert session.get(SolicitudRetiroMISD, creada.json()["id"]) is not None
