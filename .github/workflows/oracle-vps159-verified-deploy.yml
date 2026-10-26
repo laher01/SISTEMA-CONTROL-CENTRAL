@@ -1,0 +1,189 @@
+name: oracle-vps159-verified-deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oracle-vps159-deploy
+  cancel-in-progress: false
+
+jobs:
+  verify-backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: fact
+          POSTGRES_PASSWORD: fact
+          POSTGRES_DB: fact_central
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U fact"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      FC_TEST_DATABASE_URL: postgresql+psycopg://fact:fact@localhost:5432/fact_central
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy app
+      - run: uv run pytest
+
+  verify-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  verify-recovery-isolated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Simular falla y verificar restauración documental sintética
+        run: python -m unittest discover -s tests -p 'test_recovery_isolated.py' -v
+
+  verify-recovery-docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar sintaxis del ensayo aislado
+        run: bash -n tests/integration/recovery_docker_isolated.sh
+      - name: Restaurar PostgreSQL, volumen documental y contenedor de prueba
+        env:
+          CI: "true"
+        run: bash tests/integration/recovery_docker_isolated.sh
+
+  deploy:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      vars.ORACLE159_AUTO_DEPLOY_ENABLED == 'true' &&
+      vars.ORACLE159_RECOVERY_VERIFIED == 'true' &&
+      vars.ORACLE159_ACCESS_PROTECTED == 'true'
+    needs:
+      - verify-backend
+      - verify-frontend
+      - verify-recovery-isolated
+      - verify-recovery-docker
+    runs-on: ubuntu-latest
+    environment: oracle-production
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar destino y secretos
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+          EXPECTED_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$VPS_HOST" = "159.112.181.198" || {
+            echo "::error::Destino bloqueado: solo se admite 159.112.181.198"
+            exit 1
+          }
+          test "$VPS_USER" = "ubuntu" || {
+            echo "::error::Usuario bloqueado: solo se admite ubuntu"
+            exit 1
+          }
+          case "$EXPECTED_COMMIT" in
+            *[!0-9a-f]*|"") echo "::error::SHA de commit inválido"; exit 1 ;;
+          esac
+          for name in VPS_SSH_PRIVATE_KEY VPS_SSH_KNOWN_HOSTS; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Falta el secreto $name en oracle-production"
+              exit 1
+            fi
+          done
+          echo "Commit de main autorizado por CI: $EXPECTED_COMMIT"
+
+      - name: Preparar SSH con identidad verificada
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Inspección previa de la VPS (solo lectura)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          EXPECTED_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_ed25519 -p 22 \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o "UserKnownHostsFile=$HOME/.ssh/known_hosts" \
+            -o IdentitiesOnly=yes \
+            -o ConnectTimeout=15 \
+            "$VPS_USER@$VPS_HOST" \
+            "cd -- /home/ubuntu/fact-central && EXPECTED_COMMIT='$EXPECTED_COMMIT' bash -s" \
+            < deploy/preflight-secretaria.sh
+
+      - name: Crear respaldo fresco y probar restauración aislada
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_ed25519 -p 22 \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o "UserKnownHostsFile=$HOME/.ssh/known_hosts" \
+            -o IdentitiesOnly=yes \
+            -o ConnectTimeout=15 \
+            "$VPS_USER@$VPS_HOST" \
+            'set -eu; cd -- /home/ubuntu/fact-central; script=$(mktemp deploy/.preflight-restore-XXXXXX.sh); trap '''rm -f "$script"''' EXIT; cat > "$script"; bash "$script"' \
+            < deploy/preflight-backup-restore-items.sh
+
+      - name: Desplegar exactamente el commit validado
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          EXPECTED_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_ed25519 -p 22 \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o "UserKnownHostsFile=$HOME/.ssh/known_hosts" \
+            -o IdentitiesOnly=yes \
+            -o ConnectTimeout=15 \
+            "$VPS_USER@$VPS_HOST" \
+            'set -eu; script=$(mktemp); trap '''rm -f "$script"''' EXIT; cat > "$script"; cd -- /home/ubuntu/fact-central; EXPECTED_COMMIT="$EXPECTED_COMMIT" bash "$script"; test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"; echo "Commit desplegado verificado"' \
+            < deploy/bootstrap-main.sh
