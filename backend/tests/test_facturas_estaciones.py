@@ -29,6 +29,7 @@ def test_escorpio_serie_ruc_cliente_y_total(
         f"FACTURA ELECTRÓNICA F109 Nº {numero}\n"
         f"SEÑOR(ES) : {receptor}     RUC : {ruc_cliente}\n"
         "2026-10-02 2026-10-02 SOL\n"
+        "SUB TOTAL S/ 100.00\n"
         f"IMPORTE TOTAL S/ {total}\nwww.facturacion.jadal.pe"
     )
     datos = extraer_campos(texto, "TEXTO_PDF", 1.0)
@@ -210,3 +211,15 @@ def test_escorpio_correlativo_largo_conserva_ceros(numero: str) -> None:
     datos = extraer_factura_estacion(texto)
     assert datos["serie"][0] == "F109"
     assert datos["correlativo"][0] == numero
+
+
+
+def test_total_generico_ignora_subtotal_y_toma_importe_total() -> None:
+    texto = (
+        "Factura electrónica\n"
+        "Sub Total S/ 100.00\n"
+        "Importe Total S/ 118.00\n"
+    )
+    campos = extraer_campos(texto, "TEXTO_PDF", 1.0)["campos"]
+    assert campos["importe_total"]["valor"] == "118.00"
+    assert campos["importe_total"]["evidencia"] == "Importe Total S/ 118.00"
