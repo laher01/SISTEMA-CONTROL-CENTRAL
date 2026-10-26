@@ -1,6 +1,8 @@
 name: oracle-vps159-verified-deploy
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
 
