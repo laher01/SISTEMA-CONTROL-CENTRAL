@@ -210,8 +210,17 @@ class Gestor(ConId, ConTenant, ConCreacion, Base):
 class Expediente(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "expedientes"
     __table_args__ = (
-        UniqueConstraint(
-            "tenant_id", "receptor_id", "tipo_comprobante", "serie", "correlativo", "emisor_id"
+        Index(
+            "uq_expedientes_identidad_activa",
+            "tenant_id",
+            "receptor_id",
+            "tipo_comprobante",
+            "serie",
+            "correlativo",
+            "emisor_id",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+            sqlite_where=text("deleted_at IS NULL"),
         ),
         Index(
             "uq_expedientes_rhe_identidad_activa",
@@ -261,8 +270,22 @@ class Expediente(ConId, ConTenant, ConCreacion, Base):
 class Documento(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "documentos"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "sha256"),
-        UniqueConstraint("tenant_id", "huella_comercial"),
+        Index(
+            "uq_documentos_tenant_sha256_activo",
+            "tenant_id",
+            "sha256",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+            sqlite_where=text("deleted_at IS NULL"),
+        ),
+        Index(
+            "uq_documentos_tenant_huella_comercial_activa",
+            "tenant_id",
+            "huella_comercial",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL AND huella_comercial IS NOT NULL"),
+            sqlite_where=text("deleted_at IS NULL AND huella_comercial IS NOT NULL"),
+        ),
     )
 
     expediente_id: Mapped[uuid.UUID | None] = mapped_column(
