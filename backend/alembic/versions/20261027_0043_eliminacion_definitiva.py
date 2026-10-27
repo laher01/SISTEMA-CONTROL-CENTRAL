@@ -24,9 +24,7 @@ def upgrade() -> None:
             )
         with op.batch_alter_table("documentos") as batch:
             batch.drop_constraint("uq_documentos_tenant_id_sha256", type_="unique")
-            batch.drop_constraint(
-                "uq_documentos_tenant_id_huella_comercial", type_="unique"
-            )
+            batch.drop_constraint("uq_documentos_tenant_id_huella_comercial", type_="unique")
         with op.batch_alter_table("expedientes") as batch:
             batch.drop_constraint(
                 op.f(
@@ -40,12 +38,8 @@ def upgrade() -> None:
             "solicitudes_retiro_misd",
             type_="foreignkey",
         )
-        op.drop_constraint(
-            "uq_documentos_tenant_id_sha256", "documentos", type_="unique"
-        )
-        op.drop_constraint(
-            "uq_documentos_tenant_id_huella_comercial", "documentos", type_="unique"
-        )
+        op.drop_constraint("uq_documentos_tenant_id_sha256", "documentos", type_="unique")
+        op.drop_constraint("uq_documentos_tenant_id_huella_comercial", "documentos", type_="unique")
         op.drop_constraint(
             op.f(
                 "uq_expedientes_tenant_id_receptor_id_tipo_comprobante_serie_correlativo_emisor_id"
