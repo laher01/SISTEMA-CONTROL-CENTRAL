@@ -523,15 +523,26 @@ async def subir_documento(
                     ubl.receptor.ruc,
                 )
                 if expediente_existente is not None:
-                    _validar_ambito_expediente(auth, expediente_existente, session)
-                    if expediente_id is not None and expediente_id != expediente_existente.id:
-                        raise HTTPException(
-                            status.HTTP_409_CONFLICT,
-                            "La factura ya está vinculada a otro expediente",
+                    factura_activa_id = session.scalar(
+                        select(Documento.id)
+                        .where(
+                            Documento.tenant_id == tenant_id,
+                            Documento.expediente_id == expediente_existente.id,
+                            Documento.tipo_documento == TipoDocumento.FACT,
+                            Documento.deleted_at.is_(None),
                         )
-                    expediente_id = expediente_existente.id
-                    usuario_id = expediente_existente.usuario_id
-                    gestor_id = expediente_existente.gestor_id
+                        .limit(1)
+                    )
+                    if factura_activa_id is None:
+                        _validar_ambito_expediente(auth, expediente_existente, session)
+                        if expediente_id is not None and expediente_id != expediente_existente.id:
+                            raise HTTPException(
+                                status.HTTP_409_CONFLICT,
+                                "La factura ya está vinculada a otro expediente",
+                            )
+                        expediente_id = expediente_existente.id
+                        usuario_id = expediente_existente.usuario_id
+                        gestor_id = expediente_existente.gestor_id
             revision = revisar_asignaciones_emisor(
                 session, tenant_id, ubl.emisor.ruc, usuario_id, gestor_id
             )
