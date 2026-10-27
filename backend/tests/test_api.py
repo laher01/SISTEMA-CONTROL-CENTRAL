@@ -635,6 +635,37 @@ def test_reingreso_de_factura_eliminada_crea_documento_nuevo_en_expediente_activ
     assert nuevo["expediente_id"] == original["expediente_id"]
 
 
+def test_reingreso_de_factura_no_reutiliza_expediente_de_otro_usuario(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    session: Session,
+) -> None:
+    from app.models import Miembro
+
+    contenido = factura(numero="F001-00009987")
+    original = subir(client, "factura-propietario.xml", contenido)
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/documentos/{original['id']}").status_code == 200
+
+    otro_usuario = Miembro(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="OTROUSR",
+        nombre="Otro usuario",
+        rol="USUARIO",
+        activo=True,
+    )
+    session.add(otro_usuario)
+    session.commit()
+
+    auth_prueba.como_usuario(otro_usuario.id, codigo="OTROUSR")
+    respuesta = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("factura-propietario.xml", contenido)},
+    )
+    assert respuesta.status_code == 404
+    assert "expediente_id" not in respuesta.text
+
+
 def test_eliminacion_concurrente_no_duplica_auditoria_ni_falla_parcial(
     client: TestClient,
     auth_prueba: AuthPrueba,
