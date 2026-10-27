@@ -27,7 +27,7 @@ def upgrade() -> None:
             batch.drop_constraint("uq_documentos_tenant_id_huella_comercial", type_="unique")
         with op.batch_alter_table("expedientes") as batch:
             batch.drop_constraint(
-                "uq_expedientes_tenant_id_receptor_id_tipo_comprobante_serie_correlativo_emisor_id",
+                op.f("uq_expedientes_tenant_id_receptor_id_tipo_comprobante_serie_correlativo_emisor_id"),
                 type_="unique",
             )
     else:
@@ -39,7 +39,7 @@ def upgrade() -> None:
         op.drop_constraint("uq_documentos_tenant_id_sha256", "documentos", type_="unique")
         op.drop_constraint("uq_documentos_tenant_id_huella_comercial", "documentos", type_="unique")
         op.drop_constraint(
-            "uq_expedientes_tenant_id_receptor_id_tipo_comprobante_serie_correlativo_emisor_id",
+            op.f("uq_expedientes_tenant_id_receptor_id_tipo_comprobante_serie_correlativo_emisor_id"),
             "expedientes",
             type_="unique",
         )
@@ -116,7 +116,7 @@ def downgrade() -> None:
             )
         with op.batch_alter_table("expedientes") as batch:
             batch.create_unique_constraint(
-                "uq_expedientes_tenant_id_receptor_id_tipo_comprobante_serie_correlativo_emisor_id",
+                op.f("uq_expedientes_tenant_id_receptor_id_tipo_comprobante_serie_correlativo_emisor_id"),
                 [
                     "tenant_id",
                     "receptor_id",
@@ -143,7 +143,7 @@ def downgrade() -> None:
             ["tenant_id", "huella_comercial"],
         )
         op.create_unique_constraint(
-            "uq_expedientes_tenant_id_receptor_id_tipo_comprobante_serie_correlativo_emisor_id",
+            op.f("uq_expedientes_tenant_id_receptor_id_tipo_comprobante_serie_correlativo_emisor_id"),
             "expedientes",
             [
                 "tenant_id",
