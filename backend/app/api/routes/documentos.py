@@ -524,10 +524,7 @@ async def subir_documento(
                 )
                 if expediente_existente is not None:
                     _validar_ambito_expediente(auth, expediente_existente, session)
-                    if (
-                        expediente_id is not None
-                        and expediente_id != expediente_existente.id
-                    ):
+                    if expediente_id is not None and expediente_id != expediente_existente.id:
                         raise HTTPException(
                             status.HTTP_409_CONFLICT,
                             "La factura ya está vinculada a otro expediente",
