@@ -64,6 +64,7 @@ def test_crea_nuevo_expediente_fiscal_si_el_anterior_esta_retirado_y_conserva_al
 ) -> None:
     reloj.hoy = date(2026, 10, 27)
     tenant_id = auth_prueba.contexto.tenant_id
+
     def crear() -> Expediente:
         return crear_expediente(
             session,
@@ -94,7 +95,7 @@ def test_crea_nuevo_expediente_fiscal_si_el_anterior_esta_retirado_y_conserva_al
     anterior.deleted_at = ahora()
     session.commit()
 
-    nuevo = crear_expediente(session, settings, reloj.hoy, **datos)
+    nuevo = crear()
     session.commit()
 
     assert nuevo.id != anterior.id
