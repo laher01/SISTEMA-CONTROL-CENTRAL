@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.enums import Moneda, TipoComprobante
-from app.models import Alerta, Documento, ahora
+from app.models import Alerta, Documento, Expediente, ahora
 from app.services.expedientes import crear_expediente
 from app.services.ingesta import ArchivoSubido, DocumentoDuplicado, ingerir_documento
 from app.storage import AlmacenLocal
@@ -43,8 +43,10 @@ def test_reingresa_sha_de_documento_retirado_y_bloquea_el_activo(
 
     assert nuevo.id != anterior.id
     assert nuevo.sha256 == anterior.sha256
-    assert session.get(Documento, anterior.id).deleted_at is not None
-    assert session.get(Documento, nuevo.id).deleted_at is None
+    anterior_guardado = session.get(Documento, anterior.id)
+    nuevo_guardado = session.get(Documento, nuevo.id)
+    assert anterior_guardado is not None and anterior_guardado.deleted_at is not None
+    assert nuevo_guardado is not None and nuevo_guardado.deleted_at is None
 
     with pytest.raises(DocumentoDuplicado):
         ingerir_documento(
@@ -62,23 +64,27 @@ def test_crea_nuevo_expediente_fiscal_si_el_anterior_esta_retirado_y_conserva_al
 ) -> None:
     reloj.hoy = date(2026, 10, 27)
     tenant_id = auth_prueba.contexto.tenant_id
-    datos = {
-        "tenant_id": tenant_id,
-        "receptor": ("20175642341", "ESTACION DE SERVICIOS SAN JOSE SAC"),
-        "emisor": ("20400000001", "PROVEEDOR DE PRUEBA"),
-        "tipo_comprobante": TipoComprobante.FACT,
-        "serie": "F091",
-        "correlativo": "7220",
-        "fecha_emision": date(2026, 9, 30),
-        "moneda": Moneda.PEN,
-        "importe_total": Decimal("31200.00"),
-        "requiere_guia": True,
-        "gestor_id": None,
-        "usuario_id": auth_prueba.contexto.usuario_id,
-        "creado_por_cuenta_id": auth_prueba.contexto.cuenta_id,
-    }
+    def crear() -> Expediente:
+        return crear_expediente(
+            session,
+            settings,
+            reloj.hoy,
+            tenant_id=tenant_id,
+            receptor=("20175642341", "ESTACION DE SERVICIOS SAN JOSE SAC"),
+            emisor=("20400000001", "PROVEEDOR DE PRUEBA"),
+            tipo_comprobante=TipoComprobante.FACT,
+            serie="F091",
+            correlativo="7220",
+            fecha_emision=date(2026, 9, 30),
+            moneda=Moneda.PEN,
+            importe_total=Decimal("31200.00"),
+            requiere_guia=True,
+            gestor_id=None,
+            usuario_id=auth_prueba.contexto.usuario_id,
+            creado_por_cuenta_id=auth_prueba.contexto.cuenta_id,
+        )
 
-    anterior = crear_expediente(session, settings, reloj.hoy, **datos)
+    anterior = crear()
     session.commit()
     alertas_antes = list(
         session.scalars(select(Alerta).where(Alerta.expediente_id == anterior.id))
@@ -93,7 +99,8 @@ def test_crea_nuevo_expediente_fiscal_si_el_anterior_esta_retirado_y_conserva_al
 
     assert nuevo.id != anterior.id
     assert nuevo.deleted_at is None
-    assert session.get(type(anterior), anterior.id).deleted_at is not None
+    anterior_guardado = session.get(Expediente, anterior.id)
+    assert anterior_guardado is not None and anterior_guardado.deleted_at is not None
     alertas_despues = list(
         session.scalars(select(Alerta).where(Alerta.expediente_id == anterior.id))
     )
