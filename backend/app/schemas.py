@@ -191,7 +191,11 @@ class ExtraccionConfirmar(BaseModel):
     razon_social_receptor: str | None = Field(default=None, min_length=1, max_length=300)
     fecha_emision: date | None = None
     moneda: Moneda | None = None
+    subtotal: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    igv: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    descuentos: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
     importe_total: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    importe_a_pagar: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
     numero_operacion: str | None = Field(default=None, min_length=4, max_length=30)
 
     @model_validator(mode="after")
@@ -262,6 +266,7 @@ class ExpedienteOut(Orm):
     gestor_codigo: str | None = None
     estado: EstadoExpediente
     pendiente_aprobacion: bool
+    puede_eliminar: bool = False
     fecha_carga: datetime | None = None
     created_at: datetime
 

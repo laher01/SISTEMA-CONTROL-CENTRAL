@@ -4,7 +4,14 @@ from decimal import Decimal
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models import CuentaAcceso, CuentaPagoERP, Miembro, PlanLiquidacion
+from app.models import (
+    CuentaAcceso,
+    CuentaPagoERP,
+    Miembro,
+    PermisoConfigurado,
+    PlanLiquidacion,
+    SolicitudRetiroMISD,
+)
 from tests.conftest import AuthPrueba
 
 
@@ -44,6 +51,51 @@ def test_configuracion_acceso_es_exclusiva_de_administrador(
     assert datos["requiere_aprobacion"] is True
     assert datos["solo_correos_autorizados"] is True
     assert datos["proveedor_email_configurado"] is False
+
+
+def test_mantenimiento_preserva_expediente_con_historial_misd(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    session: Session,
+) -> None:
+    from tests.xml import factura
+
+    session.add(
+        PermisoConfigurado(
+            tenant_id=auth_prueba.contexto.tenant_id,
+            rol="USUARIO",
+            permiso="ELIMINAR_REGISTROS",
+            habilitado=True,
+        )
+    )
+    session.commit()
+
+    subida = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("misd-protegido.xml", factura())},
+    )
+    assert subida.status_code == 201, subida.text
+    expediente_id = subida.json()["expediente_id"]
+    solicitud = client.post(
+        "/api/v1/misd/solicitudes",
+        json={"expediente_id": expediente_id, "motivo": "Retiro sujeto a revisión"},
+    )
+    assert solicitud.status_code == 201, solicitud.text
+
+    auth_prueba.como_admin()
+    seleccion = {
+        "cuenta_ids": [str(auth_prueba.contexto.cuenta_id)],
+        "incluir_sin_trazabilidad": True,
+        "tipos": ["documentos", "expedientes"],
+        "fecha_desde": None,
+        "fecha_hasta": None,
+        "confirmacion": "ELIMINAR-DATOS-OPERATIVOS",
+    }
+    limpieza = client.post("/api/v1/configuracion/mantenimiento/limpiar", json=seleccion)
+    assert limpieza.status_code == 409, limpieza.text
+    assert "solicitudes MISD" in limpieza.text
+    assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 200
+    assert session.query(SolicitudRetiroMISD).count() == 1
 
 
 def test_superadmin_autoriza_correo_y_habilita_solicitudes(
@@ -472,3 +524,37 @@ def test_reintento_archivos_no_procesa_otro_tenant(
     assert pendiente.estado == "PENDIENTE"
     assert pendiente.intentos == 0
     assert ruta.exists()
+
+
+def test_reintento_protege_ruta_referenciada(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba, settings
+) -> None:
+    from app.models import Documento, EliminacionArchivoPendiente
+
+    auth_prueba.como_admin()
+    ruta_storage = "pruebas/original-compartido.pdf"
+    ruta = settings.storage_dir / ruta_storage
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.write_bytes(b"contenido original de prueba")
+    documento = Documento(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        creado_por_cuenta_id=auth_prueba.contexto.cuenta_id,
+        sha256="f" * 64,
+        nombre_original="original-compartido.pdf",
+        mime_type="application/pdf",
+        tamano_bytes=27,
+        ruta_storage=ruta_storage,
+        estado="PENDIENTE",
+    )
+    pendiente = EliminacionArchivoPendiente(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        ruta_storage=ruta_storage,
+    )
+    session.add_all([documento, pendiente])
+    session.commit()
+    respuesta = client.post("/api/v1/configuracion/mantenimiento/reintentar-archivos")
+    assert respuesta.status_code == 200
+    assert respuesta.json() == {"procesados": 1, "completados": 0}
+    session.refresh(pendiente)
+    assert pendiente.estado == "BLOQUEADO"
+    assert ruta.is_file()

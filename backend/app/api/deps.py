@@ -172,6 +172,13 @@ def get_contexto_operativo(
             and request.url.path.startswith("/api/v1/responsable/pedidos/")
             and request.url.path.endswith("/distribuir")
         )
+        or (request.method in {"GET", "POST"} and request.url.path == "/api/v1/misd/solicitudes")
+        or (
+            request.method == "POST"
+            and len(request.url.path.split("/")) == 7
+            and request.url.path.startswith("/api/v1/misd/solicitudes/")
+            and request.url.path.rsplit("/", 1)[-1] in {"resolver", "ejecutar"}
+        )
     )
     if contexto.rol == "RESPONSABLE" and not permitido_responsable:
         raise HTTPException(

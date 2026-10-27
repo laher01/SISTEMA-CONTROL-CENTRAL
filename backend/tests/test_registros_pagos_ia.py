@@ -1,10 +1,11 @@
 from decimal import Decimal
+from uuid import UUID
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Documento, Expediente, Gestor, PerfilExtraccion
+from app.models import Documento, Expediente, Gestor, PerfilExtraccion, PermisoConfigurado
 from app.services.aprendizaje_documental import (
     aplicar_perfiles_aprendidos,
     registrar_correccion_y_aprender,
@@ -45,10 +46,22 @@ def test_registros_totalizan_y_filtran_por_emisor(
     assert filtrada.json()["total_registros"] == 2
 
 
-def test_usuario_no_puede_eliminar_registro_por_defecto(client: TestClient) -> None:
+def test_usuario_puede_retirar_registro_de_su_ambito_sin_cliente_autorizado(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    session.add(
+        PermisoConfigurado(
+            tenant_id=auth_prueba.contexto.tenant_id,
+            rol="USUARIO",
+            permiso="ELIMINAR_REGISTROS",
+            habilitado=True,
+        )
+    )
+    session.commit()
     documento = _subir_factura(client, "F001-00000093", "150.00")
     respuesta = client.delete(f"/api/v1/expedientes/{documento['expediente_id']}")
-    assert respuesta.status_code == 403
+    assert respuesta.status_code == 204, respuesta.text
+    assert client.get(f"/api/v1/expedientes/{documento['expediente_id']}").status_code == 404
 
 
 def test_pago_erp_calcula_produccion_adelanto_y_saldo(
@@ -329,7 +342,7 @@ def test_filtros_jerarquicos_por_rol(
     assert usuario_id is not None
 
     documento = _subir_factura(client, "F001-00000104", "500.00")
-    expediente = session.get(Expediente, documento["expediente_id"])
+    expediente = session.get(Expediente, UUID(documento["expediente_id"]))
     assert expediente is not None
 
     gestor = Gestor(

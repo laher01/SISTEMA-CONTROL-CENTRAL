@@ -2,6 +2,7 @@
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from uuid import UUID
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -121,7 +122,7 @@ def test_search_and_linked_invoices_are_tenant_scoped(
     assert denied.status_code == 403
     auth_prueba.como_admin()
 
-    own_doc = session.get(Documento, invoices.json()[0]["documento_id"])
+    own_doc = session.get(Documento, UUID(invoices.json()[0]["documento_id"]))
     assert own_doc is not None
     own_doc.deleted_at = datetime.now(UTC)
     session.commit()

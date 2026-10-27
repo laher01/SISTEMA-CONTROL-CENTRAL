@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import delete, func, select, update
 
 from app.api.deps import AlmacenDep, OperativeAuthDep, SessionDep, TenantDep
@@ -20,6 +20,7 @@ from app.models import (
     Miembro,
     PagoERP,
     PlanLiquidacion,
+    SolicitudRetiroMISD,
 )
 from app.schemas import (
     MantenimientoAdministradorOut,
@@ -115,6 +116,65 @@ def _rol_cuenta(session: SessionDep, cuenta: CuentaAcceso) -> str:
         return "SIN_MIEMBRO"
     miembro = session.get(Miembro, cuenta.miembro_id)
     return miembro.rol if miembro is not None else "SIN_MIEMBRO"
+
+
+@router.get("/diagnostico-documental")
+def diagnostico_documental(
+    session: SessionDep,
+    almacen: AlmacenDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    limit: int = Query(default=500, ge=1, le=2000),
+) -> dict[str, object]:
+    """Detecta originales ausentes y trabajos de limpieza sin modificar nada."""
+    _solo_administrador(auth.rol)
+    documentos = list(
+        session.scalars(
+            select(Documento)
+            .where(Documento.tenant_id == tenant_id)
+            .order_by(Documento.created_at.desc(), Documento.id)
+            .limit(limit)
+        )
+    )
+    faltantes: list[str] = []
+    for documento in documentos:
+        try:
+            existe = almacen.ruta_absoluta(documento.ruta_storage).is_file()
+        except (OSError, ValueError):
+            existe = False
+        if not existe:
+            faltantes.append(str(documento.id))
+    pendientes = int(
+        session.scalar(
+            select(func.count())
+            .select_from(EliminacionArchivoPendiente)
+            .where(
+                EliminacionArchivoPendiente.tenant_id == tenant_id,
+                EliminacionArchivoPendiente.estado == "PENDIENTE",
+            )
+        )
+        or 0
+    )
+    bloqueados = int(
+        session.scalar(
+            select(func.count())
+            .select_from(EliminacionArchivoPendiente)
+            .where(
+                EliminacionArchivoPendiente.tenant_id == tenant_id,
+                EliminacionArchivoPendiente.estado == "BLOQUEADO",
+            )
+        )
+        or 0
+    )
+    return {
+        "solo_diagnostico": True,
+        "documentos_revisados": len(documentos),
+        "documentos_sin_original": len(faltantes),
+        "documentos_sin_original_ids": faltantes[:100],
+        "archivos_pendientes": pendientes,
+        "archivos_bloqueados": bloqueados,
+        "limite_revision": limit,
+    }
 
 
 @router.get("/administradores", response_model=list[MantenimientoAdministradorOut])
@@ -215,6 +275,33 @@ def limpiar(
     eliminados = {nombre: 0 for nombre in datos.tipos}
     rutas_archivo: list[str] = []
 
+    # El registro de solicitudes MISD es evidencia auditable. Bloquear el borrado
+    # antes de mutar documentos u otros tipos evita FK 500 y limpiezas parciales.
+    expedientes_bloqueados: list[uuid.UUID] = []
+    expedientes_seleccionados: list[Expediente] = []
+    if "expedientes" in datos.tipos:
+        filtros_expedientes = _filtros(Expediente, tenant_id, datos)
+        expedientes_seleccionados = list(
+            session.scalars(select(Expediente).where(*filtros_expedientes).with_for_update())
+        )
+        ids_expedientes = [item.id for item in expedientes_seleccionados]
+        if ids_expedientes:
+            expedientes_bloqueados = list(
+                session.scalars(
+                    select(SolicitudRetiroMISD.expediente_id)
+                    .where(
+                        SolicitudRetiroMISD.tenant_id == tenant_id,
+                        SolicitudRetiroMISD.expediente_id.in_(ids_expedientes),
+                    )
+                    .distinct()
+                )
+            )
+        if expedientes_bloqueados:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Hay expedientes con solicitudes MISD auditables; no se pueden limpiar",
+            )
+
     if "pagos" in datos.tipos:
         filtros = _filtros(PagoERP, tenant_id, datos)
         ids = list(session.scalars(select(PagoERP.id).where(*filtros)))
@@ -272,8 +359,7 @@ def limpiar(
         eliminados["documentos"] = len(ids)
 
     if "expedientes" in datos.tipos:
-        filtros = _filtros(Expediente, tenant_id, datos)
-        ids = list(session.scalars(select(Expediente.id).where(*filtros)))
+        ids = [item.id for item in expedientes_seleccionados]
         restantes = 0
         if ids:
             restantes = int(
@@ -339,6 +425,15 @@ def _intentar_eliminar_archivo(
 ) -> bool:
     """Reintento idempotente: si el archivo ya no existe se marca completado."""
     pendiente.intentos += 1
+    # Una retirada por SHA puede compartir archivo con otro documento; ni siquiera
+    # un registro retirado lógicamente debe perder su original restaurable.
+    referencias = session.scalar(
+        select(Documento.id).where(Documento.ruta_storage == pendiente.ruta_storage).limit(1)
+    )
+    if referencias is not None:
+        pendiente.estado = "BLOQUEADO"
+        pendiente.ultimo_error = "Archivo todavía referenciado por un documento"
+        return False
     try:
         archivo = almacen.ruta_absoluta(pendiente.ruta_storage)
         encontrado = archivo.exists()

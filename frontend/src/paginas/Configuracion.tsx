@@ -2,7 +2,7 @@ import InspeccionTenant from "./InspeccionTenant";
 import PanelPaginaWeb from "./PanelPaginaWeb";
 import { useMemo, useState, type FormEvent } from "react";
 
-import { eliminar, enviarJson, useDatos } from "../api";
+import { eliminar, enviarJson, obtener, useDatos } from "../api";
 import type {
   ConfiguracionAcceso as ConfiguracionAccesoTipo,
   CorreoAutorizado,
@@ -18,7 +18,7 @@ import type {
   SolicitudAcceso,
 } from "../tipos";
 
-const ROLES = ["GERENTE", "SECRETARIA", "USUARIO"] as const;
+const ROLES = ["GERENTE", "RESPONSABLE", "SECRETARIA", "USUARIO"] as const;
 const PERMISO = "ELIMINAR_REGISTROS";
 
 export default function Configuracion({ sesion }: { sesion: SesionActual }) {
@@ -591,6 +591,24 @@ function MantenimientoPanel() {
   const [vista, setVista] = useState<MantenimientoVistaPrevia | null>(null);
   const [confirmacion, setConfirmacion] = useState("");
   const [mensaje, setMensaje] = useState("");
+  const [diagnostico, setDiagnostico] = useState<{
+    documentos_revisados: number;
+    documentos_sin_original: number;
+    archivos_pendientes: number;
+    archivos_bloqueados: number;
+    limite_revision: number;
+  } | null>(null);
+  const [errorDiagnostico, setErrorDiagnostico] = useState("");
+  const consultarDiagnostico = async () => {
+    setErrorDiagnostico("");
+    try {
+      setDiagnostico(
+        await obtener("/api/v1/configuracion/mantenimiento/diagnostico-documental?limit=500"),
+      );
+    } catch (error) {
+      setErrorDiagnostico(error instanceof Error ? error.message : String(error));
+    }
+  };
 
   const payload = () => ({
     cuenta_ids: cuentas,
@@ -646,6 +664,21 @@ function MantenimientoPanel() {
         los tipos de registros y el rango de fechas. La auditoría de la limpieza se conserva.
       </p>
 
+      <div className="panel-configuracion">
+        <h4>Diagnóstico documental (solo lectura)</h4>
+        <button type="button" className="secundario" onClick={() => void consultarDiagnostico()}>
+          Revisar originales y cola de limpieza
+        </button>
+        {errorDiagnostico && <p role="alert" className="error">{errorDiagnostico}</p>}
+        {diagnostico && (
+          <p role="status">
+            Revisados: {diagnostico.documentos_revisados} de hasta {diagnostico.limite_revision}
+            {" · "}Sin original: {diagnostico.documentos_sin_original}
+            {" · "}Trabajos pendientes: {diagnostico.archivos_pendientes}
+            {" · "}Trabajos bloqueados: {diagnostico.archivos_bloqueados}
+          </p>
+        )}
+      </div>
       {administradores.error && <p className="error">{administradores.error}</p>}
       {mensaje && <p className="resumen-carga">{mensaje}</p>}
 
