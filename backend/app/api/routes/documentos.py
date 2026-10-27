@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session, aliased, selectinload
 from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado
 from app.core.config import Settings
-from app.enums import EstadoDocumento, Moneda, RolMiembro, TipoDocumento
+from app.enums import EstadoDocumento, Moneda, RolMiembro, TipoComprobante, TipoDocumento
 from app.models import (
     AlertaManual,
     Auditoria,
@@ -512,6 +512,29 @@ async def subir_documento(
         except UblInvalido as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
         if ubl is not None:
+            if ubl.tipo_documento == TipoDocumento.FACT:
+                expediente_existente = buscar_expediente(
+                    session,
+                    tenant_id,
+                    TipoComprobante.FACT,
+                    ubl.serie,
+                    ubl.correlativo,
+                    ubl.emisor.ruc,
+                    ubl.receptor.ruc,
+                )
+                if expediente_existente is not None:
+                    _validar_ambito_expediente(auth, expediente_existente, session)
+                    if (
+                        expediente_id is not None
+                        and expediente_id != expediente_existente.id
+                    ):
+                        raise HTTPException(
+                            status.HTTP_409_CONFLICT,
+                            "La factura ya está vinculada a otro expediente",
+                        )
+                    expediente_id = expediente_existente.id
+                    usuario_id = expediente_existente.usuario_id
+                    gestor_id = expediente_existente.gestor_id
             revision = revisar_asignaciones_emisor(
                 session, tenant_id, ubl.emisor.ruc, usuario_id, gestor_id
             )
