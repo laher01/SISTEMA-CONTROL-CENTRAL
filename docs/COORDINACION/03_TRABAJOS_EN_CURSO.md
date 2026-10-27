@@ -10,6 +10,7 @@
 | INFRA-001 | Inventario/telemetría de VPS | Infraestructura | Chat infraestructura SaaS | PROPUESTO | Sin rama | Módulo de observabilidad (por definir) |
 | INFRA-002 | Storage escalable y afinidad por Tenant | Infraestructura | Chat infraestructura SaaS | PROPUESTO | Sin rama | Almacenamiento, modelos, migraciones (por definir) |
 | INFRA-003 | Backups y recuperación probada | Infraestructura | Chat infraestructura SaaS | PROPUESTO | Sin rama | Scripts y pruebas (por definir) |
+| OCR-MISD-001 | Unir ingreso fiscal OCR y correcciones MISD sobre main 703d20c4 | Documentos / MISD | Continuación autorizada por usuario | EN VALIDACIÓN; sin integrar | `fix/misd-ocr-joint-703d20c4` / PR borrador por crear | Rutas MISD, permisos, solicitudes, tests y los 3 archivos de PR #405 |
 | ETAPA-7 | Landing/CMS/planes/NEXUS comercial | Comercial | Chat Etapa 7 | RESERVADO A OTRO CHAT | Consultar sus PR | Website y comercial |
 
 **Importante:** no se afirma que los PR abiertos no relacionados estén libres; inspeccionar GitHub antes de tocar archivos. Un cambio de estado requiere evidencia (commit, pruebas, PR o despliegue).

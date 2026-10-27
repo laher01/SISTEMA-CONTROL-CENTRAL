@@ -1,7 +1,7 @@
 """Regresiones: visibilidad configurable y trazabilidad de fechas de Secretaría."""
 
 from dataclasses import replace
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from fastapi.testclient import TestClient
 
@@ -87,10 +87,15 @@ def test_documento_busca_correlativo_y_expone_fecha_carga(
 
     if documento["expediente_id"]:
         carga = datetime.fromisoformat(documento["created_at"])
+        if carga.tzinfo is None:
+            carga = carga.replace(tzinfo=UTC)
         exp = client.get("/api/v1/expedientes")
         assert exp.status_code == 200, exp.text
         fila = next(fila for fila in exp.json() if fila["id"] == documento["expediente_id"])
-        assert datetime.fromisoformat(fila["fecha_carga"]) == carga
+        fecha_carga = datetime.fromisoformat(fila["fecha_carga"])
+        if fecha_carga.tzinfo is None:
+            fecha_carga = fecha_carga.replace(tzinfo=UTC)
+        assert fecha_carga == carga
         registros = client.get("/api/v1/registros")
         assert registros.status_code == 200, registros.text
         registro = next(
@@ -98,7 +103,10 @@ def test_documento_busca_correlativo_y_expone_fecha_carga(
             for fila in registros.json()["filas"]
             if fila["expediente_id"] == documento["expediente_id"]
         )
-        assert datetime.fromisoformat(registro["fecha_carga"]) == carga
+        fecha_registro = datetime.fromisoformat(registro["fecha_carga"])
+        if fecha_registro.tzinfo is None:
+            fecha_registro = fecha_registro.replace(tzinfo=UTC)
+        assert fecha_registro == carga
         tablero = client.get(
             "/api/v1/dashboard/secretaria-expedientes",
             params={"desde": date(2025, 1, 1), "hasta": date(2027, 12, 31)},
@@ -107,4 +115,7 @@ def test_documento_busca_correlativo_y_expone_fecha_carga(
         control = next(
             fila for fila in tablero.json()["filas"] if fila["id"] == documento["expediente_id"]
         )
-        assert datetime.fromisoformat(control["fecha_carga"]) == carga
+        fecha_control = datetime.fromisoformat(control["fecha_carga"])
+        if fecha_control.tzinfo is None:
+            fecha_control = fecha_control.replace(tzinfo=UTC)
+        assert fecha_control == carga
