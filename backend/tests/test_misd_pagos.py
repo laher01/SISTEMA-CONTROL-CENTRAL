@@ -82,7 +82,7 @@ def test_pago_generado_bloquea_documento_y_expediente_incluso_para_admin(
 
     session.delete(pago)
     session.commit()
-    assert client.delete(ruta_expediente).status_code == 204
+    assert client.delete(ruta_expediente).status_code == 200
 
 
 def test_voucher_vinculado_a_pago_no_puede_retirarse(

@@ -1,9 +1,9 @@
-"""Política MISD de autorización: diagnóstico, sin ejecutar borrados.
+"""Política MISD de autorización para eliminación definitiva.
 
 La ventana de corrección no deroga las reglas de pagos, ámbito, ni conservación.
 """
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from app.models import Expediente
 
@@ -12,7 +12,12 @@ VENTANA_CORRECCION = timedelta(minutes=30)
 
 def dentro_ventana_correccion(expediente: Expediente, instante: datetime) -> bool:
     """La ventana comienza al constituirse el expediente, no al adjuntar archivos."""
-    transcurrido = instante - expediente.created_at
+    creado = expediente.created_at
+    if creado.tzinfo is None:
+        creado = creado.replace(tzinfo=UTC)
+    if instante.tzinfo is None:
+        instante = instante.replace(tzinfo=UTC)
+    transcurrido = instante - creado
     return timedelta(0) <= transcurrido <= VENTANA_CORRECCION
 
 

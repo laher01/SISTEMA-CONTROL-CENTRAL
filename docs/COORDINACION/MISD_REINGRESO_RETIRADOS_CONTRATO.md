@@ -1,6 +1,6 @@
 # MISD — Contrato de eliminación definitiva de documentos y expedientes
 
-**Estado:** especificación funcional acordada; todavía no implementada por completo en el candidato #396.
+**Estado:** contrato aplicado parcialmente en el candidato #396; no habilitar en producción hasta cerrar las pruebas PostgreSQL, migración y flujos MISD/UI descritos abajo.
 
 ## Comportamiento solicitado
 
@@ -38,6 +38,9 @@ Después de una eliminación completada, subir nuevamente el mismo archivo crea 
 - `AlmacenLocal` guarda por tenant/SHA. El mantenimiento cuenta con lógica de limpieza de archivos, pero la ruta de eliminación individual todavía no cumple el contrato completo de dependencias, auditoría y confirmación física.
 - En la rama del PR #396, los cambios P1/P2 de aprobación administrativa y colisión de factura al restaurar aparecen en el código; sus hilos de revisión siguen abiertos. Esa restauración existente no debe confundirse con el nuevo comportamiento definitivo.
 - El SHA actual de #396 requiere CI propio. Los resultados 8/8 publicados en comentarios corresponden a otro SHA y no certifican el HEAD vigente.
+- El candidato actual elimina físicamente en `DELETE /documentos`, `DELETE /expedientes` y en la ejecución MISD, usa una cola reintentable y rechaza eliminaciones con referencias de claves foráneas no resueltas.
+- La ruta de restauración responde `410 Gone`; la carga posterior usa un ID nuevo y fuerza OCR si hay auditoría de eliminación previa. Los índices activos permiten reingresar identidades eliminadas.
+- El borrado directo y MISD consultan la cola y devuelven cuántos archivos quedaron pendientes. Debe validarse la migración 0043 y la sincronización tenant/SHA con PostgreSQL real antes de cerrar el PR.
 
 ## Pruebas de aceptación
 

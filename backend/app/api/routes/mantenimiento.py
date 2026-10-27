@@ -32,6 +32,7 @@ from app.schemas import (
     MantenimientoVistaPreviaOut,
 )
 from app.services import auditoria
+from app.services.eliminacion import procesar_archivo_pendiente
 
 router = APIRouter(prefix="/configuracion/mantenimiento", tags=["mantenimiento"])
 
@@ -469,29 +470,7 @@ def _intentar_eliminar_archivo(
     session: SessionDep, almacen: AlmacenDep, pendiente: EliminacionArchivoPendiente
 ) -> bool:
     """Reintento idempotente: si el archivo ya no existe se marca completado."""
-    pendiente.intentos += 1
-    # Una retirada por SHA puede compartir archivo con otro documento; ni siquiera
-    # un registro retirado lógicamente debe perder su original restaurable.
-    referencias = session.scalar(
-        select(Documento.id).where(Documento.ruta_storage == pendiente.ruta_storage).limit(1)
-    )
-    if referencias is not None:
-        pendiente.estado = "BLOQUEADO"
-        pendiente.ultimo_error = "Archivo todavía referenciado por un documento"
-        return False
-    try:
-        archivo = almacen.ruta_absoluta(pendiente.ruta_storage)
-        encontrado = archivo.exists()
-        if encontrado:
-            archivo.unlink()
-        pendiente.estado = "COMPLETADO"
-        pendiente.ultimo_error = None
-        pendiente.completado_at = datetime.now(UTC)
-        return encontrado
-    except (OSError, ValueError) as exc:
-        pendiente.estado = "PENDIENTE"
-        pendiente.ultimo_error = str(exc)[:500]
-        return False
+    return procesar_archivo_pendiente(session, almacen, pendiente)
 
 
 @router.post("/reintentar-archivos")

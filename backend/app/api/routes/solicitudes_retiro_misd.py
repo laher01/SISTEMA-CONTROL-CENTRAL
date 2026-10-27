@@ -1,15 +1,31 @@
-"""Solicitudes MISD: registro y decisión; nunca ejecuta eliminación física/lógica."""
+"""Solicitudes MISD: registro, aprobación y ejecución segura de eliminación."""
 
 import uuid
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
-from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
-from app.models import ChatMensaje, CuentaAcceso, Expediente, Miembro, SolicitudRetiroMISD, ahora
+from app.api.deps import AlmacenDep, OperativeAuthDep, SessionDep, TenantDep
+from app.models import (
+    Alerta,
+    AlertaManual,
+    ChatMensaje,
+    CuentaAcceso,
+    Documento,
+    EliminacionArchivoPendiente,
+    Expediente,
+    Miembro,
+    SolicitudRetiroMISD,
+    ahora,
+)
 from app.services import auditoria
 from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
+from app.services.eliminacion import (
+    bloquear_clave_archivo,
+    procesar_archivo_pendiente,
+    tablas_que_referencian,
+)
 from app.services.misd_autorizaciones import dentro_ventana_correccion
 from app.services.misd_pagos import motivo_bloqueo_liquidacion, motivo_bloqueo_voucher
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
@@ -339,13 +355,11 @@ def resolver(
 def ejecutar(
     solicitud_id: uuid.UUID,
     session: SessionDep,
+    almacen: AlmacenDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
-) -> dict[str, str]:
-    """Retirada lógica con autorización consumible y revalidación transaccional.
-
-    Nunca destruye originales físicos ni pagos ni auditoría.
-    """
+) -> dict[str, object]:
+    """Elimina físicamente tras autorización MISD y revalidación transaccional."""
     bloquear_tenant_financiero(session, tenant_id)
     solicitud = session.scalar(
         select(SolicitudRetiroMISD)
@@ -357,6 +371,8 @@ def ejecutar(
     )
     if solicitud is None:
         raise HTTPException(404, "Solicitud no encontrada")
+    if solicitud.estado == "EJECUTADA":
+        raise HTTPException(409, "Solicitud consumida previamente")
     expediente = session.scalar(
         select(Expediente)
         .where(Expediente.id == solicitud.expediente_id, Expediente.tenant_id == tenant_id)
@@ -396,33 +412,62 @@ def ejecutar(
     ):
         raise HTTPException(409, "La aprobación jerárquica ya no es válida")
 
-    # Bloquear documentos para serializar retiradas simultáneas del mismo expediente.
-    from app.models import Documento
-
-    session.scalars(
-        select(Documento.id)
-        .where(Documento.tenant_id == tenant_id, Documento.expediente_id == expediente.id)
-        .with_for_update()
-    ).all()
-    for documento in expediente.documentos:
-        if (
-            documento.deleted_at is None
-            and motivo_bloqueo_voucher(session, tenant_id, documento.id) is not None
-        ):
+    documentos = list(
+        session.scalars(
+            select(Documento.id)
+            .where(Documento.tenant_id == tenant_id, Documento.expediente_id == expediente.id)
+            .with_for_update()
+        ).all()
+    )
+    documentos_obj = (
+        list(
+            session.scalars(select(Documento).where(Documento.id.in_(documentos)).with_for_update())
+        )
+        if documentos
+        else []
+    )
+    referencias = tablas_que_referencian(
+        session,
+        documento_ids={documento.id for documento in documentos_obj},
+        expediente_id=expediente.id,
+    )
+    if referencias:
+        raise HTTPException(
+            409, "Eliminación bloqueada por dependencias: " + ", ".join(referencias)
+        )
+    for documento in documentos_obj:
+        if motivo_bloqueo_voucher(session, tenant_id, documento.id) is not None:
             raise HTTPException(409, "Expediente contiene un voucher vinculado a un pago")
-    marca = ahora()
-    expediente.deleted_at = marca
-    for documento in expediente.documentos:
-        if documento.deleted_at is None:
-            documento.deleted_at = marca
-            auditoria.registrar(
-                session,
-                tenant_id,
-                "DOCUMENTO_ELIMINADO_CON_EXPEDIENTE",
-                "documento",
-                documento.id,
-                {"expediente_id": str(expediente.id), "sha256": documento.sha256},
-            )
+    pendientes = [
+        EliminacionArchivoPendiente(tenant_id=tenant_id, ruta_storage=documento.ruta_storage)
+        for documento in documentos_obj
+    ]
+    for sha256 in sorted(documento.sha256 for documento in documentos_obj):
+        bloquear_clave_archivo(session, tenant_id, sha256)
+    session.add_all(pendientes)
+    session.execute(
+        delete(Alerta).where(
+            Alerta.tenant_id == tenant_id,
+            Alerta.expediente_id == expediente.id,
+        )
+    )
+    session.execute(
+        delete(AlertaManual).where(
+            AlertaManual.tenant_id == tenant_id,
+            AlertaManual.expediente_id == expediente.id,
+        )
+    )
+    for documento in documentos_obj:
+        auditoria.registrar(
+            session,
+            tenant_id,
+            "DOCUMENTO_ELIMINADO_CON_EXPEDIENTE",
+            "documento",
+            documento.id,
+            {"expediente_id": str(expediente.id), "sha256": documento.sha256},
+        )
+        session.delete(documento)
+    session.delete(expediente)
     solicitud.estado = "EJECUTADA"
     auditoria.registrar(
         session,
@@ -440,7 +485,17 @@ def ejecutar(
         tenant_id,
         auth.cuenta_id,
         destinatarios,
-        f"MISD: expediente {expediente.id} retirado del sistema operativo.",
+        f"MISD: expediente {expediente.id} eliminado definitivamente.",
     )
     session.commit()
-    return {"id": str(solicitud.id), "estado": solicitud.estado}
+    archivos_eliminados = sum(
+        procesar_archivo_pendiente(session, almacen, pendiente) for pendiente in pendientes
+    )
+    session.commit()
+    return {
+        "id": str(solicitud.id),
+        "estado": solicitud.estado,
+        "documentos_eliminados": len(documentos_obj),
+        "archivos_eliminados": archivos_eliminados,
+        "archivos_pendientes": len(documentos_obj) - archivos_eliminados,
+    }

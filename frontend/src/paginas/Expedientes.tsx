@@ -5,7 +5,12 @@ import { conParametros, descargarPdfExpedientes, eliminar, imprimirExpedientes, 
 import { Estado, Paginacion, Semaforo } from "../componentes";
 import FiltroJerarquia from "../componentes/FiltroJerarquia";
 import { ETIQUETA_ESTADO, formatearFecha, formatearMonto, numeroExpediente } from "../formato";
-import { ESTADOS_EXPEDIENTE, type Expediente, type SesionActual } from "../tipos";
+import {
+  ESTADOS_EXPEDIENTE,
+  type Expediente,
+  type ExpedienteDetalle,
+  type SesionActual,
+} from "../tipos";
 import { formatearMonto as monto } from "../formato";
 
 const POR_PAGINA = 50;
@@ -72,11 +77,29 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
   const { datos, error, cargando, recargar } = useDatos<Expediente[]>(ruta);
   const { datos: capacidades } = useDatos<{ puede_retirar: boolean }>("/api/v1/documentos/capacidades");
   const retirarExpediente = async (id: string) => {
-    if (!window.confirm("¿Retirar este expediente y sus documentos? No se borran originales físicos. Si el cliente está autorizado, debe aprobar ADMINISTRACIÓN.")) return;
     setMensaje("");
     try {
-      await eliminar("/api/v1/expedientes/" + id);
-      setMensaje("Expediente retirado del sistema operativo.");
+      const detalle = await obtener<ExpedienteDetalle>(`/api/v1/expedientes/${id}`);
+      const listado = detalle.documentos.slice(0, 20)
+        .map((documento) => `• ${documento.nombre_original}`).join("\n");
+      const mas = detalle.documentos.length > 20 ? `\n…y ${detalle.documentos.length - 20} más` : "";
+      const confirmacion = [
+        `Eliminar definitivamente ${detalle.tipo_comprobante} ${detalle.serie}-${detalle.correlativo}?`,
+        `${detalle.documentos.length} archivo(s):`,
+        listado,
+        mas,
+        "Se borrarán del almacenamiento físico y de la lógica contable. No se pueden restaurar.",
+        "Si el cliente está autorizado, debe aprobar ADMINISTRACIÓN.",
+      ].filter(Boolean).join("\n");
+      if (!window.confirm(confirmacion)) return;
+      const resultado = (await eliminar("/api/v1/expedientes/" + id)) as {
+        archivos_pendientes?: number;
+      };
+      setMensaje(
+        resultado.archivos_pendientes
+          ? `Expediente eliminado; ${resultado.archivos_pendientes} archivo(s) esperan borrado físico.`
+          : "Expediente y archivos eliminados definitivamente.",
+      );
       recargar();
     } catch (err) {
       setMensaje(err instanceof Error ? err.message : String(err));
