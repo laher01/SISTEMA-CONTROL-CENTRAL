@@ -339,6 +339,7 @@ function FilaDocumento({
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState("");
   const lectura = resumenLectura(documento);
+  const importes = resumenImportesConfirmados(documento);
   const partes = resumenPartes(documento);
 
   const reprocesar = async () => {
@@ -408,6 +409,7 @@ function FilaDocumento({
         ) : (
           <span className="tenue">Sin lectura</span>
         )}
+        {importes && <small className="bloque tenue">{importes}</small>}
       </td>
       <td>
         <ParteDocumento razonSocial={partes.emisor.razonSocial} ruc={partes.emisor.ruc} />
@@ -430,6 +432,26 @@ function FilaDocumento({
       </td>
     </tr>
   );
+}
+
+function resumenImportesConfirmados(documento: Documento): string | undefined {
+  const datos = documento.datos_extraidos;
+  const confirmacion = datos?.extraccion_confirmada;
+  if (!confirmacion || typeof confirmacion !== "object" || !("campos" in confirmacion)) return undefined;
+  const campos = confirmacion.campos;
+  const total = leerValorCampo(campos, "importe_total");
+  const moneda = documento.moneda || leerValorCampo(campos, "moneda");
+  if (!total || (moneda !== "PEN" && moneda !== "USD")) return undefined;
+  const detalle = [
+    ["Subtotal", "subtotal"],
+    ["IGV", "igv"],
+    ["Descuentos", "descuentos"],
+    ["A pagar", "importe_a_pagar"],
+  ].flatMap(([etiqueta, clave]) => {
+    const valor = clave ? leerValorCampo(campos, clave) : undefined;
+    return valor ? [`${etiqueta}: ${formatearMonto(moneda, valor)}`] : [];
+  });
+  return [`Total confirmado: ${formatearMonto(moneda, total)}`, ...detalle].join(" · ");
 }
 
 function resumenLectura(documento: Documento): { texto: string; detalle: string } | undefined {
