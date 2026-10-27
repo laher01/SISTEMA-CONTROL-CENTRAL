@@ -1,5 +1,7 @@
 """La autorización administrativa gobierna ingresos y liquidaciones, no archivos."""
 
+from decimal import Decimal
+
 from fastapi.testclient import TestClient
 
 from tests.conftest import AuthPrueba
@@ -21,7 +23,7 @@ def test_cliente_sin_validar_no_cuenta_y_se_muestra_no_valido(
     assert compras.status_code == 200, compras.text
     assert len(compras.json()) == 1
     assert compras.json()[0]["cliente_autorizado"] is False
-    assert compras.json()[0]["importe_total"] == "0.00"
+    assert Decimal(compras.json()[0]["importe_total"]) == Decimal("0")
 
     autorizar_receptor(client, auth_prueba)
     resumen_validado = client.get("/api/v1/produccion/resumen")
