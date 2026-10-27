@@ -57,7 +57,7 @@ def test_usuario_puede_retirar_registro_de_su_ambito_sin_cliente_autorizado(
             habilitado=True,
         )
     )
-    session.flush()
+    session.commit()
     documento = _subir_factura(client, "F001-00000093", "150.00")
     respuesta = client.delete(f"/api/v1/expedientes/{documento['expediente_id']}")
     assert respuesta.status_code == 204, respuesta.text

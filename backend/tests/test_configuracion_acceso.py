@@ -68,7 +68,7 @@ def test_mantenimiento_preserva_expediente_con_historial_misd(
             habilitado=True,
         )
     )
-    session.flush()
+    session.commit()
 
     subida = client.post(
         "/api/v1/documentos",

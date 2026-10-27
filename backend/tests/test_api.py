@@ -1255,7 +1255,7 @@ def test_previsualizar_retirada_exige_misd_fuera_de_ventana(
             habilitado=True,
         )
     )
-    session.flush()
+    session.commit()
 
     documento = subir(client, nombre, contenido)
     creado = datetime.now(UTC) - timedelta(minutes=31)

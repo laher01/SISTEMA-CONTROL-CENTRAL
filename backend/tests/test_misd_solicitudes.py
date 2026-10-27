@@ -27,7 +27,7 @@ def habilitar_retiro_usuario(session: Session, auth_prueba: AuthPrueba) -> None:
             habilitado=True,
         )
     )
-    session.flush()
+    session.commit()
 
 
 def test_solicitud_aprobacion_no_borra_expediente(

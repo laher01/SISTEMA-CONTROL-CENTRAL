@@ -33,7 +33,7 @@ def habilitar_retiro_usuario(session: Session, auth_prueba: AuthPrueba) -> None:
             habilitado=True,
         )
     )
-    session.flush()
+    session.commit()
 
 
 def test_pago_generado_bloquea_documento_y_expediente_incluso_para_admin(
