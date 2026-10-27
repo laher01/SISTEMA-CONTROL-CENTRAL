@@ -110,5 +110,5 @@ def test_crea_nuevo_expediente_fiscal_si_el_anterior_esta_retirado_y_conserva_al
     ] == [(a.id, a.tipo, a.mensaje, a.resuelta, a.resuelta_at) for a in alertas_antes]
 
     with pytest.raises(IntegrityError):
-        crear_expediente(session, settings, reloj.hoy, **datos)
+        crear()
     session.rollback()
