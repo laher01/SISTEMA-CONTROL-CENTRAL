@@ -122,7 +122,11 @@ def ingerir_documento(
 ) -> Documento:
     sha256 = hashlib.sha256(archivo.contenido).hexdigest()
     existente = session.scalar(
-        select(Documento.id).where(Documento.tenant_id == tenant_id, Documento.sha256 == sha256)
+        select(Documento.id).where(
+            Documento.tenant_id == tenant_id,
+            Documento.sha256 == sha256,
+            Documento.deleted_at.is_(None),
+        )
     )
     if existente is not None:
         raise DocumentoDuplicado(existente)
