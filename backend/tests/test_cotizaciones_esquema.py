@@ -13,8 +13,7 @@ def test_esquema_huella_comercial_nullable_y_unica(engine, auth_prueba) -> None:
 
     indices = inspect(engine).get_indexes("documentos")
     assert any(
-        set(indice["column_names"]) == {"tenant_id", "huella_comercial"}
-        and indice["unique"]
+        set(indice["column_names"]) == {"tenant_id", "huella_comercial"} and indice["unique"]
         for indice in indices
     )
 
