@@ -14,8 +14,33 @@ branch_labels = None
 depends_on = None
 
 
+_EXPEDIENTE_IDENTITY_COLUMNS = [
+    "tenant_id",
+    "receptor_id",
+    "tipo_comprobante",
+    "serie",
+    "correlativo",
+    "emisor_id",
+]
+
+
+def _nombre_constraint_identidad_expediente(bind) -> str:
+    constraints = sa.inspect(bind).get_unique_constraints("expedientes")
+    matches = [
+        constraint["name"]
+        for constraint in constraints
+        if constraint.get("column_names") == _EXPEDIENTE_IDENTITY_COLUMNS
+    ]
+    if len(matches) != 1:
+        raise RuntimeError(
+            "No se encontró exactamente una restricción única de identidad de expediente"
+        )
+    return matches[0]
+
+
 def upgrade() -> None:
     bind = op.get_bind()
+    nombre_constraint_expediente = _nombre_constraint_identidad_expediente(bind)
     if bind.dialect.name == "sqlite":
         with op.batch_alter_table("solicitudes_retiro_misd") as batch:
             batch.drop_constraint(
@@ -26,10 +51,7 @@ def upgrade() -> None:
             batch.drop_constraint("uq_documentos_tenant_id_sha256", type_="unique")
             batch.drop_constraint("uq_documentos_tenant_id_huella_comercial", type_="unique")
         with op.batch_alter_table("expedientes") as batch:
-            batch.drop_constraint(
-                "uq_expedientes_tenant_id_receptor_id_tipo_comprobante_serie_correlativo_emisor_id",
-                type_="unique",
-            )
+            batch.drop_constraint(nombre_constraint_expediente, type_="unique")
     else:
         op.drop_constraint(
             "fk_solicitudes_retiro_misd_expediente_id_expedientes",
@@ -39,7 +61,7 @@ def upgrade() -> None:
         op.drop_constraint("uq_documentos_tenant_id_sha256", "documentos", type_="unique")
         op.drop_constraint("uq_documentos_tenant_id_huella_comercial", "documentos", type_="unique")
         op.drop_constraint(
-            "uq_expedientes_tenant_id_receptor_id_tipo_comprobante_serie_correlativo_emisor_id",
+            nombre_constraint_expediente,
             "expedientes",
             type_="unique",
         )
@@ -116,15 +138,8 @@ def downgrade() -> None:
             )
         with op.batch_alter_table("expedientes") as batch:
             batch.create_unique_constraint(
-                "uq_expedientes_tenant_id_receptor_id_tipo_comprobante_serie_correlativo_emisor_id",
-                [
-                    "tenant_id",
-                    "receptor_id",
-                    "tipo_comprobante",
-                    "serie",
-                    "correlativo",
-                    "emisor_id",
-                ],
+                op.f("uq_exp_ident_legacy"),
+                _EXPEDIENTE_IDENTITY_COLUMNS,
             )
     else:
         op.create_foreign_key(
@@ -143,14 +158,7 @@ def downgrade() -> None:
             ["tenant_id", "huella_comercial"],
         )
         op.create_unique_constraint(
-            "uq_expedientes_tenant_id_receptor_id_tipo_comprobante_serie_correlativo_emisor_id",
+            op.f("uq_exp_ident_legacy"),
             "expedientes",
-            [
-                "tenant_id",
-                "receptor_id",
-                "tipo_comprobante",
-                "serie",
-                "correlativo",
-                "emisor_id",
-            ],
+            _EXPEDIENTE_IDENTITY_COLUMNS,
         )
