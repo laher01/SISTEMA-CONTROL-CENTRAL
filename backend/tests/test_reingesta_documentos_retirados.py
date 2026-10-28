@@ -87,9 +87,7 @@ def test_crea_nuevo_expediente_fiscal_si_el_anterior_esta_retirado_y_conserva_al
 
     anterior = crear()
     session.commit()
-    alertas_antes = list(
-        session.scalars(select(Alerta).where(Alerta.expediente_id == anterior.id))
-    )
+    alertas_antes = list(session.scalars(select(Alerta).where(Alerta.expediente_id == anterior.id)))
     assert alertas_antes
 
     anterior.deleted_at = ahora()
@@ -105,9 +103,9 @@ def test_crea_nuevo_expediente_fiscal_si_el_anterior_esta_retirado_y_conserva_al
     alertas_despues = list(
         session.scalars(select(Alerta).where(Alerta.expediente_id == anterior.id))
     )
-    assert [
-        (a.id, a.tipo, a.mensaje, a.resuelta, a.resuelta_at) for a in alertas_despues
-    ] == [(a.id, a.tipo, a.mensaje, a.resuelta, a.resuelta_at) for a in alertas_antes]
+    assert [(a.id, a.tipo, a.mensaje, a.resuelta, a.resuelta_at) for a in alertas_despues] == [
+        (a.id, a.tipo, a.mensaje, a.resuelta, a.resuelta_at) for a in alertas_antes
+    ]
 
     with pytest.raises(IntegrityError):
         crear()
