@@ -1,9 +1,12 @@
-"""Solicitud persistente y autorización MISD: sin borrar expedientes."""
+"""Solicitud y autorización MISD antes de la eliminación definitiva."""
+
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings
 from app.models import (
     Auditoria,
     ChatMensaje,
@@ -249,7 +252,7 @@ def test_misd_solicitud_tenant_ajeno_no_se_puede_consultar_ni_resolver(
 
 
 def test_ejecutar_misd_en_ventana_sin_pagos_consume_solicitud(
-    client: TestClient, auth_prueba: AuthPrueba, session: Session
+    client: TestClient, auth_prueba: AuthPrueba, session: Session, settings: Settings
 ) -> None:
     subida = client.post(
         "/api/v1/documentos",
@@ -266,8 +269,18 @@ def test_ejecutar_misd_en_ventana_sin_pagos_consume_solicitud(
     ejecutada = client.post(f"/api/v1/misd/solicitudes/{solicitud_id}/ejecutar")
     assert ejecutada.status_code == 200, ejecutada.text
     assert ejecutada.json()["estado"] == "EJECUTADA"
+    assert ejecutada.json()["documentos_eliminados"] == 1
+    archivo = (
+        settings.storage_dir
+        / str(auth_prueba.contexto.tenant_id)
+        / subida.json()["sha256"][:2]
+        / subida.json()["sha256"]
+    )
+    assert not archivo.exists()
     assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 404
     assert client.post(f"/api/v1/misd/solicitudes/{solicitud_id}/ejecutar").status_code == 409
+    solicitud = session.get(SolicitudRetiroMISD, UUID(solicitud_id))
+    assert solicitud is not None and solicitud.estado == "EJECUTADA"
     assert session.query(Auditoria).filter(Auditoria.accion == "MISD_RETIRO_EJECUTADO").count() == 1
 
 
@@ -305,7 +318,7 @@ def test_misd_fuera_de_ventana_exige_aprobacion(
         json={"documentos_ids": [subida.json()["id"]]},
     )
     assert lote.status_code == 200, lote.text
-    assert lote.json()["retirados"] == 0
+    assert lote.json()["eliminados"] == 0
     assert lote.json()["resultados"][0]["codigo"] == "409"
     assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 200
 

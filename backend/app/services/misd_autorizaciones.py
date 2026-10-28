@@ -1,4 +1,4 @@
-"""Política MISD de autorización: diagnóstico, sin ejecutar borrados.
+"""Política MISD de autorización para eliminación definitiva.
 
 La ventana de corrección no deroga las reglas de pagos, ámbito, ni conservación.
 """

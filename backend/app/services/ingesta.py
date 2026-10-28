@@ -22,6 +22,7 @@ from app.models import (
 )
 from app.services import auditoria
 from app.services.contabilidad_items_ubl import registrar_items_ubl
+from app.services.eliminacion import bloquear_clave_archivo
 from app.services.expedientes import (
     actualizar_expediente,
     buscar_expediente,
@@ -121,8 +122,13 @@ def ingerir_documento(
     creado_por_cuenta_id: uuid.UUID | None = None,
 ) -> Documento:
     sha256 = hashlib.sha256(archivo.contenido).hexdigest()
+    bloquear_clave_archivo(session, tenant_id, sha256)
     existente = session.scalar(
-        select(Documento.id).where(Documento.tenant_id == tenant_id, Documento.sha256 == sha256)
+        select(Documento.id).where(
+            Documento.tenant_id == tenant_id,
+            Documento.sha256 == sha256,
+            Documento.deleted_at.is_(None),
+        )
     )
     if existente is not None:
         raise DocumentoDuplicado(existente)
@@ -147,7 +153,19 @@ def ingerir_documento(
                 comprobante.receptor.ruc,
             )
             if existente_comercial is not None:
-                raise ComprobanteYaRegistrado(existente_comercial.id)
+                factura_activa = session.scalar(
+                    select(Documento.id).where(
+                        Documento.tenant_id == tenant_id,
+                        Documento.expediente_id == existente_comercial.id,
+                        Documento.tipo_documento == TipoDocumento.FACT,
+                        Documento.deleted_at.is_(None),
+                    )
+                )
+                if factura_activa is not None:
+                    raise ComprobanteYaRegistrado(existente_comercial.id)
+                # El comprobante principal fue eliminado físicamente; admitir
+                # el nuevo documento dentro del expediente que sigue activo.
+                expediente = existente_comercial
         tipo_documento = comprobante.tipo_documento
         datos = comprobante.a_dict()
         expediente = _expediente_para_comprobante(

@@ -1,12 +1,13 @@
 import { useMemo, useState, type ChangeEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { conParametros, eliminar, enviarFormulario, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
+import { conParametros, eliminar, enviarFormulario, obtener, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
 import { Estado, Paginacion, Semaforo } from "../componentes";
 import FiltroJerarquia from "../componentes/FiltroJerarquia";
 import { ETIQUETA_TIPO_DOCUMENTO, formatearFecha, formatearMonto } from "../formato";
 import type {
   Documento,
+  ExpedienteDetalle,
   RegistroFila,
   RegistroOpciones,
   RegistroResumen,
@@ -271,11 +272,29 @@ function FilaRegistro({
   };
 
   const retirar = async () => {
-    if (!window.confirm("¿Ocultar este expediente y TODOS sus documentos de los módulos operativos? Se conservarán los originales y la auditoría; no se eliminarán físicamente.")) return;
     setOcupado(true);
     setError("");
     try {
-      await eliminar("/api/v1/expedientes/" + fila.expediente_id);
+      const detalle = await obtener<ExpedienteDetalle>(
+        `/api/v1/expedientes/${fila.expediente_id}`,
+      );
+      const nombres = detalle.documentos.slice(0, 20)
+        .map((documento) => `• ${documento.nombre_original}`).join("\n");
+      const mas = detalle.documentos.length > 20
+        ? `\n…y ${detalle.documentos.length - 20} más`
+        : "";
+      const confirmacion = [
+        `Eliminar ${detalle.tipo_comprobante} ${detalle.serie}-${detalle.correlativo}?`,
+        `${detalle.documentos.length} archivo(s):`, nombres, mas,
+        "Se borrarán los archivos físicos y los datos de la lógica contable. No se puede restaurar.",
+      ].filter(Boolean).join("\n");
+      if (!window.confirm(confirmacion)) return;
+      const resultado = (await eliminar("/api/v1/expedientes/" + fila.expediente_id)) as {
+        archivos_pendientes?: number;
+      };
+      if (resultado.archivos_pendientes) {
+        setError(`${resultado.archivos_pendientes} archivo(s) esperan borrado físico.`);
+      }
       alCambiar();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { conParametros, eliminar, enviarJson, obtener, urlArchivo, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
+import { conParametros, eliminar, enviarJson, urlArchivo, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
 import { Estado, Paginacion } from "../componentes";
 import FiltroJerarquia from "../componentes/FiltroJerarquia";
 import { formatearMonto } from "../formato";
@@ -66,7 +66,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
     offset: String(pagina * POR_PAGINA),
   });
   const { datos, error, cargando, recargar } = useDatos<Documento[]>(ruta);
-  const { datos: capacidades } = useDatos<{ puede_retirar: boolean; puede_restaurar: boolean }>(
+  const { datos: capacidades } = useDatos<{ puede_retirar: boolean; puede_eliminar_definitivamente: boolean }>(
     "/api/v1/documentos/capacidades",
   );
   const { datos: resumen } = useDatos<{
@@ -97,38 +97,6 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
   const [eliminandoLote, setEliminandoLote] = useState(false);
   const [resultadoEliminacion, setResultadoEliminacion] = useState("");
   const [errorEliminacion, setErrorEliminacion] = useState("");
-  const [retirados, setRetirados] = useState<Documento[] | null>(null);
-  const [errorRetirados, setErrorRetirados] = useState("");
-  const [cargandoRetirados, setCargandoRetirados] = useState(false);
-  const [restaurandoId, setRestaurandoId] = useState("");
-
-  const consultarRetirados = async () => {
-    setCargandoRetirados(true);
-    setErrorRetirados("");
-    try {
-      setRetirados(await obtener<Documento[]>("/api/v1/documentos/retirados?limit=100"));
-    } catch (error) {
-      setErrorRetirados(error instanceof Error ? error.message : String(error));
-    } finally {
-      setCargandoRetirados(false);
-    }
-  };
-
-  const restaurarRetirado = async (documento: Documento) => {
-    if (!window.confirm(`¿Restaurar ${documento.nombre_original}? Se verificará el archivo original.`)) return;
-    setRestaurandoId(documento.id);
-    setErrorRetirados("");
-    try {
-      await enviarJson<Documento>(`/api/v1/documentos/${documento.id}/restaurar`, "POST");
-      await consultarRetirados();
-      recargar();
-    } catch (error) {
-      setErrorRetirados(error instanceof Error ? error.message : String(error));
-    } finally {
-      setRestaurandoId("");
-    }
-  };
-
   const visibles = datos ?? [];
   const seleccionVisible = visibles.filter((documento) => seleccionados.includes(documento.id));
   const todosSeleccionados = visibles.length > 0 && seleccionVisible.length === visibles.length;
@@ -166,25 +134,34 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
       setErrorEliminacion(error instanceof Error ? error.message : String(error));
       return;
     }
-    const confirmado = window.confirm(
-      `¿Retirar ${elegidos.length} documento(s) de esta página? ` +
-      "Se registrará una auditoría por cada archivo. Los originales no se borran físicamente.",
-    );
+    const nombres = elegidos.slice(0, 20)
+      .map((documento) => `• ${documento.nombre_original}`).join("\n");
+    const mas = elegidos.length > 20 ? `\n…y ${elegidos.length - 20} más` : "";
+    const confirmado = window.confirm([
+      `Eliminar definitivamente ${elegidos.length} documento(s)?`,
+      nombres,
+      mas,
+      "Se quitarán de contabilidad y se borrarán los archivos físicos. No se pueden restaurar.",
+    ].filter(Boolean).join("\n"));
     if (!confirmado) return;
     setEliminandoLote(true);
     setErrorEliminacion("");
     setResultadoEliminacion("");
-    const retirados: string[] = [];
+    const eliminados: string[] = [];
+    let pendientesFisicos = 0;
     const fallos: string[] = [];
     try {
       const resultado = await enviarJson<{
-        retirados: number;
+        eliminados: number;
         resultados: { id: string; estado: string; codigo?: string }[];
       }>("/api/v1/documentos/retirar-lote", "POST", {
         documentos_ids: elegidos.map((d) => d.id),
       });
       for (const fila of resultado.resultados) {
-        if (fila.estado === "RETIRADO") retirados.push(fila.id);
+        if (fila.estado === "ELIMINADO" || fila.estado === "ELIMINADO_ARCHIVO_PENDIENTE") {
+          eliminados.push(fila.id);
+          if (fila.estado === "ELIMINADO_ARCHIVO_PENDIENTE") pendientesFisicos += 1;
+        }
         else {
           const documento = elegidos.find((d) => d.id === fila.id);
           fallos.push(`${documento?.nombre_original ?? fila.id}: error ${fila.codigo ?? "desconocido"}`);
@@ -195,8 +172,11 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
       setEliminandoLote(false);
       return;
     }
-    setSeleccionados((actual) => actual.filter((id) => !retirados.includes(id)));
-    setResultadoEliminacion(`${retirados.length} documento(s) retirado(s) de ${elegidos.length}.`);
+    setSeleccionados((actual) => actual.filter((id) => !eliminados.includes(id)));
+    setResultadoEliminacion(
+      `${eliminados.length} de ${elegidos.length} eliminados.` +
+      (pendientesFisicos ? ` ${pendientesFisicos} archivo(s) siguen pendientes de borrado físico.` : ""),
+    );
     if (fallos.length) setErrorEliminacion(fallos.join(" | "));
     setEliminandoLote(false);
     recargar();
@@ -243,7 +223,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
         <div>
           <h2>Documentos</h2>
           <p className="tenue">
-            Bandeja central para revisar, filtrar, reprocesar y retirar documentos sin perder trazabilidad.
+            Bandeja central para revisar, filtrar, reprocesar y eliminar documentos con auditoría.
           </p>
         </div>
         <div className="acciones-documento">
@@ -268,7 +248,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
           disabled={!capacidades?.puede_retirar || !seleccionVisible.length || eliminandoLote}
           onClick={eliminarSeleccionados}
         >
-          {eliminandoLote ? "Retirando documentos…" : "Eliminar seleccionados"}
+          {eliminandoLote ? "Eliminando documentos…" : "Eliminar seleccionados"}
         </button>
         <button
           className="secundario"
@@ -276,40 +256,6 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
           onClick={() => setSeleccionados([])}
         >Limpiar selección</button>
       </div>
-      {capacidades?.puede_restaurar && <section aria-label="Documentos retirados">
-        <button
-          className="secundario"
-          type="button"
-          disabled={cargandoRetirados}
-          onClick={() => {
-            if (retirados !== null) setRetirados(null);
-            else void consultarRetirados();
-          }}
-        >
-          {cargandoRetirados ? "Consultando…" : retirados === null ? "Ver retirados" : "Ocultar retirados"}
-        </button>
-        {errorRetirados && <p role="alert" className="error">{errorRetirados}</p>}
-        {retirados !== null && (
-          <div className="panel-configuracion">
-            <h3>Documentos retirados (hasta 100)</h3>
-            <p>El original se conserva hasta que se autorice su eliminación definitiva.</p>
-            {retirados.length === 0 && <p>No hay documentos retirados en su ámbito.</p>}
-            {retirados.map((documento) => (
-              <div key={documento.id} className="acciones-documento">
-                <span>{documento.nombre_original}</span>
-                <button
-                  type="button"
-                  className="secundario"
-                  disabled={restaurandoId !== ""}
-                  onClick={() => void restaurarRetirado(documento)}
-                >
-                  {restaurandoId === documento.id ? "Restaurando…" : "Restaurar"}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>}
       {resultadoEliminacion && <p role="status">{resultadoEliminacion}</p>}
       {errorEliminacion && <p role="alert" className="error">{errorEliminacion}</p>}
 
@@ -458,15 +404,20 @@ function FilaDocumento({
     }
   };
 
-  const retirar = async () => {
+  const eliminarDocumento = async () => {
     const confirmado = window.confirm(
-      `¿Retirar "${documento.nombre_original}" de FACT CENTRAL? La acción quedará auditada.`,
+      `¿Eliminar definitivamente "${documento.nombre_original}"? Se quitará de contabilidad y se borrará el archivo físico. No se puede restaurar.`,
     );
     if (!confirmado) return;
     setOcupado(true);
     setError("");
     try {
-      await eliminar(`/api/v1/documentos/${documento.id}`);
+      const resultado = (await eliminar(`/api/v1/documentos/${documento.id}`)) as {
+        estado?: string;
+      };
+      if (resultado.estado === "pendiente") {
+        setError("El registro se eliminó; el borrado físico del archivo está pendiente.");
+      }
       alCambiar();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -530,7 +481,7 @@ function FilaDocumento({
       <td>
         <div className="acciones-documento">
           <button disabled={ocupado} onClick={reprocesar}>Reprocesar</button>
-          <button className="peligro" disabled={ocupado} onClick={retirar}>Eliminar</button>
+          <button className="peligro" disabled={ocupado} onClick={eliminarDocumento}>Eliminar</button>
         </div>
       </td>
     </tr>
