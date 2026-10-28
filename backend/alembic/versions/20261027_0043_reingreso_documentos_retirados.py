@@ -18,7 +18,7 @@ def upgrade() -> None:
     # Los registros retirados conservan auditoría e identidad histórica.
     # Solo las identidades activas deben impedir una nueva carga.
     op.drop_constraint(
-        "uq_expedientes_tenant_id_receptor_id_tipo_comprobante_serie_correlativo_emisor_id",
+        "uq_expedientes_tenant_id_receptor_id_tipo_comprobante_serie_cor",
         "expedientes",
         type_="unique",
     )
@@ -79,8 +79,8 @@ def downgrade() -> None:
     for nombre, consulta in conflictos:
         if bind.execute(sa.text(consulta)).first() is not None:
             raise RuntimeError(
-                f"No se puede revertir 0043: existen registros históricos y activos con la misma {nombre}; "
-                "preserve los datos y mantenga esta migración."
+                f"No se puede revertir 0043: existen registros históricos y activos "
+                f"con la misma {nombre}; preserve los datos y mantenga esta migración."
             )
 
     op.drop_index("uq_documentos_tenant_huella_comercial_activa", table_name="documentos")
@@ -97,7 +97,7 @@ def downgrade() -> None:
     )
     op.drop_index("uq_expedientes_identidad_activa", table_name="expedientes")
     op.create_unique_constraint(
-        "uq_expedientes_tenant_id_receptor_id_tipo_comprobante_serie_correlativo_emisor_id",
+        "uq_expedientes_tenant_id_receptor_id_tipo_comprobante_serie_cor",
         "expedientes",
         ["tenant_id", "receptor_id", "tipo_comprobante", "serie", "correlativo", "emisor_id"],
     )
