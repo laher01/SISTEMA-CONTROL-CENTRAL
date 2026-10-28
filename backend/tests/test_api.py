@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.routes import documentos as documentos_routes
 from app.core.config import Settings
-from app.models import Empresa, Expediente
+from app.models import Auditoria, Empresa, Expediente
 from app.services import procesamiento_documental
 from app.services.procesamiento_documental import ResultadoProcesamiento, sugerir_tipo
 from tests.conftest import AuthPrueba, Reloj
@@ -534,6 +534,7 @@ def test_documentos_filtran_por_tipo_y_emisor(client: TestClient) -> None:
 def test_eliminar_expediente_oculta_documentos_en_todos_los_modulos(
     client: TestClient,
     auth_prueba: AuthPrueba,
+    settings: Settings,
 ) -> None:
     archivo = subir(client, "comprobante.xml", factura(numero="F001-00009987"))
     expediente_id = archivo["expediente_id"]
@@ -541,7 +542,12 @@ def test_eliminar_expediente_oculta_documentos_en_todos_los_modulos(
     auth_prueba.como_admin()
 
     respuesta = client.delete(f"/api/v1/expedientes/{expediente_id}")
-    assert respuesta.status_code == 204, respuesta.text
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json() == {
+        "documentos_eliminados": 1,
+        "archivos_eliminados": 1,
+        "archivos_pendientes": 0,
+    }
     assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 404
     assert client.get(f"/api/v1/documentos/{archivo['id']}").status_code == 404
     documentos = client.get("/api/v1/documentos")
@@ -550,23 +556,110 @@ def test_eliminar_expediente_oculta_documentos_en_todos_los_modulos(
     listado = client.get("/api/v1/registros")
     assert listado.status_code == 200, listado.text
     assert all(item["expediente_id"] != expediente_id for item in listado.json()["filas"])
+    ruta = (
+        settings.storage_dir
+        / str(auth_prueba.contexto.tenant_id)
+        / archivo["sha256"][:2]
+        / archivo["sha256"]
+    )
+    assert not ruta.exists()
 
 
-def test_eliminar_documento_es_logico_y_deja_de_listarlo(
+def test_eliminar_documento_borra_registro_y_archivo_fisico(
     client: TestClient,
     auth_prueba: AuthPrueba,
+    settings: Settings,
 ) -> None:
     documento = subir(client, "eliminar.pdf", b"%PDF-1.7 documento temporal")
     auth_prueba.como_admin()
     documento_id = documento["id"]
 
     respuesta = client.delete(f"/api/v1/documentos/{documento_id}")
-    assert respuesta.status_code == 204
+    assert respuesta.status_code == 200
+    assert respuesta.json() == {"estado": "completado"}
 
     assert client.get(f"/api/v1/documentos/{documento_id}").status_code == 404
     listado = client.get("/api/v1/documentos")
     assert listado.status_code == 200
     assert all(d["id"] != documento_id for d in listado.json())
+    original = (
+        settings.storage_dir
+        / str(auth_prueba.contexto.tenant_id)
+        / documento["sha256"][:2]
+        / documento["sha256"]
+    )
+    assert not original.exists()
+
+
+def test_reingreso_tras_eliminacion_crea_documento_nuevo(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.routes import documentos as rutas_documentos
+
+    forzados: list[bool] = []
+
+    def procesar_simulado(*args: object, **kwargs: object) -> None:
+        forzados.append(kwargs.get("forzar_cache") is True)
+
+    monkeypatch.setattr(rutas_documentos, "_procesar_y_aplicar", procesar_simulado)
+    contenido = b"%PDF-1.7 documento para reingreso"
+    primero = subir(client, "reingreso.pdf", contenido)
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+    auth_prueba.como_admin()
+    eliminado = client.delete(f"/api/v1/documentos/{primero['id']}")
+    assert eliminado.status_code == 200, eliminado.text
+
+    auth_prueba.como_usuario(usuario_id)
+    segundo = subir(client, "reingreso.pdf", contenido)
+    assert segundo["id"] != primero["id"]
+    assert forzados == [False, True]
+
+
+def test_reingreso_de_factura_eliminada_crea_documento_nuevo_en_expediente_activo(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
+    contenido = factura(numero="F001-00009986")
+    original = subir(client, "factura-reingreso.xml", contenido)
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/documentos/{original['id']}").status_code == 200
+
+    auth_prueba.como_usuario(usuario_id)
+    nuevo = subir(client, "factura-reingreso.xml", contenido)
+    assert nuevo["id"] != original["id"]
+    assert nuevo["expediente_id"] == original["expediente_id"]
+
+
+def test_eliminacion_concurrente_no_duplica_auditoria_ni_falla_parcial(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    engine: Engine,
+    session: Session,
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    if engine.dialect.name != "postgresql":
+        pytest.skip("La prueba exige bloqueos de fila PostgreSQL")
+    documento = subir(client, "eliminar-concurrente.pdf", b"%PDF-1.7 borrado concurrente")
+    auth_prueba.como_admin()
+    barrera = Barrier(2)
+
+    def eliminar_simultaneamente() -> int:
+        barrera.wait(timeout=15)
+        return client.delete(f"/api/v1/documentos/{documento['id']}").status_code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(eliminar_simultaneamente) for _ in range(2)]
+        estados = sorted(future.result(timeout=30) for future in futures)
+
+    assert estados == [200, 404]
+    assert session.query(Auditoria).filter(Auditoria.accion == "DOCUMENTO_ELIMINADO").count() == 1
 
 
 def test_reprocesamiento_masivo_repara_razones_sociales(
@@ -1118,94 +1211,48 @@ Fecha de emisión"""
     assert len(ids) == 3
 
 
-def test_restaurar_documento_retirado_conserva_original(
+def test_reingreso_reconstruye_resultado_documental_persistido(
     client: TestClient,
     auth_prueba: AuthPrueba,
+    permiso_retiro_usuario: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    documento = subir(client, "restaurable.pdf", b"%PDF-1.7 restauracion de prueba")
+    from app.api.routes import documentos as rutas_documentos
+
+    contador = 0
+
+    def extraccion_simulada(*args: object) -> ResultadoProcesamiento:
+        nonlocal contador
+        contador += 1
+        return ResultadoProcesamiento(
+            texto=f"DOCUMENTO GENERICO REPROCESADO {contador}",
+            metodo="TEXTO_PDF",
+            motor="simulado",
+            paginas=1,
+            confianza=1.0,
+            sugerencia=sugerir_tipo(f"DOCUMENTO GENERICO REPROCESADO {contador}"),
+        )
+
+    monkeypatch.setattr(rutas_documentos, "procesar", extraccion_simulada)
+    contenido = pdf_vacio()
+    original = subir(client, "reprocesamiento-persistente.pdf", contenido)
+    inicial = original["datos_extraidos"]["procesamiento_documental"]
+    assert inicial["texto"] == "DOCUMENTO GENERICO REPROCESADO 1"
+    propietario_id = auth_prueba.contexto.usuario_id
+    assert propietario_id is not None
     auth_prueba.como_admin()
-    ruta = f"/api/v1/documentos/{documento['id']}"
-    assert client.delete(ruta).status_code == 204
-    assert client.get(ruta).status_code == 404
-
-    restaurado = client.post(ruta + "/restaurar")
-    assert restaurado.status_code == 200, restaurado.text
-    assert restaurado.json()["id"] == documento["id"]
-    assert client.get(ruta).status_code == 200
-    assert client.post(ruta + "/restaurar").status_code == 409
-
-
-def test_restaurar_sin_documento_retirado_devuelve_404(client: TestClient) -> None:
-    respuesta = client.post("/api/v1/documentos/00000000-0000-0000-0000-000000000001/restaurar")
-    assert respuesta.status_code == 404
-
-
-def test_restauracion_denegada_a_superadmin(
-    client: TestClient,
-    auth_prueba: AuthPrueba,
-) -> None:
-    documento = subir(client, "privado.pdf", b"%PDF-1.7 solo tenant")
-    auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/documentos/{documento['id']}").status_code == 204
-    auth_prueba.como_superadmin()
-    assert client.post(f"/api/v1/documentos/{documento['id']}/restaurar").status_code == 403
-
-
-def test_restauracion_rechaza_original_ausente(
-    client: TestClient,
-    auth_prueba: AuthPrueba,
-    settings: Settings,
-) -> None:
-    documento = subir(client, "ausente.pdf", b"%PDF-1.7 archivo de prueba")
-    auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/documentos/{documento['id']}").status_code == 204
-    original = (
-        settings.storage_dir
-        / str(auth_prueba.contexto.tenant_id)
-        / documento["sha256"][:2]
-        / documento["sha256"]
+    assert client.delete(f"/api/v1/documentos/{original['id']}").status_code == 200
+    auth_prueba.como_usuario(propietario_id)
+    respuesta = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("reprocesamiento-persistente.pdf", contenido, "application/pdf")},
     )
-    original.unlink()
-    respuesta = client.post(f"/api/v1/documentos/{documento['id']}/restaurar")
-    assert respuesta.status_code == 409
-    assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 404
-
-
-def test_restauracion_rechaza_tenant_ajeno(
-    client: TestClient,
-    auth_prueba: AuthPrueba,
-) -> None:
-    from dataclasses import replace
-    from uuid import uuid4
-
-    documento = subir(client, "tenant.pdf", b"%PDF-1.7 prueba tenant")
-    auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/documentos/{documento['id']}").status_code == 204
-    original = auth_prueba.contexto
-    auth_prueba.contexto = replace(original, tenant_id=uuid4())
-    try:
-        assert client.post(f"/api/v1/documentos/{documento['id']}/restaurar").status_code == 404
-    finally:
-        auth_prueba.contexto = original
-
-
-def test_listar_retirados_respeta_estado_y_permiso(
-    client: TestClient,
-    auth_prueba: AuthPrueba,
-) -> None:
-    primero = subir(client, "primero.pdf", b"%PDF-1.7 primer original")
-    segundo = subir(client, "segundo.pdf", b"%PDF-1.7 segundo original")
-    auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/documentos/{primero['id']}").status_code == 204
-
-    resultado = client.get("/api/v1/documentos/retirados")
-    assert resultado.status_code == 200, resultado.text
-    ids = {documento["id"] for documento in resultado.json()}
-    assert primero["id"] in ids
-    assert segundo["id"] not in ids
-
-    auth_prueba.como_superadmin()
-    assert client.get("/api/v1/documentos/retirados").status_code == 403
+    assert respuesta.status_code == 201, respuesta.text
+    assert respuesta.json()["id"] != original["id"]
+    nuevo = respuesta.json()["datos_extraidos"]["procesamiento_documental"]
+    assert nuevo["texto"] == "DOCUMENTO GENERICO REPROCESADO 2"
+    assert contador == 2
+    assert client.get(f"/api/v1/documentos/{respuesta.json()['id']}").status_code == 200
 
 
 def test_previsualizar_retirada_no_cambia_documentos(
@@ -1300,7 +1347,7 @@ def test_previsualizar_retirada_no_filtra_identificadores_ajenos(
         auth_prueba.contexto = anterior
 
 
-def test_retirar_lote_informa_fallos_y_no_borra_archivos(
+def test_eliminar_lote_informa_fallos_y_borra_archivos(
     client: TestClient,
     auth_prueba: AuthPrueba,
     settings: Settings,
@@ -1313,7 +1360,7 @@ def test_retirar_lote_informa_fallos_y_no_borra_archivos(
         json={"documentos_ids": [primero["id"], segundo["id"]]},
     )
     assert respuesta.status_code == 200, respuesta.text
-    assert respuesta.json()["retirados"] == 2
+    assert respuesta.json()["eliminados"] == 2
     for documento in (primero, segundo):
         assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 404
         original = (
@@ -1322,14 +1369,14 @@ def test_retirar_lote_informa_fallos_y_no_borra_archivos(
             / documento["sha256"][:2]
             / documento["sha256"]
         )
-        assert original.is_file()
+        assert not original.exists()
 
     repetido = client.post(
         "/api/v1/documentos/retirar-lote",
         json={"documentos_ids": [primero["id"], segundo["id"]]},
     )
     assert repetido.status_code == 200
-    assert repetido.json()["retirados"] == 0
+    assert repetido.json()["eliminados"] == 0
     assert all(fila["estado"] == "NO_RETIRADO" for fila in repetido.json()["resultados"])
 
 
@@ -1346,7 +1393,7 @@ def test_retirar_lote_no_autoriza_superadmin(
     assert respuesta.status_code == 403
 
 
-def test_retirar_lote_no_elimina_documento_de_otro_tenant(
+def test_eliminar_lote_no_elimina_documento_de_otro_tenant(
     client: TestClient,
     auth_prueba: AuthPrueba,
 ) -> None:
@@ -1363,7 +1410,7 @@ def test_retirar_lote_no_elimina_documento_de_otro_tenant(
             json={"documentos_ids": [documento["id"]]},
         )
         assert respuesta.status_code == 200, respuesta.text
-        assert respuesta.json()["retirados"] == 0
+        assert respuesta.json()["eliminados"] == 0
         assert respuesta.json()["resultados"][0]["estado"] == "NO_RETIRADO"
     finally:
         auth_prueba.contexto = anterior
@@ -1396,8 +1443,8 @@ def test_capacidades_documentales_respeta_admin_y_superadmin(
     admin = client.get(ruta)
     assert admin.status_code == 200
     assert admin.json()["puede_retirar"] is True
-    assert admin.json()["puede_restaurar"] is True
-    assert admin.json()["puede_eliminar_definitivamente"] is False
+    assert admin.json()["puede_restaurar"] is False
+    assert admin.json()["puede_eliminar_definitivamente"] is True
     auth_prueba.como_superadmin()
     superadmin = client.get(ruta)
     assert superadmin.status_code == 403
@@ -1482,28 +1529,6 @@ def test_ambitos_documentales_cinco_roles(
         assert error.value.status_code == 404
 
 
-def test_retirada_y_restauracion_recalculan_expediente_y_alertas(
-    client: TestClient,
-    auth_prueba: AuthPrueba,
-) -> None:
-    documento = subir(client, "factura-restaurable.xml", factura())
-    expediente_id = documento["expediente_id"]
-    antes = expediente(client, expediente_id)
-    alertas_antes = alertas_abiertas(antes)
-    auth_prueba.como_admin()
-
-    retirado = client.delete(f"/api/v1/documentos/{documento['id']}")
-    assert retirado.status_code == 204, retirado.text
-    durante = expediente(client, expediente_id)
-    assert all(item["id"] != documento["id"] for item in durante["documentos"])
-
-    recuperado = client.post(f"/api/v1/documentos/{documento['id']}/restaurar")
-    assert recuperado.status_code == 200, recuperado.text
-    despues = expediente(client, expediente_id)
-    assert any(item["id"] == documento["id"] for item in despues["documentos"])
-    assert alertas_abiertas(despues) == alertas_antes
-
-
 def test_pago_voucher_impide_retirada_y_conserva_vinculos(
     client: TestClient,
     auth_prueba: AuthPrueba,
@@ -1547,181 +1572,6 @@ def test_pago_voucher_impide_retirada_y_conserva_vinculos(
     assert client.get(f"/api/v1/documentos/{doc_id}").status_code == 200
 
 
-def test_restaurar_expediente_devuelve_evidencia_y_alertas(
-    client: TestClient, auth_prueba: AuthPrueba
-) -> None:
-    original = subir(client, "factura-expediente.xml", factura())
-    expediente_id = original["expediente_id"]
-    previas = alertas_abiertas(expediente(client, expediente_id))
-    auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 204
-    assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 404
-    restaurado = client.post(f"/api/v1/expedientes/{expediente_id}/restaurar")
-    assert restaurado.status_code == 200, restaurado.text
-    assert any(doc["id"] == original["id"] for doc in restaurado.json()["documentos"])
-    assert alertas_abiertas(restaurado.json()) == previas
-    assert client.post(f"/api/v1/expedientes/{expediente_id}/restaurar").status_code == 409
-
-
-def test_restaurar_expediente_no_reactiva_documento_retirado_previamente(
-    client: TestClient, auth_prueba: AuthPrueba
-) -> None:
-    original = subir(client, "factura-previa.xml", factura())
-    expediente_id = original["expediente_id"]
-    auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/documentos/{original['id']}").status_code == 204
-    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 204
-    restaurado = client.post(f"/api/v1/expedientes/{expediente_id}/restaurar")
-    assert restaurado.status_code == 200, restaurado.text
-    assert all(doc["id"] != original["id"] for doc in restaurado.json()["documentos"])
-    assert client.get(f"/api/v1/documentos/{original['id']}").status_code == 404
-
-
-def test_restaurar_expediente_denegado_a_superadmin(
-    client: TestClient, auth_prueba: AuthPrueba
-) -> None:
-    original = subir(client, "factura-superadmin.xml", factura())
-    expediente_id = original["expediente_id"]
-    auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 204
-    auth_prueba.como_superadmin()
-    assert client.post(f"/api/v1/expedientes/{expediente_id}/restaurar").status_code == 403
-
-
-def test_restaurar_expediente_original_faltante_no_cambia_estado(
-    client: TestClient, auth_prueba: AuthPrueba, settings: Settings
-) -> None:
-    original = subir(client, "factura-faltante.xml", factura())
-    expediente_id = original["expediente_id"]
-    auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 204
-    ruta = (
-        settings.storage_dir
-        / str(auth_prueba.contexto.tenant_id)
-        / str(original["sha256"])[:2]
-        / str(original["sha256"])
-    )
-    ruta.unlink()
-    respuesta = client.post(f"/api/v1/expedientes/{expediente_id}/restaurar")
-    assert respuesta.status_code == 409, respuesta.text
-    assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 404
-
-
-def test_restaurar_expediente_rechaza_tenant_ajeno(
-    client: TestClient, auth_prueba: AuthPrueba
-) -> None:
-    from dataclasses import replace
-    from uuid import uuid4
-
-    original = subir(client, "tenant-expediente.xml", factura())
-    expediente_id = original["expediente_id"]
-    auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 204
-    anterior = auth_prueba.contexto
-    auth_prueba.contexto = replace(anterior, tenant_id=uuid4())
-    try:
-        assert client.post(f"/api/v1/expedientes/{expediente_id}/restaurar").status_code == 404
-    finally:
-        auth_prueba.contexto = anterior
-    assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 404
-
-
-def test_expediente_pagado_bloqueado_y_gre_restaurable_sin_pago(
-    client: TestClient, auth_prueba: AuthPrueba, session: Session
-) -> None:
-    from uuid import UUID
-
-    from app.models import PagoERP, ReferenciaGRE
-
-    original = subir(client, "factura-vinculada.xml", factura())
-    doc_id = UUID(str(original["id"]))
-    expediente_id = original["expediente_id"]
-    alertas_iniciales = alertas_abiertas(expediente(client, expediente_id))
-    referencia = ReferenciaGRE(
-        tenant_id=auth_prueba.contexto.tenant_id,
-        documento_id=doc_id,
-        serie="F001",
-        correlativo="25",
-        emisor_ruc="20123456789",
-        receptor_ruc="20987654321",
-    )
-    pago = PagoERP(
-        tenant_id=auth_prueba.contexto.tenant_id,
-        usuario_id=auth_prueba.contexto.miembro_id,
-        periodo_desde=date(2026, 9, 1),
-        periodo_hasta=date(2026, 9, 30),
-        moneda="PEN",
-        produccion_total=Decimal("150.00"),
-        porcentaje=Decimal("10.00"),
-        bruto=Decimal("15.00"),
-        saldo=Decimal("15.00"),
-        voucher_documento_id=doc_id,
-    )
-    session.add_all([referencia, pago])
-    session.commit()
-    referencia_id = referencia.id
-    auth_prueba.como_admin()
-
-    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 409
-    assert alertas_abiertas(expediente(client, expediente_id)) == alertas_iniciales
-    session.delete(pago)
-    session.commit()
-
-    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 204
-    respuesta = client.post(f"/api/v1/expedientes/{expediente_id}/restaurar")
-    assert respuesta.status_code == 200, respuesta.text
-    session.expire_all()
-    assert session.get(ReferenciaGRE, referencia_id).documento_id == doc_id
-    assert alertas_abiertas(respuesta.json()) == alertas_iniciales
-
-
-def test_restauraciones_concurrentes_no_duplican_reactivacion(
-    client: TestClient, auth_prueba: AuthPrueba, engine: Engine
-) -> None:
-    from concurrent.futures import ThreadPoolExecutor
-    from threading import Barrier
-
-    if engine.dialect.name != "postgresql":
-        pytest.skip("La prueba exige bloqueos reales PostgreSQL")
-    original = subir(client, "factura-concurrente.xml", factura())
-    expediente_id = original["expediente_id"]
-    auth_prueba.como_admin()
-    ruta = f"/api/v1/expedientes/{expediente_id}/restaurar"
-    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 204
-    barrera = Barrier(2)
-
-    def restaurar() -> int:
-        barrera.wait(timeout=15)
-        return client.post(ruta).status_code
-
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        primero = executor.submit(restaurar)
-        segundo = executor.submit(restaurar)
-        resultados = sorted((primero.result(timeout=30), segundo.result(timeout=30)))
-    assert resultados == [200, 409]
-    detalle_final = expediente(client, expediente_id)
-    assert sum(doc["id"] == original["id"] for doc in detalle_final["documentos"]) == 1
-
-
-def test_restaurar_expediente_original_alterado_no_cambia_estado(
-    client: TestClient, auth_prueba: AuthPrueba, settings: Settings
-) -> None:
-    original = subir(client, "factura-alterada.xml", factura())
-    expediente_id = original["expediente_id"]
-    auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 204
-    ruta = (
-        settings.storage_dir
-        / str(auth_prueba.contexto.tenant_id)
-        / str(original["sha256"])[:2]
-        / str(original["sha256"])
-    )
-    ruta.write_bytes(b"original alterado durante el resguardo")
-    resultado = client.post(f"/api/v1/expedientes/{expediente_id}/restaurar")
-    assert resultado.status_code == 409, resultado.text
-    assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 404
-
-
 def test_misd_secretaria_no_retiro_documentos_ni_expedientes(
     client: TestClient, auth_prueba: AuthPrueba
 ) -> None:
@@ -1751,7 +1601,7 @@ def test_misd_cliente_autorizado_requiere_administrador(
     # El gerente sin ámbito no debe descubrir la existencia del expediente.
     assert client.delete(f"/api/v1/expedientes/{registro.id}").status_code == 404
     auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/expedientes/{registro.id}").status_code == 204
+    assert client.delete(f"/api/v1/expedientes/{registro.id}").status_code == 200
 
 
 def test_misd_solo_administrador_puede_retirar_cliente_autorizado() -> None:
@@ -1763,205 +1613,8 @@ def test_misd_solo_administrador_puede_retirar_cliente_autorizado() -> None:
     assert not requiere_autorizacion_administrativa("ADMINISTRADOR", True)
 
 
-def test_restaurar_expediente_preserva_retiros_anteriores_y_alertas(
-    client: TestClient,
-    auth_prueba: AuthPrueba,
-    session: Session,
-) -> None:
-    from uuid import UUID
-
-    from app.models import Documento
-
-    factura_doc = subir(client, "exp-restauracion.xml", factura())
-    exp_id = factura_doc["expediente_id"]
-    previo = subir(client, "exp-previo.pdf", b"%PDF-1.7 retiro previo")
-    posterior = subir(client, "exp-posterior.pdf", b"%PDF-1.7 retiro cascada")
-    session.get(Documento, UUID(str(previo["id"]))).expediente_id = UUID(str(exp_id))
-    session.get(Documento, UUID(str(posterior["id"]))).expediente_id = UUID(str(exp_id))
-    session.commit()
-    alertas_iniciales = alertas_abiertas(expediente(client, exp_id))
-    auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/documentos/{previo['id']}").status_code == 204
-    assert client.delete(f"/api/v1/expedientes/{exp_id}").status_code == 204
-    assert client.get(f"/api/v1/expedientes/{exp_id}").status_code == 404
-    assert client.post(f"/api/v1/documentos/{posterior['id']}/restaurar").status_code == 409
-    respuesta = client.post(f"/api/v1/expedientes/{exp_id}/restaurar")
-    assert respuesta.status_code == 200, respuesta.text
-    activos = {item["id"] for item in respuesta.json()["documentos"]}
-    assert factura_doc["id"] in activos
-    assert posterior["id"] in activos
-    assert previo["id"] not in activos
-    assert client.get(f"/api/v1/documentos/{previo['id']}").status_code == 404
-    assert alertas_abiertas(expediente(client, exp_id)) == alertas_iniciales
-    assert client.post(f"/api/v1/expedientes/{exp_id}/restaurar").status_code == 409
-
-
-def test_restauracion_expediente_prohibe_superadmin(
-    client: TestClient, auth_prueba: AuthPrueba
-) -> None:
-    doc = subir(client, "exp-permisos.xml", factura())
-    auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/expedientes/{doc['expediente_id']}").status_code == 204
-    auth_prueba.como_superadmin()
-    assert client.post(f"/api/v1/expedientes/{doc['expediente_id']}/restaurar").status_code == 403
-
-
-@pytest.mark.parametrize("alteracion", ["ausente", "corrupto"])
-def test_restauracion_integral_rechaza_original_invalido_sin_cambios(
-    client: TestClient,
-    auth_prueba: AuthPrueba,
-    session: Session,
-    settings: Settings,
-    alteracion: str,
-) -> None:
-    from uuid import UUID
-
-    from app.models import Documento
-
-    principal = subir(client, "integridad-original.xml", factura())
-    exp_id = principal["expediente_id"]
-    adjunto = subir(client, "original-seguro.pdf", b"%PDF-1.7 documento de prueba")
-    adjunto_modelo = session.get(Documento, UUID(str(adjunto["id"])))
-    assert adjunto_modelo is not None
-    adjunto_modelo.expediente_id = UUID(str(exp_id))
-    session.commit()
-    auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/expedientes/{exp_id}").status_code == 204
-    original = settings.storage_dir / adjunto_modelo.ruta_storage
-    assert original.is_file()
-    if alteracion == "ausente":
-        original.unlink()
-    else:
-        original.write_bytes(b"archivo modificado")
-    respuesta = client.post(f"/api/v1/expedientes/{exp_id}/restaurar")
-    assert respuesta.status_code == 409, respuesta.text
-    assert client.get(f"/api/v1/expedientes/{exp_id}").status_code == 404
-    assert client.get(f"/api/v1/documentos/{principal['id']}").status_code == 404
-    assert client.get(f"/api/v1/documentos/{adjunto['id']}").status_code == 404
-
-
-def test_restauracion_integral_oculta_expediente_de_tenant_ajeno(
-    client: TestClient, auth_prueba: AuthPrueba
-) -> None:
-    from dataclasses import replace
-    from uuid import uuid4
-
-    principal = subir(client, "restauracion-tenant.xml", factura())
-    exp_id = principal["expediente_id"]
-    auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/expedientes/{exp_id}").status_code == 204
-    original = auth_prueba.contexto
-    auth_prueba.contexto = replace(original, tenant_id=uuid4())
-    try:
-        assert client.post(f"/api/v1/expedientes/{exp_id}/restaurar").status_code == 404
-    finally:
-        auth_prueba.contexto = original
-    assert client.get(f"/api/v1/expedientes/{exp_id}").status_code == 404
-    assert client.post(f"/api/v1/expedientes/{exp_id}/restaurar").status_code == 200
-
-
-def test_restauracion_integral_conserva_vinculos_gre_y_pago(
-    client: TestClient,
-    auth_prueba: AuthPrueba,
-    session: Session,
-) -> None:
-    from uuid import UUID
-
-    from app.models import Documento, PagoERP, ReferenciaGRE
-
-    principal = subir(client, "exp-vinculos.xml", factura())
-    exp_id = principal["expediente_id"]
-    adjunto = subir(client, "exp-voucher.pdf", b"%PDF-1.7 comprobante de prueba")
-    doc_id = UUID(str(adjunto["id"]))
-    documento = session.get(Documento, doc_id)
-    assert documento is not None
-    documento.expediente_id = UUID(str(exp_id))
-    session.commit()
-    auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/expedientes/{exp_id}").status_code == 204
-
-    referencia = ReferenciaGRE(
-        tenant_id=auth_prueba.contexto.tenant_id,
-        documento_id=doc_id,
-        expediente_id=UUID(str(exp_id)),
-        serie="F001",
-        correlativo="123",
-        emisor_ruc="20123456789",
-        receptor_ruc="20987654321",
-    )
-    pago = PagoERP(
-        tenant_id=auth_prueba.contexto.tenant_id,
-        usuario_id=auth_prueba.contexto.miembro_id,
-        periodo_desde=date(2026, 8, 1),
-        periodo_hasta=date(2026, 8, 31),
-        moneda="PEN",
-        produccion_total=Decimal("100.00"),
-        porcentaje=Decimal("10.00"),
-        bruto=Decimal("10.00"),
-        saldo=Decimal("10.00"),
-        voucher_documento_id=doc_id,
-    )
-    session.add_all([referencia, pago])
-    session.commit()
-    referencia_id, pago_id = referencia.id, pago.id
-    respuesta = client.post(f"/api/v1/expedientes/{exp_id}/restaurar")
-    assert respuesta.status_code == 200, respuesta.text
-    session.expire_all()
-    assert session.get(ReferenciaGRE, referencia_id).documento_id == doc_id
-    assert session.get(ReferenciaGRE, referencia_id).expediente_id == UUID(str(exp_id))
-    assert session.get(PagoERP, pago_id).voucher_documento_id == doc_id
-    assert session.get(PagoERP, pago_id).saldo == Decimal("10.00")
-
-
-def test_restauracion_integral_revierte_cambios_si_falla_actualizacion(
-    client: TestClient,
-    auth_prueba: AuthPrueba,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from sqlalchemy.exc import IntegrityError
-
-    from app.api.routes import expedientes as expedientes_routes
-
-    principal = subir(client, "exp-rollback.xml", factura())
-    exp_id = principal["expediente_id"]
-    auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/expedientes/{exp_id}").status_code == 204
-
-    def fallar_recalculo(*args: object, **kwargs: object) -> None:
-        raise IntegrityError("actualizar expediente", {}, ValueError("fallo simulado"))
-
-    with monkeypatch.context() as contexto:
-        contexto.setattr(expedientes_routes, "actualizar_expediente", fallar_recalculo)
-        resultado = client.post(f"/api/v1/expedientes/{exp_id}/restaurar")
-    assert resultado.status_code == 409, resultado.text
-    assert client.get(f"/api/v1/expedientes/{exp_id}").status_code == 404
-    assert client.get(f"/api/v1/documentos/{principal['id']}").status_code == 404
-    assert client.post(f"/api/v1/expedientes/{exp_id}/restaurar").status_code == 200
-
-
-def test_restauracion_integral_concurrente_solo_una_operacion_activa(
-    client: TestClient,
-    auth_prueba: AuthPrueba,
-    engine: Engine,
-) -> None:
-    from concurrent.futures import ThreadPoolExecutor
-    from threading import Barrier
-
-    if engine.dialect.name != "postgresql":
-        pytest.skip("Prueba concurrente requiere bloqueos FOR UPDATE reales de PostgreSQL")
-
-    principal = subir(client, "exp-concurrente.xml", factura())
-    exp_id = principal["expediente_id"]
-    auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/expedientes/{exp_id}").status_code == 204
-    barrera = Barrier(2)
-
-    def restaurar_simultaneamente() -> int:
-        barrera.wait(timeout=15)
-        return client.post(f"/api/v1/expedientes/{exp_id}/restaurar").status_code
-
-    with ThreadPoolExecutor(max_workers=2) as ejecutor:
-        futuros = [ejecutor.submit(restaurar_simultaneamente) for _ in range(2)]
-        estados = [futuro.result(timeout=30) for futuro in futuros]
-    assert sorted(estados) == [200, 409]
-    assert client.get(f"/api/v1/expedientes/{exp_id}").status_code == 200
+def test_restaurar_documento_y_expediente_ya_no_disponible(client: TestClient) -> None:
+    documento_id = "00000000-0000-0000-0000-000000000001"
+    expediente_id = "00000000-0000-0000-0000-000000000001"
+    assert client.post(f"/api/v1/documentos/{documento_id}/restaurar").status_code == 410
+    assert client.post(f"/api/v1/expedientes/{expediente_id}/restaurar").status_code == 410

@@ -1,4 +1,3 @@
-import hashlib
 import json
 import re
 import tempfile
@@ -13,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import case, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import InstrumentedAttribute
@@ -23,7 +22,18 @@ from starlette.background import BackgroundTask
 from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado
 from app.enums import EstadoExpediente, RolMiembro
-from app.models import Documento, Empresa, Expediente, Gestor, Miembro, ahora
+from app.models import (
+    Alerta,
+    AlertaManual,
+    Documento,
+    EliminacionArchivoPendiente,
+    Empresa,
+    Expediente,
+    Gestor,
+    Miembro,
+    SolicitudRetiroMISD,
+    ahora,
+)
 from app.schemas import (
     ExpedienteDetalle,
     ExpedienteIn,
@@ -35,8 +45,12 @@ from app.security import cuenta_administradora_responsable
 from app.services import auditoria
 from app.services.ambito_gerencia import alcance_expedientes_gerente, expediente_visible_gerente
 from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
+from app.services.eliminacion import (
+    bloquear_clave_archivo,
+    procesar_archivo_pendiente,
+    tablas_que_referencian,
+)
 from app.services.expedientes import (
-    actualizar_expediente,
     buscar_expediente,
     documentos_faltantes,
     fecha_limite,
@@ -980,16 +994,25 @@ def detalle(
     )
 
 
-@router.delete("/{expediente_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{expediente_id}")
 def eliminar(
     session: SessionDep,
+    almacen: AlmacenDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
     expediente_id: uuid.UUID,
-) -> None:
+) -> dict[str, object]:
     bloquear_tenant_financiero(session, tenant_id)
-    expediente = session.get(Expediente, expediente_id)
-    if expediente is None or expediente.tenant_id != tenant_id or expediente.deleted_at:
+    expediente = session.scalar(
+        select(Expediente)
+        .where(
+            Expediente.id == expediente_id,
+            Expediente.tenant_id == tenant_id,
+            Expediente.deleted_at.is_(None),
+        )
+        .with_for_update()
+    )
+    if expediente is None:
         raise no_encontrado("Expediente")
     if auth.rol == "GESTOR" and expediente.gestor_id != auth.gestor_id:
         raise no_encontrado("Expediente")
@@ -1015,6 +1038,16 @@ def eliminar(
             "El cliente está autorizado: debe solicitar aprobación a ADMINISTRACIÓN",
         )
 
+    solicitud_pendiente = session.scalar(
+        select(SolicitudRetiroMISD.id).where(
+            SolicitudRetiroMISD.tenant_id == tenant_id,
+            SolicitudRetiroMISD.expediente_id == expediente.id,
+            SolicitudRetiroMISD.estado.in_(["PENDIENTE", "APROBADA"]),
+        )
+    )
+    if solicitud_pendiente is not None:
+        raise HTTPException(409, "Hay una solicitud MISD de eliminación pendiente")
+
     bloqueo = motivo_bloqueo_liquidacion(session, expediente)
     if bloqueo is not None:
         raise HTTPException(
@@ -1029,21 +1062,55 @@ def eliminar(
     ):
         raise HTTPException(409, "Expediente contiene un voucher vinculado a un pago")
 
-    marca_eliminacion = ahora()
-    expediente.deleted_at = marca_eliminacion
-    # Una eliminación integral debe ocultar también las evidencias de los
-    # demás menús, sin perder la trazabilidad ni borrar archivos físicos.
-    for documento in expediente.documentos:
-        if documento.deleted_at is None:
-            documento.deleted_at = marca_eliminacion
-            auditoria.registrar(
-                session,
-                tenant_id,
-                "DOCUMENTO_ELIMINADO_CON_EXPEDIENTE",
-                "documento",
-                documento.id,
-                {"expediente_id": str(expediente.id), "sha256": documento.sha256},
-            )
+    documentos = list(
+        session.scalars(
+            select(Documento)
+            .where(Documento.tenant_id == tenant_id, Documento.expediente_id == expediente.id)
+            .with_for_update()
+        )
+    )
+    referencias = tablas_que_referencian(
+        session,
+        documento_ids={documento.id for documento in documentos},
+        expediente_id=expediente.id,
+    )
+    if referencias:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Eliminación bloqueada por dependencias: " + ", ".join(referencias),
+        )
+    for documento in documentos:
+        if motivo_bloqueo_voucher(session, tenant_id, documento.id) is not None:
+            raise HTTPException(409, "Expediente contiene un voucher vinculado a un pago")
+    pendientes = [
+        EliminacionArchivoPendiente(tenant_id=tenant_id, ruta_storage=documento.ruta_storage)
+        for documento in documentos
+    ]
+    for sha256 in sorted(documento.sha256 for documento in documentos):
+        bloquear_clave_archivo(session, tenant_id, sha256)
+    session.add_all(pendientes)
+    session.execute(
+        delete(Alerta).where(
+            Alerta.tenant_id == tenant_id,
+            Alerta.expediente_id == expediente.id,
+        )
+    )
+    session.execute(
+        delete(AlertaManual).where(
+            AlertaManual.tenant_id == tenant_id,
+            AlertaManual.expediente_id == expediente.id,
+        )
+    )
+    for documento in documentos:
+        auditoria.registrar(
+            session,
+            tenant_id,
+            "DOCUMENTO_ELIMINADO_CON_EXPEDIENTE",
+            "documento",
+            documento.id,
+            {"expediente_id": str(expediente.id), "sha256": documento.sha256},
+        )
+        session.delete(documento)
     auditoria.registrar(
         session,
         tenant_id,
@@ -1056,101 +1123,25 @@ def eliminar(
             "correlativo": expediente.correlativo,
         },
     )
+    session.delete(expediente)
     session.commit()
+    archivos_eliminados = 0
+    for pendiente in pendientes:
+        if procesar_archivo_pendiente(session, almacen, pendiente):
+            archivos_eliminados += 1
+    session.commit()
+    return {
+        "documentos_eliminados": len(documentos),
+        "archivos_eliminados": archivos_eliminados,
+        "archivos_pendientes": len(documentos) - archivos_eliminados,
+    }
 
 
-@router.post("/{expediente_id}/restaurar", response_model=ExpedienteDetalle)
-def restaurar_expediente(
-    expediente_id: uuid.UUID,
-    session: SessionDep,
-    almacen: AlmacenDep,
-    settings: SettingsDep,
-    hoy: HoyDep,
-    tenant_id: TenantDep,
-    auth: OperativeAuthDep,
-) -> ExpedienteDetalle:
-    """Restaura únicamente evidencias retiradas junto con el expediente."""
-    expediente = session.scalar(
-        select(Expediente)
-        .where(Expediente.id == expediente_id, Expediente.tenant_id == tenant_id)
-        .with_for_update()
+@router.post("/{expediente_id}/restaurar")
+def restaurar_expediente(expediente_id: uuid.UUID) -> None:
+    """La eliminación es definitiva; cree un expediente nuevo al reingresar."""
+    raise HTTPException(
+        status.HTTP_410_GONE,
+        "La restauración fue retirada. Vuelva a cargar los documentos "
+        "para crear un expediente nuevo.",
     )
-    if expediente is None or not _visible_para_auth(expediente, auth, session):
-        raise no_encontrado("Expediente")
-    if auth.rol == RolMiembro.SUPERADMIN or not permiso_habilitado(
-        session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS
-    ):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin permiso para restaurar expedientes")
-    if expediente.deleted_at is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "El expediente ya se encuentra activo")
-
-    # La retirada integral asigna la misma marca al expediente y a las
-    # evidencias activas. Las retiradas anteriormente conservan otra marca.
-    marca = expediente.deleted_at
-    candidatos = [doc for doc in expediente.documentos if doc.deleted_at == marca]
-    if candidatos:
-        # Serializa restauraciones de originales del mismo tenant y evita
-        # carreras entre verificaciones de huella y colisiones.
-        session.scalars(
-            select(Documento.id)
-            .where(Documento.tenant_id == tenant_id, Documento.expediente_id == expediente_id)
-            .with_for_update()
-        ).all()
-    for doc in candidatos:
-        ruta = almacen.ruta_absoluta(doc.ruta_storage)
-        if not ruta.is_file() or hashlib.sha256(ruta.read_bytes()).hexdigest() != doc.sha256:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                "Original ausente o alterado: no se ha restaurado el expediente",
-            )
-        equivalente = session.scalar(
-            select(Documento.id)
-            .where(
-                Documento.tenant_id == tenant_id,
-                Documento.id != doc.id,
-                Documento.deleted_at.is_(None),
-                or_(
-                    Documento.sha256 == doc.sha256,
-                    and_(
-                        Documento.huella_comercial.is_not(None),
-                        Documento.huella_comercial == doc.huella_comercial,
-                    ),
-                ),
-            )
-            .limit(1)
-        )
-        if equivalente is not None:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                "Un documento activo coincide con una evidencia retirada",
-            )
-
-    expediente.deleted_at = None
-    for doc in candidatos:
-        doc.deleted_at = None
-        auditoria.registrar(
-            session,
-            tenant_id,
-            "DOCUMENTO_RESTAURADO_CON_EXPEDIENTE",
-            "documento",
-            doc.id,
-            {"expediente_id": str(expediente.id)},
-        )
-    auditoria.registrar(
-        session,
-        tenant_id,
-        "EXPEDIENTE_RESTAURADO",
-        "expediente",
-        expediente.id,
-        {"documentos_restaurados": len(candidatos)},
-    )
-    try:
-        session.flush()
-        actualizar_expediente(session, expediente, hoy, settings)
-        session.commit()
-    except IntegrityError as exc:
-        session.rollback()
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, "Conflicto de identidad al restaurar expediente"
-        ) from exc
-    return detalle(session, settings, tenant_id, auth, expediente_id)

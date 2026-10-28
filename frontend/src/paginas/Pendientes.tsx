@@ -95,13 +95,13 @@ export default function Pendientes() {
   const [resultadoLote, setResultadoLote] = useState<ResultadoLote>();
   const [errorLote, setErrorLote] = useState("");
   const [seleccionados, setSeleccionados] = useState<string[]>([]);
-  const [retirandoSeleccionados, setRetirandoSeleccionados] = useState(false);
-  const [resultadoRetirada, setResultadoRetirada] = useState("");
-  const [errorRetirada, setErrorRetirada] = useState("");
+  const [eliminandoSeleccionados, setEliminandoSeleccionados] = useState(false);
+  const [resultadoEliminacion, setResultadoEliminacion] = useState("");
+  const [errorEliminacion, setErrorEliminacion] = useState("");
 
-  const retirarSeleccionados = async () => {
+  const eliminarSeleccionados = async () => {
     const visibles = (datos ?? []).filter((d) => seleccionados.includes(d.id));
-    if (!visibles.length || retirandoSeleccionados) return;
+    if (!visibles.length || eliminandoSeleccionados) return;
     try {
       const vista = await enviarJson<{
         total: number;
@@ -114,46 +114,54 @@ export default function Pendientes() {
         const requiereMisd = vista.resultados.filter(
           (fila) => fila.estado === "REQUIERE_MISD",
         ).length;
-        setErrorRetirada(
+        setErrorEliminacion(
           requiereMisd > 0
-            ? `${requiereMisd} documento(s) requieren aprobación MISD antes del retiro.`
-            : `Solo ${vista.aptos} de ${visibles.length} documentos tienen autorización para retirarse. Actualice la bandeja.`,
+            ? `${requiereMisd} documento(s) requieren aprobación MISD antes de eliminarse.`
+            : `Solo ${vista.aptos} de ${visibles.length} documentos tienen autorización para eliminarse. Actualice la bandeja.`,
         );
         return;
       }
     } catch (error) {
-      setErrorRetirada(error instanceof Error ? error.message : String(error));
+      setErrorEliminacion(error instanceof Error ? error.message : String(error));
       return;
     }
-    if (!window.confirm(`¿Retirar ${visibles.length} documentos pendientes? Los originales se conservarán.`)) return;
-    setRetirandoSeleccionados(true);
-    setErrorRetirada("");
-    setResultadoRetirada("");
-    const retirados: string[] = [];
+    const nombres = visibles.slice(0, 20)
+      .map((documento) => `• ${documento.nombre_original}`).join("\n");
+    const mas = visibles.length > 20 ? `\n…y ${visibles.length - 20} más` : "";
+    if (!window.confirm([
+      `Eliminar definitivamente ${visibles.length} documentos?`,
+      nombres,
+      mas,
+      "Se borrarán sus archivos físicos y no se podrán restaurar.",
+    ].filter(Boolean).join("\n"))) return;
+    setEliminandoSeleccionados(true);
+    setErrorEliminacion("");
+    setResultadoEliminacion("");
+    const eliminados: string[] = [];
     const errores: string[] = [];
     try {
       const resultado = await enviarJson<{
-        retirados: number;
+        eliminados: number;
         resultados: { id: string; estado: string; codigo?: string }[];
       }>("/api/v1/documentos/retirar-lote", "POST", {
         documentos_ids: visibles.map((d) => d.id),
       });
       for (const fila of resultado.resultados) {
-        if (fila.estado === "RETIRADO") retirados.push(fila.id);
+        if (fila.estado.startsWith("ELIMINADO")) eliminados.push(fila.id);
         else {
           const documento = visibles.find((d) => d.id === fila.id);
           errores.push(`${documento?.nombre_original ?? fila.id}: error ${fila.codigo ?? "desconocido"}`);
         }
       }
     } catch (error) {
-      setErrorRetirada(error instanceof Error ? error.message : String(error));
-      setRetirandoSeleccionados(false);
+      setErrorEliminacion(error instanceof Error ? error.message : String(error));
+      setEliminandoSeleccionados(false);
       return;
     }
-    setSeleccionados((actual) => actual.filter((id) => !retirados.includes(id)));
-    setResultadoRetirada(`${retirados.length} de ${visibles.length} documentos retirados.`);
-    setErrorRetirada(errores.join(" | "));
-    setRetirandoSeleccionados(false);
+    setSeleccionados((actual) => actual.filter((id) => !eliminados.includes(id)));
+    setResultadoEliminacion(`${eliminados.length} de ${visibles.length} documentos eliminados.`);
+    setErrorEliminacion(errores.join(" | "));
+    setEliminandoSeleccionados(false);
     recargar();
     recargarProvisionales();
   };
@@ -239,13 +247,13 @@ export default function Pendientes() {
       {errorLote && <p className="error">{errorLote}</p>}
       <div className="acciones-documento">
         <strong>{(datos ?? []).filter((d) => seleccionados.includes(d.id)).length} pendientes seleccionados</strong>
-        <button className="peligro" disabled={!capacidades?.puede_retirar || retirandoSeleccionados || !(datos ?? []).some((d) => seleccionados.includes(d.id))} onClick={() => void retirarSeleccionados()}>
-          {retirandoSeleccionados ? "Retirando…" : "Eliminar seleccionados"}
+        <button className="peligro" disabled={!capacidades?.puede_retirar || eliminandoSeleccionados || !(datos ?? []).some((d) => seleccionados.includes(d.id))} onClick={() => void eliminarSeleccionados()}>
+          {eliminandoSeleccionados ? "Eliminando…" : "Eliminar seleccionados"}
         </button>
-        <button className="secundario" disabled={retirandoSeleccionados || !seleccionados.length} onClick={() => setSeleccionados([])}>Limpiar selección</button>
+        <button className="secundario" disabled={eliminandoSeleccionados || !seleccionados.length} onClick={() => setSeleccionados([])}>Limpiar selección</button>
       </div>
-      {resultadoRetirada && <p role="status">{resultadoRetirada}</p>}
-      {errorRetirada && <p role="alert" className="error">{errorRetirada}</p>}
+      {resultadoEliminacion && <p role="status">{resultadoEliminacion}</p>}
+      {errorEliminacion && <p role="alert" className="error">{errorEliminacion}</p>}
       <Estado cargando={cargando} error={error} vacio={datos?.length === 0}>
         <table>
           <thead>
@@ -290,12 +298,17 @@ function FilaPendiente({
   const [errorEliminar, setErrorEliminar] = useState("");
   const retirar = async () => {
     if (!window.confirm(
-      "¿Retirar este documento de FACT CENTRAL? Quedará auditado y se conservará el original."
+      "¿Eliminar definitivamente este documento de FACT CENTRAL? Se borrará el archivo físico y no se podrá restaurar."
     )) return;
     setEliminando(true);
     setErrorEliminar("");
     try {
-      await eliminar("/api/v1/documentos/" + documento.id);
+      const resultado = (await eliminar("/api/v1/documentos/" + documento.id)) as {
+        estado?: string;
+      };
+      if (resultado.estado === "pendiente") {
+        setErrorEliminar("Registro eliminado; el archivo físico quedó pendiente de borrado.");
+      }
       alVincular();
     } catch (error) {
       setErrorEliminar(error instanceof Error ? error.message : String(error));

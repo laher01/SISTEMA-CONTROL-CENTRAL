@@ -11,10 +11,12 @@ def test_esquema_huella_comercial_nullable_y_unica(engine, auth_prueba) -> None:
     assert "huella_comercial" in columnas
     assert columnas["huella_comercial"]["nullable"] is True
 
-    restricciones = inspect(engine).get_unique_constraints("documentos")
+    indices = inspect(engine).get_indexes("documentos")
     assert any(
-        set(constraint["column_names"]) == {"tenant_id", "huella_comercial"}
-        for constraint in restricciones
+        index["name"] == "uq_documentos_huella_activa"
+        and set(index["column_names"]) == {"tenant_id", "huella_comercial"}
+        and index["unique"]
+        for index in indices
     )
 
     # La nueva columna no puede invalidar documentos históricos sin huella.
