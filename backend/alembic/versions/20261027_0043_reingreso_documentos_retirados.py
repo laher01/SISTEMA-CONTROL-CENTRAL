@@ -17,11 +17,25 @@ depends_on = None
 def upgrade() -> None:
     # Los registros retirados conservan auditoría e identidad histórica.
     # Solo las identidades activas deben impedir una nueva carga.
-    op.drop_constraint(
-        "uq_expedientes_tenant_id_receptor_id_tipo_comprobante_serie_cor",
-        "expedientes",
-        type_="unique",
+    identidad_fiscal = {
+        "tenant_id",
+        "receptor_id",
+        "tipo_comprobante",
+        "serie",
+        "correlativo",
+        "emisor_id",
+    }
+    restriccion_identidad = next(
+        (
+            item
+            for item in sa.inspect(op.get_bind()).get_unique_constraints("expedientes")
+            if set(item["column_names"]) == identidad_fiscal
+        ),
+        None,
     )
+    if restriccion_identidad is None or restriccion_identidad["name"] is None:
+        raise RuntimeError("No se encontró la restricción única histórica de expedientes")
+    op.drop_constraint(restriccion_identidad["name"], "expedientes", type_="unique")
     op.create_index(
         "uq_expedientes_identidad_activa",
         "expedientes",
@@ -97,7 +111,7 @@ def downgrade() -> None:
     )
     op.drop_index("uq_expedientes_identidad_activa", table_name="expedientes")
     op.create_unique_constraint(
-        "uq_expedientes_tenant_id_receptor_id_tipo_comprobante_serie_cor",
+        "uq_expedientes_identidad_historica",
         "expedientes",
         ["tenant_id", "receptor_id", "tipo_comprobante", "serie", "correlativo", "emisor_id"],
     )
