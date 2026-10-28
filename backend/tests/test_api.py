@@ -1214,7 +1214,6 @@ Fecha de emisión"""
 def test_reingreso_reconstruye_resultado_documental_persistido(
     client: TestClient,
     auth_prueba: AuthPrueba,
-    permiso_retiro_usuario: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from app.api.routes import documentos as rutas_documentos
