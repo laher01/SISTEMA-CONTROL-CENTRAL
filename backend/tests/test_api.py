@@ -197,8 +197,9 @@ def test_alertas_y_dashboard(client: TestClient) -> None:
     assert resumen["alertas_abiertas"]["RECEPTOR_NO_AUTORIZADO"] == 2
     assert resumen["documentos_pendientes"]["PENDIENTE_CLASIFICACION"] == 1
     montos = {m["moneda"]: m for m in resumen["montos"]}
-    assert montos["PEN"]["bancarizable"] == "2500.00"
-    assert montos["USD"]["bancarizable"] == "800.00"
+    assert Decimal(montos["PEN"]["bancarizable"]) == Decimal("0")
+    assert Decimal(montos["USD"]["bancarizable"]) == Decimal("0")
+    assert resumen["documentos_receptor_no_autorizado"] == 2
 
 
 def test_validaciones_de_carga(client: TestClient) -> None:
@@ -827,7 +828,10 @@ def test_reprocesar_partes_repara_empresas_de_documento_relacionado(
     assert detalle["receptor"]["razon_social"] == "CLIENTE ACTUALIZADO S.A.C."
 
 
-def test_dashboard_desglose_agrupa_y_filtra(client: TestClient) -> None:
+def test_dashboard_desglose_agrupa_y_filtra(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
     subir(
         client,
         "septiembre.xml",
@@ -843,6 +847,8 @@ def test_dashboard_desglose_agrupa_y_filtra(client: TestClient) -> None:
             emisor="20600000003",
         ),
     )
+
+    autorizar_receptor(client, auth_prueba)
 
     por_mes = client.get(
         "/api/v1/dashboard/desglose",
@@ -880,6 +886,7 @@ def test_dashboard_desglose_agrupa_y_filtra(client: TestClient) -> None:
 
 def test_rhe_crea_expedientes_propios_y_suma_montos(
     client: TestClient,
+    auth_prueba: AuthPrueba,
     settings: Settings,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -941,6 +948,21 @@ Total Neto Recibido : 1,500.00 SOLES""",
     detalles = [expediente(client, expediente_id) for expediente_id in expedientes_ids]
     assert {detalle["correlativo"] for detalle in detalles} == {"33", "34", "35"}
     assert all(detalle["requiere_guia"] is False for detalle in detalles)
+
+    receptores_ruc = {"20611909234", "20492560601", "20609762030"}
+    empresas = client.get("/api/v1/empresas").json()
+    contexto_anterior = auth_prueba.contexto
+    auth_prueba.como_admin()
+    try:
+        for empresa in empresas:
+            if empresa["ruc"] in receptores_ruc:
+                respuesta = client.patch(
+                    f"/api/v1/empresas/{empresa['id']}",
+                    json={"autorizada": True},
+                )
+                assert respuesta.status_code == 200, respuesta.text
+    finally:
+        auth_prueba.contexto = contexto_anterior
 
     resumen = client.get("/api/v1/dashboard/resumen")
     assert resumen.status_code == 200, resumen.text

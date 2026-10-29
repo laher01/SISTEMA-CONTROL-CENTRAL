@@ -307,6 +307,7 @@ class DashboardResumen(BaseModel):
     montos: list[MontosMoneda]
     alertas_abiertas: dict[TipoAlerta, int]
     documentos_pendientes: dict[EstadoDocumento, int]
+    documentos_receptor_no_autorizado: int
 
 
 class DashboardDesgloseFila(BaseModel):
