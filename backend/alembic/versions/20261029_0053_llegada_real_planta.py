@@ -1,7 +1,7 @@
 """separa la llegada a planta del inicio de descarga
 
-Revision ID: 0046
-Revises: 0045
+Revision ID: 0053
+Revises: 0052
 Create Date: 2026-10-28
 """
 
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "0046"
-down_revision: str | None = "0045"
+revision: str = "0053"
+down_revision: str | None = "0052"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

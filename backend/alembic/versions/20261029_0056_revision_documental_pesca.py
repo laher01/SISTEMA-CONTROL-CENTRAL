@@ -1,7 +1,7 @@
 """añade etapas, revisión y versionado documental pesquero
 
-Revision ID: 0049
-Revises: 0048
+Revision ID: 0056
+Revises: 0055
 Create Date: 2026-10-28
 """
 
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "0049"
-down_revision: str | None = "0048"
+revision: str = "0056"
+down_revision: str | None = "0055"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -1,7 +1,7 @@
 """registra cuadrillas y tareas operativas por vehículo
 
-Revision ID: 0048
-Revises: 0047
+Revision ID: 0055
+Revises: 0054
 Create Date: 2026-10-28
 """
 
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "0048"
-down_revision: str | None = "0047"
+revision: str = "0055"
+down_revision: str | None = "0054"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -1,7 +1,7 @@
 """conserva los datos de la embarcación asociados a cada operación
 
-Revision ID: 0045
-Revises: 0044
+Revision ID: 0052
+Revises: 0051
 Create Date: 2026-10-28
 """
 
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "0045"
-down_revision: str | None = "0044"
+revision: str = "0052"
+down_revision: str | None = "0051"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
