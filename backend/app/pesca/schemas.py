@@ -20,7 +20,9 @@ class OperacionIn(BaseModel):
     remitente: str | None = Field(default=None, max_length=200)
     destinatario: str | None = Field(default=None, max_length=200)
     facturador: str | None = Field(default=None, max_length=200)
-    toneladas_declaradas: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=3)
+    toneladas_declaradas: Decimal | None = Field(
+        default=None, ge=0, max_digits=14, decimal_places=3
+    )
     precio_propuesto: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
     descarga_prevista: datetime | None = None
     llegada_planta_prevista: datetime | None = None
@@ -98,7 +100,9 @@ class ConfirmarPrecioIn(BaseModel):
     @model_validator(mode="after")
     def exigir_aceptacion(self) -> "ConfirmarPrecioIn":
         if not self.acepta_acuerdo:
-            raise ValueError("El Jefe de Bahía o Gerente debe aceptar el precio confirmado por la embarcación")
+            raise ValueError(
+                "El Jefe de Bahía o Gerente debe aceptar el precio confirmado por la embarcación"
+            )
         return self
 
 
@@ -108,7 +112,10 @@ class ConfirmarAcuerdoEmbarcacionIn(BaseModel):
     @model_validator(mode="after")
     def exigir_confirmacion(self) -> "ConfirmarAcuerdoEmbarcacionIn":
         if not self.confirma_precio_acordado:
-            raise ValueError("Confirma que el precio ingresado corresponde al acuerdo con Jefe de Bahía o Gerente")
+            raise ValueError(
+                "Confirma que el precio ingresado corresponde al acuerdo con Jefe de "
+                "Bahía o Gerente"
+            )
         return self
 
 
@@ -196,16 +203,28 @@ class ActividadCuadrillaIn(BaseModel):
             raise ValueError("Describe la incidencia para dejar constancia en la operación")
         if self.actividad == "LAVADO" and self.verificacion_visual is None:
             raise ValueError("El Lavador debe registrar la revisión visual")
-        if self.actividad == "LAVADO" and self.estado == "COMPLETA" and not self.verificacion_visual:
-            raise ValueError("El lavado no puede marcarse completo si la revisión visual no fue satisfactoria")
-        if self.actividad == "CAJEO" and (self.cajas is None or self.contaminacion_detectada is None):
+        if (
+            self.actividad == "LAVADO"
+            and self.estado == "COMPLETA"
+            and not self.verificacion_visual
+        ):
+            raise ValueError(
+                "El lavado no puede marcarse completo si la revisión visual no fue satisfactoria"
+            )
+        if self.actividad == "CAJEO" and (
+            self.cajas is None or self.contaminacion_detectada is None
+        ):
             raise ValueError("El Cajeador debe registrar cajas y declarar si detectó contaminación")
         if self.actividad == "CAJEO" and self.contaminacion_detectada and not self.observacion:
             raise ValueError("Describe lo observado cuando se reporta contaminación")
-        if self.actividad == "ESTIBA" and (self.cajas is None or self.hielo_kg is None or self.revision_final is None):
+        if self.actividad == "ESTIBA" and (
+            self.cajas is None or self.hielo_kg is None or self.revision_final is None
+        ):
             raise ValueError("El Estibador debe registrar cajas, hielo y revisión final")
         if self.actividad == "ESTIBA" and self.estado == "COMPLETA" and not self.revision_final:
-            raise ValueError("La tarea no puede marcarse completa sin una revisión final satisfactoria")
+            raise ValueError(
+                "La tarea no puede marcarse completa sin una revisión final satisfactoria"
+            )
         return self
 
 
@@ -281,16 +300,33 @@ class MovimientoIn(BaseModel):
         if es_gasto and (self.tipo_gasto is None or self.tipo_comprobante is None):
             raise ValueError("Todo gasto operativo debe clasificarse y tener un CPE definido")
         comprobante_por_gasto = {
-            "MUELLE": "factura", "HIELO": "factura", "FLETE": "factura",
-            "CUADRILLA": "recibo_honorarios", "APUNTADOR": "recibo_honorarios",
+            "MUELLE": "factura",
+            "HIELO": "factura",
+            "FLETE": "factura",
+            "CUADRILLA": "recibo_honorarios",
+            "APUNTADOR": "recibo_honorarios",
         }
         if es_gasto and self.tipo_gasto in comprobante_por_gasto:
             esperado = comprobante_por_gasto[self.tipo_gasto]
-            boleta_excepcional = self.tipo_gasto == "MUELLE" and self.tipo_comprobante == "boleta" and bool(self.motivo_boleta_muelle and self.motivo_boleta_muelle.strip())
+            boleta_excepcional = (
+                self.tipo_gasto == "MUELLE"
+                and self.tipo_comprobante == "boleta"
+                and bool(self.motivo_boleta_muelle and self.motivo_boleta_muelle.strip())
+            )
             if self.tipo_comprobante != esperado and not boleta_excepcional:
-                raise ValueError(f"{self.tipo_gasto}: el comprobante requerido es {esperado}; solo admite boleta para muelle si no puede emitir factura y se explica el motivo")
-        if self.tipo_comprobante == "boleta" and (self.tipo_gasto != "MUELLE" or not self.motivo_boleta_muelle or not self.motivo_boleta_muelle.strip()):
-            raise ValueError("La boleta solo se admite para el muelle cuando no puede emitir factura; explica la excepción")
+                raise ValueError(
+                    f"{self.tipo_gasto}: el comprobante requerido es {esperado}; solo admite "
+                    "boleta para muelle si no puede emitir factura y se explica el motivo"
+                )
+        if self.tipo_comprobante == "boleta" and (
+            self.tipo_gasto != "MUELLE"
+            or not self.motivo_boleta_muelle
+            or not self.motivo_boleta_muelle.strip()
+        ):
+            raise ValueError(
+                "La boleta solo se admite para el muelle cuando no puede emitir factura; "
+                "explica la excepción"
+            )
         return self
 
 
@@ -361,7 +397,12 @@ class TiemposPlantaIn(BaseModel):
 
     @model_validator(mode="after")
     def campo_a_actualizar(self) -> "TiemposPlantaIn":
-        if not {"fecha_reporte_planta", "llegada_planta", "inicio_planta", "fin_planta"}.intersection(self.model_fields_set):
+        if not {
+            "fecha_reporte_planta",
+            "llegada_planta",
+            "inicio_planta",
+            "fin_planta",
+        }.intersection(self.model_fields_set):
             raise ValueError("Indique al menos una fecha u hora para actualizar")
         return self
 
@@ -392,7 +433,9 @@ class RegistroPlantaIn(BaseModel):
     @model_validator(mode="after")
     def validar_resultado(self) -> "RegistroPlantaIn":
         if self.resultado in {"completo", "parcial"} and self.peso_aceptado <= 0:
-            raise ValueError("El peso aceptado debe ser mayor que cero para un resultado completo o parcial")
+            raise ValueError(
+                "El peso aceptado debe ser mayor que cero para un resultado completo o parcial"
+            )
         if self.resultado == "rechazado" and not self.motivo_rechazo:
             raise ValueError("Indique el motivo del rechazo")
         if self.resultado == "completo" and self.cajas_rechazadas:
@@ -456,7 +499,7 @@ class RevisionDocumentoIn(BaseModel):
     observacion: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
-    def validar_observacion(self):
+    def validar_observacion(self) -> "RevisionDocumentoIn":
         if self.estado == "OBSERVADO" and not (self.observacion or "").strip():
             raise ValueError("Indica el motivo de la observación")
         return self

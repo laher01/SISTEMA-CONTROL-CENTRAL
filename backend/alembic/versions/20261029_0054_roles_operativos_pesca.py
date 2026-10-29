@@ -26,8 +26,12 @@ def upgrade() -> None:
         sa.Column("rol", sa.String(length=40), nullable=False),
         sa.Column("activa", sa.Boolean(), server_default=sa.true(), nullable=False),
         sa.Column("asignado_por_cuenta_id", sa.Uuid(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.ForeignKeyConstraint(["asignado_por_cuenta_id"], ["cuentas_acceso.id"]),
         sa.ForeignKeyConstraint(["cuenta_id"], ["cuentas_acceso.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"]),
@@ -45,7 +49,9 @@ def upgrade() -> None:
         sa.Column("cuenta_objetivo_id", sa.Uuid(), nullable=False),
         sa.Column("rol", sa.String(length=40), nullable=False),
         sa.Column("accion", sa.String(length=20), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.ForeignKeyConstraint(["actor_cuenta_id"], ["cuentas_acceso.id"]),
         sa.ForeignKeyConstraint(["cuenta_objetivo_id"], ["cuentas_acceso.id"]),
         sa.ForeignKeyConstraint(["tenant_id"], ["tenants.id"]),

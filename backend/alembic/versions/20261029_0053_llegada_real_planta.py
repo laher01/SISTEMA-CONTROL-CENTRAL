@@ -18,7 +18,9 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("pesca_vehiculos", sa.Column("llegada_planta", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "pesca_vehiculos", sa.Column("llegada_planta", sa.DateTime(timezone=True), nullable=True)
+    )
     op.execute(
         "UPDATE pesca_vehiculos SET llegada_planta = inicio_planta "
         "WHERE llegada_planta IS NULL AND inicio_planta IS NOT NULL"

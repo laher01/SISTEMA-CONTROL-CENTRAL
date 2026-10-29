@@ -26,7 +26,9 @@ def _tenant() -> sa.Column[object]:
 
 
 def _created() -> sa.Column[object]:
-    return sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False)
+    return sa.Column(
+        "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+    )
 
 
 def upgrade() -> None:
@@ -39,8 +41,12 @@ def upgrade() -> None:
         sa.Column("responsable_id", sa.String(200), nullable=False),
         sa.Column("estado", sa.String(30), nullable=False, server_default="en_descarga"),
         sa.Column("observacion", sa.Text()),
-        _id(), _tenant(), _created(),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        _id(),
+        _tenant(),
+        _created(),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_pesca_operaciones")),
     )
     op.create_table(
@@ -49,23 +55,45 @@ def upgrade() -> None:
         sa.Column("nombre", sa.String(200), nullable=False),
         sa.Column("patron_armador", sa.String(200), nullable=False),
         sa.Column("intermediario", sa.String(200)),
-        _id(), _tenant(), _created(),
+        _id(),
+        _tenant(),
+        _created(),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_pesca_embarcaciones")),
-        sa.UniqueConstraint("tenant_id", "matricula", name=op.f("uq_pesca_embarcaciones_tenant_id_matricula")),
+        sa.UniqueConstraint(
+            "tenant_id", "matricula", name=op.f("uq_pesca_embarcaciones_tenant_id_matricula")
+        ),
     )
     op.create_table(
         "pesca_descargas_embarcacion",
-        sa.Column("operacion_id", sa.Uuid(), sa.ForeignKey("pesca_operaciones.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("embarcacion_id", sa.Uuid(), sa.ForeignKey("pesca_embarcaciones.id"), nullable=False),
+        sa.Column(
+            "operacion_id",
+            sa.Uuid(),
+            sa.ForeignKey("pesca_operaciones.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "embarcacion_id", sa.Uuid(), sa.ForeignKey("pesca_embarcaciones.id"), nullable=False
+        ),
         sa.Column("inicio_descarga", sa.DateTime(timezone=True)),
         sa.Column("fin_descarga", sa.DateTime(timezone=True)),
-        _id(), _tenant(), _created(),
+        _id(),
+        _tenant(),
+        _created(),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_pesca_descargas_embarcacion")),
-        sa.UniqueConstraint("operacion_id", "embarcacion_id", name=op.f("uq_pesca_descargas_embarcacion_operacion_id_embarcacion_id")),
+        sa.UniqueConstraint(
+            "operacion_id",
+            "embarcacion_id",
+            name=op.f("uq_pesca_descargas_embarcacion_operacion_id_embarcacion_id"),
+        ),
     )
     op.create_table(
         "pesca_vehiculos",
-        sa.Column("operacion_id", sa.Uuid(), sa.ForeignKey("pesca_operaciones.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "operacion_id",
+            sa.Uuid(),
+            sa.ForeignKey("pesca_operaciones.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("placa", sa.String(20), nullable=False),
         sa.Column("tipo", sa.String(60), nullable=False),
         sa.Column("chofer", sa.String(200), nullable=False),
@@ -74,22 +102,41 @@ def upgrade() -> None:
         sa.Column("inicio_planta", sa.DateTime(timezone=True)),
         sa.Column("fin_planta", sa.DateTime(timezone=True)),
         sa.Column("turno", sa.String(80)),
-        _id(), _tenant(), _created(),
+        _id(),
+        _tenant(),
+        _created(),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_pesca_vehiculos")),
     )
     op.create_table(
         "pesca_cargas",
-        sa.Column("descarga_id", sa.Uuid(), sa.ForeignKey("pesca_descargas_embarcacion.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("vehiculo_id", sa.Uuid(), sa.ForeignKey("pesca_vehiculos.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "descarga_id",
+            sa.Uuid(),
+            sa.ForeignKey("pesca_descargas_embarcacion.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "vehiculo_id",
+            sa.Uuid(),
+            sa.ForeignKey("pesca_vehiculos.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("peso_muelle_kg", sa.Numeric(14, 3)),
         sa.Column("cajas", sa.Integer()),
         sa.Column("observacion", sa.Text()),
-        _id(), _tenant(), _created(),
+        _id(),
+        _tenant(),
+        _created(),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_pesca_cargas")),
     )
     op.create_table(
         "pesca_registros_planta",
-        sa.Column("vehiculo_id", sa.Uuid(), sa.ForeignKey("pesca_vehiculos.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "vehiculo_id",
+            sa.Uuid(),
+            sa.ForeignKey("pesca_vehiculos.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("resultado", sa.String(20), nullable=False),
         sa.Column("peso_aceptado", sa.Numeric(14, 3), nullable=False),
         sa.Column("unidad", sa.String(10), nullable=False, server_default="ton"),
@@ -97,38 +144,72 @@ def upgrade() -> None:
         sa.Column("motivo_rechazo", sa.String(200)),
         sa.Column("fecha_finalizacion", sa.DateTime(timezone=True)),
         sa.Column("observacion", sa.Text()),
-        _id(), _tenant(), _created(),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        _id(),
+        _tenant(),
+        _created(),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_pesca_registros_planta")),
         sa.UniqueConstraint("vehiculo_id", name=op.f("uq_pesca_registros_planta_vehiculo_id")),
     )
     op.create_table(
         "pesca_documentos",
-        sa.Column("operacion_id", sa.Uuid(), sa.ForeignKey("pesca_operaciones.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("vehiculo_id", sa.Uuid(), sa.ForeignKey("pesca_vehiculos.id", ondelete="CASCADE")),
+        sa.Column(
+            "operacion_id",
+            sa.Uuid(),
+            sa.ForeignKey("pesca_operaciones.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "vehiculo_id", sa.Uuid(), sa.ForeignKey("pesca_vehiculos.id", ondelete="CASCADE")
+        ),
         sa.Column("tipo", sa.String(50), nullable=False),
         sa.Column("nombre", sa.String(500), nullable=False),
         sa.Column("mime_type", sa.String(100), nullable=False),
         sa.Column("sha256", sa.String(64), nullable=False),
         sa.Column("ruta_storage", sa.String(500), nullable=False),
         sa.Column("subido_por", sa.String(200), nullable=False),
-        _id(), _tenant(), _created(),
+        _id(),
+        _tenant(),
+        _created(),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_pesca_documentos")),
     )
     op.create_table(
         "pesca_documento_vehiculos",
-        sa.Column("documento_id", sa.Uuid(), sa.ForeignKey("pesca_documentos.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("vehiculo_id", sa.Uuid(), sa.ForeignKey("pesca_vehiculos.id", ondelete="CASCADE"), nullable=False),
-        sa.PrimaryKeyConstraint("documento_id", "vehiculo_id", name=op.f("pk_pesca_documento_vehiculos")),
+        sa.Column(
+            "documento_id",
+            sa.Uuid(),
+            sa.ForeignKey("pesca_documentos.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "vehiculo_id",
+            sa.Uuid(),
+            sa.ForeignKey("pesca_vehiculos.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.PrimaryKeyConstraint(
+            "documento_id", "vehiculo_id", name=op.f("pk_pesca_documento_vehiculos")
+        ),
     )
     op.create_table(
         "pesca_historial",
-        sa.Column("operacion_id", sa.Uuid(), sa.ForeignKey("pesca_operaciones.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("vehiculo_id", sa.Uuid(), sa.ForeignKey("pesca_vehiculos.id", ondelete="CASCADE")),
+        sa.Column(
+            "operacion_id",
+            sa.Uuid(),
+            sa.ForeignKey("pesca_operaciones.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "vehiculo_id", sa.Uuid(), sa.ForeignKey("pesca_vehiculos.id", ondelete="CASCADE")
+        ),
         sa.Column("accion", sa.String(60), nullable=False),
         sa.Column("actor", sa.String(200), nullable=False),
         sa.Column("detalle", sa.Text(), nullable=False),
-        _id(), _tenant(), _created(),
+        _id(),
+        _tenant(),
+        _created(),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_pesca_historial")),
     )
 

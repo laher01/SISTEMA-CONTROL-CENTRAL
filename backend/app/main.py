@@ -32,13 +32,14 @@ from app.api.routes import (
     solicitudes_carga_emisor,
     solicitudes_retiro_misd,
 )
-from app.pesca import routes as pesca
 from app.core.config import get_settings
+from app.pesca import routes as pesca
 
 app = FastAPI(
     title="S.P.T. · Sistema Pesquero de Trazabilidad",
     description=(
-        "Plataforma para la trazabilidad pesquera, la gestión documental y la recepción de descargas."
+        "Plataforma para la trazabilidad pesquera, la gestión documental y la "
+        "recepción de descargas."
     ),
     version="0.1.0",
 )

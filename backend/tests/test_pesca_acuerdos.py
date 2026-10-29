@@ -4,9 +4,7 @@ from decimal import Decimal
 from app.pesca.models import AsignacionRolPesca, OperacionPesca
 
 
-def test_precio_requiere_confirmacion_de_embarcacion_y_rol_autorizado(
-    client, session, auth_prueba
-):
+def test_precio_requiere_confirmacion_de_embarcacion_y_rol_autorizado(client, session, auth_prueba):
     contexto = auth_prueba.contexto
     session.add(
         AsignacionRolPesca(

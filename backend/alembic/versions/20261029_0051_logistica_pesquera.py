@@ -42,22 +42,44 @@ def upgrade() -> None:
         ("factura_emitida_por", sa.String(200)),
     ):
         op.add_column("pesca_operaciones", sa.Column(name, column, nullable=True))
-    op.add_column("pesca_operaciones", sa.Column("estado_facturacion", sa.String(30), nullable=False, server_default="pendiente"))
-    op.add_column("pesca_descargas_embarcacion", sa.Column("peso_declarado_kg", sa.Numeric(14, 3), nullable=True))
-    op.add_column("pesca_vehiculos", sa.Column("salida_muelle", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "pesca_operaciones",
+        sa.Column("estado_facturacion", sa.String(30), nullable=False, server_default="pendiente"),
+    )
+    op.add_column(
+        "pesca_descargas_embarcacion",
+        sa.Column("peso_declarado_kg", sa.Numeric(14, 3), nullable=True),
+    )
+    op.add_column(
+        "pesca_vehiculos", sa.Column("salida_muelle", sa.DateTime(timezone=True), nullable=True)
+    )
     op.add_column("pesca_embarcaciones", sa.Column("armador", sa.String(200), nullable=True))
     op.add_column("pesca_embarcaciones", sa.Column("patron", sa.String(200), nullable=True))
     op.create_table(
         "pesca_documento_embarcaciones",
-        sa.Column("documento_id", sa.Uuid(), sa.ForeignKey("pesca_documentos.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("embarcacion_id", sa.Uuid(), sa.ForeignKey("pesca_embarcaciones.id", ondelete="CASCADE"), nullable=False),
-        sa.PrimaryKeyConstraint("documento_id", "embarcacion_id", name="pk_pesca_documento_embarcaciones"),
+        sa.Column(
+            "documento_id",
+            sa.Uuid(),
+            sa.ForeignKey("pesca_documentos.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "embarcacion_id",
+            sa.Uuid(),
+            sa.ForeignKey("pesca_embarcaciones.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.PrimaryKeyConstraint(
+            "documento_id", "embarcacion_id", name="pk_pesca_documento_embarcaciones"
+        ),
     )
     op.create_table(
         "pesca_movimientos",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("tenant_id", sa.Uuid(), sa.ForeignKey("tenants.id"), nullable=False),
-        sa.Column("operacion_id", sa.Uuid(), sa.ForeignKey("pesca_operaciones.id", ondelete="CASCADE")),
+        sa.Column(
+            "operacion_id", sa.Uuid(), sa.ForeignKey("pesca_operaciones.id", ondelete="CASCADE")
+        ),
         sa.Column("clase", sa.String(40), nullable=False),
         sa.Column("pagador", sa.String(200), nullable=False),
         sa.Column("beneficiario", sa.String(200), nullable=False),
@@ -68,7 +90,9 @@ def upgrade() -> None:
         sa.Column("tarifa_unitaria", sa.Numeric(14, 2)),
         sa.Column("comprobante_documento_id", sa.Uuid(), sa.ForeignKey("pesca_documentos.id")),
         sa.Column("registrado_por", sa.String(200), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.CheckConstraint(
             "(clase = 'prestamo_personal_bahia' AND operacion_id IS NULL) OR "
             "(clase <> 'prestamo_personal_bahia' AND operacion_id IS NOT NULL)",
@@ -83,16 +107,27 @@ def upgrade() -> None:
         "pesca_movimiento_abonos",
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("tenant_id", sa.Uuid(), sa.ForeignKey("tenants.id"), nullable=False),
-        sa.Column("movimiento_id", sa.Uuid(), sa.ForeignKey("pesca_movimientos.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "movimiento_id",
+            sa.Uuid(),
+            sa.ForeignKey("pesca_movimientos.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("importe", sa.Numeric(14, 2), nullable=False),
         sa.Column("tipo", sa.String(30), nullable=False),
         sa.Column("registrado_por", sa.String(200), nullable=False),
         sa.Column("observacion", sa.Text()),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id", name="pk_pesca_movimiento_abonos"),
     )
-    op.create_index("ix_pesca_movimiento_abonos_tenant_id", "pesca_movimiento_abonos", ["tenant_id"])
-    op.create_index("ix_pesca_movimiento_abonos_movimiento_id", "pesca_movimiento_abonos", ["movimiento_id"])
+    op.create_index(
+        "ix_pesca_movimiento_abonos_tenant_id", "pesca_movimiento_abonos", ["tenant_id"]
+    )
+    op.create_index(
+        "ix_pesca_movimiento_abonos_movimiento_id", "pesca_movimiento_abonos", ["movimiento_id"]
+    )
 
 
 def downgrade() -> None:

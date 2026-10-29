@@ -556,11 +556,7 @@ def _responder_ruc(
     return NexusChatOut(
         respuesta=(
             f"RUC {ruc}: "
-            + (
-                f"en S.P.T. figura como {local}."
-                if local
-                else "no está registrado localmente."
-            )
+            + (f"en S.P.T. figura como {local}." if local else "no está registrado localmente.")
             + " La consulta externa de RUC todavía no tiene proveedor configurado."
         ),
         accion="VERIFICAR_RUC",
