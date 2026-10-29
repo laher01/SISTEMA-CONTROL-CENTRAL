@@ -36,5 +36,16 @@ def test_importe_pendiente_no_aparece_en_totales(client: TestClient) -> None:
     assert documentos.status_code == 200, documentos.text
     assert str(documentos.json()["total_pen_autorizado"]) in ("0", "0.00")
 
+    dashboard = client.get("/api/v1/dashboard/resumen")
+    assert dashboard.status_code == 200, dashboard.text
+    assert dashboard.json()["documentos_receptor_no_autorizado"] == 1
+    for monto in dashboard.json()["montos"]:
+        assert float(monto["bancarizable"]) == 0
+        assert float(monto["no_bancarizable"]) == 0
+
+    desglose = client.get("/api/v1/dashboard/desglose")
+    assert desglose.status_code == 200, desglose.text
+    assert desglose.json()["filas"] == []
+
     empresas = client.get("/api/v1/expedientes/resumen-empresas")
     assert empresas.status_code == 200, empresas.text
