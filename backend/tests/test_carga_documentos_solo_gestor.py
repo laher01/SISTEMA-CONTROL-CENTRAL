@@ -6,7 +6,6 @@ from fastapi.testclient import TestClient
 
 from tests.conftest import AuthPrueba
 
-
 RUTAS_CARGA = (
     "/api/v1/documentos",
     "/api/v1/documentos/paquete",
