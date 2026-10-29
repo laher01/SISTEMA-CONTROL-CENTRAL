@@ -10,6 +10,7 @@ interface SolicitudMISD {
   estado: "PENDIENTE" | "APROBADA" | "RECHAZADA" | "EJECUTADA" | string;
   rol_solicitante: string;
   motivo: string;
+  es_solicitante: boolean;
 }
 
 export default function AprobacionesMISD() {
@@ -72,6 +73,27 @@ function FilaSolicitud({
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState("");
 
+  const ejecutarRetiro = async () => {
+    if (!window.confirm("El retiro definitivo eliminará el expediente y todos sus documentos vinculados. ¿Confirmas?")) return;
+    setProcesando(true);
+    setError("");
+    try {
+      const resultado = await enviarJson<{ documentos_eliminados?: number; archivos_eliminados?: number; archivos_pendientes?: number }>(
+        `/api/v1/misd/solicitudes/${solicitud.id}/ejecutar`,
+        "POST",
+      );
+      alResolver();
+      setError(
+        `Retiro ejecutado: ${resultado.documentos_eliminados ?? 0} documento(s), ${resultado.archivos_eliminados ?? 0} archivo(s) borrados físicamente.` +
+        ((resultado.archivos_pendientes ?? 0) > 0 ? ` ${resultado.archivos_pendientes} archivo(s) quedaron pendientes de limpieza.` : ""),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setProcesando(false);
+    }
+  };
+
   const resolver = async (aprobar: boolean) => {
     const motivo = window.prompt(
       aprobar ? "Motivo de aprobación (mínimo 8 caracteres):" : "Motivo del rechazo (mínimo 8 caracteres):",
@@ -121,7 +143,7 @@ function FilaSolicitud({
       <td>{solicitud.motivo}</td>
       <td>{solicitud.estado}</td>
       <td>
-        {solicitud.estado === "PENDIENTE" ? (
+        {solicitud.estado === "PENDIENTE" && !solicitud.es_solicitante ? (
           <>
             <button disabled={procesando} onClick={() => void resolver(true)}>
               Aprobar
@@ -130,7 +152,11 @@ function FilaSolicitud({
               Rechazar
             </button>
           </>
-        ) : "Resuelta"}
+        ) : solicitud.estado === "APROBADA" && solicitud.es_solicitante ? (
+          <button className="peligro" disabled={procesando} onClick={() => void ejecutarRetiro()}>
+            Ejecutar retiro definitivo
+          </button>
+        ) : solicitud.es_solicitante ? "Esperando aprobación" : "Resuelta"}
         {error && <small role="alert" className="error bloque">{error}</small>}
       </td>
     </tr>
