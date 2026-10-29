@@ -26,25 +26,34 @@ Arquitectura aislada para convivir con los servicios existentes de la VPS:
 No se deben publicar los puertos de PostgreSQL ni FastAPI. El puerto 18080 escucha solo en
 localhost y sirve para comprobaciones dentro de la VPS.
 
-## Actualización automática desde GitHub
+## Despliegue desde GitHub
 
-Crear el Environment `staging` en GitHub y guardar estos secretos:
+El workflow `.github/workflows/deploy-staging.yml` ejecuta verificación de backend, frontend y
+recuperación aislada en los cambios de `main`. **El despliegue automático está deshabilitado por
+defecto**: solo entra al job `deploy` en un push a `main` cuando la variable de repositorio
+`ORACLE_AUTO_DEPLOY_ENABLED` vale `true`. El workflow también exige
+`ORACLE_RECOVERY_VERIFIED=true` en el Environment `oracle-autodeploy`; estos valores deben
+habilitarse únicamente después de coordinar y aprobar la operación.
 
-- `VPS_HOST`: IP pública de la VPS.
-- `VPS_USER`: usuario SSH de despliegue, inicialmente `ubuntu`.
-- `VPS_DEPLOY_PATH`: `/home/ubuntu/fact-central`.
+El workflow actual restringe SSH a `ubuntu@132.145.233.172` y valida la ruta
+`/home/ubuntu/fact-central`. El Environment `staging` proporciona los secretos para
+`workflow_dispatch`; el Environment `oracle-autodeploy` proporciona los secretos para el evento
+`push`. En el Environment usado por cada evento deben existir:
+
+- `VPS_HOST`: debe ser `132.145.233.172`.
+- `VPS_USER`: debe ser `ubuntu`.
+- `VPS_DEPLOY_PATH`: debe ser `/home/ubuntu/fact-central`.
 - `VPS_SSH_PRIVATE_KEY`: clave privada exclusiva para despliegue.
-- `VPS_SSH_KNOWN_HOSTS`: huella SSH verificada de la VPS.
+- `VPS_SSH_KNOWN_HOSTS`: huella SSH verificada de esa VPS.
 
-El despliegue automático queda habilitado por defecto: cada cambio aceptado en `main` ejecuta
-todas las pruebas y, solo si backend y frontend aprueban, GitHub continúa con el despliegue.
+Antes de modificar la VPS, el workflow fija y valida el SHA de `main`, ejecuta las pruebas y
+comprobaciones de recuperación, realiza el preflight remoto y verifica un respaldo PostgreSQL. Solo
+entonces reconstruye los contenedores y consulta `/health`. Un workflow exitoso no confirma por sí
+solo que el hostname público de Cloudflare, los roles ni los flujos documentales estén operativos;
+esos puntos requieren una verificación funcional independiente.
 
-Antes de conectarse, el workflow valida que todos los secretos anteriores existan. Después entra por
-SSH, descarga `main`, verifica que la VPS quede exactamente en el commit que disparó el workflow,
-crea un respaldo de PostgreSQL, reconstruye los contenedores y comprueba `/health`.
-
-El disparo manual (`workflow_dispatch`) se mantiene únicamente como contingencia para volver a
-desplegar la versión actual sin modificar código.
+`workflow_dispatch` queda como operación manual de contingencia y usa el Environment `staging`.
+La existencia de secretos o el éxito de CI no habilitan el despliegue automático por sí mismos.
 
 ## Operación
 
