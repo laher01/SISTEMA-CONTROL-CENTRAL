@@ -44,7 +44,7 @@ def test_solo_gestores_pueden_ingresar_documentos(
 
 @pytest.mark.parametrize("ruta", RUTAS_CARGA)
 def test_gestor_pasa_el_control_de_rol_de_carga(
-    client: TestClient, auth_prueba, ruta: str
+    client: TestClient, auth_prueba: AuthPrueba, ruta: str
 ) -> None:
     auth_prueba.contexto = replace(
         auth_prueba.contexto,
