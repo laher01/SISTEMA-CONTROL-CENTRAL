@@ -56,7 +56,7 @@ const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = 
   { a: "/mi-equipo/pagos", texto: "Pago de Usuarios", icono: "▣", roles: ["RESPONSABLE"] },
   { a: "/pago-gestores", texto: "Pago de Gestores", icono: "▣", roles: ["USUARIO"] },
   { a: "/comisiones", texto: "Simular comisiones", icono: "◉", roles: ["RESPONSABLE", "USUARIO"] },
-  { a: "/subir", texto: "Subir documentos", icono: "↑", roles: ["USUARIO", "GESTOR"] },
+  { a: "/subir", texto: "Subir documentos", icono: "↑", roles: ["GESTOR"] },
   { a: "/mi-recepcion", texto: "Recepción Automática", icono: "✉", roles: ["GESTOR"] },
   {
     a: "/registros",
@@ -232,7 +232,7 @@ export default function App() {
           <>
           <Route path="/" element={sesion.es_administracion_demo && sesion.rol === "ADMINISTRADOR" ? <Navigate to="/organizacion" replace /> : <Dashboard key={`${sesion.rol}-${sesion.codigo}`} sesion={sesion} />} />
           <Route path="/ingresar" element={<Navigate to="/" replace />} />
-          <Route path="/subir" element={<Subir sesion={sesion} />} />
+          <Route path="/subir" element={sesion.rol === "GESTOR" ? <Subir sesion={sesion} /> : <Navigate to="/" replace />} />
           <Route path="/registros" element={sesion.rol === "SECRETARIA" && activaciones?.registros === false ? <Navigate to="/expedientes" replace /> : <Registros sesion={sesion} />} />
           <Route path="/mi-recepcion" element={sesion.rol === "GESTOR" ? <RecepcionGestor /> : <Navigate to="/" replace />} />
           <Route path="/chat" element={<Chat />} />
