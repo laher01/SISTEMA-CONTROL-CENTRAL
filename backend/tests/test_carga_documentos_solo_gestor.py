@@ -25,11 +25,11 @@ ROLES_NO_GESTOR = (
 @pytest.mark.parametrize("ruta", RUTAS_CARGA)
 @pytest.mark.parametrize("rol", ROLES_NO_GESTOR)
 def test_solo_gestores_pueden_ingresar_documentos(
-    client: TestClient, auth_prueba: AuthPrueba, ruta: str, rol: str
+    client_estricto: TestClient, auth_prueba: AuthPrueba, ruta: str, rol: str
 ) -> None:
     auth_prueba.contexto = replace(auth_prueba.contexto, rol=rol)
     if ruta.endswith("/lote-imagenes"):
-        respuesta = client.post(
+        respuesta = client_estricto.post(
             ruta,
             files=[("archivos", ("prueba.jpg", b"imagen", "image/jpeg"))],
         )
@@ -43,7 +43,7 @@ def test_solo_gestores_pueden_ingresar_documentos(
 
 @pytest.mark.parametrize("ruta", RUTAS_CARGA)
 def test_gestor_pasa_el_control_de_rol_de_carga(
-    client: TestClient, auth_prueba: AuthPrueba, ruta: str
+    client_estricto: TestClient, auth_prueba: AuthPrueba, ruta: str
 ) -> None:
     auth_prueba.contexto = replace(
         auth_prueba.contexto,
