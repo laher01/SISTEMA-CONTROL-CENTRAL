@@ -92,7 +92,7 @@ const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = 
     a: "/aprobaciones-misd",
     texto: "Aprobaciones MISD",
     icono: "✓",
-    roles: ["ADMINISTRADOR", "RESPONSABLE"],
+    roles: ["ADMINISTRADOR", "RESPONSABLE", "USUARIO"],
   },
   {
     a: "/pendientes",
@@ -242,7 +242,7 @@ export default function App() {
           <Route path="/expedientes" element={<Expedientes sesion={sesion} />} />
           <Route path="/expedientes/:id" element={<ExpedienteDetalle />} />
           <Route path="/pendientes" element={<Pendientes />} />
-          <Route path="/aprobaciones-misd" element={["ADMINISTRADOR", "RESPONSABLE"].includes(sesion.rol) ? <AprobacionesMISD /> : <Navigate to="/expedientes" replace />} />
+          <Route path="/aprobaciones-misd" element={["ADMINISTRADOR", "RESPONSABLE", "USUARIO"].includes(sesion.rol) ? <AprobacionesMISD /> : <Navigate to="/expedientes" replace />} />
           <Route path="/alertas" element={<Alertas sesion={sesion} />} />
           <Route path="/empresas" element={<Empresas sesion={sesion} />} />
           <Route path="/mi-equipo" element={<MiEquipoResponsable />} />
