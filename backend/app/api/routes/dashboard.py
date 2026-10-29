@@ -437,6 +437,27 @@ def resumen(
         mes,
     )
 
+    receptores_autorizados = select(Empresa.id).where(
+        Empresa.tenant_id == tenant_id,
+        Empresa.autorizada.is_(True),
+        Empresa.deleted_at.is_(None),
+    )
+    documentos_receptor_no_autorizado = (
+        session.scalar(
+            select(func.count(Documento.id))
+            .join(Expediente, Documento.expediente_id == Expediente.id)
+            .join(Empresa, Expediente.receptor_id == Empresa.id)
+            .where(
+                Documento.tenant_id == tenant_id,
+                Documento.deleted_at.is_(None),
+                Empresa.tenant_id == tenant_id,
+                Empresa.autorizada.is_(False),
+                *vigentes,
+            )
+        )
+        or 0
+    )
+
     por_estado = {e: 0 for e in EstadoExpediente}
     for estado, total in session.execute(
         select(Expediente.estado, func.count()).where(*vigentes).group_by(Expediente.estado)
@@ -461,7 +482,11 @@ def resumen(
             select(
                 func.coalesce(func.sum(case((es_bancarizable, Expediente.importe_total))), 0),
                 func.coalesce(func.sum(case((~es_bancarizable, Expediente.importe_total))), 0),
-            ).where(*vigentes, Expediente.moneda == moneda)
+            ).where(
+                *vigentes,
+                Expediente.moneda == moneda,
+                Expediente.receptor_id.in_(receptores_autorizados),
+            )
         ).one()
         montos.append(
             MontosMoneda(
@@ -542,6 +567,7 @@ def resumen(
         montos=montos,
         alertas_abiertas=alertas,
         documentos_pendientes=pendientes,
+        documentos_receptor_no_autorizado=documentos_receptor_no_autorizado,
     )
 
 
@@ -581,6 +607,15 @@ def desglose(
         .where(
             Expediente.tenant_id == tenant_id,
             Expediente.deleted_at.is_(None),
+        )
+    )
+    consulta = consulta.where(
+        Expediente.receptor_id.in_(
+            select(Empresa.id).where(
+                Empresa.tenant_id == tenant_id,
+                Empresa.autorizada.is_(True),
+                Empresa.deleted_at.is_(None),
+            )
         )
     )
     consulta = consulta.where(
