@@ -285,6 +285,7 @@ def listar(
                 "expediente_id": str(solicitud.expediente_id),
                 "estado": solicitud.estado,
                 "rol_solicitante": solicitud.solicitante_rol,
+                "motivo": solicitud.motivo,
             }
         )
     return resultado
