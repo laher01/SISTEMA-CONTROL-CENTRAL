@@ -40,7 +40,7 @@ La API registra 29 routers en el SHA consultado. El panel React también expone 
 | Frente | Evidencia consultada | Lectura de coordinación |
 |---|---|---|
 | Cargas solo por Gestor | PR #413, rama `fix/gestor-only-document-upload-20261029`; CI 6/6 verde para SHA `1994c2d06f8731452b989b9b892bf9d3a5a47c06` | No fusionado ni desplegado; el fix protege las tres rutas de carga y la ruta directa de UI |
-| Montos de receptor pendiente | PR #414, apilado sobre #413 | Segundo CI en ejecución para el último SHA; no integrar hasta confirmar todos los checks |
+| Montos de receptor pendiente | PR #414, apilado sobre #413 | CI 5/5 verde en SHA `14cd2e441592844f0f968e7a59438671e8a72c8b`; draft, no integrado |
 | Guía de autodespliegue | Workflow `.github/workflows/deploy-staging.yml` vs `deploy/README.md`; PR #415 propone alinear documentación | El workflow está opt-in por `ORACLE_AUTO_DEPLOY_ENABLED=true`, exige `ORACLE_RECOVERY_VERIFIED=true` y restringe el destino a `ubuntu@132.145.233.172`. Aún no se verificaron los Environments/secretos del repositorio |
 | DNS/túnel operativo | Dominio declarado por usuario: `app.nexomarnegocioseirl.online`; la guía tenía otro hostname | Validar Cloudflare Tunnel y el SHA real de la VPS antes de cualquier despliegue |
 | Orquestador | Issue #412; protocolo maestro en `AGENTE_MAESTRO_CHATGPT_NEXUS.md` | El protocolo prohíbe asumir ejecución autónoma en segundo plano. El catálogo/runtime SUPERADMIN todavía debe diseñarse e implementarse |
