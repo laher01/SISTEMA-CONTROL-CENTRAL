@@ -9,6 +9,7 @@ interface SolicitudMISD {
   expediente_id: string;
   estado: "PENDIENTE" | "APROBADA" | "RECHAZADA" | "EJECUTADA" | string;
   rol_solicitante: string;
+  motivo: string;
 }
 
 export default function AprobacionesMISD() {
@@ -38,6 +39,7 @@ export default function AprobacionesMISD() {
             <tr>
               <th>Expediente</th>
               <th>Solicitó</th>
+              <th>Motivo</th>
               <th>Estado</th>
               <th>Decisión</th>
             </tr>
@@ -116,6 +118,7 @@ function FilaSolicitud({
         ) : comprobante}
       </td>
       <td>{solicitud.rol_solicitante}</td>
+      <td>{solicitud.motivo}</td>
       <td>{solicitud.estado}</td>
       <td>
         {solicitud.estado === "PENDIENTE" ? (
