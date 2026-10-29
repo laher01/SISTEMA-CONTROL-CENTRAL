@@ -169,6 +169,8 @@ La arquitectura funcional está documentada. El foco actual es construir y valid
 
 - [`docs/MVP.md`](docs/MVP.md) — alcance, criterios de éxito y lo que queda fuera.
 - [`docs/ESQUEMA_MVP.md`](docs/ESQUEMA_MVP.md) — esquema de datos único del MVP.
+- [`docs/PESCA_OPERACIONES.md`](docs/PESCA_OPERACIONES.md) — API inicial para descargas de muelle,
+  recepción por vehículo en planta, evidencias e historial operativo.
 - [`docs/futuro/`](docs/futuro/) — visión a largo plazo (NEXUS, agentes, infraestructura avanzada), fuera del alcance actual.
 
 ## Ejecución local del MVP
