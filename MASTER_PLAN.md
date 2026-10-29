@@ -1,28 +1,35 @@
-# FACT CENTRAL
+# S.P.T. — Sistema Pesquero de Trazabilidad
 
-## Plataforma SaaS Inteligente para Gestión Documental Tributaria, Expedientes Digitales y Control Integral de Compras Empresariales
+## Identidad del producto
+
+La plataforma es S.P.T. y opera con tenants independientes. **SNIDERFISH es el tenant piloto y
+plantilla**, no la plataforma. Los planes y referencias históricas de este documento describen
+componentes de la plataforma; el flujo pesquero activo se detalla en
+[`docs/PESCA_OPERACIONES.md`](docs/PESCA_OPERACIONES.md).
+
+## Plataforma SaaS multiempresa para trazabilidad de operaciones pesqueras
 
 ---
 
 # MASTER PLAN
 
-Versión: 2.0
+Versión: 3.0
 
-Estado: Arquitectura Funcional (Pre-Desarrollo)
+Estado: Implementación del flujo operativo pesquero MVP
 
-Última actualización: Agosto 2026
+Última actualización: Octubre 2026
 
 ---
 
 # MISIÓN
 
-Construir la plataforma SaaS más completa para la administración documental de compras empresariales, permitiendo que empresas de cualquier tamaño controlen digitalmente toda su documentación tributaria mediante inteligencia artificial, expedientes digitales y procesos completamente trazables.
+Construir S.P.T., una plataforma multiempresa que registre y relacione cada operación pesquera desde el reporte del armador hasta la recepción en planta, conservando responsables, tiempos, pesajes, gastos, documentos y evidencias sin mezclar tenants.
 
 ---
 
 # VISIÓN
 
-Convertir FACT CENTRAL en el estándar latinoamericano para la gestión documental tributaria, auditoría preventiva y control inteligente de compras empresariales, ofreciendo una plataforma escalable, segura y preparada para operar con miles de empresas simultáneamente.
+Hacer de S.P.T. una plataforma confiable para la trazabilidad pesquera, preparada para servir a múltiples tenants. SNIDERFISH funciona como piloto y plantilla; los nuevos tenants conservarán sus operaciones y configuración de forma independiente.
 
 ---
 
@@ -45,33 +52,31 @@ Toda nueva funcionalidad deberá quedar completamente documentada antes de comen
 
 # NATURALEZA DEL PRODUCTO
 
-FACT CENTRAL NO es un sistema de facturación.
+S.P.T. no es un facturador.
 
-FACT CENTRAL NO reemplaza a un ERP tradicional.
+S.P.T. no reemplaza por sí solo un ERP tradicional.
 
-FACT CENTRAL es una plataforma SaaS especializada en la administración documental de procesos de compras empresariales.
+S.P.T. es la plataforma de trazabilidad pesquera. Incluye herramientas documentales para relacionar las evidencias de cada etapa.
 
-Su objetivo es transformar miles de documentos dispersos en expedientes digitales inteligentes completamente relacionados.
+Su objetivo es mostrar quién reportó, confirmó, descargó, transportó, recibió y registró cada movimiento, junto con el soporte correspondiente.
 
 ---
 
 # OBJETIVOS PRINCIPALES
 
-• Centralizar toda la documentación tributaria de compras.
+• Registrar el reporte, la preparación, la descarga, el traslado y la recepción de pesca.
 
-• Automatizar la creación de expedientes digitales.
+• Conservar separados el peso declarado, el peso de muelle y el peso aceptado en planta.
 
-• Relacionar automáticamente documentos pertenecientes a una misma operación comercial.
+• Relacionar documentos y evidencias con la operación, el vehículo y la embarcación correspondientes.
 
-• Facilitar auditorías tributarias.
+• Registrar gastos, adelantos, reembolsos y devoluciones con saldos auditables.
 
-• Reducir riesgos documentarios.
+• Mantener los préstamos personales separados de la operación y su liquidación.
 
-• Generar inteligencia empresarial basada en compras.
+• Registrar el expediente y la factura lista para presentar a pago.
 
-• Automatizar procesos mediante IA.
-
-• Mantener trazabilidad completa de cada documento.
+• Mantener trazabilidad completa de cada cambio, documento y responsable.
 
 ---
 
@@ -105,11 +110,9 @@ Todo dentro de un único Tenant.
 
 ---
 
-## 3. Gestión exclusiva de Compras
+## 3. Gestión de operaciones pesqueras y evidencias
 
-La versión inicial administra únicamente procesos documentarios de compras.
-
-Las ventas quedan previstas para futuras versiones.
+El MVP prioriza el ciclo de descarga y recepción pesquera. La emisión de facturas, pagos y liquidaciones quedan fuera hasta definir e implementar sus reglas.
 
 ---
 
@@ -373,8 +376,6 @@ Cualquier modificación importante en la arquitectura del sistema deberá reflej
 
 ---
 
-# FACT CENTRAL
+# S.P.T. — SISTEMA PESQUERO DE TRAZABILIDAD
 
-"No desarrollamos un software.
-
-Construimos una plataforma inteligente capaz de comprender, organizar y controlar la documentación empresarial."
+"Construimos una plataforma que registra y conecta cada etapa de la operación pesquera, desde el reporte hasta la recepción en planta."

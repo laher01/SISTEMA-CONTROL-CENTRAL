@@ -42,7 +42,7 @@ async function entrar(page: import("@playwright/test").Page, rol: Rol) {
   await page.getByRole("button", { name: "Iniciar sesión" }).click();
   await page.goto("/configuracion");
   await expect(page.getByRole("heading", { name: rol === "SUPERADMIN"
-    ? /Consola SaaS/ : /Configuración de Administración/ })).toBeVisible();
+    ? /Superadmin S\.P\.T\./ : /Configuración de Administración/ })).toBeVisible();
 }
 
 test("SUPERADMIN: inicio de sesión, menú exclusivo y bloqueo de ruta operativa", async ({ page }) => {
@@ -52,7 +52,7 @@ test("SUPERADMIN: inicio de sesión, menú exclusivo y bloqueo de ruta operativa
   await expect(page.getByRole("button", { name: "Configuración de acceso" })).toHaveCount(0);
   await page.goto("/empresas");
   await expect(page).toHaveURL(/\/configuracion$/);
-  await expect(page.getByRole("heading", { name: /Consola SaaS/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Superadmin S\.P\.T\./ })).toBeVisible();
 });
 
 test("ADMINISTRADOR: inicio de sesión y controles de su tenant", async ({ page }) => {

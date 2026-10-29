@@ -1,4 +1,4 @@
-# LEER PRIMERO — Coordinación multichat FACT CENTRAL
+# LEER PRIMERO — Coordinación multichat S.P.T.
 
 ## Secuencia obligatoria
 1. Consultar `main` actualizado, `AGENTS.md` y esta carpeta.
@@ -9,7 +9,7 @@
 6. Actualizar el registro al finalizar indicando evidencias y pendientes, sin pisar cambios paralelos.
 
 ## Identidad del proyecto
-FACT CENTRAL es **SaaS multi-tenant**: SUPERADMIN de plataforma → Tenant aislado → único Administrador propietario → Gerencia / Secretaría / Responsables → Usuarios → Gestores. Los módulos administrativos y documentales operan dentro de un Tenant.
+S.P.T. (Sistema Pesquero de Trazabilidad) es la **plataforma SaaS multi-tenant**: SUPERADMIN S.P.T. → tenants aislados → roles operativos propios de cada tenant. SNIDERFISH es el tenant piloto y plantilla; la plataforma no gira en torno a SNIDERFISH. La logística pesquera, documentos y evidencias pertenecen a S.P.T. y se aíslan por tenant.
 
 ## Principios no negociables
 - Backend debe aislar todas las operaciones por Tenant, incluso ante UUID conocidos; pruebas automáticas.

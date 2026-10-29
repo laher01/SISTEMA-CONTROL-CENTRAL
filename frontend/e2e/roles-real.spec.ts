@@ -16,7 +16,7 @@ async function login(page: Page, espacio: string, usuario: string) {
 
 test("SUPERADMIN real: consola exclusiva y backend rechaza operaciones", async ({ page }) => {
   await login(page, "PLATFORM", "SUPADMIN01");
-  await expect(page.getByRole("heading", { name: /Consola SaaS/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Superadmin S\.P\.T\./ })).toBeVisible();
   await expect(page.getByRole("button", { name: "Administraciones SaaS" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Mantenimiento" })).toHaveCount(0);
   const inventario = await page.request.get("/api/v1/configuracion/administraciones");
