@@ -11,7 +11,9 @@ permissions:
 
 jobs:
   browser:
-    runs-on: ubuntu-latest
+    # Playwright 1.58.2 does not yet ship browser dependencies for Ubuntu 26.04.
+    # Keep browser CI on the supported 24.04 image until upstream adds 26.04 support.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:
