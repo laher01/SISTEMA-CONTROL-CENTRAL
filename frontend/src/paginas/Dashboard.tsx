@@ -104,6 +104,10 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
                 <span className="cifra">{pendientes}</span>
                 <span>Documentos sin expediente</span>
               </Link>
+              <Link to="/expedientes?pendiente_aprobacion=true" className="tarjeta borde-rojo">
+                <span className="cifra">{datos.documentos_receptor_no_autorizado}</span>
+                <span>Documentos de receptores no autorizados</span>
+              </Link>
             </section>
 
             <section>
