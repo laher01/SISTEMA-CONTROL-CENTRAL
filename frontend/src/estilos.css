@@ -336,6 +336,9 @@ button:disabled {
 .texto-verde { color: #247a3c; }
 .pesca-archivos { color: #506174; margin-top: .75rem; font-size: .85rem; }
 .pesca-archivos li { margin: .3rem 0; }
+.pesca-documento-reemplazado { opacity: .68; }
+.pesca-revision-documento { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; }
+.pesca-revision-documento input { min-width: 14rem; }
 .pesca-cerrar-op { margin-top: .8rem; }
 .pesca-secundario { background: #e9f1f8; color: #214f77; border-color: #d2e0ec; }
 .pesca-fechas { margin: .6rem 0; color: #526273; font-size: .82rem; }
