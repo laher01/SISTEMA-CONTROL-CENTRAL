@@ -25,6 +25,7 @@ import MiEquipoResponsable from "./paginas/MiEquipoResponsable";
 import Pagos from "./paginas/Pagos";
 import PagoGestores from "./paginas/PagoGestores";
 import Pendientes from "./paginas/Pendientes";
+import Pesca from "./paginas/Pesca";
 import Produccion from "./paginas/Produccion";
 import Registros from "./paginas/Registros";
 import RecepcionGestor from "./paginas/RecepcionGestor";
@@ -113,6 +114,12 @@ const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = 
     roles: ["SUPERADMIN", "ADMINISTRADOR", "USUARIO", "GESTOR"],
   },
   {
+    a: "/pesca",
+    texto: "Operaciones de pesca",
+    icono: "⚓",
+    roles: ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"],
+  },
+  {
     a: "/pagos",
     texto: "Pagos",
     icono: "▣",
@@ -169,7 +176,7 @@ export default function App() {
   };
 
   const menu = sesion.rol === "SUPERADMIN"
-    ? [{ a: "/configuracion", texto: "Consola SaaS", icono: "⚙", roles: ["SUPERADMIN" as RolSesion] }]
+    ? [{ a: "/configuracion", texto: "Superadmin S.P.T.", icono: "⚙", roles: ["SUPERADMIN" as RolSesion] }]
     : MENU.filter((item) => item.roles.includes(sesion.rol) && (sesion.rol !== "SECRETARIA" || (
       (item.a !== "/registros" || activaciones?.registros !== false) &&
       (item.a !== "/secretaria" || activaciones?.control_documental !== false) &&
@@ -187,7 +194,8 @@ export default function App() {
       <aside className={`menu menu-ajustable ${barraAbierta ? "menu-abierto" : "menu-cerrado"}`} onMouseEnter={() => { if (modoBarra === "AUTOMATICO") setBarraAbierta(true); }} onMouseLeave={() => { if (modoBarra === "AUTOMATICO") setBarraAbierta(false); }}>
         <div className="barra-controles"><button type="button" className="barra-toggle" aria-label={barraAbierta ? "Contraer menú" : "Expandir menú"} aria-expanded={barraAbierta} title={barraAbierta ? "Contraer menú" : "Expandir menú"} onClick={() => setBarraAbierta(!barraAbierta)}>☰</button><div className="barra-opciones"><label htmlFor="modo-menu">Modo</label><select id="modo-menu" aria-label="Comportamiento del menú lateral" value={modoBarra} onChange={(e) => cambiarModo(e.target.value as "AUTOMATICO" | "MANUAL")}><option value="AUTOMATICO">Automático</option><option value="MANUAL">Manual</option></select></div></div>
         <AparienciaPersonal onBarra={aplicarModoPersonal} />
-        <h1 className="barra-texto">FACT CENTRAL</h1>
+        <h1 className="barra-texto">S.P.T.</h1>
+        <p className="barra-texto marca-descripcion">Sistema Pesquero de Trazabilidad</p>
         <div className="sesion-resumen barra-texto">
           <strong>{sesion.codigo}</strong>
           <span>{sesion.nombre}</span>
@@ -205,7 +213,7 @@ export default function App() {
       </aside>
       <main className="contenido">
         <header className="ruta-organizacion" aria-label="Dominio y cadena de responsabilidad">
-          <div className="ruta-dominio"><strong>FACT CENTRAL</strong><span>{dominio}</span></div>
+          <div className="ruta-dominio"><strong>S.P.T.</strong><span>{dominio}</span></div>
           <div className="ruta-personas">
             {cadena.map((persona, indice) => (
               <span className="ruta-persona" key={persona.rol + persona.codigo}>
@@ -250,6 +258,7 @@ export default function App() {
           <Route path="/responsables-operativos" element={<ResponsablesOperativos />} />
           <Route path="/mi-cartera" element={<CarteraGerencia />} />
           <Route path="/produccion" element={sesion.rol === "GERENTE" ? <Navigate to="/mi-cartera" replace /> : <Produccion />} />
+          <Route path="/pesca" element={<Pesca />} />
           <Route path="/pagos" element={<Pagos sesion={sesion} />} />
           <Route path="/comisiones-responsables" element={sesion.rol === "GERENTE" ? <ComisionesResponsables sesion={sesion} /> : <Navigate to="/expedientes" replace />} />
           <Route path="/configuracion" element={<Configuracion sesion={sesion} />} />

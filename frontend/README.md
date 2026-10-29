@@ -1,4 +1,4 @@
-# FACT CENTRAL — Frontend MVP
+# S.P.T. — Interfaz de la plataforma
 
 Interfaz web operativa del MVP (Vite + React + TypeScript). Permite validar el flujo completo sin
 usar la API a mano, pero todavía no representa el diseño visual final del producto.

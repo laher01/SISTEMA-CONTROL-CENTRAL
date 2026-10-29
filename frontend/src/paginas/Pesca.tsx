@@ -9,22 +9,44 @@ type Operacion = {
   puerto: string;
   muelle: string;
   planta: string;
+  armador_reportante: string | null;
+  comprador: string | null;
+  remitente: string | null;
+  destinatario: string | null;
+  facturador: string | null;
+  toneladas_declaradas: number | null;
+  precio_propuesto: number | null;
+  precio_confirmado: number | null;
+  precio_confirmado_por: string | null;
+  precio_confirmado_at: string | null;
+  descarga_prevista: string | null;
+  llegada_planta_prevista: string | null;
+  jefe_bahia: string | null;
+  encargado_muelle: string | null;
+  apuntador: string | null;
+  factura_serie: string | null;
+  factura_correlativo: string | null;
+  factura_emitida_at: string | null;
+  factura_emitida_por: string | null;
+  estado_facturacion: string;
   estado: string;
 };
 
-type Descarga = { descarga_id: string; embarcacion_id: string; matricula: string; nombre: string };
+type Descarga = { descarga_id: string; embarcacion_id: string; matricula: string; nombre: string; armador: string | null; patron: string | null; peso_declarado_kg: number | null; inicio_descarga: string | null; fin_descarga: string | null };
 type Vehiculo = {
   id: string;
   placa: string;
   tipo: string;
   chofer: string;
   estado: string;
+  salida_muelle: string | null;
   turno: string | null;
   fecha_reporte_planta: string | null;
   inicio_planta: string | null;
   fin_planta: string | null;
 };
-type Archivo = { id: string; tipo: string; nombre: string };
+type Archivo = { id: string; tipo: string; nombre: string; vehiculo_id: string | null };
+type Movimiento = { id: string; operacion_id: string | null; clase: string; pagador: string; beneficiario: string; concepto: string; importe: number; moneda: string; registrado_por: string; comprobante_documento_id: string | null; abonado: number; saldo: number; estado: string };
 type Paquete = { vehiculo_id: string; placa: string; documentacion_lista: boolean; faltantes: string[] };
 type Resumen = {
   total_peso_muelle_kg: number;
@@ -40,12 +62,18 @@ type Resumen = {
 };
 
 const DOCUMENTOS = [
+  ["certificado_matricula", "Certificado de matrícula"],
+  ["permiso_pesca", "Permiso de pesca"],
+  ["certificado_sanipes", "Certificado SANIPES"],
+  ["reporte_satelital", "Constancia / reporte satelital"],
+  ["visto_bueno_produce", "Visto bueno PRODUCE"],
   ["guia_remitente", "Guía de remisión remitente"],
   ["guia_transportista", "Guía de remisión transportista"],
   ["acta_fiscalizacion", "Acta de fiscalización"],
   ["formato_descarga", "Formato de descarga"],
   ["certificado_procedencia", "Certificado de procedencia"],
   ["certificado_captura", "Certificado de captura"],
+  ["factura", "Factura emitida"],
   ["peso_planta", "Peso registrado en planta"],
   ["otro", "Otro documento"],
 ] as const;
@@ -53,6 +81,12 @@ const DOCUMENTOS = [
 function fechaHoraLocalActual() {
   const fecha = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000);
   return fecha.toISOString().slice(0, 16);
+}
+
+function aFechaHoraLocal(valor: string | null) {
+  if (!valor) return "";
+  const fecha = new Date(valor);
+  return new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 }
 
 async function manejar<T>(accion: () => Promise<T>, alExito: () => void, alError: (mensaje: string) => void) {
@@ -75,6 +109,8 @@ export default function Pesca() {
   const { datos: archivos, recargar: recargarArchivos } = useDatos<Archivo[]>(seleccionada ? `${base}/documentos` : "");
   const { datos: paquetes, recargar: recargarPaquetes } = useDatos<Paquete[]>(seleccionada ? `${base}/documentacion` : "");
   const { datos: resumen, recargar: recargarResumen } = useDatos<Resumen>(seleccionada ? `${base}/resumen` : "");
+  const { datos: movimientos, recargar: recargarMovimientos } = useDatos<Movimiento[]>(seleccionada ? `${base}/movimientos` : "");
+  const { datos: prestamos, recargar: recargarPrestamos } = useDatos<Movimiento[]>("/api/v1/pesca/movimientos-personales");
 
   const refrescarDetalle = () => {
     recargarDescargas();
@@ -82,6 +118,48 @@ export default function Pesca() {
     recargarArchivos();
     recargarPaquetes();
     recargarResumen();
+    recargarMovimientos();
+  };
+
+  const registrarMovimiento = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formulario = event.currentTarget;
+    const form = new FormData(formulario);
+    const clase = String(form.get("clase"));
+    void manejar(
+      () => enviarJson<Movimiento>("/api/v1/pesca/movimientos", "POST", {
+        operacion_id: clase === "prestamo_personal_bahia" ? null : seleccionada,
+        clase, pagador: form.get("pagador"), beneficiario: form.get("beneficiario"),
+        concepto: form.get("concepto"), importe: Number(form.get("importe")), moneda: form.get("moneda"),
+        cantidad: form.get("cantidad") ? Number(form.get("cantidad")) : null,
+        tarifa_unitaria: form.get("tarifa_unitaria") ? Number(form.get("tarifa_unitaria")) : null,
+      }),
+      () => { setAviso("Movimiento guardado con trazabilidad."); formulario.reset(); refrescarDetalle(); recargarPrestamos(); }, setAviso,
+    );
+  };
+
+  const registrarAbono = (event: FormEvent<HTMLFormElement>, movimientoId: string, trasGuardar: () => void) => {
+    event.preventDefault();
+    const formulario = event.currentTarget;
+    const form = new FormData(formulario);
+    void manejar(
+      () => enviarJson(`/api/v1/pesca/movimientos/${movimientoId}/abonos`, "POST", {
+        importe: Number(form.get("importe")), observacion: form.get("observacion") || null,
+      }),
+      () => { setAviso("Devolución o reembolso registrado."); formulario.reset(); trasGuardar(); }, setAviso,
+    );
+  };
+
+  const adjuntarComprobante = (event: FormEvent<HTMLFormElement>, movimientoId: string, trasGuardar: () => void) => {
+    event.preventDefault();
+    const formulario = event.currentTarget;
+    const file = new FormData(formulario).get("archivo");
+    if (!(file instanceof File) || !file.size) { setAviso("Selecciona el comprobante del movimiento."); return; }
+    const data = new FormData(); data.append("archivo", file);
+    void manejar(
+      () => enviarFormulario(`/api/v1/pesca/movimientos/${movimientoId}/comprobante`, data),
+      () => { setAviso("Comprobante adjuntado al movimiento."); formulario.reset(); trasGuardar(); }, setAviso,
+    );
   };
   const listar = () => {
     recargar();
@@ -95,9 +173,50 @@ export default function Pesca() {
     void manejar(
       () => enviarJson<Operacion>("/api/v1/pesca/operaciones", "POST", {
         puerto: form.get("puerto"), muelle: form.get("muelle"), planta: form.get("planta"),
+        armador_reportante: form.get("armador_reportante") || null,
+        comprador: form.get("comprador") || null, remitente: form.get("remitente") || null,
+        destinatario: form.get("destinatario") || null, facturador: form.get("facturador") || null,
+        toneladas_declaradas: form.get("toneladas_declaradas") ? Number(form.get("toneladas_declaradas")) : null,
+        precio_propuesto: form.get("precio_propuesto") ? Number(form.get("precio_propuesto")) : null,
+        descarga_prevista: form.get("descarga_prevista") ? new Date(String(form.get("descarga_prevista"))).toISOString() : null,
+        llegada_planta_prevista: form.get("llegada_planta_prevista") ? new Date(String(form.get("llegada_planta_prevista"))).toISOString() : null,
+        jefe_bahia: form.get("jefe_bahia") || null, encargado_muelle: form.get("encargado_muelle") || null,
+        apuntador: form.get("apuntador") || null,
       }),
       () => { setAviso("Operación creada."); formulario.reset(); recargar(); },
       setAviso,
+    );
+  };
+
+  const confirmarPrecio = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!seleccionada) return;
+    const form = new FormData(event.currentTarget);
+    void manejar(
+      () => enviarJson<Operacion>(`${base}/confirmar-precio`, "POST", {
+        comprador: form.get("comprador"), precio_confirmado: Number(form.get("precio_confirmado")),
+      }),
+      () => { setAviso("Precio confirmado y bloqueado para esta operación."); recargar(); }, setAviso,
+    );
+  };
+
+  const iniciarDescarga = () => {
+    if (!seleccionada) return;
+    void manejar(
+      () => enviarJson<Operacion>(`${base}/iniciar-descarga`, "POST"),
+      () => { setAviso("Documentos verificados; descarga autorizada."); listar(); }, setAviso,
+    );
+  };
+
+  const registrarFactura = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!seleccionada) return;
+    const form = new FormData(event.currentTarget);
+    void manejar(
+      () => enviarJson<Operacion>(`${base}/factura`, "POST", {
+        serie: form.get("factura_serie"), correlativo: form.get("factura_correlativo"),
+      }),
+      () => { setAviso("Factura registrada. Adjunta el comprobante para completar el paquete de pago."); listar(); }, setAviso,
     );
   };
 
@@ -108,7 +227,10 @@ export default function Pesca() {
     const form = new FormData(formulario);
     void manejar(
       () => enviarJson<Descarga>(`${base}/embarcaciones`, "POST", {
-        matricula: form.get("matricula"), nombre: form.get("nombre"), patron_armador: form.get("patron_armador"),
+        matricula: form.get("matricula"), nombre: form.get("nombre"), armador: form.get("armador"), patron: form.get("patron"),
+        peso_declarado_kg: form.get("peso_declarado_t") ? Number(form.get("peso_declarado_t")) * 1000 : null,
+        inicio_descarga: form.get("inicio_descarga") ? new Date(String(form.get("inicio_descarga"))).toISOString() : null,
+        fin_descarga: form.get("fin_descarga") ? new Date(String(form.get("fin_descarga"))).toISOString() : null,
         intermediario: form.get("intermediario") || null,
       }),
       () => { setAviso("Embarcación vinculada."); formulario.reset(); refrescarDetalle(); }, setAviso,
@@ -128,6 +250,21 @@ export default function Pesca() {
     );
   };
 
+  const guardarHorasDescarga = (event: FormEvent<HTMLFormElement>, descargaId: string) => {
+    event.preventDefault();
+    const formulario = event.currentTarget;
+    const form = new FormData(formulario);
+    const payload: Record<string, unknown> = { observacion: form.get("observacion") };
+    const inicio = form.get("inicio_descarga");
+    const fin = form.get("fin_descarga");
+    if (inicio) payload.inicio_descarga = new Date(String(inicio)).toISOString();
+    if (fin) payload.fin_descarga = new Date(String(fin)).toISOString();
+    void manejar(
+      () => enviarJson(`/api/v1/pesca/descargas/${descargaId}/fechas`, "PATCH", payload),
+      () => { setAviso("Horas reales de descarga actualizadas."); refrescarDetalle(); }, setAviso,
+    );
+  };
+
   const subirArchivo = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!seleccionada) return;
@@ -140,9 +277,11 @@ export default function Pesca() {
     data.append("tipo", String(form.get("tipo")));
     const idVehiculo = String(form.get("vehiculo"));
     if (idVehiculo) data.append("vehiculo_ids", idVehiculo);
+    const idEmbarcacion = String(form.get("embarcacion"));
+    if (idEmbarcacion) data.append("embarcacion_ids", idEmbarcacion);
     void manejar(
       () => enviarFormulario(`${base}/documentos`, data),
-      () => { setAviso("Documento guardado."); formulario.reset(); refrescarDetalle(); }, setAviso,
+      () => { setAviso("Documento guardado."); formulario.reset(); refrescarDetalle(); recargar(); }, setAviso,
     );
   };
 
@@ -161,6 +300,29 @@ export default function Pesca() {
         <button type="button" onClick={listar}>Actualizar</button>
       </header>
       {aviso && <p className="pesca-aviso" role="status">{aviso}<button type="button" onClick={() => setAviso("")}>Cerrar</button></p>}
+      <details className="pesca-prestamos-personales">
+        <summary>Préstamos personales del jefe de bahía <span>Separados de las operaciones y liquidaciones</span></summary>
+        <form className="pesca-form pesca-prestamo-form" onSubmit={registrarMovimiento}>
+          <input type="hidden" name="clase" value="prestamo_personal_bahia" />
+          <label>Prestamista (jefe de bahía)<input name="pagador" required /></label>
+          <label>Armador o patrón que recibió<input name="beneficiario" required /></label>
+          <label>Motivo<input name="concepto" required /></label>
+          <label>Importe<input name="importe" type="number" min="0.01" step="0.01" required /></label>
+          <input type="hidden" name="moneda" value="PEN" />
+          <button type="submit">Registrar préstamo personal</button>
+        </form>
+        <div className="pesca-movimientos">
+          {!prestamos?.length ? <p className="muted">No hay préstamos personales registrados.</p> : prestamos.map((item) => <article className="pesca-movimiento" key={item.id}>
+            <div><strong>{item.beneficiario}</strong><small>{item.concepto} · prestamista: {item.pagador}</small></div>
+            <span>{item.moneda} {Number(item.importe).toFixed(2)} · abonado {Number(item.abonado).toFixed(2)} · saldo {Number(item.saldo).toFixed(2)}</span>
+            {item.comprobante_documento_id ? <a href={`/api/v1/pesca/documentos/${item.comprobante_documento_id}/archivo`} target="_blank" rel="noreferrer">Ver constancia del préstamo</a> : <form className="pesca-abono-form" onSubmit={(event) => adjuntarComprobante(event, item.id, recargarPrestamos)}><label>Constancia (opcional)<input name="archivo" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" required /></label><button type="submit">Adjuntar constancia</button></form>}
+            {item.saldo > 0 && <form className="pesca-abono-form" onSubmit={(event) => registrarAbono(event, item.id, recargarPrestamos)}>
+              <label>Registrar abono<input name="importe" type="number" min="0.01" max={item.saldo} step="0.01" required /></label>
+              <label>Nota<input name="observacion" /></label><button type="submit">Guardar devolución</button>
+            </form>}
+          </article>)}
+        </div>
+      </details>
       <div className="pesca-columnas">
         <div className="pesca-panel">
           <h3>Nueva operación</h3>
@@ -168,6 +330,20 @@ export default function Pesca() {
             <label>Puerto<input name="puerto" required placeholder="Paita" /></label>
             <label>Muelle<input name="muelle" required placeholder="Nombre del muelle" /></label>
             <label>Planta de destino<input name="planta" required placeholder="Planta procesadora" /></label>
+            <details className="pesca-datos-iniciales"><summary>Datos comerciales y preparación</summary>
+              <label>Armador que reporta<input name="armador_reportante" /></label>
+              <label>Comprador<input name="comprador" /></label>
+              <label>Remitente<input name="remitente" placeholder="Quién emite la guía remitente" /></label>
+              <label>Destinatario<input name="destinatario" /></label>
+              <label>Facturador (si es distinto)<input name="facturador" /></label>
+              <label>Toneladas declaradas<input name="toneladas_declaradas" type="number" min="0" step="0.001" /></label>
+              <label>Precio propuesto por tonelada (S/)<input name="precio_propuesto" type="number" min="0" step="0.01" /></label>
+              <label>Descarga prevista<input name="descarga_prevista" type="datetime-local" /></label>
+              <label>Llegada prevista a planta<input name="llegada_planta_prevista" type="datetime-local" /></label>
+              <label>Jefe de bahía<input name="jefe_bahia" /></label>
+              <label>Encargado de muelle<input name="encargado_muelle" /></label>
+              <label>Apuntador<input name="apuntador" /></label>
+            </details>
             <button type="submit">Crear operación de hoy</button>
           </form>
           <h3>Operaciones recientes</h3>
@@ -178,7 +354,7 @@ export default function Pesca() {
             {operaciones?.map((item) => (
               <button className={`pesca-op ${seleccionada === item.id ? "seleccionada" : ""}`} type="button" key={item.id} onClick={() => { setSeleccionada(item.id); setAviso(""); }}>
                 <span><strong>{item.muelle}</strong><small>{item.puerto} · {new Date(`${item.fecha_reporte}T12:00:00`).toLocaleDateString("es-PE")}</small></span>
-                <span className="pesca-estado">{item.estado === "cerrada" ? "Cerrada" : "En proceso"}</span>
+                <span className="pesca-estado">{item.estado === "cerrada" ? "Cerrada" : item.estado === "preparacion" ? "Preparación" : "En descarga"}</span>
               </button>
             ))}
           </div>
@@ -186,13 +362,61 @@ export default function Pesca() {
 
         <div className="pesca-detalle">
           {!op ? <div className="pesca-vacio"><h3>Selecciona una operación</h3><p>Verás aquí sus embarcaciones, vehículos y registro de planta.</p></div> : <>
-            <div className="pesca-titulo-detalle"><div><p className="sobrelinea">{op.puerto} · {op.muelle}</p><h3>{op.planta}</h3></div><span className="pesca-estado grande">{op.estado === "cerrada" ? "Cerrada" : "En proceso"}</span></div>
-            <div className="pesca-metricas"><div><small>Peso muelle</small><strong>{((resumen?.total_peso_muelle_kg ?? 0) / 1000).toFixed(3)} t</strong></div><div><small>Peso aceptado planta</small><strong>{((resumen?.total_peso_aceptado_planta_kg ?? 0) / 1000).toFixed(3)} t</strong></div><div><small>Vehículos</small><strong>{vehiculos?.length ?? 0}</strong></div></div>
+            <div className="pesca-titulo-detalle"><div><p className="sobrelinea">{op.puerto} · {op.muelle}</p><h3>{op.planta}</h3></div><span className="pesca-estado grande">{op.estado === "cerrada" ? "Cerrada" : op.estado === "preparacion" ? "Preparación" : "En descarga"}</span></div>
+            <section className="pesca-resumen-comercial" aria-label="Datos comerciales y responsables">
+              <p><strong>Armador reportante:</strong> {op.armador_reportante || "Pendiente"} · <strong>Comprador:</strong> {op.comprador || "Pendiente"}</p>
+              <p><strong>Remitente:</strong> {op.remitente || "Pendiente"} · <strong>Destinatario:</strong> {op.destinatario || "Pendiente"} · <strong>Facturador:</strong> {op.facturador || "Mismo remitente"}</p>
+              <p><strong>Toneladas declaradas:</strong> {op.toneladas_declaradas ?? "Pendiente"} · <strong>Precio propuesto:</strong> {op.precio_propuesto == null ? "Pendiente" : `S/ ${Number(op.precio_propuesto).toFixed(2)}/t`}</p>
+              <p><strong>Descarga prevista:</strong> {op.descarga_prevista ? new Date(op.descarga_prevista).toLocaleString("es-PE") : "Pendiente"} · <strong>Llegada prevista a planta:</strong> {op.llegada_planta_prevista ? new Date(op.llegada_planta_prevista).toLocaleString("es-PE") : "Pendiente"}</p>
+              <p><strong>Jefe de bahía:</strong> {op.jefe_bahia || "—"} · <strong>Encargado:</strong> {op.encargado_muelle || "—"} · <strong>Apuntador:</strong> {op.apuntador || "—"}</p>
+            </section>
+            {op.precio_confirmado == null && op.estado === "preparacion" ? <form className="pesca-form pesca-confirmar-precio" onSubmit={confirmarPrecio}>
+              <h4>Confirmación del comprador</h4>
+              <label>Comprador que confirma<input name="comprador" defaultValue={op.comprador ?? ""} required /></label>
+              <label>Precio acordado por tonelada (S/)<input name="precio_confirmado" type="number" min="0.01" step="0.01" defaultValue={op.precio_propuesto ?? ""} required /></label>
+              <button type="submit">Confirmar y bloquear precio</button>
+            </form> : op.precio_confirmado != null && <p className="pesca-precio-bloqueado"><strong>Precio confirmado:</strong> S/ {Number(op.precio_confirmado).toFixed(2)}/t · actor: {op.precio_confirmado_por} · {op.precio_confirmado_at ? new Date(op.precio_confirmado_at).toLocaleString("es-PE") : ""}</p>}
+            {op.estado === "preparacion" && <div className="pesca-autorizacion-descarga">
+              <strong>Antes de iniciar la descarga, sube:</strong>
+              <span>matrícula · permiso de pesca · SANIPES · satelital · visto bueno PRODUCE · guía remitente</span>
+              <button type="button" onClick={iniciarDescarga} disabled={op.precio_confirmado == null}>Verificar documentos e iniciar descarga</button>
+            </div>}
+            <div className="pesca-metricas"><div><small>Peso declarado</small><strong>{op.toneladas_declaradas == null ? "—" : `${Number(op.toneladas_declaradas).toFixed(3)} t`}</strong></div><div><small>Peso muelle</small><strong>{((resumen?.total_peso_muelle_kg ?? 0) / 1000).toFixed(3)} t</strong></div><div><small>Peso aceptado planta</small><strong>{((resumen?.total_peso_aceptado_planta_kg ?? 0) / 1000).toFixed(3)} t</strong></div><div><small>Vehículos</small><strong>{vehiculos?.length ?? 0}</strong></div></div>
+            <section className="pesca-control-gastos">
+              <h4>Gastos y adelantos de esta operación</h4>
+              <p>Los gastos pagados por la empresa, los montos que el jefe de bahía puso de su bolsillo y los adelantos al armador se concilian aquí. Los préstamos personales se controlan en su registro independiente.</p>
+              <form className="pesca-form pesca-movimiento-form" onSubmit={registrarMovimiento}>
+                <label>Tipo<select name="clase"><option value="gasto_empresa">Gasto pagado por la empresa</option><option value="gasto_bahia_reembolsable">Gasto de operación pagado por jefe de bahía</option><option value="adelanto_armador_empresa">Adelanto de la empresa al armador</option></select></label>
+                <label>Pagador<input name="pagador" required placeholder="Empresa o jefe de bahía" /></label>
+                <label>Beneficiario / proveedor<input name="beneficiario" required /></label>
+                <label>Concepto<input name="concepto" required placeholder="Hielo, cuadrilla, flete…" /></label>
+                <label>Importe<input name="importe" type="number" min="0.01" step="0.01" required /></label>
+                <label>Moneda<select name="moneda"><option value="PEN">Soles</option><option value="USD">Dólares</option></select></label>
+                <label>Cantidad (opcional)<input name="cantidad" type="number" min="0.001" step="0.001" /></label>
+                <label>Tarifa unitaria (opcional)<input name="tarifa_unitaria" type="number" min="0" step="0.01" /></label>
+                <button type="submit">Guardar movimiento de la operación</button>
+              </form>
+              <div className="pesca-movimientos">
+                {!movimientos?.length ? <p className="muted">Aún no hay gastos ni adelantos registrados.</p> : movimientos.map((item) => <article className="pesca-movimiento" key={item.id}>
+                  <div><strong>{item.concepto}</strong><small>{item.clase.replaceAll("_", " ")} · {item.beneficiario} · pagó: {item.pagador}</small></div>
+                  <span>{item.moneda} {Number(item.importe).toFixed(2)} · saldo {Number(item.saldo).toFixed(2)} · {item.estado.replaceAll("_", " ")}</span>
+                  {item.comprobante_documento_id ? <a href={`/api/v1/pesca/documentos/${item.comprobante_documento_id}/archivo`} target="_blank" rel="noreferrer">Ver comprobante</a> : <form className="pesca-abono-form" onSubmit={(event) => adjuntarComprobante(event, item.id, recargarMovimientos)}><label>Comprobante (opcional)<input name="archivo" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" required /></label><button type="submit">Adjuntar comprobante</button></form>}
+                  {item.saldo > 0 && item.clase !== "gasto_empresa" && <form className="pesca-abono-form" onSubmit={(event) => registrarAbono(event, item.id, recargarMovimientos)}>
+                    <label>Devolución / reembolso<input name="importe" type="number" min="0.01" max={item.saldo} step="0.01" required /></label>
+                    <label>Nota de conciliación<input name="observacion" /></label><button type="submit">Registrar abono</button>
+                  </form>}
+                </article>)}
+              </div>
+            </section>
             <div className="pesca-subpaneles">
               <form className="pesca-form pesca-form-horizontal" onSubmit={agregarEmbarcacion}>
                 <h4>Vincular embarcación</h4>
                 <label>Matrícula<input name="matricula" required /></label><label>Nombre<input name="nombre" required /></label>
-                <label>Patrón o armador<input name="patron_armador" required /></label><label>Intermediario (opcional)<input name="intermediario" /></label>
+                <label>Armador<input name="armador" required /></label><label>Patrón<input name="patron" required /></label>
+                <label>Peso declarado (ton)<input name="peso_declarado_t" type="number" min="0" step="0.001" /></label>
+                <label>Inicio real de descarga<input name="inicio_descarga" type="datetime-local" /></label>
+                <label>Fin real de descarga<input name="fin_descarga" type="datetime-local" /></label>
+                <label>Intermediario (opcional)<input name="intermediario" /></label>
                 <button type="submit">Agregar embarcación</button>
               </form>
               <form className="pesca-form pesca-form-horizontal" onSubmit={agregarVehiculo}>
@@ -203,7 +427,7 @@ export default function Pesca() {
             </div>
 
             <h4>Embarcaciones vinculadas</h4>
-            {descargas?.length ? <ul className="pesca-chips">{descargas.map((d) => <li key={d.descarga_id}><strong>{d.nombre}</strong><small>{d.matricula}</small></li>)}</ul> : <p className="muted">Agrega la primera embarcación.</p>}
+            {descargas?.length ? <ul className="pesca-chips">{descargas.map((d) => <li key={d.descarga_id}><strong>{d.nombre}</strong><small>{d.matricula} · Armador: {d.armador || "—"} · Patrón: {d.patron || "—"} · Declarado: {d.peso_declarado_kg == null ? "—" : `${(Number(d.peso_declarado_kg) / 1000).toFixed(3)} t`}</small><small>Descarga real: {d.inicio_descarga ? new Date(d.inicio_descarga).toLocaleString("es-PE") : "—"} a {d.fin_descarga ? new Date(d.fin_descarga).toLocaleString("es-PE") : "—"}</small><details><summary>Editar horas reales (requiere motivo)</summary><form className="pesca-form" onSubmit={(event) => guardarHorasDescarga(event, d.descarga_id)}><label>Inicio real<input name="inicio_descarga" type="datetime-local" defaultValue={aFechaHoraLocal(d.inicio_descarga)} /></label><label>Fin real<input name="fin_descarga" type="datetime-local" defaultValue={aFechaHoraLocal(d.fin_descarga)} /></label><label>Motivo / nota<input name="observacion" required /></label><button type="submit">Guardar horas</button></form></details></li>)}</ul> : <p className="muted">Agrega la primera embarcación.</p>}
 
             <h4>Vehículos y recepción en planta</h4>
             {!vehiculos?.length ? <p className="muted">Agrega un vehículo para iniciar el seguimiento.</p> : <div className="pesca-vehiculos">{vehiculos.map((v) => {
@@ -216,10 +440,21 @@ export default function Pesca() {
               <h4>Documentación de la operación</h4>
               <label>Tipo de documento<select name="tipo">{DOCUMENTOS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
               <label>Vincular a<select name="vehiculo"><option value="">Toda la operación</option>{vehiculos?.map((v) => <option key={v.id} value={v.id}>{v.placa} · {v.chofer}</option>)}</select></label>
+              <label>Vincular certificado a embarcación<select name="embarcacion"><option value="">Documento general / del vehículo</option>{descargas?.map((d) => <option key={d.descarga_id} value={d.embarcacion_id}>{d.nombre} · {d.matricula}</option>)}</select></label>
               <label>Foto o archivo (PDF/JPG/PNG/WEBP)<input name="archivo" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" required /></label>
               <button type="submit">Subir documento</button>
             </form>
             <div className="pesca-documentacion"><strong>Documentación por vehículo</strong>{paquetes?.map((p) => <p key={p.vehiculo_id}><span>{p.placa}</span>{p.documentacion_lista ? <b className="texto-verde">Lista para presentar</b> : <small>Falta: {p.faltantes.join(", ")}</small>}</p>)}</div>
+            {op.estado === "cerrada" && <section className="pesca-facturacion">
+              <h4>Factura y expediente para pago</h4>
+              {op.estado_facturacion === "pendiente" ? <form className="pesca-form pesca-factura-form" onSubmit={registrarFactura}>
+                <label>Serie<input name="factura_serie" required placeholder="F001" /></label>
+                <label>Correlativo<input name="factura_correlativo" required /></label>
+                <button type="submit">Registrar factura emitida</button>
+              </form> : <p>Factura {op.factura_serie}-{op.factura_correlativo} · {op.estado_facturacion.replaceAll("_", " ")}</p>}
+              {op.estado_facturacion === "pendiente_documento" && <p className="pesca-pendiente-doc">Sube ahora el archivo de la factura en “Documentación de la operación”, con tipo “Factura emitida”.</p>}
+              {op.estado_facturacion === "lista_para_pago" && <p className="texto-verde"><strong>Paquete listo para presentar a pago.</strong></p>}
+            </section>}
             <details className="pesca-archivos"><summary>Archivos cargados ({archivos?.length ?? 0})</summary><ul>{archivos?.map((a) => <li key={a.id}>{a.tipo.replaceAll("_", " ")} · <a href={`/api/v1/pesca/documentos/${a.id}/archivo`} target="_blank" rel="noreferrer">{a.nombre}</a></li>)}</ul></details>
             <button className="pesca-cerrar-op" type="button" disabled={!vehiculos?.length || vehiculos.some((v) => v.estado !== "cerrado")} onClick={cerrarOperacion}>Cerrar operación del día</button>
           </>}
@@ -264,6 +499,12 @@ function VehiculoCard({ operationId, vehicle, descargas, linea, paquete, alGuard
     } catch (error) { alError(error instanceof Error ? error.message : String(error)); }
     finally { setEsperando(false); }
   };
+  const iniciarTraslado = async () => {
+    setInicio(true);
+    try { await enviarJson(`/api/v1/pesca/vehiculos/${vehicle.id}/traslado/iniciar`, "POST"); alGuardar(); }
+    catch (error) { alError(error instanceof Error ? error.message : String(error)); }
+    finally { setInicio(false); }
+  };
   const iniciarPlanta = async () => {
     setInicio(true);
     try { await enviarJson(`/api/v1/pesca/vehiculos/${vehicle.id}/planta/iniciar`, "POST"); alGuardar(); }
@@ -305,16 +546,17 @@ function VehiculoCard({ operationId, vehicle, descargas, linea, paquete, alGuard
   const colorPeso = linea?.peso_muelle_kg == null ? "" : acceptedKg > linea.peso_muelle_kg ? "verde" : acceptedKg === linea.peso_muelle_kg ? "naranja" : "rojo";
   return <article className="pesca-vehiculo">
     <header><div><strong>{vehicle.placa}</strong><small>{vehicle.tipo} · {vehicle.chofer}</small></div><span className={`pesca-estado ${vehicle.estado === "cerrado" ? "cerrado" : ""}`}>{vehicle.estado.replaceAll("_", " ")}</span></header>
-    <div className="pesca-vehiculo-meta"><span>Turno: {vehicle.turno || "Sin turno"}</span><span>{descargas.length} embarcaciones vinculadas</span></div>
-    {vehicle.estado === "pendiente_planta" && <button type="button" className="pesca-secundario" disabled={inicio} onClick={() => void iniciarPlanta()}>{inicio ? "Registrando…" : "Iniciar recepción en planta"}</button>}
-    {vehicle.estado !== "cerrado" && <details className="pesca-fechas"><summary>Fechas y horas de planta</summary><form className="pesca-form pesca-fechas-form" onSubmit={(event) => void guardarFechas(event)}>
+    <div className="pesca-vehiculo-meta"><span>Turno: {vehicle.turno || "Sin turno"}</span><span>{descargas.length} embarcaciones vinculadas</span>{vehicle.salida_muelle && <span>Salió del muelle: {new Date(vehicle.salida_muelle).toLocaleString("es-PE")}</span>}</div>
+    {vehicle.estado === "pendiente_muelle" && <button type="button" className="pesca-secundario" disabled={inicio} onClick={() => void iniciarTraslado()}>{inicio ? "Registrando…" : "Despachar a planta (verificar carga y documentos)"}</button>}
+    {vehicle.estado === "en_traslado" && <button type="button" className="pesca-secundario" disabled={inicio} onClick={() => void iniciarPlanta()}>{inicio ? "Registrando…" : "Registrar llegada e iniciar recepción en planta"}</button>}
+    {vehicle.estado === "en_planta" && <details className="pesca-fechas"><summary>Fechas y horas de planta</summary><form className="pesca-form pesca-fechas-form" onSubmit={(event) => void guardarFechas(event)}>
       <label>Fecha de reporte<input type="date" value={fechaReporte} onChange={(e) => setFechaReporte(e.target.value)} /></label>
       <label>Inicio de descarga<input type="datetime-local" value={inicioManual} onChange={(e) => setInicioManual(e.target.value)} /></label>
       <label>Fin de descarga<input type="datetime-local" value={finManual} onChange={(e) => setFinManual(e.target.value)} /></label>
       <label>Motivo del ajuste<input value={observacionFechas} onChange={(e) => setObservacionFechas(e.target.value)} required /></label>
       <button type="submit" disabled={esperando}>Guardar fechas</button>
     </form></details>}
-    {vehicle.estado !== "cerrado" && <form className="pesca-form pesca-carga-form" onSubmit={(event) => void asignarCarga(event)}>
+    {vehicle.estado === "pendiente_muelle" && <form className="pesca-form pesca-carga-form" onSubmit={(event) => void asignarCarga(event)}>
       <strong>Asignar carga desde muelle</strong>
       <label>Embarcación<select value={descargaId} onChange={(e) => setDescargaId(e.target.value)} required><option value="">Seleccionar…</option>{descargas.map((d) => <option key={d.descarga_id} value={d.descarga_id}>{d.nombre} · {d.matricula}</option>)}</select></label>
       <label>Peso de muelle (kg)<input type="number" min="0" step="0.001" value={pesoMuelle} onChange={(e) => setPesoMuelle(e.target.value)} /></label>
@@ -323,7 +565,7 @@ function VehiculoCard({ operationId, vehicle, descargas, linea, paquete, alGuard
     </form>}
     {linea?.peso_aceptado != null && <p className={`pesca-diferencia ${colorPeso}`}>Aceptado en planta: {linea.peso_aceptado} {linea.unidad} · comparación muelle: {colorPeso || "pendiente"}</p>}
     {paquete && !paquete.documentacion_lista && <p className="pesca-pendiente-doc">Pendiente: {paquete.faltantes.join(", ")}</p>}
-    {vehicle.estado !== "cerrado" && <div className="pesca-form pesca-peso-form">
+    {vehicle.estado === "en_planta" && <div className="pesca-form pesca-peso-form">
       <label>Resultado<select value={resultado} onChange={(e) => setResultado(e.target.value)}><option value="completo">Completo</option><option value="parcial">Parcial</option><option value="rechazado">Rechazado</option></select></label>
       <label>Peso aceptado<input type="number" min="0" step="0.001" value={peso} onChange={(e) => setPeso(e.target.value)} /></label>
       <label>Unidad<select value={unidad} onChange={(e) => setUnidad(e.target.value)}><option value="ton">Toneladas</option><option value="kg">Kilogramos</option><option value="lb">Libras</option><option value="oz">Onzas</option></select></label>

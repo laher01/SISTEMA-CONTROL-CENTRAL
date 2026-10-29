@@ -1,56 +1,78 @@
-# Operaciones de pesca: backend inicial
+# S.P.T. — logística de operaciones pesqueras
 
-El módulo `/api/v1/pesca` acompaña al flujo documental actual de FACT CENTRAL y registra la
-descarga desde muelle hasta la recepción por vehículo en planta. Sus tablas usan el tenant ya
-configurado por el backend.
+**S.P.T. (Sistema Pesquero de Trazabilidad)** es la plataforma. Cada organización opera como
+tenant independiente; **SNIDERFISH es el tenant piloto y plantilla**, no el nombre ni el dueño de
+la plataforma.
 
-## Flujo implementado
+El módulo `/api/v1/pesca` registra la operación desde el reporte del armador hasta la recepción
+en planta. Los datos se aíslan por `tenant_id`; los pesos se guardan con su fuente y no se mezclan.
 
-1. Crear operación diaria. La fecha se completa con la fecha local de `FC_ZONA_HORARIA` si no se
-   envía en la solicitud.
-2. Vincular embarcaciones por matrícula y registrar patrón/armador e intermediario.
-3. Registrar vehículos, asignarles las cargas de una o más embarcaciones y conservar peso de
-   muelle y cajas por asignación.
-4. Registrar el turno y el inicio de atención en planta. Las fechas y horas de inicio y fin se
-   pueden informar manualmente para casos sin señal o batería. La fecha/hora final toma el
-   momento actual si se omite; se puede indicar expresamente que no se registrará.
-5. Registrar por vehículo el resultado de planta (`completo`, `parcial` o `rechazado`), solo el
-   peso aceptado, la unidad y, cuando aplique, las cajas rechazadas y el motivo. Las unidades se
-   normalizan a kg para las comparaciones y sumas.
-6. Subir la evidencia del peso de planta y cerrar el registro del vehículo. La operación solo
-   cierra cuando todos sus vehículos tienen peso y evidencia.
+## Secuencia de operación
 
-Los archivos aceptados son PDF, JPG, PNG y WEBP. Un documento puede quedar vinculado a varios
-vehículos para usar una sola acta general o certificado. Cada cambio operativo importante crea
-una entrada de historial con actor, fecha y detalle.
+1. **Reporte y preparación:** se crea una operación con armador reportante, puerto, muelle, planta,
+   comprador, remitente, destinatario, facturador, toneladas declaradas, precio propuesto, horarios
+   previstos y responsables (jefe de bahía, encargado de muelle y apuntador). Los datos de una
+   operación no modifican la plantilla del tenant.
+2. **Confirmación comercial:** el comprador registrado confirma el precio por tonelada. La primera
+   confirmación queda fechada, ligada al usuario que la ingresó y bloqueada para cambios normales.
+   Una corrección requiere un flujo separado y auditado; no se sobrescribe el precio confirmado.
+3. **Control documental antes de descargar:** se deben adjuntar matrícula, permiso de pesca,
+   certificado SANIPES, constancia/reporte satelital, visto bueno de PRODUCE y Guía de Remisión
+   Remitente. `POST /operaciones/{id}/iniciar-descarga` rechaza el inicio mientras falte el precio
+   confirmado o cualquiera de esos documentos.
+4. **Descarga en muelle:** se vinculan embarcación, armador y patrón por separado, se registra el
+   peso declarado por embarcación y los pesos/cajas descargados por vehículo. Los registros de
+   inicio y fin de descarga son distintos de los horarios previstos.
+5. **Despacho y recepción:** antes de salir del muelle, cada vehículo debe tener carga asignada,
+   Guía Remitente, Guía Transportista, acta de fiscalización y formato de descarga adjuntos. Se
+   registra la hora real de salida. En planta se registran llegada, inicio y fin de descarga,
+   peso aceptado, unidad, rechazo y evidencia de pesaje.
+   Los valores se normalizan a kg para comparar.
+6. **Cierre documental:** se cargan formato de descarga, acta de fiscalización, guía de transporte,
+   peso de planta y certificado de procedencia, entre otros. Una misma evidencia puede vincularse a
+   varios vehículos. El historial conserva actor, momento y acción.
+7. **Gastos y conciliación:** cada movimiento de operación identifica pagador, beneficiario,
+   concepto, monto/moneda, cantidad y tarifa opcionales. Se distinguen gastos pagados por la
+   empresa, gastos operativos pagados por el jefe de bahía que esperan reembolso y adelantos de la
+   empresa al armador. Se pueden adjuntar comprobantes y registrar reembolsos o devoluciones
+   parciales; el saldo se calcula sin superar el monto original.
+8. **Préstamos personales:** el préstamo de dinero propio del jefe de bahía se registra sin
+   `operacion_id`, con constancia opcional, abonos parciales y saldo. El listado solo devuelve al actor que lo registró.
+   No aparece en los gastos, pesos ni movimientos de la operación y nunca se descuenta de la pesca.
+9. **Factura y presentación a pago:** después de cerrar la recepción y adjuntar el certificado de
+   procedencia, Secretaría registra serie/correlativo y carga el comprobante. El sistema marca el
+   expediente como `lista_para_pago`; no emite la factura ni confirma el pago.
 
 ## Rutas principales
 
 - `POST/GET /api/v1/pesca/operaciones`
+- `POST /api/v1/pesca/operaciones/{id}/confirmar-precio`
+- `POST /api/v1/pesca/operaciones/{id}/factura`
+- `POST /api/v1/pesca/operaciones/{id}/iniciar-descarga`
 - `POST /api/v1/pesca/operaciones/{id}/embarcaciones`
 - `POST /api/v1/pesca/operaciones/{id}/vehiculos`
 - `POST /api/v1/pesca/vehiculos/{id}/cargas`
-- `POST /api/v1/pesca/vehiculos/{id}/planta/iniciar`
-- `POST /api/v1/pesca/vehiculos/{id}/planta`
-- `POST /api/v1/pesca/operaciones/{id}/documentos` (multipart: `archivo`, `tipo`, y opcionalmente
-  `vehiculo_ids` repetido por cada vehículo)
-- `GET /api/v1/pesca/operaciones/{id}/documentacion` y `/resumen`
-- `GET /api/v1/pesca/operaciones/{id}/historial`
-- `POST /api/v1/pesca/vehiculos/{id}/planta/cerrar`
-- `POST /api/v1/pesca/operaciones/{id}/cerrar`
+- `POST /api/v1/pesca/vehiculos/{id}/traslado/iniciar`
+- `POST /api/v1/pesca/vehiculos/{id}/planta/iniciar` y `/planta`
+- `POST /api/v1/pesca/operaciones/{id}/documentos`
+- `GET /api/v1/pesca/operaciones/{id}/documentacion`, `/resumen`, `/historial` y `/movimientos`
+- `POST /api/v1/pesca/movimientos` y `POST /movimientos/{id}/abonos`
+- `GET /api/v1/pesca/movimientos-personales`
 
-Tipos de documento conocidos: `guia_remitente`, `guia_transportista`, `acta_fiscalizacion`,
-`formato_descarga`, `certificado_procedencia`, `certificado_captura`, `peso_planta`, `otro`.
-La verificación de documentación enumera faltantes por vehículo para preparar su expediente
-operativo.
+## Pesos que permanecen separados
 
-## Límite actual
+- **Declarado:** estimación que reporta la embarcación.
+- **Muelle:** peso que queda asignado al vehículo durante la descarga.
+- **Planta:** peso aceptado por la planta, respaldado por evidencia.
 
-Este primer corte no implementa todavía inicio de sesión propio ni permisos por rol dentro de la
-API. El backend existente usa Cloudflare Access como barrera de entrada al entorno de prueba; el
-El módulo toma el actor del encabezado de identidad inyectado por Cloudflare Access; `X-Actor` es
-solo una alternativa para desarrollo local y no autentica ni autoriza al usuario. Antes de habilitar
-el módulo a usuarios finales se deben aplicar permisos por rol para jefe de bahía, encargado y
-apuntadores. No se deben publicar estas rutas sin esa protección.
+No se usa ninguno para reemplazar los otros. La liquidación, diferencias autorizadas, excedentes,
+descuentos y pérdida de deudas quedan pendientes de reglas aprobadas; este módulo registra hechos y
+saldos de movimientos, no decide esos cálculos comerciales.
 
-La emisión, presentación y cobro de facturas queda fuera del módulo operativo.
+## Límites antes de habilitar a usuarios finales
+
+El entorno actual usa Cloudflare Access como barrera externa; `X-Actor` solo existe para desarrollo
+local y no autentica a nadie. Aún falta implementar permisos por rol para Superadmin S.P.T.,
+administrador del tenant, jefe de bahía, encargado, apuntador y armador/patrón. No se deben exponer
+estas rutas a usuarios finales hasta integrar y verificar ese control. El envío/facturación y el
+cobro de facturas permanecen fuera del módulo operativo.

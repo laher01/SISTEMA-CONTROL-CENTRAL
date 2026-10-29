@@ -1,36 +1,35 @@
-# FACT CENTRAL
+# S.P.T. — Sistema Pesquero de Trazabilidad
 
-## Plataforma SaaS Inteligente para Gestión Documental Tributaria y Control Integral de Compras Empresariales
+## Plataforma multiempresa para trazabilidad pesquera y operación documental
 
-FACT CENTRAL es una plataforma SaaS multiempresa (Multi-Tenant) diseñada para administrar, organizar y auditar digitalmente los procesos documentarios de compras de empresas.
+S.P.T. es la plataforma SaaS multiempresa (Multi-Tenant) del proyecto **Sistema Pesquero de Trazabilidad**. La plataforma administra operaciones de pesca, documentos y evidencias de forma trazable. Cada organización tiene su tenant independiente. **SNIDERFISH es el tenant piloto y plantilla; no es la plataforma.**
 
 No es un sistema de facturación.
 
 No es un ERP tradicional.
 
-Su objetivo es convertir miles de documentos tributarios en expedientes digitales inteligentes completamente relacionados, trazables y listos para procesos de auditoría, control interno y toma de decisiones.
+Su objetivo es hacer trazable cada operación pesquera desde el reporte de la embarcación hasta la descarga y recepción en planta, y conservar sus documentos, pesajes, responsables y movimientos de dinero en un expediente verificable.
 
 ---
 
 # Objetivo
 
-Centralizar toda la documentación de compras de una organización en un único sistema inteligente que permita:
+Registrar y auditar en un solo expediente:
 
-• Control documental.
-• Automatización de expedientes.
-• Auditoría tributaria preventiva.
-• Inteligencia de compras.
-• Gestión de proveedores.
-• Control de pedidos.
-• Seguimiento de pagos.
-• Evidencias digitales.
-• Reportes ejecutivos.
+• Reportes de armadores y confirmaciones del comprador.
+• Descargas de muelle, traslado y recepción por vehículo en planta.
+• Pesos declarados, de muelle y de planta, conservados por separado.
+• Responsables, horarios previstos y reales.
+• Documentos y evidencias de cada etapa.
+• Gastos operativos, adelantos, reembolsos y devoluciones.
+• Préstamos personales aislados de las operaciones.
+• Factura adjunta y paquete de documentos listo para pago.
 
 ---
 
 # Problemas que resuelve
 
-Actualmente las empresas almacenan documentos dispersos entre:
+Las operaciones y documentos suelen quedar dispersos entre:
 
 - Correos electrónicos
 - WhatsApp
@@ -39,29 +38,26 @@ Actualmente las empresas almacenan documentos dispersos entre:
 - Imágenes
 - Voucher
 - Guías
-- Contratos
+- Formatos de descarga y actas
 
-FACT CENTRAL convierte automáticamente toda esa información en expedientes digitales relacionados.
+S.P.T. convierte esa información en expedientes y eventos de operación trazables.
 
 ---
 
 # Arquitectura
 
-FACT CENTRAL está construido como una plataforma SaaS Multi-Tenant.
+S.P.T. está construido como una plataforma SaaS Multi-Tenant.
 
-Cada Administrador posee un espacio completamente independiente donde administra:
+Cada tenant posee un espacio completamente independiente para administrar:
 
-- Clientes
-- Proveedores
+- Embarcaciones y actores
+- Operaciones pesqueras
+- Vehículos, muelles y plantas
 - Usuarios
-- Gestores
 - Documentos
-- Expedientes
-- Pedidos
-- Pagos
-- Productos
+- Gastos y adelantos
 - Evidencias
-- Dashboards
+- Historial y reportes
 
 Todo aislado del resto de clientes de la plataforma.
 
@@ -175,7 +171,7 @@ La arquitectura funcional está documentada. El foco actual es construir y valid
 
 ## Ejecución local del MVP
 
-Para probar FACT CENTRAL sin autenticación ni Docker:
+Para probar S.P.T. sin autenticación ni Docker:
 
 - Windows: ejecuta `iniciar-local.cmd`.
 - Linux/macOS: ejecuta `./iniciar-local.sh`.

@@ -1,4 +1,4 @@
-# FACT CENTRAL — Backend MVP
+# S.P.T. — Backend de la plataforma
 
 API FastAPI que implementa el alcance de `docs/MVP.md` sobre el esquema de `docs/ESQUEMA_MVP.md`.
 

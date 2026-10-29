@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models import Base, ahora
@@ -17,6 +17,26 @@ class OperacionPesca(Base):
     puerto: Mapped[str] = mapped_column(String(100))
     muelle: Mapped[str] = mapped_column(String(200))
     planta: Mapped[str] = mapped_column(String(200))
+    armador_reportante: Mapped[str | None] = mapped_column(String(200))
+    comprador: Mapped[str | None] = mapped_column(String(200))
+    remitente: Mapped[str | None] = mapped_column(String(200))
+    destinatario: Mapped[str | None] = mapped_column(String(200))
+    facturador: Mapped[str | None] = mapped_column(String(200))
+    toneladas_declaradas: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    precio_propuesto: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    precio_confirmado: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    precio_confirmado_por: Mapped[str | None] = mapped_column(String(200))
+    precio_confirmado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    descarga_prevista: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    llegada_planta_prevista: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    jefe_bahia: Mapped[str | None] = mapped_column(String(200))
+    encargado_muelle: Mapped[str | None] = mapped_column(String(200))
+    apuntador: Mapped[str | None] = mapped_column(String(200))
+    factura_serie: Mapped[str | None] = mapped_column(String(20))
+    factura_correlativo: Mapped[str | None] = mapped_column(String(30))
+    factura_emitida_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    factura_emitida_por: Mapped[str | None] = mapped_column(String(200))
+    estado_facturacion: Mapped[str] = mapped_column(String(30), default="pendiente")
     responsable_id: Mapped[str] = mapped_column(String(200))
     estado: Mapped[str] = mapped_column(String(30), default="en_descarga", index=True)
     observacion: Mapped[str | None] = mapped_column(Text)
@@ -33,6 +53,8 @@ class EmbarcacionPesca(Base):
     matricula: Mapped[str] = mapped_column(String(40))
     nombre: Mapped[str] = mapped_column(String(200))
     patron_armador: Mapped[str] = mapped_column(String(200))
+    armador: Mapped[str | None] = mapped_column(String(200))
+    patron: Mapped[str | None] = mapped_column(String(200))
     intermediario: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=ahora)
 
@@ -47,6 +69,7 @@ class DescargaEmbarcacion(Base):
     embarcacion_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pesca_embarcaciones.id"), index=True)
     inicio_descarga: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fin_descarga: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    peso_declarado_kg: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=ahora)
 
 
@@ -60,6 +83,7 @@ class VehiculoPesca(Base):
     tipo: Mapped[str] = mapped_column(String(60))
     chofer: Mapped[str] = mapped_column(String(200))
     estado: Mapped[str] = mapped_column(String(30), default="pendiente_planta", index=True)
+    salida_muelle: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fecha_reporte_planta: Mapped[date | None] = mapped_column(Date)
     inicio_planta: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fin_planta: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -103,7 +127,7 @@ class DocumentoPesca(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
-    operacion_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pesca_operaciones.id", ondelete="CASCADE"), index=True)
+    operacion_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pesca_operaciones.id", ondelete="CASCADE"), index=True)
     vehiculo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pesca_vehiculos.id", ondelete="CASCADE"), index=True)
     tipo: Mapped[str] = mapped_column(String(50), index=True)
     nombre: Mapped[str] = mapped_column(String(500))
@@ -121,6 +145,13 @@ class VinculoDocumentoVehiculo(Base):
     vehiculo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pesca_vehiculos.id", ondelete="CASCADE"), primary_key=True)
 
 
+class VinculoDocumentoEmbarcacion(Base):
+    __tablename__ = "pesca_documento_embarcaciones"
+
+    documento_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pesca_documentos.id", ondelete="CASCADE"), primary_key=True)
+    embarcacion_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pesca_embarcaciones.id", ondelete="CASCADE"), primary_key=True)
+
+
 class HistorialPesca(Base):
     __tablename__ = "pesca_historial"
 
@@ -131,4 +162,45 @@ class HistorialPesca(Base):
     accion: Mapped[str] = mapped_column(String(60))
     actor: Mapped[str] = mapped_column(String(200))
     detalle: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=ahora)
+
+
+class MovimientoPesca(Base):
+    """Registro monetario trazable; los préstamos personales no tienen operación asociada."""
+
+    __tablename__ = "pesca_movimientos"
+    __table_args__ = (
+        CheckConstraint(
+            "(clase = 'prestamo_personal_bahia' AND operacion_id IS NULL) OR "
+            "(clase <> 'prestamo_personal_bahia' AND operacion_id IS NOT NULL)",
+            name="prestamo_personal_sin_operacion",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
+    operacion_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pesca_operaciones.id", ondelete="CASCADE"), index=True)
+    clase: Mapped[str] = mapped_column(String(40), index=True)
+    pagador: Mapped[str] = mapped_column(String(200))
+    beneficiario: Mapped[str] = mapped_column(String(200))
+    concepto: Mapped[str] = mapped_column(String(300))
+    importe: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    moneda: Mapped[str] = mapped_column(String(3), default="PEN")
+    cantidad: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    tarifa_unitaria: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    comprobante_documento_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pesca_documentos.id"))
+    registrado_por: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=ahora)
+
+
+class AbonoMovimientoPesca(Base):
+    __tablename__ = "pesca_movimiento_abonos"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
+    movimiento_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pesca_movimientos.id", ondelete="CASCADE"), index=True)
+    importe: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    tipo: Mapped[str] = mapped_column(String(30))
+    registrado_por: Mapped[str] = mapped_column(String(200))
+    observacion: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=ahora)

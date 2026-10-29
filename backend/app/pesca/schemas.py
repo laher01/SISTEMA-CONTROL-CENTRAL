@@ -15,6 +15,18 @@ class OperacionIn(BaseModel):
     puerto: str = Field(min_length=1, max_length=100)
     muelle: str = Field(min_length=1, max_length=200)
     planta: str = Field(min_length=1, max_length=200)
+    armador_reportante: str | None = Field(default=None, max_length=200)
+    comprador: str | None = Field(default=None, max_length=200)
+    remitente: str | None = Field(default=None, max_length=200)
+    destinatario: str | None = Field(default=None, max_length=200)
+    facturador: str | None = Field(default=None, max_length=200)
+    toneladas_declaradas: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=3)
+    precio_propuesto: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    descarga_prevista: datetime | None = None
+    llegada_planta_prevista: datetime | None = None
+    jefe_bahia: str | None = Field(default=None, max_length=200)
+    encargado_muelle: str | None = Field(default=None, max_length=200)
+    apuntador: str | None = Field(default=None, max_length=200)
     observacion: str | None = None
 
 
@@ -24,6 +36,26 @@ class OperacionOut(Orm):
     puerto: str
     muelle: str
     planta: str
+    armador_reportante: str | None
+    comprador: str | None
+    remitente: str | None
+    destinatario: str | None
+    facturador: str | None
+    toneladas_declaradas: Decimal | None
+    precio_propuesto: Decimal | None
+    precio_confirmado: Decimal | None
+    precio_confirmado_por: str | None
+    precio_confirmado_at: datetime | None
+    descarga_prevista: datetime | None
+    llegada_planta_prevista: datetime | None
+    jefe_bahia: str | None
+    encargado_muelle: str | None
+    apuntador: str | None
+    factura_serie: str | None
+    factura_correlativo: str | None
+    factura_emitida_at: datetime | None
+    factura_emitida_por: str | None
+    estado_facturacion: str
     responsable_id: str
     estado: str
     observacion: str | None
@@ -33,10 +65,94 @@ class OperacionOut(Orm):
 class EmbarcacionIn(BaseModel):
     matricula: str = Field(min_length=1, max_length=40)
     nombre: str = Field(min_length=1, max_length=200)
-    patron_armador: str = Field(min_length=1, max_length=200)
+    armador: str = Field(min_length=1, max_length=200)
+    patron: str = Field(min_length=1, max_length=200)
     intermediario: str | None = Field(default=None, max_length=200)
     inicio_descarga: datetime | None = None
     fin_descarga: datetime | None = None
+    peso_declarado_kg: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=3)
+
+
+class TiemposDescargaIn(BaseModel):
+    inicio_descarga: datetime | None = None
+    fin_descarga: datetime | None = None
+    observacion: str = Field(min_length=1, max_length=2000)
+
+    @model_validator(mode="after")
+    def requiere_fecha(self) -> "TiemposDescargaIn":
+        if not {"inicio_descarga", "fin_descarga"}.intersection(self.model_fields_set):
+            raise ValueError("Indique al menos una fecha u hora de descarga")
+        return self
+
+
+class ConfirmarPrecioIn(BaseModel):
+    precio_confirmado: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    comprador: str = Field(min_length=1, max_length=200)
+
+
+class RegistrarFacturaIn(BaseModel):
+    serie: str = Field(min_length=1, max_length=20)
+    correlativo: str = Field(min_length=1, max_length=30)
+
+
+class MovimientoIn(BaseModel):
+    operacion_id: uuid.UUID | None = None
+    clase: Literal[
+        "gasto_empresa",
+        "gasto_bahia_reembolsable",
+        "adelanto_armador_empresa",
+        "prestamo_personal_bahia",
+    ]
+    pagador: str = Field(min_length=1, max_length=200)
+    beneficiario: str = Field(min_length=1, max_length=200)
+    concepto: str = Field(min_length=1, max_length=300)
+    importe: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    moneda: Literal["PEN", "USD"] = "PEN"
+    cantidad: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=3)
+    tarifa_unitaria: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+
+    @model_validator(mode="after")
+    def separar_prestamo_personal(self) -> "MovimientoIn":
+        es_prestamo = self.clase == "prestamo_personal_bahia"
+        if es_prestamo and self.operacion_id is not None:
+            raise ValueError("El préstamo personal no puede vincularse a una operación de pesca")
+        if not es_prestamo and self.operacion_id is None:
+            raise ValueError("Este movimiento debe pertenecer a una operación")
+        return self
+
+
+class AbonoMovimientoIn(BaseModel):
+    importe: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    observacion: str | None = Field(default=None, max_length=1000)
+
+
+class MovimientoOut(Orm):
+    id: uuid.UUID
+    operacion_id: uuid.UUID | None
+    clase: str
+    pagador: str
+    beneficiario: str
+    concepto: str
+    importe: Decimal
+    moneda: str
+    cantidad: Decimal | None
+    tarifa_unitaria: Decimal | None
+    comprobante_documento_id: uuid.UUID | None
+    registrado_por: str
+    created_at: datetime
+    abonado: Decimal = Decimal("0")
+    saldo: Decimal = Decimal("0")
+    estado: str = "pendiente"
+
+
+class AbonoMovimientoOut(Orm):
+    id: uuid.UUID
+    movimiento_id: uuid.UUID
+    importe: Decimal
+    tipo: str
+    registrado_por: str
+    observacion: str | None
+    created_at: datetime
 
 
 class DescargaOut(BaseModel):
@@ -44,6 +160,11 @@ class DescargaOut(BaseModel):
     embarcacion_id: uuid.UUID
     matricula: str
     nombre: str
+    armador: str | None = None
+    patron: str | None = None
+    peso_declarado_kg: Decimal | None = None
+    inicio_descarga: datetime | None = None
+    fin_descarga: datetime | None = None
 
 
 class VehiculoIn(BaseModel):
@@ -123,6 +244,7 @@ class VehiculoOut(Orm):
     tipo: str
     chofer: str
     estado: str
+    salida_muelle: datetime | None
     fecha_reporte_planta: date | None
     inicio_planta: datetime | None
     fin_planta: datetime | None
@@ -131,7 +253,7 @@ class VehiculoOut(Orm):
 
 class DocumentoOut(Orm):
     id: uuid.UUID
-    operacion_id: uuid.UUID
+    operacion_id: uuid.UUID | None
     vehiculo_id: uuid.UUID | None
     tipo: str
     nombre: str

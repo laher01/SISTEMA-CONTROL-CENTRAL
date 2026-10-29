@@ -32,11 +32,14 @@ from app.api.routes import (
     solicitudes_carga_emisor,
     solicitudes_retiro_misd,
 )
+from app.pesca import routes as pesca
 from app.core.config import get_settings
 
 app = FastAPI(
-    title="FACT CENTRAL",
-    description="MVP: ingesta documental, expedientes digitales y alertas tributarias.",
+    title="S.P.T. · Sistema Pesquero de Trazabilidad",
+    description=(
+        "Plataforma para la trazabilidad pesquera, la gestión documental y la recepción de descargas."
+    ),
     version="0.1.0",
 )
 
@@ -81,6 +84,7 @@ for modulo in (
     configuracion_acceso,
     pagina_web,
     mantenimiento,
+    pesca,
 ):
     api.include_router(modulo.router)
 app.include_router(api)
