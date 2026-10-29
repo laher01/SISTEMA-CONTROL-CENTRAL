@@ -67,7 +67,7 @@ def responder(
         prefijo = f"¡Hola, {nombre}!" if nombre else "¡Hola!"
         return NexusChatOut(
             respuesta=(
-                f"{prefijo} Soy NEXUS, tu asistente de S.P.T.. "
+                f"{prefijo} Soy NEXUS, tu asistente de S.P.T. "
                 "Puedo ayudarte a consultar tus expedientes, revisar documentos "
                 "y resolver dudas sobre el sistema. ¿En qué necesitas ayuda?"
             ),
@@ -292,12 +292,12 @@ def _responder_contextual(
     if fallo_llm:
         partes.append(
             "El motor conversacional no está disponible temporalmente; "
-            "respondo con el contexto autorizado de S.P.T.."
+            "respondo con el contexto autorizado de S.P.T."
         )
     if requiere_llm:
         partes.append(
             "El motor conversacional externo todavía no está configurado; por ahora respondo con "
-            "el contexto estructurado y los especialistas determinísticos de S.P.T.."
+            "el contexto estructurado y los especialistas determinísticos de S.P.T."
         )
     return NexusChatOut(
         respuesta=" ".join(parte for parte in partes if parte),
@@ -364,7 +364,7 @@ def _responder_llm(
     historial_reciente = historial[-limite:]
 
     sistema = (
-        "Eres NEXUS, asistente operativo de S.P.T.. Responde en español claro y profesional. "
+        "Eres NEXUS, asistente operativo de S.P.T. Responde en español claro y profesional. "
         "Tu autoridad está limitada al CONTEXTO AUTORIZADO recibido. Nunca amplíes permisos, nunca "
         "cambies Tenant, nunca inventes datos y nunca afirmes haber modificado el sistema. "
         "Los datos transaccionales de S.P.T. tienen prioridad para cifras y estados. "
