@@ -540,6 +540,8 @@ def agregar_embarcacion(
     actor: ActorDep,
 ) -> DescargaOut:
     op = _operacion(session, tenant_id, op_id)
+    if op.estado != "preparacion":
+        raise HTTPException(409, "Las embarcaciones deben quedar vinculadas antes de iniciar la descarga")
     embarcacion = session.scalar(
         select(EmbarcacionPesca).where(
             EmbarcacionPesca.tenant_id == tenant_id,
@@ -568,6 +570,10 @@ def agregar_embarcacion(
         tenant_id=tenant_id,
         operacion_id=op.id,
         embarcacion_id=embarcacion.id,
+        matricula_snapshot=embarcacion.matricula,
+        nombre_snapshot=embarcacion.nombre,
+        armador_snapshot=datos.armador.strip(),
+        patron_snapshot=datos.patron.strip(),
         inicio_descarga=datos.inicio_descarga,
         fin_descarga=datos.fin_descarga,
         peso_declarado_kg=datos.peso_declarado_kg,
@@ -582,10 +588,10 @@ def agregar_embarcacion(
     return DescargaOut(
         descarga_id=descarga.id,
         embarcacion_id=embarcacion.id,
-        matricula=embarcacion.matricula,
-        nombre=embarcacion.nombre,
-        armador=embarcacion.armador,
-        patron=embarcacion.patron,
+        matricula=descarga.matricula_snapshot,
+        nombre=descarga.nombre_snapshot,
+        armador=descarga.armador_snapshot,
+        patron=descarga.patron_snapshot,
         peso_declarado_kg=descarga.peso_declarado_kg,
         inicio_descarga=descarga.inicio_descarga,
         fin_descarga=descarga.fin_descarga,
@@ -610,10 +616,10 @@ def listar_embarcaciones(
         DescargaOut(
             descarga_id=descarga.id,
             embarcacion_id=vessel.id,
-            matricula=vessel.matricula,
-            nombre=vessel.nombre,
-            armador=vessel.armador,
-            patron=vessel.patron,
+            matricula=descarga.matricula_snapshot,
+            nombre=descarga.nombre_snapshot,
+            armador=descarga.armador_snapshot,
+            patron=descarga.patron_snapshot,
             peso_declarado_kg=descarga.peso_declarado_kg,
             inicio_descarga=descarga.inicio_descarga,
             fin_descarga=descarga.fin_descarga,
@@ -661,10 +667,10 @@ def actualizar_tiempos_descarga(
     return DescargaOut(
         descarga_id=descarga.id,
         embarcacion_id=vessel.id,
-        matricula=vessel.matricula,
-        nombre=vessel.nombre,
-        armador=vessel.armador,
-        patron=vessel.patron,
+        matricula=descarga.matricula_snapshot,
+        nombre=descarga.nombre_snapshot,
+        armador=descarga.armador_snapshot,
+        patron=descarga.patron_snapshot,
         peso_declarado_kg=descarga.peso_declarado_kg,
         inicio_descarga=descarga.inicio_descarga,
         fin_descarga=descarga.fin_descarga,
@@ -680,16 +686,14 @@ def agregar_vehiculo(
     actor: ActorDep,
 ) -> VehiculoPesca:
     op = _operacion(session, tenant_id, op_id)
-    if op.estado == "cerrada":
-        raise HTTPException(409, "La operación ya está cerrada")
+    if op.estado not in {"preparacion", "en_descarga"}:
+        raise HTTPException(409, "No se pueden agregar vehículos después del despacho a planta")
     vehicle = VehiculoPesca(
         tenant_id=tenant_id,
         operacion_id=op_id,
         placa=datos.placa,
         tipo=datos.tipo,
         chofer=datos.chofer,
-        fecha_reporte_planta=datos.fecha_reporte_planta,
-        inicio_planta=datos.inicio_planta,
         turno=datos.turno,
         estado="pendiente_muelle",
     )
@@ -749,9 +753,28 @@ def iniciar_descarga_planta(
     if vehicle.estado == "cerrado":
         raise HTTPException(409, "El registro del vehículo ya está cerrado")
     vehicle.fecha_reporte_planta = vehicle.fecha_reporte_planta or hoy
-    vehicle.inicio_planta = vehicle.inicio_planta or datetime.now(UTC)
+    vehicle.llegada_planta = vehicle.llegada_planta or datetime.now(UTC)
     vehicle.estado = "en_planta"
-    _historial(session, tenant_id, vehicle.operacion_id, actor, "planta_iniciada", "Ingreso e inicio de descarga en planta", vehicle.id)
+    _historial(session, tenant_id, vehicle.operacion_id, actor, "llegada_planta_registrada", f"Llegada real a planta: {vehicle.llegada_planta.isoformat()}", vehicle.id)
+    session.commit()
+    session.refresh(vehicle)
+    return vehicle
+
+
+@router.post("/vehiculos/{vehiculo_id}/planta/descarga/iniciar", response_model=VehiculoOut)
+def iniciar_descarga_en_planta(
+    vehiculo_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    actor: ActorDep,
+) -> VehiculoPesca:
+    vehicle = _vehiculo(session, tenant_id, vehiculo_id)
+    if vehicle.estado != "en_planta" or vehicle.llegada_planta is None:
+        raise HTTPException(409, "Registra primero la llegada real del vehículo a planta")
+    if vehicle.inicio_planta is not None:
+        raise HTTPException(409, "El inicio de descarga en planta ya está registrado")
+    vehicle.inicio_planta = datetime.now(UTC)
+    _historial(session, tenant_id, vehicle.operacion_id, actor, "descarga_planta_iniciada", f"Inicio real de descarga en planta: {vehicle.inicio_planta.isoformat()}", vehicle.id)
     session.commit()
     session.refresh(vehicle)
     return vehicle
@@ -766,26 +789,37 @@ def actualizar_tiempos_planta(
     actor: ActorDep,
 ) -> VehiculoPesca:
     vehicle = _vehiculo(session, tenant_id, vehiculo_id)
-    if vehicle.estado == "cerrado":
-        raise HTTPException(409, "El registro del vehículo ya está cerrado")
+    if vehicle.estado not in {"en_traslado", "en_planta", "pendiente_evidencia"}:
+        raise HTTPException(409, "Los horarios de planta se editan después del despacho y antes del cierre")
     antes = {
         "fecha_reporte_planta": str(vehicle.fecha_reporte_planta) if vehicle.fecha_reporte_planta else None,
+        "llegada_planta": vehicle.llegada_planta.isoformat() if vehicle.llegada_planta else None,
         "inicio_planta": vehicle.inicio_planta.isoformat() if vehicle.inicio_planta else None,
         "fin_planta": vehicle.fin_planta.isoformat() if vehicle.fin_planta else None,
     }
     if "fecha_reporte_planta" in datos.model_fields_set:
         vehicle.fecha_reporte_planta = datos.fecha_reporte_planta
+    if "llegada_planta" in datos.model_fields_set:
+        vehicle.llegada_planta = datos.llegada_planta
     if "inicio_planta" in datos.model_fields_set:
         vehicle.inicio_planta = datos.inicio_planta
     if "fin_planta" in datos.model_fields_set:
         vehicle.fin_planta = datos.fin_planta
+    if vehicle.salida_muelle and vehicle.llegada_planta and vehicle.llegada_planta < vehicle.salida_muelle:
+        raise HTTPException(422, "La llegada a planta no puede ser anterior a la salida del muelle")
+    if vehicle.inicio_planta and vehicle.llegada_planta is None:
+        raise HTTPException(422, "Registra la llegada a planta antes del inicio de descarga")
+    if vehicle.llegada_planta and vehicle.inicio_planta and vehicle.inicio_planta < vehicle.llegada_planta:
+        raise HTTPException(422, "El inicio de descarga en planta no puede ser anterior a la llegada")
+    if vehicle.inicio_planta and vehicle.fin_planta and vehicle.fin_planta < vehicle.inicio_planta:
+        raise HTTPException(422, "El fin de descarga en planta no puede ser anterior al inicio")
     _historial(
         session,
         tenant_id,
         vehicle.operacion_id,
         actor,
         "fechas_planta_editadas",
-        f"Antes: {antes}; ahora: fecha={vehicle.fecha_reporte_planta}, inicio={vehicle.inicio_planta}, fin={vehicle.fin_planta}. Motivo: {datos.observacion}",
+        f"Antes: {antes}; ahora: fecha={vehicle.fecha_reporte_planta}, llegada={vehicle.llegada_planta}, inicio={vehicle.inicio_planta}, fin={vehicle.fin_planta}. Motivo: {datos.observacion}",
         vehicle.id,
     )
     session.commit()
@@ -805,6 +839,8 @@ def agregar_carga(
     op = _operacion(session, tenant_id, vehicle.operacion_id)
     if op.estado != "en_descarga":
         raise HTTPException(409, "Primero completa la preparación y autoriza el inicio de descarga")
+    if vehicle.estado != "pendiente_muelle":
+        raise HTTPException(409, "La carga solo se puede modificar mientras el vehículo está en el muelle")
     descarga = session.scalar(
         select(DescargaEmbarcacion).where(
             DescargaEmbarcacion.id == datos.descarga_id,
@@ -876,7 +912,32 @@ async def subir_documento(
         if vessel is None:
             raise HTTPException(422, "Todas las embarcaciones deben pertenecer a la operación")
         vessels.append(vessel)
+    if tipo == "certificado_procedencia" and (vehicles or vessels):
+        raise HTTPException(422, "El certificado de procedencia debe adjuntarse a toda la operación")
     digest = hashlib.sha256(raw).hexdigest()
+    existente = session.scalar(
+        select(DocumentoPesca).where(
+            DocumentoPesca.tenant_id == tenant_id,
+            DocumentoPesca.operacion_id == op.id,
+            DocumentoPesca.tipo == tipo,
+            DocumentoPesca.sha256 == digest,
+        )
+    )
+    if existente is not None:
+        for vehicle in vehicles:
+            vinculo = session.get(VinculoDocumentoVehiculo, (existente.id, vehicle.id))
+            if vinculo is None:
+                session.add(VinculoDocumentoVehiculo(documento_id=existente.id, vehiculo_id=vehicle.id))
+        for vessel in vessels:
+            vinculo = session.get(VinculoDocumentoEmbarcacion, (existente.id, vessel.id))
+            if vinculo is None:
+                session.add(VinculoDocumentoEmbarcacion(documento_id=existente.id, embarcacion_id=vessel.id))
+        if tipo == "factura" and op.factura_serie and op.factura_correlativo:
+            op.estado_facturacion = "lista_para_pago"
+        _historial(session, tenant_id, op.id, actor, "documento_reutilizado", f"{tipo}: {existente.nombre}")
+        session.commit()
+        session.refresh(existente)
+        return existente
     path = almacen.guardar(tenant_id, digest, raw)
     doc = DocumentoPesca(
         tenant_id=tenant_id,
@@ -1044,10 +1105,12 @@ def registrar_peso_planta(
     vehicle = _vehiculo(session, tenant_id, vehiculo_id)
     if vehicle.estado == "cerrado":
         raise HTTPException(409, "El registro de planta está cerrado")
-    if vehicle.estado != "en_planta":
+    if vehicle.estado not in {"en_planta", "pendiente_evidencia"}:
         raise HTTPException(409, "Registra primero la llegada y el inicio de recepción en planta")
-    if datos.resultado == "completo" and datos.peso_aceptado <= 0:
-        raise HTTPException(422, "El peso aceptado debe ser mayor que cero")
+    if vehicle.inicio_planta is None:
+        raise HTTPException(409, "Registra el inicio real de descarga en planta antes del pesaje")
+    if datos.resultado in {"completo", "parcial"} and datos.peso_aceptado <= 0:
+        raise HTTPException(422, "El peso aceptado debe ser mayor que cero para un resultado completo o parcial")
     record = session.scalar(
         select(RegistroPlanta).where(
             RegistroPlanta.tenant_id == tenant_id,
@@ -1125,6 +1188,10 @@ def cerrar_registro_planta(
     actor: ActorDep,
 ) -> CierreOut:
     vehicle = _vehiculo(session, tenant_id, vehiculo_id)
+    if vehicle.estado == "cerrado":
+        raise HTTPException(409, "El registro de planta ya está cerrado")
+    if vehicle.estado != "pendiente_evidencia":
+        raise HTTPException(409, "Registra el peso de planta antes de cerrar el vehículo")
     record = session.scalar(
         select(RegistroPlanta).where(RegistroPlanta.tenant_id == tenant_id, RegistroPlanta.vehiculo_id == vehicle.id)
     )
@@ -1159,6 +1226,8 @@ def cerrar_operacion(
     actor: ActorDep,
 ) -> CierreOut:
     op = _operacion(session, tenant_id, op_id)
+    if op.estado == "cerrada":
+        raise HTTPException(409, "La operación ya está cerrada")
     vehicles = list(session.scalars(select(VehiculoPesca).where(VehiculoPesca.operacion_id == op.id)))
     if not vehicles:
         raise HTTPException(409, "La operación aún no tiene vehículos")

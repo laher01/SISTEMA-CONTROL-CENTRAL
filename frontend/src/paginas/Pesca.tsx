@@ -40,6 +40,7 @@ type Vehiculo = {
   chofer: string;
   estado: string;
   salida_muelle: string | null;
+  llegada_planta: string | null;
   turno: string | null;
   fecha_reporte_planta: string | null;
   inicio_planta: string | null;
@@ -409,7 +410,7 @@ export default function Pesca() {
               </div>
             </section>
             <div className="pesca-subpaneles">
-              <form className="pesca-form pesca-form-horizontal" onSubmit={agregarEmbarcacion}>
+              {op.estado === "preparacion" && <form className="pesca-form pesca-form-horizontal" onSubmit={agregarEmbarcacion}>
                 <h4>Vincular embarcación</h4>
                 <label>Matrícula<input name="matricula" required /></label><label>Nombre<input name="nombre" required /></label>
                 <label>Armador<input name="armador" required /></label><label>Patrón<input name="patron" required /></label>
@@ -418,12 +419,12 @@ export default function Pesca() {
                 <label>Fin real de descarga<input name="fin_descarga" type="datetime-local" /></label>
                 <label>Intermediario (opcional)<input name="intermediario" /></label>
                 <button type="submit">Agregar embarcación</button>
-              </form>
-              <form className="pesca-form pesca-form-horizontal" onSubmit={agregarVehiculo}>
+              </form>}
+              {["preparacion", "en_descarga"].includes(op.estado) && <form className="pesca-form pesca-form-horizontal" onSubmit={agregarVehiculo}>
                 <h4>Agregar vehículo</h4><label>Placa<input name="placa" required /></label>
                 <label>Tipo<input name="tipo" required placeholder="3 ejes, carreta…" /></label><label>Chofer<input name="chofer" required /></label>
                 <label>Turno de planta (si existe)<input name="turno" /></label><button type="submit">Agregar vehículo</button>
-              </form>
+              </form>}
             </div>
 
             <h4>Embarcaciones vinculadas</h4>
@@ -441,6 +442,7 @@ export default function Pesca() {
               <label>Tipo de documento<select name="tipo">{DOCUMENTOS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
               <label>Vincular a<select name="vehiculo"><option value="">Toda la operación</option>{vehiculos?.map((v) => <option key={v.id} value={v.id}>{v.placa} · {v.chofer}</option>)}</select></label>
               <label>Vincular certificado a embarcación<select name="embarcacion"><option value="">Documento general / del vehículo</option>{descargas?.map((d) => <option key={d.descarga_id} value={d.embarcacion_id}>{d.nombre} · {d.matricula}</option>)}</select></label>
+              <small>El certificado de procedencia debe subirse para toda la operación, sin vincularlo a un vehículo ni a una embarcación.</small>
               <label>Foto o archivo (PDF/JPG/PNG/WEBP)<input name="archivo" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" required /></label>
               <button type="submit">Subir documento</button>
             </form>
@@ -456,7 +458,7 @@ export default function Pesca() {
               {op.estado_facturacion === "lista_para_pago" && <p className="texto-verde"><strong>Paquete listo para presentar a pago.</strong></p>}
             </section>}
             <details className="pesca-archivos"><summary>Archivos cargados ({archivos?.length ?? 0})</summary><ul>{archivos?.map((a) => <li key={a.id}>{a.tipo.replaceAll("_", " ")} · <a href={`/api/v1/pesca/documentos/${a.id}/archivo`} target="_blank" rel="noreferrer">{a.nombre}</a></li>)}</ul></details>
-            <button className="pesca-cerrar-op" type="button" disabled={!vehiculos?.length || vehiculos.some((v) => v.estado !== "cerrado")} onClick={cerrarOperacion}>Cerrar operación del día</button>
+            {op.estado !== "cerrada" && <button className="pesca-cerrar-op" type="button" disabled={!vehiculos?.length || vehiculos.some((v) => v.estado !== "cerrado")} onClick={cerrarOperacion}>Cerrar operación del día</button>}
           </>}
         </div>
       </div>
@@ -474,6 +476,7 @@ function VehiculoCard({ operationId, vehicle, descargas, linea, paquete, alGuard
   const [resultado, setResultado] = useState(linea?.resultado_planta === "pendiente" ? "completo" : linea?.resultado_planta ?? "completo");
   const [cajas, setCajas] = useState("0");
   const [motivo, setMotivo] = useState("");
+  const [observacionPeso, setObservacionPeso] = useState("");
   const [foto, setFoto] = useState<File | null>(null);
   const [esperando, setEsperando] = useState(false);
   const [sinFechaFinal, setSinFechaFinal] = useState(false);
@@ -482,8 +485,9 @@ function VehiculoCard({ operationId, vehicle, descargas, linea, paquete, alGuard
   const [cajasMuelle, setCajasMuelle] = useState("");
   const [inicio, setInicio] = useState(false);
   const [fechaReporte, setFechaReporte] = useState(vehicle.fecha_reporte_planta ?? "");
-  const [inicioManual, setInicioManual] = useState(vehicle.inicio_planta ? new Date(vehicle.inicio_planta).toISOString().slice(0, 16) : "");
-  const [finManual, setFinManual] = useState(vehicle.fin_planta ? new Date(vehicle.fin_planta).toISOString().slice(0, 16) : "");
+  const [llegadaManual, setLlegadaManual] = useState(aFechaHoraLocal(vehicle.llegada_planta));
+  const [inicioManual, setInicioManual] = useState(aFechaHoraLocal(vehicle.inicio_planta));
+  const [finManual, setFinManual] = useState(aFechaHoraLocal(vehicle.fin_planta));
   const [observacionFechas, setObservacionFechas] = useState("");
   const [fechaFinalPeso, setFechaFinalPeso] = useState(fechaHoraLocalActual);
   const asignarCarga = async (event: FormEvent<HTMLFormElement>) => {
@@ -511,6 +515,12 @@ function VehiculoCard({ operationId, vehicle, descargas, linea, paquete, alGuard
     catch (error) { alError(error instanceof Error ? error.message : String(error)); }
     finally { setInicio(false); }
   };
+  const iniciarDescargaPlanta = async () => {
+    setInicio(true);
+    try { await enviarJson(`/api/v1/pesca/vehiculos/${vehicle.id}/planta/descarga/iniciar`, "POST"); alGuardar(); }
+    catch (error) { alError(error instanceof Error ? error.message : String(error)); }
+    finally { setInicio(false); }
+  };
   const guardarFechas = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!observacionFechas.trim()) { alError("Indica el motivo del ajuste de fecha u hora."); return; }
@@ -518,6 +528,7 @@ function VehiculoCard({ operationId, vehicle, descargas, linea, paquete, alGuard
     try {
       await enviarJson(`/api/v1/pesca/vehiculos/${vehicle.id}/planta/fechas`, "PATCH", {
         fecha_reporte_planta: fechaReporte || null,
+        llegada_planta: llegadaManual ? new Date(llegadaManual).toISOString() : null,
         inicio_planta: inicioManual ? new Date(inicioManual).toISOString() : null,
         fin_planta: finManual ? new Date(finManual).toISOString() : null,
         observacion: observacionFechas,
@@ -534,6 +545,7 @@ function VehiculoCard({ operationId, vehicle, descargas, linea, paquete, alGuard
         resultado, peso_aceptado: Number(peso || 0), unidad, cajas_rechazadas: Number(cajas || 0),
         motivo_rechazo: motivo || null, no_registrar_fecha_finalizacion: sinFechaFinal,
         fecha_finalizacion: !sinFechaFinal && fechaFinalPeso ? new Date(fechaFinalPeso).toISOString() : null,
+        observacion: observacionPeso || null,
       });
       const data = new FormData(); data.append("archivo", foto); data.append("tipo", "peso_planta"); data.append("vehiculo_ids", vehicle.id);
       await enviarFormulario(`/api/v1/pesca/operaciones/${operationId}/documentos`, data);
@@ -546,12 +558,20 @@ function VehiculoCard({ operationId, vehicle, descargas, linea, paquete, alGuard
   const colorPeso = linea?.peso_muelle_kg == null ? "" : acceptedKg > linea.peso_muelle_kg ? "verde" : acceptedKg === linea.peso_muelle_kg ? "naranja" : "rojo";
   return <article className="pesca-vehiculo">
     <header><div><strong>{vehicle.placa}</strong><small>{vehicle.tipo} · {vehicle.chofer}</small></div><span className={`pesca-estado ${vehicle.estado === "cerrado" ? "cerrado" : ""}`}>{vehicle.estado.replaceAll("_", " ")}</span></header>
-    <div className="pesca-vehiculo-meta"><span>Turno: {vehicle.turno || "Sin turno"}</span><span>{descargas.length} embarcaciones vinculadas</span>{vehicle.salida_muelle && <span>Salió del muelle: {new Date(vehicle.salida_muelle).toLocaleString("es-PE")}</span>}</div>
+    <div className="pesca-vehiculo-meta">
+      <span>Turno: {vehicle.turno || "Sin turno"}</span><span>{descargas.length} embarcaciones vinculadas</span>
+      {vehicle.salida_muelle && <span>Salió del muelle: {new Date(vehicle.salida_muelle).toLocaleString("es-PE")}</span>}
+      {vehicle.llegada_planta && <span>Llegó a planta: {new Date(vehicle.llegada_planta).toLocaleString("es-PE")}</span>}
+      {vehicle.inicio_planta && <span>Inició descarga: {new Date(vehicle.inicio_planta).toLocaleString("es-PE")}</span>}
+      {vehicle.fin_planta && <span>Terminó descarga: {new Date(vehicle.fin_planta).toLocaleString("es-PE")}</span>}
+    </div>
     {vehicle.estado === "pendiente_muelle" && <button type="button" className="pesca-secundario" disabled={inicio} onClick={() => void iniciarTraslado()}>{inicio ? "Registrando…" : "Despachar a planta (verificar carga y documentos)"}</button>}
-    {vehicle.estado === "en_traslado" && <button type="button" className="pesca-secundario" disabled={inicio} onClick={() => void iniciarPlanta()}>{inicio ? "Registrando…" : "Registrar llegada e iniciar recepción en planta"}</button>}
-    {vehicle.estado === "en_planta" && <details className="pesca-fechas"><summary>Fechas y horas de planta</summary><form className="pesca-form pesca-fechas-form" onSubmit={(event) => void guardarFechas(event)}>
+    {vehicle.estado === "en_traslado" && <button type="button" className="pesca-secundario" disabled={inicio} onClick={() => void iniciarPlanta()}>{inicio ? "Registrando…" : "Registrar llegada real a planta"}</button>}
+    {vehicle.estado === "en_planta" && !vehicle.inicio_planta && <button type="button" className="pesca-secundario" disabled={inicio} onClick={() => void iniciarDescargaPlanta()}>{inicio ? "Registrando…" : "Iniciar descarga real en planta"}</button>}
+    {["en_planta", "pendiente_evidencia"].includes(vehicle.estado) && <details className="pesca-fechas"><summary>Fechas y horas de planta</summary><form className="pesca-form pesca-fechas-form" onSubmit={(event) => void guardarFechas(event)}>
       <label>Fecha de reporte<input type="date" value={fechaReporte} onChange={(e) => setFechaReporte(e.target.value)} /></label>
-      <label>Inicio de descarga<input type="datetime-local" value={inicioManual} onChange={(e) => setInicioManual(e.target.value)} /></label>
+      <label>Llegada real a planta<input type="datetime-local" value={llegadaManual} onChange={(e) => setLlegadaManual(e.target.value)} /></label>
+      <label>Inicio real de descarga<input type="datetime-local" value={inicioManual} onChange={(e) => setInicioManual(e.target.value)} /></label>
       <label>Fin de descarga<input type="datetime-local" value={finManual} onChange={(e) => setFinManual(e.target.value)} /></label>
       <label>Motivo del ajuste<input value={observacionFechas} onChange={(e) => setObservacionFechas(e.target.value)} required /></label>
       <button type="submit" disabled={esperando}>Guardar fechas</button>
@@ -565,16 +585,17 @@ function VehiculoCard({ operationId, vehicle, descargas, linea, paquete, alGuard
     </form>}
     {linea?.peso_aceptado != null && <p className={`pesca-diferencia ${colorPeso}`}>Aceptado en planta: {linea.peso_aceptado} {linea.unidad} · comparación muelle: {colorPeso || "pendiente"}</p>}
     {paquete && !paquete.documentacion_lista && <p className="pesca-pendiente-doc">Pendiente: {paquete.faltantes.join(", ")}</p>}
-    {vehicle.estado === "en_planta" && <div className="pesca-form pesca-peso-form">
+    {["en_planta", "pendiente_evidencia"].includes(vehicle.estado) && Boolean(vehicle.inicio_planta) && <div className="pesca-form pesca-peso-form">
       <label>Resultado<select value={resultado} onChange={(e) => setResultado(e.target.value)}><option value="completo">Completo</option><option value="parcial">Parcial</option><option value="rechazado">Rechazado</option></select></label>
       <label>Peso aceptado<input type="number" min="0" step="0.001" value={peso} onChange={(e) => setPeso(e.target.value)} /></label>
       <label>Unidad<select value={unidad} onChange={(e) => setUnidad(e.target.value)}><option value="ton">Toneladas</option><option value="kg">Kilogramos</option><option value="lb">Libras</option><option value="oz">Onzas</option></select></label>
       {resultado !== "completo" && <label>Cajas rechazadas<input type="number" min="0" step="1" value={cajas} onChange={(e) => setCajas(e.target.value)} /></label>}
       {resultado === "rechazado" && <label>Motivo<select value={motivo} onChange={(e) => setMotivo(e.target.value)}><option value="">Seleccionar…</option><option value="calidad">Calidad</option><option value="contaminacion_quimica">Contaminación química</option><option value="excedente">Excedente</option><option value="otro">Otro</option></select></label>}
+      {vehicle.estado === "pendiente_evidencia" && <label>Motivo para corregir o completar el registro<input value={observacionPeso} onChange={(e) => setObservacionPeso(e.target.value)} required /></label>}
       {!sinFechaFinal && <label>Fecha/hora final<input type="datetime-local" value={fechaFinalPeso} onChange={(e) => setFechaFinalPeso(e.target.value)} /></label>}
       <label>Evidencia de peso<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(e) => setFoto(e.target.files?.[0] ?? null)} /></label>
       <label className="pesca-checkbox"><input type="checkbox" checked={sinFechaFinal} onChange={(e) => setSinFechaFinal(e.target.checked)} /> No registrar fecha final</label>
-      <button type="button" disabled={esperando || (!peso && resultado !== "rechazado") || (resultado === "rechazado" && !motivo)} onClick={() => void cerrar()}>{esperando ? "Guardando…" : "Guardar peso y evidencia"}</button>
+      <button type="button" disabled={esperando || (!peso && resultado !== "rechazado") || (resultado === "rechazado" && !motivo)} onClick={() => void cerrar()}>{esperando ? "Guardando…" : vehicle.estado === "pendiente_evidencia" ? "Completar peso, evidencia y cierre" : "Guardar peso y evidencia"}</button>
     </div>}
   </article>;
 }

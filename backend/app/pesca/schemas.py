@@ -160,8 +160,8 @@ class DescargaOut(BaseModel):
     embarcacion_id: uuid.UUID
     matricula: str
     nombre: str
-    armador: str | None = None
-    patron: str | None = None
+    armador: str
+    patron: str
     peso_declarado_kg: Decimal | None = None
     inicio_descarga: datetime | None = None
     fin_descarga: datetime | None = None
@@ -171,20 +171,19 @@ class VehiculoIn(BaseModel):
     placa: str = Field(min_length=1, max_length=20)
     tipo: str = Field(min_length=1, max_length=60)
     chofer: str = Field(min_length=1, max_length=200)
-    fecha_reporte_planta: date | None = None
-    inicio_planta: datetime | None = None
     turno: str | None = Field(default=None, max_length=80)
 
 
 class TiemposPlantaIn(BaseModel):
     fecha_reporte_planta: date | None = None
+    llegada_planta: datetime | None = None
     inicio_planta: datetime | None = None
     fin_planta: datetime | None = None
     observacion: str = Field(min_length=1, max_length=2000)
 
     @model_validator(mode="after")
     def campo_a_actualizar(self) -> "TiemposPlantaIn":
-        if not {"fecha_reporte_planta", "inicio_planta", "fin_planta"}.intersection(self.model_fields_set):
+        if not {"fecha_reporte_planta", "llegada_planta", "inicio_planta", "fin_planta"}.intersection(self.model_fields_set):
             raise ValueError("Indique al menos una fecha u hora para actualizar")
         return self
 
@@ -214,6 +213,8 @@ class RegistroPlantaIn(BaseModel):
 
     @model_validator(mode="after")
     def validar_resultado(self) -> "RegistroPlantaIn":
+        if self.resultado in {"completo", "parcial"} and self.peso_aceptado <= 0:
+            raise ValueError("El peso aceptado debe ser mayor que cero para un resultado completo o parcial")
         if self.resultado == "rechazado" and not self.motivo_rechazo:
             raise ValueError("Indique el motivo del rechazo")
         if self.resultado == "completo" and self.cajas_rechazadas:
@@ -245,6 +246,7 @@ class VehiculoOut(Orm):
     chofer: str
     estado: str
     salida_muelle: datetime | None
+    llegada_planta: datetime | None
     fecha_reporte_planta: date | None
     inicio_planta: datetime | None
     fin_planta: datetime | None
