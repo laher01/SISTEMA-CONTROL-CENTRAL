@@ -1,5 +1,5 @@
-import uuid
 from dataclasses import replace
+import uuid
 
 import pytest
 from fastapi.testclient import TestClient
