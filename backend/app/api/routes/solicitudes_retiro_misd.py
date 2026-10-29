@@ -270,7 +270,7 @@ def listar(
         .order_by(SolicitudRetiroMISD.created_at.desc())
         .limit(200)
     )
-    resultado = []
+    resultado: list[dict[str, str | bool]] = []
     for solicitud in consultas:
         expediente = session.get(Expediente, solicitud.expediente_id)
         if expediente is None:
