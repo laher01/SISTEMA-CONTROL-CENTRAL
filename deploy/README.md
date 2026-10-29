@@ -16,8 +16,9 @@ Arquitectura aislada para convivir con los servicios existentes de la VPS:
 3. Copiar `deploy/.env.production.example` a `deploy/.env.production` y generar una contraseña
    PostgreSQL larga y aleatoria. Confirmar `FC_TENANT_RUC`: se usa para distinguir al receptor de
    los proveedores durante la extracción automática de comprobantes de compra.
-4. En Cloudflare Zero Trust crear un Tunnel y configurar el hostname
-   `factcentral.nexomarnegocioseirl.online` con servicio `http://frontend:80`.
+4. En Cloudflare Zero Trust verificar el Tunnel existente para la VPS antigua y configurar
+   el hostname operativo `app.nexomarnegocioseirl.online` con servicio `http://frontend:80`.
+   No continuar si el hostname configurado no coincide con el dominio que usa el Tenant.
 5. Proteger el hostname con Cloudflare Access antes de habilitarlo, porque el MVP todavía no tiene
    autenticación propia.
 6. Copiar el token del Tunnel a `CLOUDFLARE_TUNNEL_TOKEN` en `.env.production`.
