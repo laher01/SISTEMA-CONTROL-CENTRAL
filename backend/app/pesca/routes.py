@@ -11,8 +11,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
+from app.models import CuentaAcceso, Gestor, Miembro
 from app.pesca.models import (
     AbonoMovimientoPesca,
+    ActividadCuadrillaPesca,
+    AsignacionCuadrillaPesca,
+    AsignacionRolPesca,
+    AuditoriaRolPesca,
     CargaEmbarcacionVehiculo,
     DescargaEmbarcacion,
     DocumentoPesca,
@@ -26,11 +31,20 @@ from app.pesca.models import (
     VinculoDocumentoVehiculo,
 )
 from app.pesca.schemas import (
-    AbonoMovimientoIn,
     AbonoMovimientoOut,
+    ActividadCuadrillaIn,
+    ActividadCuadrillaOut,
+    AsignacionCuadrillaIn,
+    AsignacionCuadrillaOut,
     CargaIn,
     CierreOut,
     ConfirmarPrecioIn,
+    ConfirmarAcuerdoEmbarcacionIn,
+    CuentaResponsablePesaje,
+    SolicitarAjustePrecioIn,
+    PagoCuadrillaIn,
+    ResponsablePesajeMuelleIn,
+    CuentaPescaCandidata,
     DescargaOut,
     DocumentoOut,
     EmbarcacionIn,
@@ -39,6 +53,10 @@ from app.pesca.schemas import (
     MovimientoIn,
     MovimientoOut,
     RegistrarFacturaIn,
+    RevisionDocumentoIn,
+    RolPescaAsignacionIn,
+    RolPescaAsignacionOut,
+    RolesPescaActuales,
     RegistroPlantaIn,
     RegistroPlantaOut,
     TiemposDescargaIn,
@@ -49,6 +67,20 @@ from app.pesca.schemas import (
 from app.storage import AlmacenLocal
 
 router = APIRouter(prefix="/pesca", tags=["operaciones de pesca"])
+ROLES_PESCA = (
+    "JEFE_BAHIA", "GERENTE", "ENCARGADO_MUELLE", "ARMADOR", "PATRON",
+    "APUNTADOR_MUELLE", "APUNTADOR_PLANTA", "JEFE_CUADRILLA",
+    "SECRETARIA", "TRAMITADORA", "TRANSPORTISTA",
+)
+ROLES_CONTROL_OPERACION = ("JEFE_BAHIA", "ENCARGADO_MUELLE")
+ROLES_CONTROL_PLANTA = ("APUNTADOR_PLANTA",)
+ROLES_CAPTURA_PLANTA = ("APUNTADOR_PLANTA",)
+ROLES_DOCUMENTACION = (
+    "JEFE_BAHIA", "ENCARGADO_MUELLE", "ARMADOR", "PATRON", "APUNTADOR_MUELLE",
+    "APUNTADOR_PLANTA", "SECRETARIA", "TRAMITADORA",
+)
+ROL_POR_ACTIVIDAD = {
+}
 TIPOS_DOCUMENTO = {
     "certificado_matricula",
     "permiso_pesca",
@@ -62,9 +94,29 @@ TIPOS_DOCUMENTO = {
     "certificado_procedencia",
     "certificado_captura",
     "factura",
+    "boleta",
+    "recibo_honorarios",
+    "voucher_pago",
     "comprobante_gasto",
     "peso_planta",
     "otro",
+}
+ETAPAS_DOCUMENTO = {"EMBARCACION", "MUELLE", "TRANSPORTE", "PLANTA", "TRAMITADORA", "FACTURACION", "GENERAL"}
+ETAPA_POR_TIPO = {
+    "certificado_matricula": "EMBARCACION",
+    "permiso_pesca": "EMBARCACION",
+    "certificado_sanipes": "EMBARCACION",
+    "reporte_satelital": "EMBARCACION",
+    "visto_bueno_produce": "EMBARCACION",
+    "acta_fiscalizacion": "MUELLE",
+    "formato_descarga": "MUELLE",
+    "guia_remitente": "TRANSPORTE",
+    "guia_transportista": "TRANSPORTE",
+    "peso_planta": "PLANTA",
+    "certificado_procedencia": "TRAMITADORA",
+    "factura": "FACTURACION",
+    "boleta": "FACTURACION",
+    "recibo_honorarios": "FACTURACION",
 }
 MIME_PERMITIDOS = {"application/pdf", "image/jpeg", "image/png", "image/webp"}
 FACTOR_KG = {
@@ -81,6 +133,363 @@ def obtener_actor(auth: OperativeAuthDep) -> str:
 
 
 ActorDep = Annotated[str, Depends(obtener_actor)]
+
+
+def _requiere_rol_pesca(*roles: str):
+    def verificar(session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep) -> None:
+        if auth.rol in {"ADMINISTRADOR", "SUPERADMIN"} and {"JEFE_BAHIA", "GERENTE"}.intersection(roles):
+            raise HTTPException(403, "La decisión y consulta de precios corresponde al Jefe de Bahía o al Gerente")
+        asignacion = session.scalar(
+            select(AsignacionRolPesca.id).where(
+                AsignacionRolPesca.tenant_id == tenant_id,
+                AsignacionRolPesca.cuenta_id == auth.cuenta_id,
+                AsignacionRolPesca.rol.in_(roles),
+                AsignacionRolPesca.activa.is_(True),
+            )
+        )
+        if asignacion is None:
+            raise HTTPException(403, "La cuenta no tiene el rol pesquero requerido para esta acción")
+
+    return Depends(verificar)
+
+
+def _etiqueta_cuenta_pesca(session: Session, cuenta: CuentaAcceso) -> tuple[str, str]:
+    if cuenta.miembro_id is not None:
+        miembro = session.get(Miembro, cuenta.miembro_id)
+        if miembro is not None:
+            return miembro.codigo, miembro.nombre
+    if cuenta.gestor_id is not None:
+        gestor = session.get(Gestor, cuenta.gestor_id)
+        if gestor is not None:
+            return gestor.codigo, gestor.nombre
+    return cuenta.login, cuenta.login
+
+
+def _validar_administrador_tenant(auth: OperativeAuthDep) -> None:
+    if auth.rol != "ADMINISTRADOR":
+        raise HTTPException(403, "Solo el Administrador general del tenant puede asignar roles pesqueros")
+
+
+def _puede_ver_precios(session: Session, tenant_id: uuid.UUID, cuenta_id: uuid.UUID) -> bool:
+    cuenta = session.get(CuentaAcceso, cuenta_id)
+    miembro = session.get(Miembro, cuenta.miembro_id) if cuenta and cuenta.miembro_id else None
+    if miembro is not None and miembro.rol in {"ADMINISTRADOR", "SUPERADMIN"}:
+        return False
+    return session.scalar(
+        select(AsignacionRolPesca.id).where(
+            AsignacionRolPesca.tenant_id == tenant_id,
+            AsignacionRolPesca.cuenta_id == cuenta_id,
+            AsignacionRolPesca.rol.in_(("JEFE_BAHIA", "GERENTE")),
+            AsignacionRolPesca.activa.is_(True),
+        )
+    ) is not None
+
+
+def _operacion_para_actor(op: OperacionPesca, puede_ver_precios: bool) -> OperacionPesca | OperacionOut:
+    if puede_ver_precios:
+        return op
+    return OperacionOut.model_validate(op).model_copy(
+        update={
+            "precio_propuesto": None,
+            "precio_confirmado": None,
+            "precio_confirmado_por": None,
+            "precio_confirmado_at": None,
+        }
+    )
+
+
+def _exigir_embarcacion_reportante(op: OperacionPesca, actor: str) -> None:
+    if op.responsable_id.casefold().strip() != actor.casefold().strip():
+        raise HTTPException(403, "Solo la cuenta que reportó esta embarcación puede confirmar o solicitar cambios de su precio")
+
+
+@router.get("/roles/mios", response_model=RolesPescaActuales)
+def roles_pesca_actuales(
+    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
+) -> RolesPescaActuales:
+    roles = list(
+        session.scalars(
+            select(AsignacionRolPesca.rol).where(
+                AsignacionRolPesca.tenant_id == tenant_id,
+                AsignacionRolPesca.cuenta_id == auth.cuenta_id,
+                AsignacionRolPesca.activa.is_(True),
+            )
+        )
+    )
+    return RolesPescaActuales(cuenta_id=auth.cuenta_id, roles=roles)
+
+
+@router.get("/roles/candidatos", response_model=list[CuentaPescaCandidata])
+def listar_candidatos_rol_pesca(
+    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
+) -> list[CuentaPescaCandidata]:
+    _validar_administrador_tenant(auth)
+    cuentas: dict[uuid.UUID, CuentaPescaCandidata] = {}
+    activas = session.scalars(
+        select(CuentaAcceso).where(
+            CuentaAcceso.tenant_id == tenant_id,
+            CuentaAcceso.activo.is_(True),
+            CuentaAcceso.deleted_at.is_(None),
+        )
+    )
+    for cuenta in activas:
+        miembro = session.get(Miembro, cuenta.miembro_id) if cuenta.miembro_id else None
+        if miembro is not None and miembro.rol in {"ADMINISTRADOR", "SUPERADMIN"}:
+            continue
+        codigo, nombre = _etiqueta_cuenta_pesca(session, cuenta)
+        cuentas[cuenta.id] = CuentaPescaCandidata(cuenta_id=cuenta.id, codigo=codigo, nombre=nombre)
+    return sorted(cuentas.values(), key=lambda item: (item.nombre.casefold(), item.codigo.casefold()))
+
+
+@router.get("/roles/asignaciones", response_model=list[RolPescaAsignacionOut])
+def listar_asignaciones_rol_pesca(
+    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
+) -> list[RolPescaAsignacionOut]:
+    _validar_administrador_tenant(auth)
+    rows = session.scalars(
+        select(AsignacionRolPesca)
+        .where(AsignacionRolPesca.tenant_id == tenant_id)
+        .order_by(AsignacionRolPesca.rol, AsignacionRolPesca.created_at)
+    )
+    salida = []
+    for row in rows:
+        cuenta = session.get(CuentaAcceso, row.cuenta_id)
+        if cuenta is None:
+            continue
+        codigo, nombre = _etiqueta_cuenta_pesca(session, cuenta)
+        salida.append(
+            RolPescaAsignacionOut(
+                id=row.id,
+                cuenta_id=row.cuenta_id,
+                rol=row.rol,
+                activa=row.activa,
+                codigo=codigo,
+                nombre=nombre,
+            )
+        )
+    return salida
+
+
+@router.put("/roles/asignaciones", response_model=RolPescaAsignacionOut)
+def guardar_asignacion_rol_pesca(
+    datos: RolPescaAsignacionIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> RolPescaAsignacionOut:
+    _validar_administrador_tenant(auth)
+    cuenta = session.scalar(
+        select(CuentaAcceso).where(
+            CuentaAcceso.id == datos.cuenta_id,
+            CuentaAcceso.tenant_id == tenant_id,
+            CuentaAcceso.activo.is_(True),
+            CuentaAcceso.deleted_at.is_(None),
+        )
+    )
+    if cuenta is None:
+        raise HTTPException(404, "La cuenta no existe en este tenant o está inactiva")
+    miembro = session.get(Miembro, cuenta.miembro_id) if cuenta.miembro_id else None
+    if miembro is not None and miembro.rol in {"ADMINISTRADOR", "SUPERADMIN"}:
+        raise HTTPException(422, "La cuenta Administrador de plataforma/tenant no puede recibir actores operativos de pesca")
+    asignacion = session.scalar(
+        select(AsignacionRolPesca).where(
+            AsignacionRolPesca.tenant_id == tenant_id,
+            AsignacionRolPesca.cuenta_id == cuenta.id,
+            AsignacionRolPesca.rol == datos.rol,
+        )
+    )
+    accion = "activada" if datos.activa else "desactivada"
+    if asignacion is None:
+        asignacion = AsignacionRolPesca(
+            tenant_id=tenant_id,
+            cuenta_id=cuenta.id,
+            rol=datos.rol,
+            activa=datos.activa,
+            asignado_por_cuenta_id=auth.cuenta_id,
+        )
+        session.add(asignacion)
+        accion = "asignada" if datos.activa else "desactivada"
+    else:
+        asignacion.activa = datos.activa
+        asignacion.asignado_por_cuenta_id = auth.cuenta_id
+        asignacion.updated_at = datetime.now(UTC)
+    session.add(
+        AuditoriaRolPesca(
+            tenant_id=tenant_id,
+            actor_cuenta_id=auth.cuenta_id,
+            cuenta_objetivo_id=cuenta.id,
+            rol=datos.rol,
+            accion=accion,
+        )
+    )
+    session.commit()
+    session.refresh(asignacion)
+    codigo, nombre = _etiqueta_cuenta_pesca(session, cuenta)
+    return RolPescaAsignacionOut(
+        id=asignacion.id,
+        cuenta_id=asignacion.cuenta_id,
+        rol=asignacion.rol,
+        activa=asignacion.activa,
+        codigo=codigo,
+        nombre=nombre,
+    )
+
+
+@router.get("/operaciones/{op_id}/cuadrilla", response_model=list[AsignacionCuadrillaOut], dependencies=[_requiere_rol_pesca("JEFE_CUADRILLA")])
+def listar_asignaciones_cuadrilla(
+    op_id: uuid.UUID, session: SessionDep, tenant_id: TenantDep
+) -> list[AsignacionCuadrillaOut]:
+    _operacion(session, tenant_id, op_id)
+    filas = session.scalars(
+        select(AsignacionCuadrillaPesca)
+        .where(AsignacionCuadrillaPesca.tenant_id == tenant_id, AsignacionCuadrillaPesca.operacion_id == op_id)
+        .order_by(AsignacionCuadrillaPesca.actividad, AsignacionCuadrillaPesca.created_at)
+    )
+    return list(filas)
+
+
+@router.put("/operaciones/{op_id}/cuadrilla", response_model=AsignacionCuadrillaOut, dependencies=[_requiere_rol_pesca("JEFE_CUADRILLA")])
+def guardar_asignacion_cuadrilla(
+    op_id: uuid.UUID,
+    datos: AsignacionCuadrillaIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> AsignacionCuadrillaPesca:
+    op = _operacion(session, tenant_id, op_id)
+    if op.estado == "cerrada":
+        raise HTTPException(409, "No se pueden modificar asignaciones de una operación cerrada")
+    if op.modalidad_pago_cuadrilla == "DESGLOSE" and datos.activa and datos.monto_pago is None:
+        raise HTTPException(422, "La modalidad por desglose requiere el monto en efectivo de cada integrante activo")
+    nombre = datos.nombre_integrante.strip()
+    asignacion = session.scalar(
+        select(AsignacionCuadrillaPesca).where(
+            AsignacionCuadrillaPesca.tenant_id == tenant_id,
+            AsignacionCuadrillaPesca.operacion_id == op_id,
+            AsignacionCuadrillaPesca.actividad == datos.actividad,
+            AsignacionCuadrillaPesca.nombre_integrante == nombre,
+        )
+    )
+    if asignacion is None:
+        asignacion = AsignacionCuadrillaPesca(
+            tenant_id=tenant_id, operacion_id=op_id, actividad=datos.actividad,
+            nombre_integrante=nombre, activa=datos.activa, monto_pago=datos.monto_pago,
+            asignado_por_cuenta_id=auth.cuenta_id,
+        )
+        session.add(asignacion)
+        accion = "cuadrilla_integrante_registrado"
+    else:
+        asignacion.activa = datos.activa
+        asignacion.monto_pago = datos.monto_pago
+        asignacion.asignado_por_cuenta_id = auth.cuenta_id
+        asignacion.updated_at = datetime.now(UTC)
+        accion = "cuadrilla_integrante_actualizado"
+    _historial(session, tenant_id, op.id, auth.codigo, accion,
+               f"Actividad {datos.actividad}; integrante {nombre}; pago asignado {datos.monto_pago or '—'}; estado {'activo' if datos.activa else 'inactivo'}")
+    session.commit()
+    session.refresh(asignacion)
+    return asignacion
+
+
+@router.put("/operaciones/{op_id}/cuadrilla/pago", dependencies=[_requiere_rol_pesca("JEFE_CUADRILLA")])
+def configurar_pago_cuadrilla(
+    op_id: uuid.UUID, datos: PagoCuadrillaIn, session: SessionDep,
+    tenant_id: TenantDep, auth: OperativeAuthDep,
+) -> dict[str, str | None]:
+    op = _operacion(session, tenant_id, op_id)
+    if op.estado == "cerrada":
+        raise HTTPException(409, "No se puede cambiar el pago de una operación cerrada")
+    if datos.modalidad == "DESGLOSE":
+        integrantes = list(session.scalars(select(AsignacionCuadrillaPesca).where(
+            AsignacionCuadrillaPesca.tenant_id == tenant_id,
+            AsignacionCuadrillaPesca.operacion_id == op.id,
+            AsignacionCuadrillaPesca.activa.is_(True),
+        )))
+        if not integrantes:
+            raise HTTPException(409, "Registra a los integrantes y su monto antes de activar el pago por desglose")
+        incompletos = [f"{fila.actividad}: {fila.nombre_integrante}" for fila in integrantes if not fila.monto_pago or fila.monto_pago <= 0]
+        if incompletos:
+            raise HTTPException(409, {"mensaje": "Completa el pago en efectivo de cada integrante activo", "integrantes": incompletos})
+    else:
+        filas = session.scalars(select(AsignacionCuadrillaPesca).where(
+            AsignacionCuadrillaPesca.tenant_id == tenant_id,
+            AsignacionCuadrillaPesca.operacion_id == op.id,
+        ))
+        for fila in filas:
+            fila.monto_pago = None
+    op.modalidad_pago_cuadrilla = datos.modalidad
+    op.monto_pago_cuadrilla = datos.monto_unico if datos.modalidad == "UNICO" else None
+    _historial(session, tenant_id, op.id, auth.codigo, "modalidad_pago_cuadrilla",
+               f"Modalidad {datos.modalidad}; canal de entrega: efectivo por el Jefe de Cuadrilla; monto único {datos.monto_unico or '—'}")
+    session.commit()
+    return {"modalidad": op.modalidad_pago_cuadrilla, "monto_unico": str(op.monto_pago_cuadrilla) if op.monto_pago_cuadrilla is not None else None}
+
+
+@router.get("/operaciones/{op_id}/responsables-pesaje-muelle/candidatos", response_model=list[CuentaResponsablePesaje], dependencies=[_requiere_rol_pesca("JEFE_BAHIA")])
+def candidatos_responsable_pesaje_muelle(
+    op_id: uuid.UUID, session: SessionDep, tenant_id: TenantDep,
+) -> list[CuentaResponsablePesaje]:
+    _operacion(session, tenant_id, op_id)
+    rows = session.execute(
+        select(CuentaAcceso, AsignacionRolPesca.rol)
+        .join(AsignacionRolPesca, AsignacionRolPesca.cuenta_id == CuentaAcceso.id)
+        .where(
+            CuentaAcceso.tenant_id == tenant_id,
+            CuentaAcceso.activo.is_(True),
+            CuentaAcceso.deleted_at.is_(None),
+            AsignacionRolPesca.tenant_id == tenant_id,
+            AsignacionRolPesca.activa.is_(True),
+            AsignacionRolPesca.rol.in_(("APUNTADOR_MUELLE", "ENCARGADO_MUELLE")),
+        )
+        .order_by(CuentaAcceso.login)
+    ).all()
+    salida = []
+    for cuenta, rol in rows:
+        codigo, nombre = _etiqueta_cuenta_pesca(session, cuenta)
+        salida.append(CuentaResponsablePesaje(cuenta_id=cuenta.id, rol=rol, codigo=codigo, nombre=nombre))
+    return salida
+
+
+@router.put("/operaciones/{op_id}/responsable-pesaje-muelle", response_model=OperacionOut, dependencies=[_requiere_rol_pesca("JEFE_BAHIA")])
+def asignar_responsable_pesaje_muelle(
+    op_id: uuid.UUID, datos: ResponsablePesajeMuelleIn, session: SessionDep,
+    tenant_id: TenantDep, auth: OperativeAuthDep,
+) -> OperacionOut:
+    op = _operacion(session, tenant_id, op_id)
+    if op.estado not in {"preparacion", "en_descarga"}:
+        raise HTTPException(409, "El responsable del pesaje de muelle solo se puede asignar antes del despacho a planta")
+    cuenta = session.scalar(select(CuentaAcceso).where(
+        CuentaAcceso.id == datos.cuenta_id,
+        CuentaAcceso.tenant_id == tenant_id,
+        CuentaAcceso.activo.is_(True),
+        CuentaAcceso.deleted_at.is_(None),
+    ))
+    if cuenta is None:
+        raise HTTPException(404, "La cuenta responsable no existe o está inactiva en este tenant")
+    rol_asignado = session.scalar(select(AsignacionRolPesca.id).where(
+        AsignacionRolPesca.tenant_id == tenant_id,
+        AsignacionRolPesca.cuenta_id == cuenta.id,
+        AsignacionRolPesca.rol == datos.rol,
+        AsignacionRolPesca.activa.is_(True),
+    ))
+    if rol_asignado is None:
+        raise HTTPException(422, "La persona seleccionada no tiene activo el rol correspondiente")
+    if op.responsable_pesaje_muelle_cuenta_id != datos.cuenta_id:
+        ya_hay_cargas = session.scalar(select(CargaEmbarcacionVehiculo.id).where(
+            CargaEmbarcacionVehiculo.tenant_id == tenant_id,
+            CargaEmbarcacionVehiculo.descarga_id.in_(
+                select(DescargaEmbarcacion.id).where(DescargaEmbarcacion.operacion_id == op.id)
+            ),
+        ))
+        if ya_hay_cargas is not None:
+            raise HTTPException(409, "No se puede cambiar al responsable después de registrar cargas o pesos")
+    op.responsable_pesaje_muelle = datos.rol
+    op.responsable_pesaje_muelle_cuenta_id = cuenta.id
+    _historial(session, tenant_id, op.id, auth.codigo, "responsable_pesaje_muelle_asignado",
+               f"Jefe de Bahía asignó el registro del peso de muelle a {cuenta.login} como {datos.rol}")
+    session.commit()
+    session.refresh(op)
+    return _operacion_para_actor(op, True)
 
 
 def _operacion(session: Session, tenant_id: uuid.UUID, op_id: uuid.UUID) -> OperacionPesca:
@@ -105,18 +514,79 @@ def _vehiculo(session: Session, tenant_id: uuid.UUID, vehiculo_id: uuid.UUID) ->
     return obj
 
 
+@router.get("/vehiculos/{vehiculo_id}/actividades", response_model=list[ActividadCuadrillaOut], dependencies=[_requiere_rol_pesca("JEFE_CUADRILLA")])
+def listar_actividades_cuadrilla(
+    vehiculo_id: uuid.UUID, session: SessionDep, tenant_id: TenantDep
+) -> list[ActividadCuadrillaPesca]:
+    vehicle = _vehiculo(session, tenant_id, vehiculo_id)
+    return list(session.scalars(select(ActividadCuadrillaPesca).where(
+        ActividadCuadrillaPesca.tenant_id == tenant_id,
+        ActividadCuadrillaPesca.vehiculo_id == vehicle.id,
+    ).order_by(ActividadCuadrillaPesca.actividad)))
+
+
+@router.put("/vehiculos/{vehiculo_id}/actividades", response_model=ActividadCuadrillaOut, dependencies=[_requiere_rol_pesca("JEFE_CUADRILLA")])
+def guardar_actividad_cuadrilla(
+    vehiculo_id: uuid.UUID, datos: ActividadCuadrillaIn, session: SessionDep,
+    tenant_id: TenantDep, auth: OperativeAuthDep,
+) -> ActividadCuadrillaPesca:
+    vehicle = _vehiculo(session, tenant_id, vehiculo_id)
+    op = _operacion(session, tenant_id, vehicle.operacion_id)
+    if op.estado == "cerrada":
+        raise HTTPException(409, "La operación está cerrada")
+    registro = session.scalar(select(ActividadCuadrillaPesca).where(
+        ActividadCuadrillaPesca.tenant_id == tenant_id,
+        ActividadCuadrillaPesca.vehiculo_id == vehicle.id,
+        ActividadCuadrillaPesca.actividad == datos.actividad,
+    ))
+    antes = "registro creado"
+    if registro is None:
+        registro = ActividadCuadrillaPesca(
+            tenant_id=tenant_id, operacion_id=op.id, vehiculo_id=vehicle.id,
+            actividad=datos.actividad, actor_cuenta_id=auth.cuenta_id,
+        )
+        session.add(registro)
+    else:
+        if not datos.observacion:
+            raise HTTPException(422, "Indica el motivo para actualizar una tarea registrada")
+        antes = f"estado={registro.estado}; cajas={registro.cajas}; hielo_kg={registro.hielo_kg}"
+        registro.actor_cuenta_id = auth.cuenta_id
+    registro.estado = datos.estado
+    registro.cajas = datos.cajas
+    registro.hielo_kg = datos.hielo_kg
+    registro.verificacion_visual = datos.verificacion_visual
+    registro.contaminacion_detectada = datos.contaminacion_detectada
+    registro.revision_final = datos.revision_final
+    registro.observacion = datos.observacion
+    registro.updated_at = datetime.now(UTC)
+    session.flush()
+    _historial(session, tenant_id, op.id, auth.codigo, f"cuadrilla_{datos.actividad.casefold()}",
+        f"Jefe de Cuadrilla registra control del vehículo {vehicle.placa}; antes: {antes}; estado={datos.estado}, cajas={datos.cajas}, hielo_kg={datos.hielo_kg}, visual={datos.verificacion_visual}, contaminación={datos.contaminacion_detectada}, revisión_final={datos.revision_final}; nota={datos.observacion or '—'}", vehicle.id)
+    session.commit()
+    session.refresh(registro)
+    return registro
+
+
 def _tipos_documento_vehiculo(
     session: Session, tenant_id: uuid.UUID, op_id: uuid.UUID, vehicle_id: uuid.UUID
 ) -> set[str]:
-    tipos = set(
-        session.scalars(
-            select(DocumentoPesca.tipo).where(
-                DocumentoPesca.operacion_id == op_id,
-                DocumentoPesca.tenant_id == tenant_id,
-                (DocumentoPesca.vehiculo_id.is_(None)) | (DocumentoPesca.vehiculo_id == vehicle_id),
-            )
-        )
+    base = (
+        DocumentoPesca.tenant_id == tenant_id,
+        DocumentoPesca.operacion_id == op_id,
+        DocumentoPesca.vigente.is_(True),
+        DocumentoPesca.estado_revision == "VERIFICADO",
     )
+    ids_documentos_embarcacion = select(VinculoDocumentoEmbarcacion.documento_id).join(
+        DocumentoPesca, DocumentoPesca.id == VinculoDocumentoEmbarcacion.documento_id
+    ).where(*base)
+    tipos = set(session.scalars(select(DocumentoPesca.tipo).where(
+        *base,
+        DocumentoPesca.vehiculo_id.is_(None),
+        ~DocumentoPesca.id.in_(ids_documentos_embarcacion),
+    )))
+    tipos.update(session.scalars(select(DocumentoPesca.tipo).where(
+        *base, DocumentoPesca.vehiculo_id == vehicle_id,
+    )))
     linked = set(
         session.scalars(
             select(VinculoDocumentoVehiculo.documento_id).where(
@@ -129,10 +599,26 @@ def _tipos_documento_vehiculo(
             session.scalars(
                 select(DocumentoPesca.tipo).where(
                     DocumentoPesca.tenant_id == tenant_id,
+                    DocumentoPesca.operacion_id == op_id,
                     DocumentoPesca.id.in_(linked),
+                    DocumentoPesca.vigente.is_(True),
+                    DocumentoPesca.estado_revision == "VERIFICADO",
                 )
             )
         )
+    vessel_ids = select(DescargaEmbarcacion.embarcacion_id).join(
+        CargaEmbarcacionVehiculo,
+        CargaEmbarcacionVehiculo.descarga_id == DescargaEmbarcacion.id,
+    ).where(
+        DescargaEmbarcacion.tenant_id == tenant_id,
+        CargaEmbarcacionVehiculo.tenant_id == tenant_id,
+        CargaEmbarcacionVehiculo.vehiculo_id == vehicle_id,
+    )
+    tipos.update(session.scalars(
+        select(DocumentoPesca.tipo)
+        .join(VinculoDocumentoEmbarcacion, VinculoDocumentoEmbarcacion.documento_id == DocumentoPesca.id)
+        .where(*base, VinculoDocumentoEmbarcacion.embarcacion_id.in_(vessel_ids))
+    ))
     return tipos
 
 
@@ -157,14 +643,15 @@ def _historial(
     )
 
 
-@router.post("/operaciones", response_model=OperacionOut, status_code=201)
+@router.post("/operaciones", response_model=OperacionOut, status_code=201, dependencies=[_requiere_rol_pesca("ARMADOR", "PATRON")])
 def crear_operacion(
     datos: OperacionIn,
     session: SessionDep,
     tenant_id: TenantDep,
     hoy: HoyDep,
     actor: ActorDep,
-) -> OperacionPesca:
+    auth: OperativeAuthDep,
+) -> OperacionOut:
     op = OperacionPesca(
         tenant_id=tenant_id,
         fecha_reporte=datos.fecha_reporte or hoy,
@@ -183,6 +670,7 @@ def crear_operacion(
         jefe_bahia=datos.jefe_bahia,
         encargado_muelle=datos.encargado_muelle,
         apuntador=datos.apuntador,
+        responsable_pesaje_muelle=None,
         responsable_id=actor[:200],
         estado="preparacion",
         observacion=datos.observacion,
@@ -192,21 +680,36 @@ def crear_operacion(
     _historial(session, tenant_id, op.id, actor, "operacion_creada", "Operación iniciada")
     session.commit()
     session.refresh(op)
-    return op
+    return _operacion_para_actor(op, _puede_ver_precios(session, tenant_id, auth.cuenta_id))
 
 
-@router.post("/operaciones/{op_id}/iniciar-descarga", response_model=OperacionOut)
+@router.post("/operaciones/{op_id}/iniciar-descarga", response_model=OperacionOut, dependencies=[_requiere_rol_pesca("JEFE_BAHIA", "ENCARGADO_MUELLE")])
 def iniciar_descarga_operacion(
     op_id: uuid.UUID,
     session: SessionDep,
     tenant_id: TenantDep,
     actor: ActorDep,
-) -> OperacionPesca:
+    auth: OperativeAuthDep,
+) -> OperacionOut:
     op = _operacion(session, tenant_id, op_id)
     if op.estado != "preparacion":
         raise HTTPException(409, "La operación no está en etapa de preparación")
+    if not op.responsable_pesaje_muelle:
+        raise HTTPException(409, "El Jefe de Bahía debe designar al Apuntador de Muelle o Encargado de Muelle para el pesaje")
     if op.precio_confirmado is None:
-        raise HTTPException(409, "Falta confirmar el precio con el comprador")
+        raise HTTPException(409, "Falta la aceptación del precio acordado por Jefe de Bahía o Gerente")
+    if op.precio_ajuste_pendiente:
+        raise HTTPException(409, "Hay un ajuste de precio pendiente de aceptación; resuélvelo antes de iniciar la descarga")
+    if not op.responsable_pesaje_muelle or not op.responsable_pesaje_muelle_cuenta_id:
+        raise HTTPException(409, "El Jefe de Bahía debe asignar a una persona responsable del pesaje de muelle")
+    responsable_activo = session.scalar(select(AsignacionRolPesca.id).where(
+        AsignacionRolPesca.tenant_id == tenant_id,
+        AsignacionRolPesca.cuenta_id == op.responsable_pesaje_muelle_cuenta_id,
+        AsignacionRolPesca.rol == op.responsable_pesaje_muelle,
+        AsignacionRolPesca.activa.is_(True),
+    ))
+    if responsable_activo is None:
+        raise HTTPException(409, "El responsable de pesaje ya no tiene el rol activo; reasígnalo antes de iniciar")
     embarcaciones = list(
         session.scalars(
             select(DescargaEmbarcacion).where(
@@ -233,6 +736,8 @@ def iniciar_descarga_operacion(
             select(DocumentoPesca).where(
                 DocumentoPesca.operacion_id == op.id,
                 DocumentoPesca.tenant_id == tenant_id,
+                DocumentoPesca.vigente.is_(True),
+                DocumentoPesca.estado_revision == "VERIFICADO",
                 DocumentoPesca.vehiculo_id.is_(None),
                 ~DocumentoPesca.id.in_(vinculos_nave),
             )
@@ -257,6 +762,8 @@ def iniciar_descarga_operacion(
                 .where(
                     DocumentoPesca.tenant_id == tenant_id,
                     DocumentoPesca.operacion_id == op.id,
+                    DocumentoPesca.vigente.is_(True),
+                    DocumentoPesca.estado_revision == "VERIFICADO",
                     VinculoDocumentoEmbarcacion.embarcacion_id == descarga.embarcacion_id,
                 )
             )
@@ -273,10 +780,10 @@ def iniciar_descarga_operacion(
     _historial(session, tenant_id, op.id, actor, "descarga_iniciada", "Documentos y precio verificados; descarga autorizada")
     session.commit()
     session.refresh(op)
-    return op
+    return _operacion_para_actor(op, _puede_ver_precios(session, tenant_id, auth.cuenta_id))
 
 
-@router.post("/operaciones/{op_id}/confirmar-precio", response_model=OperacionOut)
+@router.post("/operaciones/{op_id}/confirmar-precio", response_model=OperacionOut, dependencies=[_requiere_rol_pesca("JEFE_BAHIA", "GERENTE")])
 def confirmar_precio(
     op_id: uuid.UUID,
     datos: ConfirmarPrecioIn,
@@ -285,14 +792,15 @@ def confirmar_precio(
     actor: ActorDep,
 ) -> OperacionPesca:
     op = _operacion(session, tenant_id, op_id)
-    if op.estado == "cerrada":
-        raise HTTPException(409, "La operación ya está cerrada")
+    if op.estado != "preparacion":
+        raise HTTPException(409, "El precio inicial solo se acepta durante la preparación")
     if op.precio_confirmado is not None:
         raise HTTPException(409, "El precio ya fue confirmado y no se puede cambiar")
-    if op.comprador and datos.comprador.casefold().strip() != op.comprador.casefold().strip():
-        raise HTTPException(422, "La confirmación debe corresponder al comprador registrado")
-    op.comprador = op.comprador or datos.comprador.strip()
-    op.precio_confirmado = datos.precio_confirmado
+    if op.precio_propuesto is None or op.precio_propuesto <= 0:
+        raise HTTPException(409, "La embarcación aún no ha ingresado un precio acordado")
+    if not op.precio_acuerdo_embarcacion_confirmado:
+        raise HTTPException(409, "Primero el Patrón o Armador debe confirmar el precio acordado")
+    op.precio_confirmado = op.precio_propuesto
     op.precio_confirmado_por = actor[:200]
     op.precio_confirmado_at = datetime.now(UTC)
     _historial(
@@ -301,21 +809,95 @@ def confirmar_precio(
         op.id,
         actor,
         "precio_confirmado",
-        f"Comprador: {op.comprador}; precio confirmado: S/ {datos.precio_confirmado}",
+        f"Jefe de Bahía/Gerente aceptó el precio acordado por la embarcación: S/ {op.precio_confirmado}",
     )
     session.commit()
     session.refresh(op)
     return op
 
 
-@router.post("/operaciones/{op_id}/factura", response_model=OperacionOut)
+@router.post("/operaciones/{op_id}/confirmar-acuerdo-embarcacion", response_model=OperacionOut, dependencies=[_requiere_rol_pesca("ARMADOR", "PATRON")])
+def confirmar_acuerdo_embarcacion(
+    op_id: uuid.UUID, datos: ConfirmarAcuerdoEmbarcacionIn,
+    session: SessionDep, tenant_id: TenantDep, actor: ActorDep, auth: OperativeAuthDep,
+) -> OperacionOut:
+    op = _operacion(session, tenant_id, op_id)
+    _exigir_embarcacion_reportante(op, actor)
+    if op.estado != "preparacion":
+        raise HTTPException(409, "La confirmación de la embarcación debe hacerse durante la preparación")
+    if op.precio_confirmado is not None:
+        raise HTTPException(409, "El precio ya fue aceptado por Jefe de Bahía o Gerente")
+    if op.precio_propuesto is None or op.precio_propuesto <= 0:
+        raise HTTPException(409, "Ingresa primero el precio acordado con Jefe de Bahía o Gerente")
+    if op.precio_acuerdo_embarcacion_confirmado:
+        raise HTTPException(409, "La embarcación ya confirmó el precio acordado")
+    op.precio_acuerdo_embarcacion_confirmado = True
+    op.precio_acuerdo_embarcacion_confirmado_por = actor[:200]
+    op.precio_acuerdo_embarcacion_confirmado_at = datetime.now(UTC)
+    _historial(session, tenant_id, op.id, actor, "precio_acuerdo_embarcacion_confirmado",
+               "Patrón/Armador confirmó que el precio ingresado corresponde al acuerdo realizado con Jefe de Bahía o Gerente")
+    session.commit()
+    session.refresh(op)
+    return _operacion_para_actor(op, _puede_ver_precios(session, tenant_id, auth.cuenta_id))
+
+
+@router.post("/operaciones/{op_id}/solicitar-ajuste-precio", response_model=OperacionOut, dependencies=[_requiere_rol_pesca("ARMADOR", "PATRON")])
+def solicitar_ajuste_precio(
+    op_id: uuid.UUID, datos: SolicitarAjustePrecioIn,
+    session: SessionDep, tenant_id: TenantDep, actor: ActorDep, auth: OperativeAuthDep,
+) -> OperacionOut:
+    op = _operacion(session, tenant_id, op_id)
+    _exigir_embarcacion_reportante(op, actor)
+    if op.estado != "preparacion":
+        raise HTTPException(409, "El precio solo se puede ajustar durante la preparación y antes de iniciar la descarga")
+    if op.precio_confirmado is None:
+        raise HTTPException(409, "El precio inicial aún no ha sido aceptado; completa primero la confirmación inicial")
+    if op.precio_ajuste_pendiente:
+        raise HTTPException(409, "Ya hay un ajuste de precio pendiente de aceptación")
+    if op.precio_propuesto == datos.precio_acordado:
+        raise HTTPException(422, "El nuevo precio debe ser distinto al precio aceptado actualmente")
+    anterior = op.precio_confirmado
+    op.precio_propuesto = datos.precio_acordado
+    op.precio_acuerdo_embarcacion_confirmado = True
+    op.precio_acuerdo_embarcacion_confirmado_por = actor[:200]
+    op.precio_acuerdo_embarcacion_confirmado_at = datetime.now(UTC)
+    _historial(session, tenant_id, op.id, actor, "ajuste_precio_solicitado",
+        f"Patrón/Armador solicita cambio del precio aceptado S/ {anterior} a S/ {datos.precio_acordado}. Motivo: {datos.motivo.strip()}")
+    session.commit()
+    session.refresh(op)
+    return _operacion_para_actor(op, _puede_ver_precios(session, tenant_id, auth.cuenta_id))
+
+
+@router.post("/operaciones/{op_id}/aceptar-ajuste-precio", response_model=OperacionOut, dependencies=[_requiere_rol_pesca("JEFE_BAHIA", "GERENTE")])
+def aceptar_ajuste_precio(
+    op_id: uuid.UUID, datos: ConfirmarPrecioIn,
+    session: SessionDep, tenant_id: TenantDep, actor: ActorDep,
+) -> OperacionPesca:
+    op = _operacion(session, tenant_id, op_id)
+    if op.estado != "preparacion":
+        raise HTTPException(409, "El ajuste de precio debe aceptarse antes de iniciar la descarga")
+    if not op.precio_ajuste_pendiente or not op.precio_acuerdo_embarcacion_confirmado:
+        raise HTTPException(409, "No hay un ajuste confirmado por la embarcación pendiente de aceptación")
+    anterior = op.precio_confirmado
+    op.precio_confirmado = op.precio_propuesto
+    op.precio_confirmado_por = actor[:200]
+    op.precio_confirmado_at = datetime.now(UTC)
+    _historial(session, tenant_id, op.id, actor, "ajuste_precio_aceptado",
+        f"Jefe de Bahía/Gerente aceptó el ajuste solicitado por la embarcación: anterior S/ {anterior}; nuevo S/ {op.precio_confirmado}")
+    session.commit()
+    session.refresh(op)
+    return op
+
+
+@router.post("/operaciones/{op_id}/factura", response_model=OperacionOut, dependencies=[_requiere_rol_pesca("SECRETARIA")])
 def registrar_factura(
     op_id: uuid.UUID,
     datos: RegistrarFacturaIn,
     session: SessionDep,
     tenant_id: TenantDep,
     actor: ActorDep,
-) -> OperacionPesca:
+    auth: OperativeAuthDep,
+) -> OperacionOut:
     op = _operacion(session, tenant_id, op_id)
     if op.estado != "cerrada":
         raise HTTPException(409, "Registra la factura después de cerrar la recepción de todos los vehículos")
@@ -325,6 +907,8 @@ def registrar_factura(
             DocumentoPesca.tenant_id == tenant_id,
             DocumentoPesca.tipo == "certificado_procedencia",
             DocumentoPesca.vehiculo_id.is_(None),
+            DocumentoPesca.vigente.is_(True),
+            DocumentoPesca.estado_revision == "VERIFICADO",
         )
     )
     if certificado is None:
@@ -339,18 +923,18 @@ def registrar_factura(
     _historial(session, tenant_id, op.id, actor, "factura_registrada", f"Factura {op.factura_serie}-{op.factura_correlativo}; pendiente adjuntar comprobante")
     session.commit()
     session.refresh(op)
-    return op
+    return _operacion_para_actor(op, _puede_ver_precios(session, tenant_id, auth.cuenta_id))
 
 
-@router.get("/operaciones", response_model=list[OperacionOut])
-def listar_operaciones(session: SessionDep, tenant_id: TenantDep) -> list[OperacionPesca]:
-    return list(
-        session.scalars(
-            select(OperacionPesca)
-            .where(OperacionPesca.tenant_id == tenant_id)
-            .order_by(OperacionPesca.created_at.desc())
-        )
+@router.get("/operaciones", response_model=list[OperacionOut], dependencies=[_requiere_rol_pesca(*ROLES_PESCA)])
+def listar_operaciones(session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep) -> list[OperacionOut]:
+    visible = _puede_ver_precios(session, tenant_id, auth.cuenta_id)
+    operaciones = session.scalars(
+        select(OperacionPesca)
+        .where(OperacionPesca.tenant_id == tenant_id)
+        .order_by(OperacionPesca.created_at.desc())
     )
+    return [_operacion_para_actor(op, visible) for op in operaciones]
 
 
 def _movimiento_out(session: Session, item: MovimientoPesca) -> MovimientoOut:
@@ -361,7 +945,11 @@ def _movimiento_out(session: Session, item: MovimientoPesca) -> MovimientoOut:
         )
     ) or Decimal("0")
     saldo = max(Decimal("0"), item.importe - Decimal(abonado))
-    if item.clase == "gasto_empresa":
+    if item.clase in {"gasto_empresa", "gasto_bahia_reembolsable"} and item.comprobante_documento_id is None:
+        estado = "pendiente_cpe"
+    elif item.clase in {"gasto_empresa", "gasto_bahia_reembolsable"} and item.voucher_documento_id is None:
+        estado = "pendiente_voucher"
+    elif item.clase == "gasto_empresa":
         estado = "pagado_empresa"
     elif saldo == 0:
         estado = "saldado"
@@ -374,7 +962,7 @@ def _movimiento_out(session: Session, item: MovimientoPesca) -> MovimientoOut:
     return MovimientoOut.model_validate(item).model_copy(update={"abonado": abonado, "saldo": saldo, "estado": estado})
 
 
-@router.post("/movimientos", response_model=MovimientoOut, status_code=201)
+@router.post("/movimientos", response_model=MovimientoOut, status_code=201, dependencies=[_requiere_rol_pesca("JEFE_BAHIA")])
 def crear_movimiento(
     datos: MovimientoIn,
     session: SessionDep,
@@ -390,6 +978,9 @@ def crear_movimiento(
         pagador=datos.pagador,
         beneficiario=datos.beneficiario,
         concepto=datos.concepto,
+        tipo_gasto=datos.tipo_gasto,
+        tipo_comprobante=datos.tipo_comprobante,
+        motivo_boleta_muelle=datos.motivo_boleta_muelle,
         importe=datos.importe,
         moneda=datos.moneda,
         cantidad=datos.cantidad,
@@ -405,7 +996,7 @@ def crear_movimiento(
     return _movimiento_out(session, item)
 
 
-@router.get("/operaciones/{op_id}/movimientos", response_model=list[MovimientoOut])
+@router.get("/operaciones/{op_id}/movimientos", response_model=list[MovimientoOut], dependencies=[_requiere_rol_pesca("JEFE_BAHIA")])
 def listar_movimientos_operacion(
     op_id: uuid.UUID, session: SessionDep, tenant_id: TenantDep
 ) -> list[MovimientoOut]:
@@ -418,7 +1009,7 @@ def listar_movimientos_operacion(
     return [_movimiento_out(session, item) for item in items]
 
 
-@router.get("/movimientos-personales", response_model=list[MovimientoOut])
+@router.get("/movimientos-personales", response_model=list[MovimientoOut], dependencies=[_requiere_rol_pesca("JEFE_BAHIA")])
 def listar_prestamos_personales(session: SessionDep, tenant_id: TenantDep, actor: ActorDep) -> list[MovimientoOut]:
     items = session.scalars(
         select(MovimientoPesca)
@@ -432,13 +1023,17 @@ def listar_prestamos_personales(session: SessionDep, tenant_id: TenantDep, actor
     return [_movimiento_out(session, item) for item in items]
 
 
-@router.post("/movimientos/{movimiento_id}/abonos", response_model=AbonoMovimientoOut, status_code=201)
-def registrar_abono_movimiento(
+@router.post("/movimientos/{movimiento_id}/abonos", response_model=AbonoMovimientoOut, status_code=201, dependencies=[_requiere_rol_pesca("JEFE_BAHIA")])
+async def registrar_abono_movimiento(
     movimiento_id: uuid.UUID,
-    datos: AbonoMovimientoIn,
     session: SessionDep,
     tenant_id: TenantDep,
+    settings: SettingsDep,
+    almacen: AlmacenDep,
     actor: ActorDep,
+    importe: Decimal = Form(..., gt=0),
+    observacion: str | None = Form(default=None, max_length=1000),
+    archivo_voucher: UploadFile | None = File(default=None),
 ) -> AbonoMovimientoPesca:
     item = session.scalar(
         select(MovimientoPesca).where(
@@ -451,6 +1046,10 @@ def registrar_abono_movimiento(
         raise HTTPException(404, "Movimiento no encontrado")
     if item.clase == "gasto_empresa":
         raise HTTPException(409, "Un gasto pagado directamente por la empresa no tiene saldo por cobrar")
+    if item.clase in {"gasto_bahia_reembolsable", "gasto_empresa"} and item.comprobante_documento_id is None:
+        raise HTTPException(409, "Adjunta primero el CPE requerido para registrar un reembolso o abono")
+    if item.clase != "prestamo_personal_bahia" and archivo_voucher is None:
+        raise HTTPException(422, "Adjunta el voucher que sustenta este pago")
     current = Decimal(
         session.scalar(
             select(func.coalesce(func.sum(AbonoMovimientoPesca.importe), 0)).where(
@@ -459,30 +1058,50 @@ def registrar_abono_movimiento(
             )
         ) or 0
     )
-    if current + datos.importe > item.importe:
+    if current + importe > item.importe:
         raise HTTPException(422, "El abono supera el saldo pendiente")
     tipo = {
         "gasto_bahia_reembolsable": "reembolso_bahia",
         "adelanto_armador_empresa": "devolucion_armador",
         "prestamo_personal_bahia": "abono_prestamo_personal",
     }[item.clase]
+    voucher_doc = None
+    if archivo_voucher is not None:
+        mime = archivo_voucher.content_type or "application/octet-stream"
+        if mime not in MIME_PERMITIDOS:
+            raise HTTPException(415, "Solo se permiten PDF, JPG, PNG o WEBP")
+        raw = await archivo_voucher.read(settings.max_upload_mb * 1024 * 1024 + 1)
+        if len(raw) > settings.max_upload_mb * 1024 * 1024:
+            raise HTTPException(413, "Archivo demasiado grande")
+        if not raw:
+            raise HTTPException(422, "Archivo vacío")
+        digest = hashlib.sha256(raw).hexdigest()
+        voucher_doc = DocumentoPesca(
+            tenant_id=tenant_id, operacion_id=item.operacion_id, tipo="voucher_pago",
+            nombre=archivo_voucher.filename or "voucher-pago", mime_type=mime,
+            sha256=digest, ruta_storage=almacen.guardar(tenant_id, digest, raw),
+            subido_por=actor[:200],
+        )
+        session.add(voucher_doc)
+        session.flush()
     abono = AbonoMovimientoPesca(
         tenant_id=tenant_id,
         movimiento_id=item.id,
-        importe=datos.importe,
+        importe=importe,
         tipo=tipo,
         registrado_por=actor[:200],
-        observacion=datos.observacion,
+        observacion=observacion,
+        voucher_documento_id=voucher_doc.id if voucher_doc else None,
     )
     session.add(abono)
     if item.operacion_id:
-        _historial(session, tenant_id, item.operacion_id, actor, tipo, f"Abono {item.moneda} {datos.importe} al movimiento {item.id}")
+        _historial(session, tenant_id, item.operacion_id, actor, tipo, f"Abono {item.moneda} {importe} al movimiento {item.id}; voucher {voucher_doc.id if voucher_doc else 'no requerido para préstamo personal'}")
     session.commit()
     session.refresh(abono)
     return abono
 
 
-@router.post("/movimientos/{movimiento_id}/comprobante", response_model=DocumentoOut, status_code=201)
+@router.post("/movimientos/{movimiento_id}/comprobante", response_model=DocumentoOut, status_code=201, dependencies=[_requiere_rol_pesca("JEFE_BAHIA")])
 async def adjuntar_comprobante_movimiento(
     movimiento_id: uuid.UUID,
     session: SessionDep,
@@ -514,7 +1133,7 @@ async def adjuntar_comprobante_movimiento(
     doc = DocumentoPesca(
         tenant_id=tenant_id,
         operacion_id=item.operacion_id,
-        tipo="comprobante_gasto",
+        tipo=item.tipo_comprobante or "comprobante_gasto",
         nombre=archivo.filename or "comprobante",
         mime_type=mime,
         sha256=digest,
@@ -531,7 +1150,48 @@ async def adjuntar_comprobante_movimiento(
     return doc
 
 
-@router.post("/operaciones/{op_id}/embarcaciones", response_model=DescargaOut, status_code=201)
+@router.post("/movimientos/{movimiento_id}/voucher", response_model=DocumentoOut, status_code=201, dependencies=[_requiere_rol_pesca("JEFE_BAHIA")])
+async def adjuntar_voucher_movimiento(
+    movimiento_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    settings: SettingsDep,
+    almacen: AlmacenDep,
+    actor: ActorDep,
+    archivo: UploadFile = File(...),
+) -> DocumentoPesca:
+    item = session.scalar(select(MovimientoPesca).where(
+        MovimientoPesca.id == movimiento_id, MovimientoPesca.tenant_id == tenant_id,
+    ))
+    if item is None or (item.clase == "prestamo_personal_bahia" and item.registrado_por != actor):
+        raise HTTPException(404, "Movimiento no encontrado")
+    if item.voucher_documento_id is not None:
+        raise HTTPException(409, "Este movimiento ya tiene voucher adjunto")
+    mime = archivo.content_type or "application/octet-stream"
+    if mime not in MIME_PERMITIDOS:
+        raise HTTPException(415, "Solo se permiten PDF, JPG, PNG o WEBP")
+    raw = await archivo.read(settings.max_upload_mb * 1024 * 1024 + 1)
+    if len(raw) > settings.max_upload_mb * 1024 * 1024:
+        raise HTTPException(413, "Archivo demasiado grande")
+    if not raw:
+        raise HTTPException(422, "Archivo vacío")
+    digest = hashlib.sha256(raw).hexdigest()
+    doc = DocumentoPesca(
+        tenant_id=tenant_id, operacion_id=item.operacion_id, tipo="voucher_pago",
+        nombre=archivo.filename or "voucher-pago", mime_type=mime, sha256=digest,
+        ruta_storage=almacen.guardar(tenant_id, digest, raw), subido_por=actor[:200],
+    )
+    session.add(doc)
+    session.flush()
+    item.voucher_documento_id = doc.id
+    if item.operacion_id:
+        _historial(session, tenant_id, item.operacion_id, actor, "voucher_pago_cargado", f"Voucher {doc.nombre} para {item.clase}")
+    session.commit()
+    session.refresh(doc)
+    return doc
+
+
+@router.post("/operaciones/{op_id}/embarcaciones", response_model=DescargaOut, status_code=201, dependencies=[_requiere_rol_pesca("ARMADOR", "PATRON")])
 def agregar_embarcacion(
     op_id: uuid.UUID,
     datos: EmbarcacionIn,
@@ -598,7 +1258,7 @@ def agregar_embarcacion(
     )
 
 
-@router.get("/operaciones/{op_id}/embarcaciones", response_model=list[DescargaOut])
+@router.get("/operaciones/{op_id}/embarcaciones", response_model=list[DescargaOut], dependencies=[_requiere_rol_pesca(*ROLES_PESCA)])
 def listar_embarcaciones(
     op_id: uuid.UUID, session: SessionDep, tenant_id: TenantDep
 ) -> list[DescargaOut]:
@@ -628,7 +1288,7 @@ def listar_embarcaciones(
     ]
 
 
-@router.patch("/descargas/{descarga_id}/fechas", response_model=DescargaOut)
+@router.patch("/descargas/{descarga_id}/fechas", response_model=DescargaOut, dependencies=[_requiere_rol_pesca("ENCARGADO_MUELLE", "APUNTADOR_MUELLE")])
 def actualizar_tiempos_descarga(
     descarga_id: uuid.UUID,
     datos: TiemposDescargaIn,
@@ -677,7 +1337,7 @@ def actualizar_tiempos_descarga(
     )
 
 
-@router.post("/operaciones/{op_id}/vehiculos", response_model=VehiculoOut, status_code=201)
+@router.post("/operaciones/{op_id}/vehiculos", response_model=VehiculoOut, status_code=201, dependencies=[_requiere_rol_pesca(*ROLES_CONTROL_OPERACION)])
 def agregar_vehiculo(
     op_id: uuid.UUID,
     datos: VehiculoIn,
@@ -705,7 +1365,7 @@ def agregar_vehiculo(
     return vehicle
 
 
-@router.post("/vehiculos/{vehiculo_id}/traslado/iniciar", response_model=VehiculoOut)
+@router.post("/vehiculos/{vehiculo_id}/traslado/iniciar", response_model=VehiculoOut, dependencies=[_requiere_rol_pesca(*ROLES_CONTROL_OPERACION)])
 def iniciar_traslado_planta(
     vehiculo_id: uuid.UUID,
     session: SessionDep,
@@ -739,7 +1399,7 @@ def iniciar_traslado_planta(
     return vehicle
 
 
-@router.post("/vehiculos/{vehiculo_id}/planta/iniciar", response_model=VehiculoOut)
+@router.post("/vehiculos/{vehiculo_id}/planta/iniciar", response_model=VehiculoOut, dependencies=[_requiere_rol_pesca(*ROLES_CONTROL_PLANTA)])
 def iniciar_descarga_planta(
     vehiculo_id: uuid.UUID,
     session: SessionDep,
@@ -761,7 +1421,7 @@ def iniciar_descarga_planta(
     return vehicle
 
 
-@router.post("/vehiculos/{vehiculo_id}/planta/descarga/iniciar", response_model=VehiculoOut)
+@router.post("/vehiculos/{vehiculo_id}/planta/descarga/iniciar", response_model=VehiculoOut, dependencies=[_requiere_rol_pesca(*ROLES_CONTROL_PLANTA)])
 def iniciar_descarga_en_planta(
     vehiculo_id: uuid.UUID,
     session: SessionDep,
@@ -780,7 +1440,7 @@ def iniciar_descarga_en_planta(
     return vehicle
 
 
-@router.patch("/vehiculos/{vehiculo_id}/planta/fechas", response_model=VehiculoOut)
+@router.patch("/vehiculos/{vehiculo_id}/planta/fechas", response_model=VehiculoOut, dependencies=[_requiere_rol_pesca(*ROLES_CONTROL_PLANTA)])
 def actualizar_tiempos_planta(
     vehiculo_id: uuid.UUID,
     datos: TiemposPlantaIn,
@@ -834,9 +1494,18 @@ def agregar_carga(
     session: SessionDep,
     tenant_id: TenantDep,
     actor: ActorDep,
+    auth: OperativeAuthDep,
 ) -> dict[str, str]:
     vehicle = _vehiculo(session, tenant_id, vehiculo_id)
     op = _operacion(session, tenant_id, vehicle.operacion_id)
+    asignado = session.scalar(select(AsignacionRolPesca.id).where(
+        AsignacionRolPesca.tenant_id == tenant_id,
+        AsignacionRolPesca.cuenta_id == auth.cuenta_id,
+        AsignacionRolPesca.rol == op.responsable_pesaje_muelle,
+        AsignacionRolPesca.activa.is_(True),
+    ))
+    if asignado is None or auth.cuenta_id != op.responsable_pesaje_muelle_cuenta_id:
+        raise HTTPException(403, "El Jefe de Bahía debe asignarte a ti como responsable del pesaje de muelle para esta operación")
     if op.estado != "en_descarga":
         raise HTTPException(409, "Primero completa la preparación y autoriza el inicio de descarga")
     if vehicle.estado != "pendiente_muelle":
@@ -865,7 +1534,7 @@ def agregar_carga(
     return {"estado": "registrado", "vehiculo_id": str(vehicle.id)}
 
 
-@router.post("/operaciones/{op_id}/documentos", response_model=DocumentoOut, status_code=201)
+@router.post("/operaciones/{op_id}/documentos", response_model=DocumentoOut, status_code=201, dependencies=[_requiere_rol_pesca(*ROLES_DOCUMENTACION)])
 async def subir_documento(
     op_id: uuid.UUID,
     session: SessionDep,
@@ -875,12 +1544,20 @@ async def subir_documento(
     actor: ActorDep,
     archivo: UploadFile = File(...),
     tipo: str = Form(...),
+    etapa: str | None = Form(default=None),
     vehiculo_ids: list[uuid.UUID] = Form(default=[]),
     embarcacion_ids: list[uuid.UUID] = Form(default=[]),
+    reemplaza_documento_id: uuid.UUID | None = Form(default=None),
 ) -> DocumentoPesca:
     op = _operacion(session, tenant_id, op_id)
     if tipo not in TIPOS_DOCUMENTO:
         raise HTTPException(422, "Tipo de documento no reconocido")
+    etapa_final = etapa or ETAPA_POR_TIPO.get(tipo, "GENERAL")
+    if etapa_final not in ETAPAS_DOCUMENTO:
+        raise HTTPException(422, "Etapa documental no reconocida")
+    etapa_fija = ETAPA_POR_TIPO.get(tipo)
+    if etapa_fija is not None and etapa_final != etapa_fija:
+        raise HTTPException(422, f"El tipo {tipo} corresponde a la etapa {etapa_fija}")
     if tipo == "factura" and (op.factura_serie is None or op.factura_correlativo is None):
         raise HTTPException(409, "Primero registra serie y correlativo de la factura después del cierre y del certificado de procedencia")
     mime = archivo.content_type or "application/octet-stream"
@@ -914,6 +1591,29 @@ async def subir_documento(
         vessels.append(vessel)
     if tipo == "certificado_procedencia" and (vehicles or vessels):
         raise HTTPException(422, "El certificado de procedencia debe adjuntarse a toda la operación")
+    documento_anterior = None
+    if reemplaza_documento_id is not None:
+        documento_anterior = session.scalar(select(DocumentoPesca).where(
+            DocumentoPesca.id == reemplaza_documento_id,
+            DocumentoPesca.tenant_id == tenant_id,
+            DocumentoPesca.operacion_id == op.id,
+            DocumentoPesca.tipo == tipo,
+            DocumentoPesca.vigente.is_(True),
+        ))
+        if documento_anterior is None:
+            raise HTTPException(404, "El documento que se quiere reemplazar no está vigente en esta operación")
+        if etapa_final != documento_anterior.etapa:
+            raise HTTPException(422, "La nueva versión debe conservar la etapa del documento anterior")
+        vehiculos_previos = set(session.scalars(select(VinculoDocumentoVehiculo.vehiculo_id).where(
+            VinculoDocumentoVehiculo.documento_id == documento_anterior.id,
+        )))
+        if documento_anterior.vehiculo_id is not None:
+            vehiculos_previos.add(documento_anterior.vehiculo_id)
+        embarcaciones_previas = set(session.scalars(select(VinculoDocumentoEmbarcacion.embarcacion_id).where(
+            VinculoDocumentoEmbarcacion.documento_id == documento_anterior.id,
+        )))
+        if not {item.id for item in vehicles}.issubset(vehiculos_previos) or not {item.id for item in vessels}.issubset(embarcaciones_previas):
+            raise HTTPException(422, "La nueva versión no puede ampliar el alcance del documento anterior")
     digest = hashlib.sha256(raw).hexdigest()
     existente = session.scalar(
         select(DocumentoPesca).where(
@@ -921,6 +1621,7 @@ async def subir_documento(
             DocumentoPesca.operacion_id == op.id,
             DocumentoPesca.tipo == tipo,
             DocumentoPesca.sha256 == digest,
+            DocumentoPesca.vigente.is_(True),
         )
     )
     if existente is not None:
@@ -932,8 +1633,6 @@ async def subir_documento(
             vinculo = session.get(VinculoDocumentoEmbarcacion, (existente.id, vessel.id))
             if vinculo is None:
                 session.add(VinculoDocumentoEmbarcacion(documento_id=existente.id, embarcacion_id=vessel.id))
-        if tipo == "factura" and op.factura_serie and op.factura_correlativo:
-            op.estado_facturacion = "lista_para_pago"
         _historial(session, tenant_id, op.id, actor, "documento_reutilizado", f"{tipo}: {existente.nombre}")
         session.commit()
         session.refresh(existente)
@@ -944,11 +1643,19 @@ async def subir_documento(
         operacion_id=op.id,
         vehiculo_id=vehicles[0].id if len(vehicles) == 1 else None,
         tipo=tipo,
+        etapa=etapa_final,
         nombre=archivo.filename or "archivo",
         mime_type=mime,
         sha256=digest,
         ruta_storage=path,
         subido_por=actor[:200],
+        estado_revision="PENDIENTE",
+        observacion_revision=None,
+        revisado_por=None,
+        revisado_at=None,
+        version=(documento_anterior.version + 1) if documento_anterior else 1,
+        vigente=True,
+        documento_anterior_id=documento_anterior.id if documento_anterior else None,
     )
     session.add(doc)
     session.flush()
@@ -956,15 +1663,23 @@ async def subir_documento(
         session.add(VinculoDocumentoVehiculo(documento_id=doc.id, vehiculo_id=vehicle.id))
     for vessel in vessels:
         session.add(VinculoDocumentoEmbarcacion(documento_id=doc.id, embarcacion_id=vessel.id))
-    if tipo == "factura" and op.factura_serie and op.factura_correlativo:
-        op.estado_facturacion = "lista_para_pago"
+    if documento_anterior is not None:
+        doc.vehiculo_id = doc.vehiculo_id or documento_anterior.vehiculo_id
+        documento_anterior.vigente = False
+        for link in session.scalars(select(VinculoDocumentoVehiculo).where(VinculoDocumentoVehiculo.documento_id == documento_anterior.id)):
+            if session.get(VinculoDocumentoVehiculo, (doc.id, link.vehiculo_id)) is None:
+                session.add(VinculoDocumentoVehiculo(documento_id=doc.id, vehiculo_id=link.vehiculo_id))
+        for link in session.scalars(select(VinculoDocumentoEmbarcacion).where(VinculoDocumentoEmbarcacion.documento_id == documento_anterior.id)):
+            if session.get(VinculoDocumentoEmbarcacion, (doc.id, link.embarcacion_id)) is None:
+                session.add(VinculoDocumentoEmbarcacion(documento_id=doc.id, embarcacion_id=link.embarcacion_id))
+        _historial(session, tenant_id, op.id, actor, "documento_versionado", f"{tipo}: versión {doc.version} reemplaza documento {documento_anterior.id}")
     _historial(session, tenant_id, op.id, actor, "documento_cargado", f"{tipo}: {doc.nombre}")
     session.commit()
     session.refresh(doc)
     return doc
 
 
-@router.get("/operaciones/{op_id}/documentos", response_model=list[DocumentoOut])
+@router.get("/operaciones/{op_id}/documentos", response_model=list[DocumentoOut], dependencies=[_requiere_rol_pesca(*ROLES_PESCA)])
 def listar_documentos_pesca(
     op_id: uuid.UUID, session: SessionDep, tenant_id: TenantDep
 ) -> list[DocumentoPesca]:
@@ -978,7 +1693,41 @@ def listar_documentos_pesca(
     )
 
 
-@router.get("/operaciones/{op_id}/documentacion")
+@router.put("/documentos/{doc_id}/revision", response_model=DocumentoOut, dependencies=[_requiere_rol_pesca("JEFE_BAHIA")])
+def revisar_documento_pesca(
+    doc_id: uuid.UUID,
+    datos: RevisionDocumentoIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    actor: ActorDep,
+) -> DocumentoPesca:
+    doc = session.scalar(select(DocumentoPesca).where(
+        DocumentoPesca.id == doc_id,
+        DocumentoPesca.tenant_id == tenant_id,
+        DocumentoPesca.vigente.is_(True),
+        DocumentoPesca.operacion_id.is_not(None),
+    ))
+    if doc is None:
+        raise HTTPException(404, "Documento vigente de operación no encontrado")
+    doc.estado_revision = datos.estado
+    doc.observacion_revision = datos.observacion.strip() if datos.observacion else None
+    doc.revisado_por = actor[:200]
+    doc.revisado_at = datetime.now(UTC)
+    if doc.tipo == "factura":
+        op = _operacion(session, tenant_id, doc.operacion_id)
+        op.estado_facturacion = "lista_para_pago" if datos.estado == "VERIFICADO" else "pendiente_documento"
+    _historial(
+        session, tenant_id, doc.operacion_id, actor,
+        "documento_revision_actualizada",
+        f"{doc.tipo} versión {doc.version}: {datos.estado}; observación={doc.observacion_revision or 'ninguna'}",
+        doc.vehiculo_id,
+    )
+    session.commit()
+    session.refresh(doc)
+    return doc
+
+
+@router.get("/operaciones/{op_id}/documentacion", dependencies=[_requiere_rol_pesca(*ROLES_PESCA)])
 def revisar_documentacion(
     op_id: uuid.UUID, session: SessionDep, tenant_id: TenantDep
 ) -> dict[str, object]:
@@ -993,7 +1742,10 @@ def revisar_documentacion(
     docs = list(
         session.scalars(
             select(DocumentoPesca).where(
-                DocumentoPesca.operacion_id == op.id, DocumentoPesca.tenant_id == tenant_id
+                DocumentoPesca.operacion_id == op.id,
+                DocumentoPesca.tenant_id == tenant_id,
+                DocumentoPesca.vigente.is_(True),
+                DocumentoPesca.estado_revision == "VERIFICADO",
             )
         )
     )
@@ -1063,7 +1815,7 @@ def revisar_documentacion(
     return {"operacion_id": op.id, "planta": op.planta, "vehiculos": salida}
 
 
-@router.get("/documentos/{doc_id}/archivo")
+@router.get("/documentos/{doc_id}/archivo", dependencies=[_requiere_rol_pesca(*ROLES_PESCA)])
 def descargar_documento_pesca(
     doc_id: uuid.UUID, session: SessionDep, tenant_id: TenantDep, almacen: AlmacenDep, actor: ActorDep
 ) -> FileResponse:
@@ -1094,7 +1846,7 @@ def descargar_documento_pesca(
     )
 
 
-@router.post("/vehiculos/{vehiculo_id}/planta", response_model=RegistroPlantaOut)
+@router.post("/vehiculos/{vehiculo_id}/planta", response_model=RegistroPlantaOut, dependencies=[_requiere_rol_pesca(*ROLES_CAPTURA_PLANTA)])
 def registrar_peso_planta(
     vehiculo_id: uuid.UUID,
     datos: RegistroPlantaIn,
@@ -1153,7 +1905,7 @@ def registrar_peso_planta(
     return record
 
 
-@router.get("/vehiculos/{vehiculo_id}/comparacion-planta")
+@router.get("/vehiculos/{vehiculo_id}/comparacion-planta", dependencies=[_requiere_rol_pesca(*ROLES_PESCA)])
 def comparar_pesos(
     vehiculo_id: uuid.UUID, session: SessionDep, tenant_id: TenantDep
 ) -> dict[str, object]:
@@ -1180,7 +1932,7 @@ def comparar_pesos(
     }
 
 
-@router.post("/vehiculos/{vehiculo_id}/planta/cerrar", response_model=CierreOut)
+@router.post("/vehiculos/{vehiculo_id}/planta/cerrar", response_model=CierreOut, dependencies=[_requiere_rol_pesca(*ROLES_CAPTURA_PLANTA)])
 def cerrar_registro_planta(
     vehiculo_id: uuid.UUID,
     session: SessionDep,
@@ -1204,6 +1956,8 @@ def cerrar_registro_planta(
             DocumentoPesca.tenant_id == tenant_id,
             DocumentoPesca.operacion_id == vehicle.operacion_id,
             DocumentoPesca.tipo == "peso_planta",
+            DocumentoPesca.vigente.is_(True),
+            DocumentoPesca.estado_revision == "VERIFICADO",
             ((DocumentoPesca.vehiculo_id == vehicle.id) | (VinculoDocumentoVehiculo.vehiculo_id == vehicle.id)),
         )
         .limit(1)
@@ -1218,7 +1972,7 @@ def cerrar_registro_planta(
     return CierreOut(estado="cerrado", mensaje="Registro del vehículo cerrado")
 
 
-@router.post("/operaciones/{op_id}/cerrar", response_model=CierreOut)
+@router.post("/operaciones/{op_id}/cerrar", response_model=CierreOut, dependencies=[_requiere_rol_pesca("JEFE_BAHIA")])
 def cerrar_operacion(
     op_id: uuid.UUID,
     session: SessionDep,
@@ -1234,6 +1988,52 @@ def cerrar_operacion(
     pendientes = [vehicle.placa for vehicle in vehicles if vehicle.estado != "cerrado"]
     if pendientes:
         raise HTTPException(409, {"mensaje": "Hay registros de planta pendientes", "vehiculos": pendientes})
+    asignaciones_cuadrilla = list(
+        session.scalars(
+            select(AsignacionCuadrillaPesca).where(
+                AsignacionCuadrillaPesca.tenant_id == tenant_id,
+                AsignacionCuadrillaPesca.operacion_id == op.id,
+                AsignacionCuadrillaPesca.activa.is_(True),
+                AsignacionCuadrillaPesca.actividad.in_(("LAVADO", "CAJEO", "ESTIBA")),
+            )
+        )
+    )
+    tareas_pendientes = []
+    for vehicle in vehicles:
+        for asignacion in asignaciones_cuadrilla:
+            tarea = session.scalar(
+                select(ActividadCuadrillaPesca).where(
+                    ActividadCuadrillaPesca.tenant_id == tenant_id,
+                    ActividadCuadrillaPesca.vehiculo_id == vehicle.id,
+                    ActividadCuadrillaPesca.actividad == asignacion.actividad,
+                )
+            )
+            if tarea is None or tarea.estado != "COMPLETA":
+                tareas_pendientes.append(f"{vehicle.placa}: {asignacion.actividad}")
+    if tareas_pendientes:
+        raise HTTPException(409, {"mensaje": "Completa las tareas de cuadrilla asignadas antes de cerrar", "tareas": tareas_pendientes})
+    gastos_sin_cpe = list(session.scalars(select(MovimientoPesca).where(
+        MovimientoPesca.tenant_id == tenant_id,
+        MovimientoPesca.operacion_id == op.id,
+        MovimientoPesca.clase.in_(("gasto_empresa", "gasto_bahia_reembolsable")),
+        MovimientoPesca.comprobante_documento_id.is_(None),
+    )))
+    if gastos_sin_cpe:
+        raise HTTPException(409, {
+            "mensaje": "Adjunta el CPE correspondiente a cada salida de gasto antes de cerrar la operación",
+            "gastos": [f"{item.tipo_gasto or 'SIN CLASIFICAR'}: {item.concepto} · S/ {item.importe}" for item in gastos_sin_cpe],
+        })
+    gastos_sin_voucher = list(session.scalars(select(MovimientoPesca).where(
+        MovimientoPesca.tenant_id == tenant_id,
+        MovimientoPesca.operacion_id == op.id,
+        MovimientoPesca.clase.in_(("gasto_empresa", "gasto_bahia_reembolsable")),
+        MovimientoPesca.voucher_documento_id.is_(None),
+    )))
+    if gastos_sin_voucher:
+        raise HTTPException(409, {
+            "mensaje": "Adjunta la evidencia del pago de cada gasto antes de cerrar la operación",
+            "gastos": [f"{item.tipo_gasto or 'SIN CLASIFICAR'}: {item.concepto} · S/ {item.importe}" for item in gastos_sin_voucher],
+        })
     op.estado = "cerrada"
     op.updated_at = datetime.now(UTC)
     _historial(session, tenant_id, op.id, actor, "operacion_cerrada", "Todos los vehículos tienen peso de planta y evidencia")
@@ -1241,13 +2041,13 @@ def cerrar_operacion(
     return CierreOut(estado="cerrada", mensaje="Operación cerrada")
 
 
-@router.get("/operaciones/{op_id}/vehiculos", response_model=list[VehiculoOut])
+@router.get("/operaciones/{op_id}/vehiculos", response_model=list[VehiculoOut], dependencies=[_requiere_rol_pesca(*ROLES_PESCA)])
 def listar_vehiculos(op_id: uuid.UUID, session: SessionDep, tenant_id: TenantDep) -> list[VehiculoPesca]:
     _operacion(session, tenant_id, op_id)
     return list(session.scalars(select(VehiculoPesca).where(VehiculoPesca.operacion_id == op_id).order_by(VehiculoPesca.created_at)))
 
 
-@router.get("/operaciones/{op_id}/historial")
+@router.get("/operaciones/{op_id}/historial", dependencies=[_requiere_rol_pesca("JEFE_BAHIA", "GERENTE")])
 def historial_operacion(op_id: uuid.UUID, session: SessionDep, tenant_id: TenantDep) -> list[dict[str, object]]:
     _operacion(session, tenant_id, op_id)
     rows = session.scalars(
@@ -1259,7 +2059,7 @@ def historial_operacion(op_id: uuid.UUID, session: SessionDep, tenant_id: Tenant
     ]
 
 
-@router.get("/operaciones/{op_id}/resumen")
+@router.get("/operaciones/{op_id}/resumen", dependencies=[_requiere_rol_pesca(*ROLES_PESCA)])
 def resumen_operacion(
     op_id: uuid.UUID, session: SessionDep, tenant_id: TenantDep
 ) -> dict[str, object]:
@@ -1273,6 +2073,28 @@ def resumen_operacion(
     )
     total_aceptado_kg = Decimal(0)
     total_muelle_kg = Decimal(0)
+    resumen_embarcaciones = []
+    descargas = list(session.scalars(select(DescargaEmbarcacion).where(
+        DescargaEmbarcacion.tenant_id == tenant_id,
+        DescargaEmbarcacion.operacion_id == op.id,
+    ).order_by(DescargaEmbarcacion.nombre_snapshot)))
+    for descarga in descargas:
+        peso_total = session.scalar(select(func.coalesce(func.sum(CargaEmbarcacionVehiculo.peso_muelle_kg), 0)).where(
+            CargaEmbarcacionVehiculo.tenant_id == tenant_id,
+            CargaEmbarcacionVehiculo.descarga_id == descarga.id,
+        ))
+        cajas_total = session.scalar(select(func.coalesce(func.sum(CargaEmbarcacionVehiculo.cajas), 0)).where(
+            CargaEmbarcacionVehiculo.tenant_id == tenant_id,
+            CargaEmbarcacionVehiculo.descarga_id == descarga.id,
+        ))
+        resumen_embarcaciones.append({
+            "descarga_id": descarga.id,
+            "nombre": descarga.nombre_snapshot,
+            "matricula": descarga.matricula_snapshot,
+            "peso_declarado_kg": descarga.peso_declarado_kg,
+            "peso_muelle_total_kg": Decimal(peso_total),
+            "cajas_total": int(cajas_total),
+        })
     detalle = []
     for vehicle in vehicles:
         plant = session.scalar(
@@ -1311,6 +2133,7 @@ def resumen_operacion(
         "muelle": op.muelle,
         "planta": op.planta,
         "estado": op.estado,
+        "embarcaciones": resumen_embarcaciones,
         "vehiculos": detalle,
         "total_peso_muelle_kg": total_muelle_kg,
         "total_peso_aceptado_planta_kg": total_aceptado_kg,

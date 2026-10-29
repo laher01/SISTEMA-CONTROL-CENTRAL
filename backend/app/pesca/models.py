@@ -24,14 +24,21 @@ class OperacionPesca(Base):
     facturador: Mapped[str | None] = mapped_column(String(200))
     toneladas_declaradas: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
     precio_propuesto: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    precio_acuerdo_embarcacion_confirmado: Mapped[bool] = mapped_column(default=False)
+    precio_acuerdo_embarcacion_confirmado_por: Mapped[str | None] = mapped_column(String(200))
+    precio_acuerdo_embarcacion_confirmado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     precio_confirmado: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     precio_confirmado_por: Mapped[str | None] = mapped_column(String(200))
     precio_confirmado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    modalidad_pago_cuadrilla: Mapped[str | None] = mapped_column(String(20))
+    monto_pago_cuadrilla: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     descarga_prevista: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     llegada_planta_prevista: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     jefe_bahia: Mapped[str | None] = mapped_column(String(200))
     encargado_muelle: Mapped[str | None] = mapped_column(String(200))
     apuntador: Mapped[str | None] = mapped_column(String(200))
+    responsable_pesaje_muelle: Mapped[str | None] = mapped_column(String(40))
+    responsable_pesaje_muelle_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cuentas_acceso.id", ondelete="SET NULL"))
     factura_serie: Mapped[str | None] = mapped_column(String(20))
     factura_correlativo: Mapped[str | None] = mapped_column(String(30))
     factura_emitida_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -42,6 +49,18 @@ class OperacionPesca(Base):
     observacion: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=ahora)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=ahora, onupdate=ahora)
+
+    @property
+    def precio_acuerdo_aceptado(self) -> bool:
+        return self.precio_confirmado is not None
+
+    @property
+    def precio_ajuste_pendiente(self) -> bool:
+        return (
+            self.precio_confirmado is not None
+            and self.precio_propuesto is not None
+            and self.precio_confirmado != self.precio_propuesto
+        )
 
 
 class EmbarcacionPesca(Base):
@@ -109,6 +128,43 @@ class CargaEmbarcacionVehiculo(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=ahora)
 
 
+class AsignacionCuadrillaPesca(Base):
+    __tablename__ = "pesca_asignaciones_cuadrilla"
+    __table_args__ = (UniqueConstraint("tenant_id", "operacion_id", "actividad", "nombre_integrante"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
+    operacion_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pesca_operaciones.id", ondelete="CASCADE"), index=True)
+    actividad: Mapped[str] = mapped_column(String(20), index=True)
+    nombre_integrante: Mapped[str] = mapped_column(String(200))
+    activa: Mapped[bool] = mapped_column(default=True)
+    monto_pago: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    asignado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=ahora)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=ahora, onupdate=ahora)
+
+
+class ActividadCuadrillaPesca(Base):
+    __tablename__ = "pesca_actividades_cuadrilla"
+    __table_args__ = (UniqueConstraint("tenant_id", "vehiculo_id", "actividad"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
+    operacion_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pesca_operaciones.id", ondelete="CASCADE"), index=True)
+    vehiculo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pesca_vehiculos.id", ondelete="CASCADE"), index=True)
+    actividad: Mapped[str] = mapped_column(String(20), index=True)
+    estado: Mapped[str] = mapped_column(String(20), default="en_proceso")
+    cajas: Mapped[int | None]
+    hielo_kg: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
+    verificacion_visual: Mapped[bool | None]
+    contaminacion_detectada: Mapped[bool | None]
+    revision_final: Mapped[bool | None]
+    observacion: Mapped[str | None] = mapped_column(Text)
+    actor_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=ahora)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=ahora, onupdate=ahora)
+
+
 class RegistroPlanta(Base):
     __tablename__ = "pesca_registros_planta"
     __table_args__ = (UniqueConstraint("vehiculo_id"),)
@@ -129,17 +185,29 @@ class RegistroPlanta(Base):
 
 class DocumentoPesca(Base):
     __tablename__ = "pesca_documentos"
+    __table_args__ = (
+        CheckConstraint("estado_revision IN ('PENDIENTE', 'VERIFICADO', 'OBSERVADO')", name="ck_pesca_documentos_estado_revision_valido"),
+        CheckConstraint("version >= 1", name="ck_pesca_documentos_version_positiva"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
     operacion_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pesca_operaciones.id", ondelete="CASCADE"), index=True)
     vehiculo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pesca_vehiculos.id", ondelete="CASCADE"), index=True)
     tipo: Mapped[str] = mapped_column(String(50), index=True)
+    etapa: Mapped[str] = mapped_column(String(30), default="GENERAL", index=True)
     nombre: Mapped[str] = mapped_column(String(500))
     mime_type: Mapped[str] = mapped_column(String(100))
     sha256: Mapped[str] = mapped_column(String(64), index=True)
     ruta_storage: Mapped[str] = mapped_column(String(500))
     subido_por: Mapped[str] = mapped_column(String(200))
+    estado_revision: Mapped[str] = mapped_column(String(20), default="PENDIENTE", index=True)
+    observacion_revision: Mapped[str | None] = mapped_column(Text)
+    revisado_por: Mapped[str | None] = mapped_column(String(200))
+    revisado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    version: Mapped[int] = mapped_column(default=1)
+    vigente: Mapped[bool] = mapped_column(default=True, index=True)
+    documento_anterior_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pesca_documentos.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=ahora)
 
 
@@ -189,11 +257,15 @@ class MovimientoPesca(Base):
     pagador: Mapped[str] = mapped_column(String(200))
     beneficiario: Mapped[str] = mapped_column(String(200))
     concepto: Mapped[str] = mapped_column(String(300))
+    tipo_gasto: Mapped[str | None] = mapped_column(String(30))
+    tipo_comprobante: Mapped[str | None] = mapped_column(String(30))
+    motivo_boleta_muelle: Mapped[str | None] = mapped_column(Text)
     importe: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     moneda: Mapped[str] = mapped_column(String(3), default="PEN")
     cantidad: Mapped[Decimal | None] = mapped_column(Numeric(14, 3))
     tarifa_unitaria: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     comprobante_documento_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pesca_documentos.id"))
+    voucher_documento_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pesca_documentos.id"))
     registrado_por: Mapped[str] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=ahora)
 
@@ -208,4 +280,31 @@ class AbonoMovimientoPesca(Base):
     tipo: Mapped[str] = mapped_column(String(30))
     registrado_por: Mapped[str] = mapped_column(String(200))
     observacion: Mapped[str | None] = mapped_column(Text)
+    voucher_documento_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pesca_documentos.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=ahora)
+
+
+class AsignacionRolPesca(Base):
+    __tablename__ = "pesca_asignaciones_rol"
+    __table_args__ = (UniqueConstraint("tenant_id", "cuenta_id", "rol"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
+    cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id", ondelete="CASCADE"), index=True)
+    rol: Mapped[str] = mapped_column(String(40), index=True)
+    activa: Mapped[bool] = mapped_column(default=True)
+    asignado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=ahora)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=ahora, onupdate=ahora)
+
+
+class AuditoriaRolPesca(Base):
+    __tablename__ = "pesca_auditoria_roles"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
+    actor_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
+    cuenta_objetivo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
+    rol: Mapped[str] = mapped_column(String(40))
+    accion: Mapped[str] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=ahora)

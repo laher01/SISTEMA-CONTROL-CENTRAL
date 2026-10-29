@@ -43,14 +43,21 @@ class OperacionOut(Orm):
     facturador: str | None
     toneladas_declaradas: Decimal | None
     precio_propuesto: Decimal | None
+    precio_acuerdo_embarcacion_confirmado: bool
+    precio_acuerdo_aceptado: bool
+    precio_ajuste_pendiente: bool
     precio_confirmado: Decimal | None
     precio_confirmado_por: str | None
     precio_confirmado_at: datetime | None
+    modalidad_pago_cuadrilla: str | None
+    monto_pago_cuadrilla: Decimal | None
     descarga_prevista: datetime | None
     llegada_planta_prevista: datetime | None
     jefe_bahia: str | None
     encargado_muelle: str | None
     apuntador: str | None
+    responsable_pesaje_muelle: str | None
+    responsable_pesaje_muelle_cuenta_id: uuid.UUID | None
     factura_serie: str | None
     factura_correlativo: str | None
     factura_emitida_at: datetime | None
@@ -86,13 +93,162 @@ class TiemposDescargaIn(BaseModel):
 
 
 class ConfirmarPrecioIn(BaseModel):
-    precio_confirmado: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
-    comprador: str = Field(min_length=1, max_length=200)
+    acepta_acuerdo: bool
+
+    @model_validator(mode="after")
+    def exigir_aceptacion(self) -> "ConfirmarPrecioIn":
+        if not self.acepta_acuerdo:
+            raise ValueError("El Jefe de Bahía o Gerente debe aceptar el precio confirmado por la embarcación")
+        return self
+
+
+class ConfirmarAcuerdoEmbarcacionIn(BaseModel):
+    confirma_precio_acordado: bool
+
+    @model_validator(mode="after")
+    def exigir_confirmacion(self) -> "ConfirmarAcuerdoEmbarcacionIn":
+        if not self.confirma_precio_acordado:
+            raise ValueError("Confirma que el precio ingresado corresponde al acuerdo con Jefe de Bahía o Gerente")
+        return self
+
+
+class SolicitarAjustePrecioIn(BaseModel):
+    precio_acordado: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    motivo: str = Field(min_length=5, max_length=1000)
 
 
 class RegistrarFacturaIn(BaseModel):
     serie: str = Field(min_length=1, max_length=20)
     correlativo: str = Field(min_length=1, max_length=30)
+
+
+RolPesca = Literal[
+    "JEFE_BAHIA",
+    "GERENTE",
+    "ENCARGADO_MUELLE",
+    "ARMADOR",
+    "PATRON",
+    "APUNTADOR_MUELLE",
+    "APUNTADOR_PLANTA",
+    "JEFE_CUADRILLA",
+    "SECRETARIA",
+    "TRAMITADORA",
+    "TRANSPORTISTA",
+]
+
+ActividadCuadrilla = Literal["LAVADO", "CAJEO", "ESTIBA"]
+EstadoActividadCuadrilla = Literal["EN_PROCESO", "COMPLETA", "INCIDENCIA"]
+
+
+class AsignacionCuadrillaIn(BaseModel):
+    nombre_integrante: str = Field(min_length=1, max_length=200)
+    actividad: ActividadCuadrilla
+    activa: bool = True
+    monto_pago: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=2)
+
+
+class AsignacionCuadrillaOut(Orm):
+    id: uuid.UUID
+    nombre_integrante: str
+    actividad: ActividadCuadrilla
+    activa: bool
+    monto_pago: Decimal | None
+
+
+class PagoCuadrillaIn(BaseModel):
+    modalidad: Literal["UNICO", "DESGLOSE"]
+    monto_unico: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=2)
+
+    @model_validator(mode="after")
+    def validar_monto_unico(self) -> "PagoCuadrillaIn":
+        if self.modalidad == "UNICO" and self.monto_unico is None:
+            raise ValueError("Indica el monto único que se entrega al Jefe de Cuadrilla")
+        if self.modalidad == "DESGLOSE" and self.monto_unico is not None:
+            raise ValueError("En modalidad por desglose, los montos se registran por integrante")
+        return self
+
+
+class ResponsablePesajeMuelleIn(BaseModel):
+    rol: Literal["APUNTADOR_MUELLE", "ENCARGADO_MUELLE"]
+    cuenta_id: uuid.UUID
+
+
+class CuentaResponsablePesaje(BaseModel):
+    cuenta_id: uuid.UUID
+    rol: Literal["APUNTADOR_MUELLE", "ENCARGADO_MUELLE"]
+    codigo: str
+    nombre: str
+
+
+class ActividadCuadrillaIn(BaseModel):
+    actividad: Literal["LAVADO", "CAJEO", "ESTIBA"]
+    estado: EstadoActividadCuadrilla
+    cajas: int | None = Field(default=None, ge=0)
+    hielo_kg: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=3)
+    verificacion_visual: bool | None = None
+    contaminacion_detectada: bool | None = None
+    revision_final: bool | None = None
+    observacion: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def validar_datos_por_actividad(self) -> "ActividadCuadrillaIn":
+        if self.estado == "INCIDENCIA" and not self.observacion:
+            raise ValueError("Describe la incidencia para dejar constancia en la operación")
+        if self.actividad == "LAVADO" and self.verificacion_visual is None:
+            raise ValueError("El Lavador debe registrar la revisión visual")
+        if self.actividad == "LAVADO" and self.estado == "COMPLETA" and not self.verificacion_visual:
+            raise ValueError("El lavado no puede marcarse completo si la revisión visual no fue satisfactoria")
+        if self.actividad == "CAJEO" and (self.cajas is None or self.contaminacion_detectada is None):
+            raise ValueError("El Cajeador debe registrar cajas y declarar si detectó contaminación")
+        if self.actividad == "CAJEO" and self.contaminacion_detectada and not self.observacion:
+            raise ValueError("Describe lo observado cuando se reporta contaminación")
+        if self.actividad == "ESTIBA" and (self.cajas is None or self.hielo_kg is None or self.revision_final is None):
+            raise ValueError("El Estibador debe registrar cajas, hielo y revisión final")
+        if self.actividad == "ESTIBA" and self.estado == "COMPLETA" and not self.revision_final:
+            raise ValueError("La tarea no puede marcarse completa sin una revisión final satisfactoria")
+        return self
+
+
+class ActividadCuadrillaOut(Orm):
+    id: uuid.UUID
+    vehiculo_id: uuid.UUID
+    actividad: str
+    estado: str
+    cajas: int | None
+    hielo_kg: Decimal | None
+    verificacion_visual: bool | None
+    contaminacion_detectada: bool | None
+    revision_final: bool | None
+    observacion: str | None
+    actor_cuenta_id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class RolPescaAsignacionIn(BaseModel):
+    cuenta_id: uuid.UUID
+    rol: RolPesca
+    activa: bool = True
+
+
+class RolPescaAsignacionOut(Orm):
+    id: uuid.UUID
+    cuenta_id: uuid.UUID
+    rol: RolPesca
+    activa: bool
+    codigo: str
+    nombre: str
+
+
+class CuentaPescaCandidata(BaseModel):
+    cuenta_id: uuid.UUID
+    codigo: str
+    nombre: str
+
+
+class RolesPescaActuales(BaseModel):
+    cuenta_id: uuid.UUID
+    roles: list[RolPesca]
 
 
 class MovimientoIn(BaseModel):
@@ -106,6 +262,9 @@ class MovimientoIn(BaseModel):
     pagador: str = Field(min_length=1, max_length=200)
     beneficiario: str = Field(min_length=1, max_length=200)
     concepto: str = Field(min_length=1, max_length=300)
+    tipo_gasto: Literal["MUELLE", "HIELO", "FLETE", "CUADRILLA", "APUNTADOR", "OTRO"] | None = None
+    tipo_comprobante: Literal["factura", "boleta", "recibo_honorarios"] | None = None
+    motivo_boleta_muelle: str | None = Field(default=None, max_length=500)
     importe: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
     moneda: Literal["PEN", "USD"] = "PEN"
     cantidad: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=3)
@@ -118,6 +277,20 @@ class MovimientoIn(BaseModel):
             raise ValueError("El préstamo personal no puede vincularse a una operación de pesca")
         if not es_prestamo and self.operacion_id is None:
             raise ValueError("Este movimiento debe pertenecer a una operación")
+        es_gasto = self.clase in {"gasto_empresa", "gasto_bahia_reembolsable"}
+        if es_gasto and (self.tipo_gasto is None or self.tipo_comprobante is None):
+            raise ValueError("Todo gasto operativo debe clasificarse y tener un CPE definido")
+        comprobante_por_gasto = {
+            "MUELLE": "factura", "HIELO": "factura", "FLETE": "factura",
+            "CUADRILLA": "recibo_honorarios", "APUNTADOR": "recibo_honorarios",
+        }
+        if es_gasto and self.tipo_gasto in comprobante_por_gasto:
+            esperado = comprobante_por_gasto[self.tipo_gasto]
+            boleta_excepcional = self.tipo_gasto == "MUELLE" and self.tipo_comprobante == "boleta" and bool(self.motivo_boleta_muelle and self.motivo_boleta_muelle.strip())
+            if self.tipo_comprobante != esperado and not boleta_excepcional:
+                raise ValueError(f"{self.tipo_gasto}: el comprobante requerido es {esperado}; solo admite boleta para muelle si no puede emitir factura y se explica el motivo")
+        if self.tipo_comprobante == "boleta" and (self.tipo_gasto != "MUELLE" or not self.motivo_boleta_muelle or not self.motivo_boleta_muelle.strip()):
+            raise ValueError("La boleta solo se admite para el muelle cuando no puede emitir factura; explica la excepción")
         return self
 
 
@@ -133,11 +306,15 @@ class MovimientoOut(Orm):
     pagador: str
     beneficiario: str
     concepto: str
+    tipo_gasto: str | None
+    tipo_comprobante: str | None
+    motivo_boleta_muelle: str | None
     importe: Decimal
     moneda: str
     cantidad: Decimal | None
     tarifa_unitaria: Decimal | None
     comprobante_documento_id: uuid.UUID | None
+    voucher_documento_id: uuid.UUID | None
     registrado_por: str
     created_at: datetime
     abonado: Decimal = Decimal("0")
@@ -152,6 +329,7 @@ class AbonoMovimientoOut(Orm):
     tipo: str
     registrado_por: str
     observacion: str | None
+    voucher_documento_id: uuid.UUID | None
     created_at: datetime
 
 
@@ -258,11 +436,30 @@ class DocumentoOut(Orm):
     operacion_id: uuid.UUID | None
     vehiculo_id: uuid.UUID | None
     tipo: str
+    etapa: str
     nombre: str
     mime_type: str
     sha256: str
     subido_por: str
+    estado_revision: Literal["PENDIENTE", "VERIFICADO", "OBSERVADO"]
+    observacion_revision: str | None
+    revisado_por: str | None
+    revisado_at: datetime | None
+    version: int
+    vigente: bool
+    documento_anterior_id: uuid.UUID | None
     created_at: datetime
+
+
+class RevisionDocumentoIn(BaseModel):
+    estado: Literal["VERIFICADO", "OBSERVADO"]
+    observacion: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def validar_observacion(self):
+        if self.estado == "OBSERVADO" and not (self.observacion or "").strip():
+            raise ValueError("Indica el motivo de la observación")
+        return self
 
 
 class CierreOut(BaseModel):
