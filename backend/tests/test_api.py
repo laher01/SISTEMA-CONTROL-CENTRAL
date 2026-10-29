@@ -197,8 +197,8 @@ def test_alertas_y_dashboard(client: TestClient) -> None:
     assert resumen["alertas_abiertas"]["RECEPTOR_NO_AUTORIZADO"] == 2
     assert resumen["documentos_pendientes"]["PENDIENTE_CLASIFICACION"] == 1
     montos = {m["moneda"]: m for m in resumen["montos"]}
-    assert montos["PEN"]["bancarizable"] == "0.00"
-    assert montos["USD"]["bancarizable"] == "0.00"
+    assert Decimal(montos["PEN"]["bancarizable"]) == Decimal("0")
+    assert Decimal(montos["USD"]["bancarizable"]) == Decimal("0")
     assert resumen["documentos_receptor_no_autorizado"] == 2
 
 
