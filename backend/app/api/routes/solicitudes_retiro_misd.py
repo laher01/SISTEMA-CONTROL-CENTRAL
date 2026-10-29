@@ -261,7 +261,7 @@ def listar(
     session: SessionDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
-) -> list[dict[str, str]]:
+) -> list[dict[str, str | bool]]:
     consultas = session.scalars(
         select(SolicitudRetiroMISD)
         .where(
@@ -285,6 +285,7 @@ def listar(
                 "expediente_id": str(solicitud.expediente_id),
                 "estado": solicitud.estado,
                 "rol_solicitante": solicitud.solicitante_rol,
+                "es_solicitante": solicitud.solicitante_cuenta_id == auth.cuenta_id,
                 "motivo": solicitud.motivo,
             }
         )
