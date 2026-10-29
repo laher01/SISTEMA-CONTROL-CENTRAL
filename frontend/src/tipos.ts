@@ -176,6 +176,7 @@ export interface DashboardResumen {
   montos: { moneda: Moneda; bancarizable: string; no_bancarizable: string }[];
   alertas_abiertas: Record<TipoAlerta, number>;
   documentos_pendientes: Partial<Record<EstadoDocumento, number>>;
+  documentos_receptor_no_autorizado: number;
 }
 
 
