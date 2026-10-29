@@ -72,18 +72,20 @@ function FilaSolicitud({
   );
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState("");
+  const [mensaje, setMensaje] = useState("");
 
   const ejecutarRetiro = async () => {
     if (!window.confirm("El retiro definitivo eliminará el expediente y todos sus documentos vinculados. ¿Confirmas?")) return;
     setProcesando(true);
     setError("");
+    setMensaje("");
     try {
       const resultado = await enviarJson<{ documentos_eliminados?: number; archivos_eliminados?: number; archivos_pendientes?: number }>(
         `/api/v1/misd/solicitudes/${solicitud.id}/ejecutar`,
         "POST",
       );
       alResolver();
-      setError(
+      setMensaje(
         `Retiro ejecutado: ${resultado.documentos_eliminados ?? 0} documento(s), ${resultado.archivos_eliminados ?? 0} archivo(s) borrados físicamente.` +
         ((resultado.archivos_pendientes ?? 0) > 0 ? ` ${resultado.archivos_pendientes} archivo(s) quedaron pendientes de limpieza.` : ""),
       );
@@ -156,8 +158,12 @@ function FilaSolicitud({
           <button className="peligro" disabled={procesando} onClick={() => void ejecutarRetiro()}>
             Ejecutar retiro definitivo
           </button>
-        ) : solicitud.es_solicitante ? "Esperando aprobación" : "Resuelta"}
+        ) : solicitud.estado === "EJECUTADA" ? "Ejecutada"
+          : solicitud.estado === "RECHAZADA" ? "Rechazada"
+            : solicitud.estado === "PENDIENTE" && solicitud.es_solicitante ? "Esperando aprobación"
+              : "Resuelta"}
         {error && <small role="alert" className="error bloque">{error}</small>}
+        {mensaje && <small role="status" className="bloque">{mensaje}</small>}
       </td>
     </tr>
   );
