@@ -24,7 +24,7 @@ def test_dashboard_filtra_clasificacion_proveedor(
     emisores = {e["ruc"]: e["id"] for e in empresas.json()}
 
     auth_prueba.como_admin()
-    for ruc in ("20600000001",):
+    for ruc in ("20100000001",):
         receptor = next(e for e in empresas.json() if e["ruc"] == ruc)
         respuesta = client.patch(
             f"/api/v1/empresas/{receptor['id']}",
