@@ -350,6 +350,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
                   seleccionado={seleccionados.includes(documento.id)}
                   alSeleccionar={(marcado) => alternarDocumento(documento.id, marcado)}
                   seleccionBloqueada={eliminandoLote}
+                  sesion={sesion}
                   alCambiar={recargar} mostrarResponsable={!responsableId} mostrarUsuario={!usuarioId} mostrarGestor={!gestorId} />
               ))}
             </tbody>
@@ -375,8 +376,10 @@ function FilaDocumento({
   mostrarResponsable,
   mostrarUsuario,
   mostrarGestor,
+  sesion,
 }: {
   documento: Documento;
+  sesion: SesionActual;
   alCambiar: () => void;
   seleccionado: boolean;
   alSeleccionar: (marcado: boolean) => void;
@@ -387,6 +390,7 @@ function FilaDocumento({
 }) {
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState("");
+  const [mensajeMisd, setMensajeMisd] = useState("");
   const lectura = resumenLectura(documento);
   const importes = resumenImportesConfirmados(documento);
   const partes = resumenPartes(documento);
@@ -396,6 +400,35 @@ function FilaDocumento({
     setError("");
     try {
       await enviarJson<Documento>(`/api/v1/documentos/${documento.id}/procesar`, "POST");
+      alCambiar();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  const solicitarRetiroMisd = async () => {
+    if (!documento.expediente_id || ocupado) return;
+    const motivo = window.prompt("Motivo para solicitar el retiro MISD (mínimo 8 caracteres):");
+    if (motivo === null) return;
+    if (motivo.trim().length < 8) {
+      setError("Escribe un motivo de al menos 8 caracteres.");
+      return;
+    }
+    const confirmado = window.confirm(
+      "La solicitud retirará el expediente completo y todos sus documentos vinculados. ¿Deseas continuar?",
+    );
+    if (!confirmado) return;
+    setOcupado(true);
+    setError("");
+    setMensajeMisd("");
+    try {
+      await enviarJson("/api/v1/misd/solicitudes", "POST", {
+        expediente_id: documento.expediente_id,
+        motivo: motivo.trim(),
+      });
+      setMensajeMisd("Solicitud MISD enviada. Consulta su estado en Aprobaciones MISD.");
       alCambiar();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -449,6 +482,7 @@ function FilaDocumento({
           <small className="bloque tenue">{documento.serie_documento}-{documento.correlativo_documento}</small>
         )}
         {error && <small className="error bloque">{error}</small>}
+        {mensajeMisd && <small role="status" className="bloque">{mensajeMisd}</small>}
       </td>
       <td>
         {documento.tipo_documento
@@ -482,6 +516,11 @@ function FilaDocumento({
         <div className="acciones-documento">
           <button disabled={ocupado} onClick={reprocesar}>Reprocesar</button>
           <button className="peligro" disabled={ocupado} onClick={eliminarDocumento}>Eliminar</button>
+          {(sesion.rol === "GESTOR" || sesion.rol === "USUARIO") && (
+            <button className="secundario" disabled={ocupado || !documento.expediente_id} onClick={solicitarRetiroMisd}>
+              Solicitar retiro MISD
+            </button>
+          )}
         </div>
       </td>
     </tr>

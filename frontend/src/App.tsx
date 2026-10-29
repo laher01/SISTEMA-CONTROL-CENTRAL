@@ -6,6 +6,7 @@ import { enviarJson, useDatos } from "./api";
 import NexusFlotante from "./componentes/NexusFlotante";
 import AparienciaPersonal from "./componentes/AparienciaPersonal";
 import Alertas from "./paginas/Alertas";
+import AprobacionesMISD from "./paginas/AprobacionesMISD";
 import Configuracion from "./paginas/Configuracion";
 import CarteraGerencia from "./paginas/CarteraGerencia";
 import Chat from "./paginas/Chat";
@@ -86,6 +87,12 @@ const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = 
     texto: "Expedientes",
     icono: "▱",
     roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"],
+  },
+  {
+    a: "/aprobaciones-misd",
+    texto: "Aprobaciones MISD",
+    icono: "✓",
+    roles: ["ADMINISTRADOR", "RESPONSABLE", "USUARIO", "GESTOR"],
   },
   {
     a: "/pendientes",
@@ -235,6 +242,7 @@ export default function App() {
           <Route path="/expedientes" element={<Expedientes sesion={sesion} />} />
           <Route path="/expedientes/:id" element={<ExpedienteDetalle />} />
           <Route path="/pendientes" element={<Pendientes />} />
+          <Route path="/aprobaciones-misd" element={["ADMINISTRADOR", "RESPONSABLE", "USUARIO", "GESTOR"].includes(sesion.rol) ? <AprobacionesMISD /> : <Navigate to="/expedientes" replace />} />
           <Route path="/alertas" element={<Alertas sesion={sesion} />} />
           <Route path="/empresas" element={<Empresas sesion={sesion} />} />
           <Route path="/mi-equipo" element={<MiEquipoResponsable />} />
