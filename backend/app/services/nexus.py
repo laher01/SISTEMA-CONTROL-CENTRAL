@@ -67,7 +67,7 @@ def responder(
         prefijo = f"¡Hola, {nombre}!" if nombre else "¡Hola!"
         return NexusChatOut(
             respuesta=(
-                f"{prefijo} Soy NEXUS, tu asistente de FACT CENTRAL. "
+                f"{prefijo} Soy NEXUS, tu asistente de S.P.T.. "
                 "Puedo ayudarte a consultar tus expedientes, revisar documentos "
                 "y resolver dudas sobre el sistema. ¿En qué necesitas ayuda?"
             ),
@@ -226,7 +226,7 @@ def _explicar_pantalla(contexto: ContextoNexus) -> NexusChatOut:
     lugar = nombres.get(seccion, f"la sección {seccion.lower()}")
     partes = [
         (
-            f"Estás en {lugar}. Puedo interpretar los datos autorizados de FACT CENTRAL, "
+            f"Estás en {lugar}. Puedo interpretar los datos autorizados de S.P.T., "
             "pero no veo directamente los elementos visuales de tu navegador."
         )
     ]
@@ -292,12 +292,12 @@ def _responder_contextual(
     if fallo_llm:
         partes.append(
             "El motor conversacional no está disponible temporalmente; "
-            "respondo con el contexto autorizado de FACT CENTRAL."
+            "respondo con el contexto autorizado de S.P.T.."
         )
     if requiere_llm:
         partes.append(
             "El motor conversacional externo todavía no está configurado; por ahora respondo con "
-            "el contexto estructurado y los especialistas determinísticos de FACT CENTRAL."
+            "el contexto estructurado y los especialistas determinísticos de S.P.T.."
         )
     return NexusChatOut(
         respuesta=" ".join(parte for parte in partes if parte),
@@ -364,10 +364,10 @@ def _responder_llm(
     historial_reciente = historial[-limite:]
 
     sistema = (
-        "Eres NEXUS, asistente operativo de FACT CENTRAL. Responde en español claro y profesional. "
+        "Eres NEXUS, asistente operativo de S.P.T.. Responde en español claro y profesional. "
         "Tu autoridad está limitada al CONTEXTO AUTORIZADO recibido. Nunca amplíes permisos, nunca "
         "cambies Tenant, nunca inventes datos y nunca afirmes haber modificado el sistema. "
-        "Los datos transaccionales de FACT CENTRAL tienen prioridad para cifras y estados. "
+        "Los datos transaccionales de S.P.T. tienen prioridad para cifras y estados. "
         "La BASE DE CONOCIMIENTO sirve para explicar reglas y arquitectura. Si falta evidencia, "
         "di exactamente qué falta. Diferencia hechos del sistema, reglas documentadas "
         "e inferencias. No cierres expedientes, no apruebes pagos, no cambies reglas ni "
@@ -522,7 +522,7 @@ def _responder_ruc(
                 coincidencia = local.strip().upper() == razon_externa.strip().upper()
             respuesta = f"RUC {ruc} consultado externamente."
             if local:
-                respuesta += f" En FACT CENTRAL: {local}."
+                respuesta += f" En S.P.T.: {local}."
             if razon_externa:
                 respuesta += f" Fuente externa: {razon_externa}."
             if coincidencia is True:
@@ -557,7 +557,7 @@ def _responder_ruc(
         respuesta=(
             f"RUC {ruc}: "
             + (
-                f"en FACT CENTRAL figura como {local}."
+                f"en S.P.T. figura como {local}."
                 if local
                 else "no está registrado localmente."
             )

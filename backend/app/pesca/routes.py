@@ -4,13 +4,13 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.deps import AlmacenDep, HoyDep, SessionDep, SettingsDep, TenantDep
+from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.pesca.models import (
     AbonoMovimientoPesca,
     CargaEmbarcacionVehiculo,
@@ -75,12 +75,9 @@ FACTOR_KG = {
 }
 
 
-def obtener_actor(
-    identidad_access: Annotated[str | None, Header(alias="Cf-Access-Authenticated-User-Email")] = None,
-    actor_local: Annotated[str | None, Header(alias="X-Actor")] = None,
-) -> str:
-    """Usa la identidad inyectada por Access; X-Actor queda para desarrollo local."""
-    return (identidad_access or actor_local or "usuario_sistema")[:200]
+def obtener_actor(auth: OperativeAuthDep) -> str:
+    """La auditoría usa la identidad validada por la sesión de la plataforma."""
+    return auth.codigo[:200]
 
 
 ActorDep = Annotated[str, Depends(obtener_actor)]

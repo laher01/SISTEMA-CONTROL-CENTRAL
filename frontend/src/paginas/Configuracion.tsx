@@ -39,7 +39,7 @@ export default function Configuracion({ sesion }: { sesion: SesionActual }) {
 
   return (
     <>
-      <h2>{sesion.rol === "SUPERADMIN" ? "Consola SaaS · Administración de tenants" : "Configuración de Administración"}</h2>
+      <h2>{sesion.rol === "SUPERADMIN" ? "Superadmin S.P.T. · Administración de tenants" : "Configuración de Administración"}</h2>
       <div className="acciones">
         {sesion.rol !== "SUPERADMIN" && (
           <button onClick={() => setSeccion("permisos")}>Permisos operativos</button>

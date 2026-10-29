@@ -1,8 +1,8 @@
-# FACT CENTRAL SaaS — Instrucciones para asistentes
+# S.P.T. — Instrucciones para asistentes
 
 **Leer antes de editar código:** [Centro de Coordinación](docs/COORDINACION/00_LEER_PRIMERO.md).
 
-- FACT CENTRAL es una plataforma SaaS multi-tenant, no un ERP independiente.
+- S.P.T. (Sistema Pesquero de Trazabilidad) es la plataforma SaaS multi-tenant del proyecto. SNIDERFISH es un tenant piloto y plantilla, no la plataforma.
 - Antes de programar, verificar el `main` vigente, documentos de coordinación, Issues, PR abiertos y responsables.
 - Un solo responsable principal por tarea. No duplicar tareas activas de otros chats.
 - Desarrollar exclusivamente en ramas independientes; abrir PR con pruebas.

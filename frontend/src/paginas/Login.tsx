@@ -56,7 +56,7 @@ export function Login({ alIngresar }: { alIngresar: () => void }) {
   return (
     <main className="login-contenedor">
       <section className="login-tarjeta">
-        <h1>FACT CENTRAL</h1>
+        <h1>S.P.T.</h1>
         <p className="tenue">{administracion?.por_subdominio ? `Administración: ${administracion.nombre}` : "Ingresa con la cuenta asignada por Administración."}</p>
         <form onSubmit={ingresar} className="login-formulario">
           {!administracion?.por_subdominio && <label>
@@ -169,7 +169,7 @@ export function CambiarClave({
           {sesion.codigo} · {sesion.nombre}
         </p>
         <p className="tenue">
-          Por seguridad debes reemplazar la clave temporal antes de usar FACT CENTRAL.
+          Por seguridad debes reemplazar la clave temporal antes de usar S.P.T..
         </p>
         <form onSubmit={cambiar} className="login-formulario">
           <input

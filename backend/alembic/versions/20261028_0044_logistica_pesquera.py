@@ -1,7 +1,7 @@
 """amplía la operación pesquera para la logística trazable
 
-Revision ID: 0003
-Revises: 0002
+Revision ID: 0044
+Revises: 0043
 Create Date: 2026-10-28
 """
 
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "0003"
-down_revision: str | None = "0002"
+revision: str = "0044"
+down_revision: str | None = "0043"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

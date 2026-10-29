@@ -376,8 +376,6 @@ Cualquier modificación importante en la arquitectura del sistema deberá reflej
 
 ---
 
-# FACT CENTRAL
+# S.P.T. — SISTEMA PESQUERO DE TRAZABILIDAD
 
-"No desarrollamos un software.
-
-Construimos una plataforma inteligente capaz de comprender, organizar y controlar la documentación empresarial."
+"Construimos una plataforma que registra y conecta cada etapa de la operación pesquera, desde el reporte hasta la recepción en planta."

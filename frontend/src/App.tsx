@@ -258,7 +258,7 @@ export default function App() {
           <Route path="/responsables-operativos" element={<ResponsablesOperativos />} />
           <Route path="/mi-cartera" element={<CarteraGerencia />} />
           <Route path="/produccion" element={sesion.rol === "GERENTE" ? <Navigate to="/mi-cartera" replace /> : <Produccion />} />
-          <Route path="/pesca" element={<Pesca />} />
+          <Route path="/pesca" element={!["ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"].includes(sesion.rol) ? <Navigate to="/" replace /> : <Pesca />} />
           <Route path="/pagos" element={<Pagos sesion={sesion} />} />
           <Route path="/comisiones-responsables" element={sesion.rol === "GERENTE" ? <ComisionesResponsables sesion={sesion} /> : <Navigate to="/expedientes" replace />} />
           <Route path="/configuracion" element={<Configuracion sesion={sesion} />} />

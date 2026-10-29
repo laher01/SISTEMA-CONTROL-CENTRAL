@@ -1,7 +1,7 @@
 """tablas operativas de descarga y entrega en planta
 
-Revision ID: 0002
-Revises: 0001
+Revision ID: 0043
+Revises: 0042
 Create Date: 2026-10-26
 """
 
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "0002"
-down_revision: str | None = "0001"
+revision: str = "0043"
+down_revision: str | None = "0042"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

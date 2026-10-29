@@ -161,7 +161,7 @@ export async function imprimirExpedientes(
 ): Promise<{ expedientes: number; pdfs: number; sinPdf: number }> {
   const ventana = window.open("", "_blank");
   if (ventana) {
-    ventana.document.title = "Preparando impresión · FACT CENTRAL";
+    ventana.document.title = "Preparando impresión · S.P.T.";
     ventana.document.body.innerHTML = "<p>Preparando documentos para impresión…</p>";
   }
 

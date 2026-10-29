@@ -8,6 +8,7 @@
 | VPS y observabilidad de infraestructura | Chat de infraestructura SaaS (esta conversación, hasta reasignación) | No introducir accesos inseguros |
 | Storage por Tenant y nodos adicionales | Chat de infraestructura SaaS | No desplegar sin autorización |
 | Backups, resiliencia, restauración | Chat de infraestructura SaaS | Respaldos verificados, nunca secretos en Git |
+| Logística pesquera trazable S.P.T. | Chat solicitante (Issue #408) | Tenant aislado; SNIDERFISH es piloto/plantilla |
 | Otros módulos operativos/documentales | PENDIENTE DE ASIGNACIÓN | Respetar PR y trabajo de otras conversaciones |
 
 Un responsable lógico de chat **no es** propietario de cuenta GitHub. Al asignar un Issue registrar también la persona/cuenta que ejecuta, si se conoce; no inventar identidades.

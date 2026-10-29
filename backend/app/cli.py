@@ -9,12 +9,12 @@ from app.security import crear_o_restablecer_cuenta
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Administración inicial de FACT CENTRAL")
+    parser = argparse.ArgumentParser(description="Administración inicial de S.P.T.")
     sub = parser.add_subparsers(dest="comando", required=True)
 
     bootstrap = sub.add_parser("bootstrap-admin", help="Crear SUPADMIN01 sin cambiar ADMIN01")
     bootstrap.add_argument("--codigo", default="SUPADMIN01")
-    bootstrap.add_argument("--nombre", default="Superadministrador FACT CENTRAL")
+    bootstrap.add_argument("--nombre", default="Superadmin S.P.T.")
 
     bootstrap.add_argument("--crear", action="store_true")
 
@@ -30,7 +30,7 @@ def _bootstrap_admin(codigo: str, nombre: str, crear: bool = False) -> None:
             raise SystemExit("Utilice exclusivamente SUPADMIN01 con --crear")
         tenant = session.scalar(select(Tenant).where(Tenant.codigo == "PLATFORM"))
         if tenant is None:
-            tenant = Tenant(nombre="FACT CENTRAL PLATAFORMA", codigo="PLATFORM", estado="ACTIVO")
+            tenant = Tenant(nombre="S.P.T. PLATAFORMA", codigo="PLATFORM", estado="ACTIVO")
             session.add(tenant)
             session.flush()
         miembro = session.scalar(

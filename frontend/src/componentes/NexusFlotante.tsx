@@ -23,7 +23,7 @@ export default function NexusFlotante({ sesion }: { sesion: SesionActual }) {
     {
       autor: "nexus",
       texto:
-        "Soy NEXUS. Ahora trabajo con el contexto de la pantalla, tu rol, los datos autorizados de FACT CENTRAL y la base de conocimiento del proyecto.",
+        "Soy NEXUS. Ahora trabajo con el contexto de la pantalla, tu rol, los datos autorizados de S.P.T. y la base de conocimiento del proyecto.",
     },
   ]);
 
