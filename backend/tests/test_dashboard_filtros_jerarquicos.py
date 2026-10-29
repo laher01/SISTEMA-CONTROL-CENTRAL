@@ -21,7 +21,7 @@ def test_dashboard_mes_resumen_desglose_y_opciones(
         assert respuesta.status_code == 201, respuesta.text
 
     empresas = client.get("/api/v1/empresas").json()
-    receptor = next(e for e in empresas if e["ruc"] == "20600000001")
+    receptor = next(e for e in empresas if e["ruc"] == "20100000001")
     contexto_anterior = auth_prueba.contexto
     auth_prueba.como_admin()
     try:
