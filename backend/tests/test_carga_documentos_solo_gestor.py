@@ -34,7 +34,7 @@ def test_solo_gestores_pueden_ingresar_documentos(
             files=[("archivos", ("prueba.jpg", b"imagen", "image/jpeg"))],
         )
     else:
-        respuesta = client.post(
+        respuesta = client_estricto.post(
             ruta,
             files={"archivo": ("prueba.pdf", b"%PDF-1.7\\n", "application/pdf")},
         )
@@ -50,7 +50,7 @@ def test_gestor_pasa_el_control_de_rol_de_carga(
         rol="GESTOR",
         gestor_id=uuid.uuid4(),
     )
-    respuesta = client.post(ruta)
+    respuesta = client_estricto.post(ruta)
     # Sin archivo, la validación del endpoint debe responder 422; un 403
     # indicaría que el permiso de Gestor quedó bloqueado por error.
     assert respuesta.status_code == 422, respuesta.text
