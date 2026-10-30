@@ -19,7 +19,6 @@ from app.api.errores import no_encontrado
 from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, RolMiembro, TipoDocumento
 from app.models import (
-    Alerta,
     AlertaManual,
     Auditoria,
     ChatMensaje,
@@ -1496,7 +1495,7 @@ def eliminar_documento(
     expediente = documento.expediente
     # La baja es operativa y definitiva. Se limpian relaciones derivadas; si el
     # documento era comprobante de pago se conserva el pago sin su archivo adjunto.
-    from app.item_models import AuditoriaFacturaItem, LineaComprobanteItem
+    from app.item_models import LineaComprobanteItem
     from app.models import PagoERP
 
     session.execute(
@@ -1588,34 +1587,10 @@ def eliminar_documento(
             .limit(1)
         )
         if queda_documento is None:
-            # Si se retiró el último archivo, eliminar también el expediente:
-            # de lo contrario quedan filas vacías que reaparecen en Expedientes.
-            session.execute(
-                delete(Alerta).where(
-                    Alerta.tenant_id == tenant_id,
-                    Alerta.expediente_id == expediente.id,
-                )
-            )
-            session.execute(
-                delete(AlertaManual).where(
-                    AlertaManual.tenant_id == tenant_id,
-                    AlertaManual.expediente_id == expediente.id,
-                )
-            )
-            session.execute(
-                delete(Auditoria).where(
-                    Auditoria.tenant_id == tenant_id,
-                    Auditoria.entidad == "expediente",
-                    Auditoria.entidad_id == expediente.id,
-                )
-            )
-            session.execute(
-                delete(AuditoriaFacturaItem).where(
-                    AuditoriaFacturaItem.tenant_id == tenant_id,
-                    AuditoriaFacturaItem.expediente_id == expediente.id,
-                )
-            )
-            session.delete(expediente)
+            # La misma purga completa se usa al retirar el último documento y
+            # al reemplazar cascarones heredados durante una nueva ingesta.
+            if not eliminar_expediente_vacio(session, expediente):
+                actualizar_expediente(session, expediente, hoy, settings)
         else:
             actualizar_expediente(session, expediente, hoy, settings)
     session.commit()
