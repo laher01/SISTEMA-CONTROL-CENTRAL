@@ -181,6 +181,14 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
         tipo_relacion="CLIENTE",
         agente_retencion=False,
     )
+    cliente_no_autorizado = Empresa(
+        tenant_id=tenant_id,
+        ruc="20444444444",
+        razon_social="CLIENTE PENDIENTE DE AUTORIZAR",
+        autorizada=False,
+        tipo_relacion="CLIENTE",
+        agente_retencion=False,
+    )
     proveedor = Empresa(
         tenant_id=tenant_id,
         ruc="20333333333",
@@ -189,7 +197,17 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
         tipo_relacion="PROVEEDOR",
         agente_retencion=False,
     )
-    session.add_all([responsable, gerente, usuario, cliente_agente, cliente_sin_agente, proveedor])
+    session.add_all(
+        [
+            responsable,
+            gerente,
+            usuario,
+            cliente_agente,
+            cliente_sin_agente,
+            cliente_no_autorizado,
+            proveedor,
+        ]
+    )
     session.flush()
     usuario.responsable_id = responsable.id
     session.add(
@@ -219,6 +237,39 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
                 gerente_id=gerente.id,
             )
         )
+    # Un documento activo sin pedido inequívoco debe quedar visible para revisión,
+    # pero jamás mezclarse en el cobro atribuido al Gerente.
+    session.add(
+        Expediente(
+            tenant_id=tenant_id,
+            emisor_id=proveedor.id,
+            receptor_id=cliente_sin_agente.id,
+            tipo_comprobante="FACT",
+            serie="F003",
+            correlativo="00003",
+            fecha_emision=date(2026, 9, 15),
+            moneda="PEN",
+            importe_total=Decimal("500.00"),
+            usuario_id=usuario.id,
+        )
+    )
+    # La producción de un receptor pendiente de autorización también debe
+    # aparecer como excluida, sin formar parte de la comisión.
+    session.add(
+        Expediente(
+            tenant_id=tenant_id,
+            emisor_id=proveedor.id,
+            receptor_id=cliente_no_autorizado.id,
+            tipo_comprobante="FACT",
+            serie="F004",
+            correlativo="00004",
+            fecha_emision=date(2026, 9, 15),
+            moneda="PEN",
+            importe_total=Decimal("250.00"),
+            usuario_id=usuario.id,
+            gerente_id=gerente.id,
+        )
+    )
     cuenta_responsable = CuentaAcceso(
         tenant_id=tenant_id,
         login="RESP-COBROS",
@@ -272,6 +323,12 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
     assert len(datos["usuarios"]) == 1
     assert datos["usuarios"][0]["produccion"] == "3000.00"
     assert datos["usuarios"][0]["comision_referencial_usuario"] == "50.00"
+    assert datos["pendientes_revision"]["cantidad"] == 2
+    assert datos["pendientes_revision"]["produccion"] == "750.00"
+    assert {fila["motivo"] for fila in datos["pendientes_revision"]["expedientes"]} == {
+        "GERENCIA_SIN_VINCULO",
+        "RECEPTOR_NO_AUTORIZADO",
+    }
 
     solicitud = client.post(
         "/api/v1/pagos-responsables/solicitudes-cobro",
