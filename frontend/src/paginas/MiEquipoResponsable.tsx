@@ -40,7 +40,7 @@ interface CobrosEquipo {
   clientes: { gerente_id: string; gerente_codigo: string; gerente_nombre: string; cliente_ruc: string; cliente_nombre: string; produccion: string; porcentaje: string; comision: string }[];
   proveedores: { gerente_id: string; gerente_codigo: string; gerente_nombre: string; ruc: string; razon_social: string; documentos: number; produccion: string }[];
   usuarios: { gerente_id: string; gerente_codigo: string; gerente_nombre: string; usuario_id: string; usuario_codigo: string; usuario_nombre: string; documentos: number; produccion: string; porcentaje_usuario: string | null; comision_referencial_usuario: string | null }[];
-  pendientes_revision: { cantidad: number; produccion: string; expedientes: { expediente_id: string; comprobante: string; fecha: string; usuario_codigo: string; usuario_nombre: string; cliente_ruc: string; cliente_nombre: string; produccion: string; motivo: "RECEPTOR_NO_AUTORIZADO" | "GERENCIA_SIN_VINCULO" }[] };
+  pendientes_revision: { cantidad: number; produccion: string; expedientes: { expediente_id: string; comprobante: string; fecha: string; usuario_codigo: string; usuario_nombre: string; cliente_ruc: string; cliente_nombre: string; produccion: string; motivo: "RECEPTOR_NO_AUTORIZADO" | "GERENCIA_SIN_VINCULO" | "GERENCIA_AMBIGUA"; gerentes_candidatos: string[] }[] };
 }
 type Pestana = "USUARIOS" | "PEDIDOS" | "COBROS" | "PAGOS";
 type SubpestanaCobro = "PROVEEDORES" | "CLIENTES" | "USUARIOS";
@@ -58,7 +58,6 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const [mensaje, setMensaje] = useState("");
   const [desdeCobro, setDesdeCobro] = useState(new Date().toISOString().slice(0, 8) + "01");
   const [hastaCobro, setHastaCobro] = useState(new Date().toISOString().slice(0, 10));
-  const [sincronizandoCobros, setSincronizandoCobros] = useState(false);
   const [subpestanaCobro, setSubpestanaCobro] = useState<SubpestanaCobro>("CLIENTES");
   const [gerentesSeleccionados, setGerentesSeleccionados] = useState<string[] | null>(null);
   const { datos: vinculosGerencia } = useDatos<GerenteVinculado[]>("/api/v1/gerencias/vinculos");
@@ -219,27 +218,6 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
       setErrorPago(e instanceof Error ? e.message : String(e));
     }
   };
-  const sincronizarCobros = async () => {
-    setSincronizandoCobros(true);
-    setMensaje("");
-    try {
-      const resultado = await enviarJson<{ vinculados: number; produccion: string }>(
-        "/api/v1/pagos-responsables/equipo-sincronizar",
-        "POST",
-        { desde: desdeCobro, hasta: hastaCobro, moneda },
-      );
-      cobrosEquipo.recargar();
-      setMensaje(
-        resultado.vinculados > 0
-          ? `Se vincularon ${resultado.vinculados} expedientes con pedidos inequívocos por ${formatearMonto(moneda, resultado.produccion)}.`
-          : "No hay expedientes pendientes con un único pedido coincidente. Revisa los documentos excluidos abajo.",
-      );
-    } catch (error) {
-      setMensaje(error instanceof Error ? error.message : String(error));
-    } finally {
-      setSincronizandoCobros(false);
-    }
-  };
   const distribuir = async (pedidoId: string) => {
     setGuardando(true);
     setMensaje("");
@@ -385,9 +363,7 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
         <div className="filtros">
           <label>Desde <input type="date" value={desdeCobro} onChange={(e) => setDesdeCobro(e.target.value)} /></label>
           <label>Hasta <input type="date" value={hastaCobro} onChange={(e) => setHastaCobro(e.target.value)} /></label>
-          <button type="button" disabled={sincronizandoCobros} onClick={() => void sincronizarCobros()}>
-            {sincronizandoCobros ? "Vinculando pedidos…" : "Vincular pedidos coincidentes y actualizar"}
-          </button>
+          <button type="button" onClick={() => cobrosEquipo.recargar()}>Actualizar periodo</button>
         </div>
         {mensaje && <p role="status">{mensaje}</p>}
         <fieldset>
@@ -429,13 +405,13 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
           {cobrosEquipo.datos.pendientes_revision.cantidad > 0 && <section className="panel-configuracion" role="status">
             <h4>Documentos fuera del cálculo de cobros</h4>
             <p>
-              Hay {cobrosEquipo.datos.pendientes_revision.cantidad} expedientes activos por {formatearMonto(moneda, cobrosEquipo.datos.pendientes_revision.produccion)} excluidos del cobro. Revisa la autorización del cliente o la relación con Gerencia/Pedido; no se atribuyen ni comisionan automáticamente.
+              Hay {cobrosEquipo.datos.pendientes_revision.cantidad} expedientes activos por {formatearMonto(moneda, cobrosEquipo.datos.pendientes_revision.produccion)} excluidos del cobro. Revisa la autorización del receptor o los vínculos de Gerencia configurados en Organización. Los pedidos no son requisito para contabilizar la producción.
             </p>
             <table><thead><tr><th>Comprobante</th><th>Fecha</th><th>Usuario</th><th>Cliente</th><th>Motivo</th><th>Producción excluida</th></tr></thead>
               <tbody>{cobrosEquipo.datos.pendientes_revision.expedientes.map((p) => <tr key={p.expediente_id}>
                 <td>{p.comprobante}</td><td>{p.fecha}</td><td>{p.usuario_codigo} · {p.usuario_nombre}</td>
                 <td>{p.cliente_nombre} · {p.cliente_ruc}</td>
-                <td>{p.motivo === "RECEPTOR_NO_AUTORIZADO" ? "Cliente no autorizado" : "Sin vínculo a Gerencia/Pedido"}</td>
+                <td>{p.motivo === "RECEPTOR_NO_AUTORIZADO" ? "Receptor no autorizado" : p.motivo === "GERENCIA_AMBIGUA" ? `Empresa compartida: ${p.gerentes_candidatos.join(", ")}` : "Sin vínculo Responsable/Gerente o Gerente/empresa"}</td>
                 <td>{formatearMonto(moneda, p.produccion)}</td>
               </tr>)}</tbody>
             </table>

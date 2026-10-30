@@ -136,10 +136,6 @@ def get_contexto_operativo(
             and request.url.path == "/api/v1/pagos-responsables/equipo-resumen"
         )
         or (
-            request.method == "POST"
-            and request.url.path == "/api/v1/pagos-responsables/equipo-sincronizar"
-        )
-        or (
             request.method in {"GET", "POST"}
             and request.url.path == "/api/v1/pagos-responsables/solicitudes-cobro"
         )

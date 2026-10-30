@@ -9,9 +9,10 @@ from typing import Literal
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
+from sqlalchemy.sql.selectable import Subquery
 
 from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.enums import RolMiembro
@@ -22,6 +23,7 @@ from app.models import (
     CuentaAcceso,
     Empresa,
     Expediente,
+    GerenteEmpresa,
     GerenteResponsable,
     Miembro,
     MovimientoPagoResponsable,
@@ -32,7 +34,6 @@ from app.models import (
 from app.services import auditoria
 from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
 from app.services.expedientes import expediente_tiene_documentos_activos
-from app.services.ingesta import atribuir_gerencia_inequivoca
 
 router = APIRouter(prefix="/pagos-responsables", tags=["pagos-responsables"])
 MONEDAS = {"PEN", "USD"}
@@ -63,12 +64,6 @@ class ProgramarPagoResponsableIn(BaseModel):
 class ConfirmarPagoResponsableIn(BaseModel):
     fecha_pago: date
     referencia_pago: str = Field(min_length=4, max_length=160)
-
-
-class SincronizarEquipoCobrosIn(BaseModel):
-    desde: date
-    hasta: date
-    moneda: str = Field(pattern="^(PEN|USD)$")
 
 
 def _ambito(auth: OperativeAuthDep, responsable_id: uuid.UUID | None = None) -> None:
@@ -107,6 +102,113 @@ def _redondear(valor: Decimal) -> Decimal:
     return valor.quantize(CENTIMO, rounding=ROUND_HALF_UP)
 
 
+def _candidatos_gerencia(tenant_id: uuid.UUID) -> Subquery:
+    gerente = aliased(Miembro)
+    return (
+        select(
+            Expediente.id.label("expediente_id"),
+            GerenteResponsable.gerente_id.label("gerente_id"),
+        )
+        .join(Miembro, Miembro.id == Expediente.usuario_id)
+        .join(
+            GerenteResponsable,
+            and_(
+                GerenteResponsable.tenant_id == tenant_id,
+                GerenteResponsable.responsable_id == Miembro.responsable_id,
+                GerenteResponsable.activo.is_(True),
+            ),
+        )
+        .join(
+            GerenteEmpresa,
+            and_(
+                GerenteEmpresa.tenant_id == tenant_id,
+                GerenteEmpresa.gerente_id == GerenteResponsable.gerente_id,
+                GerenteEmpresa.empresa_id == Expediente.receptor_id,
+                GerenteEmpresa.activo.is_(True),
+            ),
+        )
+        .join(
+            gerente,
+            and_(
+                gerente.id == GerenteResponsable.gerente_id,
+                gerente.tenant_id == tenant_id,
+                gerente.rol == RolMiembro.GERENTE,
+                gerente.activo.is_(True),
+                gerente.deleted_at.is_(None),
+            ),
+        )
+        .where(
+            Expediente.tenant_id == tenant_id,
+            Expediente.deleted_at.is_(None),
+            Miembro.tenant_id == tenant_id,
+            Miembro.rol == RolMiembro.USUARIO,
+            Miembro.deleted_at.is_(None),
+            Miembro.responsable_id.is_not(None),
+        )
+        .distinct()
+        .subquery()
+    )
+
+
+def _gerencia_resuelta(tenant_id: uuid.UUID) -> Subquery:
+    """Resuelve el Gerente desde Organización y no exige que exista un pedido.
+
+    Una relación compartida solo se resuelve cuando el expediente ya tiene un
+    gerente explícito que sigue siendo candidato; el resto queda para revisión.
+    Se preservan también asignaciones explícitas históricas hechas antes de que
+    la Organización tuviera estas relaciones.
+    """
+    candidatos = _candidatos_gerencia(tenant_id)
+    conteos = (
+        select(
+            candidatos.c.expediente_id,
+            func.count(candidatos.c.gerente_id).label("cantidad"),
+        )
+        .group_by(candidatos.c.expediente_id)
+        .subquery()
+    )
+    candidato_unico = (
+        select(candidatos.c.gerente_id)
+        .where(candidatos.c.expediente_id == conteos.c.expediente_id)
+        .limit(1)
+        .scalar_subquery()
+    )
+    gerente_guardado = aliased(Miembro)
+    # Expediente.gerente_id is a prior explicit financial attribution. Keep it
+    # stable even if the current portfolio changes, so settled production is
+    # never reassigned to another Gerente and offered for a second payment.
+    asignacion_guardada = and_(
+        Expediente.gerente_id.is_not(None),
+        gerente_guardado.tenant_id == tenant_id,
+        gerente_guardado.rol == RolMiembro.GERENTE,
+        gerente_guardado.deleted_at.is_(None),
+    )
+    return (
+        select(
+            Expediente.id.label("expediente_id"),
+            case(
+                (asignacion_guardada, Expediente.gerente_id),
+                (conteos.c.cantidad == 1, candidato_unico),
+                else_=Expediente.gerente_id,
+            ).label("gerente_id"),
+            conteos.c.cantidad.label("gerentes_candidatos"),
+        )
+        .select_from(Expediente)
+        .outerjoin(conteos, Expediente.id == conteos.c.expediente_id)
+        .outerjoin(gerente_guardado, gerente_guardado.id == Expediente.gerente_id)
+        .where(
+            or_(
+                asignacion_guardada,
+                and_(
+                    Expediente.gerente_id.is_(None),
+                    conteos.c.cantidad == 1,
+                ),
+            )
+        )
+        .subquery()
+    )
+
+
 def _calculo(
     session: SessionDep,
     tenant_id: uuid.UUID,
@@ -118,6 +220,7 @@ def _calculo(
 ) -> dict[str, object]:
     _periodo(desde, hasta, moneda)
     usuario = Miembro
+    gerente_resuelto = _gerencia_resuelta(tenant_id)
     consulta = (
         select(
             usuario.responsable_id,
@@ -129,6 +232,7 @@ def _calculo(
         )
         .join(usuario, Expediente.usuario_id == usuario.id)
         .join(Empresa, Expediente.receptor_id == Empresa.id)
+        .join(gerente_resuelto, gerente_resuelto.c.expediente_id == Expediente.id)
         .where(
             Expediente.tenant_id == tenant_id,
             Expediente.deleted_at.is_(None),
@@ -148,10 +252,7 @@ def _calculo(
     if responsable_id is not None:
         consulta = consulta.where(usuario.responsable_id == responsable_id)
     if gerente_id is not None:
-        consulta = consulta.where(Expediente.gerente_id == gerente_id)
-    else:
-        # Los expedientes sin atribución no se liquidan por aproximación.
-        consulta = consulta.where(Expediente.gerente_id.is_not(None))
+        consulta = consulta.where(gerente_resuelto.c.gerente_id == gerente_id)
     consulta = consulta.group_by(
         usuario.responsable_id,
         Empresa.id,
@@ -460,10 +561,11 @@ def resumen_equipo_responsable(
                 }
             )
 
+    gerente_proveedor = _gerencia_resuelta(tenant_id)
     resumen_proveedores = list(
         session.execute(
             select(
-                Expediente.gerente_id,
+                gerente_proveedor.c.gerente_id,
                 Empresa.id,
                 Empresa.ruc,
                 Empresa.razon_social,
@@ -471,6 +573,7 @@ def resumen_equipo_responsable(
                 func.sum(Expediente.importe_total),
             )
             .join(Miembro, Miembro.id == Expediente.usuario_id)
+            .join(gerente_proveedor, gerente_proveedor.c.expediente_id == Expediente.id)
             .join(Empresa, Empresa.id == Expediente.emisor_id)
             .where(
                 Expediente.tenant_id == tenant_id,
@@ -478,7 +581,7 @@ def resumen_equipo_responsable(
                 expediente_tiene_documentos_activos(),
                 Expediente.fecha_emision.between(desde, hasta),
                 Expediente.moneda == moneda,
-                Expediente.gerente_id.in_(elegidos),
+                gerente_proveedor.c.gerente_id.in_(elegidos),
                 Expediente.receptor.has(
                     Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
                 ),
@@ -489,7 +592,7 @@ def resumen_equipo_responsable(
                 Empresa.tenant_id == tenant_id,
                 Empresa.deleted_at.is_(None),
             )
-            .group_by(Expediente.gerente_id, Empresa.id, Empresa.ruc, Empresa.razon_social)
+            .group_by(gerente_proveedor.c.gerente_id, Empresa.id, Empresa.ruc, Empresa.razon_social)
         )
     )
     proveedores = [
@@ -507,11 +610,20 @@ def resumen_equipo_responsable(
         if gid in by_id
     ]
 
-    # Hacer visibles los expedientes del periodo excluidos del cálculo por
-    # receptor aún no autorizado o por falta de atribución a Gerencia. No se
-    # incluyen en el cobro hasta corregir la causa.
+    # Hacer visibles expedientes sin atribución única y receptores aún no
+    # autorizados. Ninguno se suma hasta que la causa esté resuelta.
     receptor_pendiente = aliased(Empresa)
-    pendientes_atribucion = list(
+    gerente_pendiente = _gerencia_resuelta(tenant_id)
+    candidatos = _candidatos_gerencia(tenant_id)
+    conteo_candidatos = (
+        select(
+            candidatos.c.expediente_id,
+            func.count(candidatos.c.gerente_id).label("cantidad"),
+        )
+        .group_by(candidatos.c.expediente_id)
+        .subquery()
+    )
+    pendientes_crudos = list(
         session.execute(
             select(
                 Expediente.id,
@@ -525,17 +637,24 @@ def resumen_equipo_responsable(
                 receptor_pendiente.ruc,
                 receptor_pendiente.razon_social,
                 receptor_pendiente.autorizada,
+                gerente_pendiente.c.gerente_id,
+                conteo_candidatos.c.cantidad,
             )
             .join(Miembro, Miembro.id == Expediente.usuario_id)
             .join(receptor_pendiente, receptor_pendiente.id == Expediente.receptor_id)
+            .outerjoin(gerente_pendiente, gerente_pendiente.c.expediente_id == Expediente.id)
+            .outerjoin(
+                conteo_candidatos,
+                conteo_candidatos.c.expediente_id == Expediente.id,
+            )
             .where(
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
                 expediente_tiene_documentos_activos(),
                 or_(
-                    Expediente.gerente_id.is_(None),
+                    gerente_pendiente.c.gerente_id.is_(None),
                     and_(
-                        Expediente.gerente_id.in_(elegidos),
+                        gerente_pendiente.c.gerente_id.in_(elegidos),
                         receptor_pendiente.autorizada.is_(False),
                     ),
                 ),
@@ -551,14 +670,54 @@ def resumen_equipo_responsable(
             .order_by(Expediente.fecha_emision, Expediente.serie, Expediente.correlativo)
         )
     )
+    ids_pendientes = [fila.id for fila in pendientes_crudos]
+    gerentes_por_expediente: dict[uuid.UUID, list[str]] = {}
+    if ids_pendientes:
+        gerente_candidato = aliased(Miembro)
+        for expediente_id, codigo in session.execute(
+            select(candidatos.c.expediente_id, gerente_candidato.codigo)
+            .join(gerente_candidato, gerente_candidato.id == candidatos.c.gerente_id)
+            .where(candidatos.c.expediente_id.in_(ids_pendientes))
+        ):
+            gerentes_por_expediente.setdefault(expediente_id, []).append(codigo)
+    pendientes_atribucion = []
+    for fila in pendientes_crudos:
+        # Los vínculos resueltos con otro gerente no pertenecen a la selección.
+        if fila.gerente_id is not None and fila.gerente_id not in elegidos:
+            continue
+        motivo = (
+            "RECEPTOR_NO_AUTORIZADO"
+            if not fila.autorizada
+            else "GERENCIA_AMBIGUA"
+            if (fila.cantidad or 0) > 1
+            else "GERENCIA_SIN_VINCULO"
+        )
+        pendientes_atribucion.append(
+            {
+                "id": fila.id,
+                "tipo_comprobante": fila.tipo_comprobante,
+                "serie": fila.serie,
+                "correlativo": fila.correlativo,
+                "fecha_emision": fila.fecha_emision,
+                "importe_total": fila.importe_total,
+                "codigo": fila.codigo,
+                "nombre": fila.nombre,
+                "ruc": fila.ruc,
+                "razon_social": fila.razon_social,
+                "autorizada": fila.autorizada,
+                "motivo": motivo,
+                "gerentes_candidatos": gerentes_por_expediente.get(fila.id, []),
+            }
+        )
     total_pendiente = _redondear(
-        sum((Decimal(fila.importe_total) for fila in pendientes_atribucion), Decimal("0"))
+        sum((Decimal(fila["importe_total"]) for fila in pendientes_atribucion), Decimal("0"))
     )
 
+    gerente_usuario = _gerencia_resuelta(tenant_id)
     resumen_usuarios = list(
         session.execute(
             select(
-                Expediente.gerente_id,
+                gerente_usuario.c.gerente_id,
                 Miembro.id,
                 Miembro.codigo,
                 Miembro.nombre,
@@ -569,6 +728,7 @@ def resumen_equipo_responsable(
                 func.sum(Expediente.importe_total),
             )
             .join(Miembro, Miembro.id == Expediente.usuario_id)
+            .join(gerente_usuario, gerente_usuario.c.expediente_id == Expediente.id)
             .join(Empresa, Empresa.id == Expediente.receptor_id)
             .where(
                 Expediente.tenant_id == tenant_id,
@@ -576,7 +736,7 @@ def resumen_equipo_responsable(
                 expediente_tiene_documentos_activos(),
                 Expediente.fecha_emision.between(desde, hasta),
                 Expediente.moneda == moneda,
-                Expediente.gerente_id.in_(elegidos),
+                gerente_usuario.c.gerente_id.in_(elegidos),
                 Empresa.autorizada.is_(True),
                 Empresa.deleted_at.is_(None),
                 Miembro.tenant_id == tenant_id,
@@ -585,7 +745,7 @@ def resumen_equipo_responsable(
                 Miembro.deleted_at.is_(None),
             )
             .group_by(
-                Expediente.gerente_id,
+                gerente_usuario.c.gerente_id,
                 Miembro.id,
                 Miembro.codigo,
                 Miembro.nombre,
@@ -669,65 +829,22 @@ def resumen_equipo_responsable(
             "produccion": str(total_pendiente),
             "expedientes": [
                 {
-                    "expediente_id": str(fila.id),
-                    "comprobante": f"{fila.tipo_comprobante} {fila.serie}-{fila.correlativo}",
-                    "fecha": fila.fecha_emision.isoformat(),
-                    "usuario_codigo": fila.codigo,
-                    "usuario_nombre": fila.nombre,
-                    "cliente_ruc": fila.ruc,
-                    "cliente_nombre": fila.razon_social,
-                    "produccion": str(_redondear(Decimal(fila.importe_total))),
-                    "motivo": (
-                        "RECEPTOR_NO_AUTORIZADO" if not fila.autorizada else "GERENCIA_SIN_VINCULO"
+                    "expediente_id": str(fila["id"]),
+                    "comprobante": (
+                        f"{fila['tipo_comprobante']} {fila['serie']}-{fila['correlativo']}"
                     ),
+                    "fecha": fila["fecha_emision"].isoformat(),
+                    "usuario_codigo": fila["codigo"],
+                    "usuario_nombre": fila["nombre"],
+                    "cliente_ruc": fila["ruc"],
+                    "cliente_nombre": fila["razon_social"],
+                    "produccion": str(_redondear(Decimal(fila["importe_total"]))),
+                    "motivo": fila["motivo"],
+                    "gerentes_candidatos": fila["gerentes_candidatos"],
                 }
                 for fila in pendientes_atribucion
             ],
         },
-    }
-
-
-@router.post("/equipo-sincronizar")
-def sincronizar_equipo_cobros(
-    datos: SincronizarEquipoCobrosIn,
-    session: SessionDep,
-    tenant_id: TenantDep,
-    auth: OperativeAuthDep,
-) -> dict[str, object]:
-    """Vincula solo expedientes con un Pedido de Gerencia coincidente y único."""
-    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
-    _periodo(datos.desde, datos.hasta, datos.moneda)
-    expedientes = list(
-        session.scalars(
-            select(Expediente)
-            .join(Miembro, Miembro.id == Expediente.usuario_id)
-            .where(
-                Expediente.tenant_id == tenant_id,
-                Expediente.deleted_at.is_(None),
-                expediente_tiene_documentos_activos(),
-                Expediente.gerente_id.is_(None),
-                Expediente.fecha_emision.between(datos.desde, datos.hasta),
-                Expediente.moneda == datos.moneda,
-                Miembro.tenant_id == tenant_id,
-                Miembro.rol == RolMiembro.USUARIO,
-                Miembro.responsable_id == auth.miembro_id,
-                Miembro.deleted_at.is_(None),
-            )
-            .with_for_update(of=Expediente)
-        )
-    )
-    vinculados = []
-    for expediente in expedientes:
-        atribuir_gerencia_inequivoca(session, expediente)
-        if expediente.gerente_id is not None:
-            vinculados.append(expediente)
-    session.commit()
-    return {
-        "vinculados": len(vinculados),
-        "produccion": str(
-            _redondear(sum((Decimal(e.importe_total) for e in vinculados), Decimal("0")))
-        ),
     }
 
 

@@ -1,12 +1,13 @@
 """Pruebas de adelantos, saldo y comprobantes de Gerencia."""
 
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models import Empresa, Expediente, Miembro
+from app.models import Empresa, Expediente, GerenteEmpresa, GerenteResponsable, Miembro
 from tests.conftest import AuthPrueba, completar_facturas_de_prueba
 
 
@@ -17,6 +18,7 @@ def test_adelanto_y_pago_total_con_comprobante(
 ) -> None:
     tenant = auth_prueba.contexto.tenant_id
     responsable = Miembro(tenant_id=tenant, codigo="RESP01", nombre="Resp", rol="RESPONSABLE")
+    gerente = Miembro(tenant_id=tenant, codigo="GER01", nombre="Gerente", rol="GERENTE")
     usuario = Miembro(tenant_id=tenant, codigo="USU01", nombre="Usuario", rol="USUARIO")
     cliente = Empresa(
         tenant_id=tenant,
@@ -25,9 +27,25 @@ def test_adelanto_y_pago_total_con_comprobante(
         tipo_relacion="CLIENTE",
         autorizada=True,
     )
-    session.add_all([responsable, usuario, cliente])
+    session.add_all([responsable, gerente, usuario, cliente])
     session.flush()
     usuario.responsable_id = responsable.id
+    session.add_all(
+        [
+            GerenteResponsable(
+                tenant_id=tenant,
+                gerente_id=gerente.id,
+                responsable_id=responsable.id,
+                activo=True,
+            ),
+            GerenteEmpresa(
+                tenant_id=tenant,
+                gerente_id=gerente.id,
+                empresa_id=cliente.id,
+                activo=True,
+            ),
+        ]
+    )
     session.add(
         Expediente(
             tenant_id=tenant,
@@ -40,11 +58,17 @@ def test_adelanto_y_pago_total_con_comprobante(
             moneda="PEN",
             importe_total=Decimal("1000.00"),
             usuario_id=usuario.id,
-            gerente_id=auth_prueba.contexto.miembro_id,
+            gerente_id=gerente.id,
         )
     )
     completar_facturas_de_prueba(session)
     session.commit()
+    auth_prueba.contexto = replace(
+        auth_prueba.contexto,
+        miembro_id=gerente.id,
+        codigo=gerente.codigo,
+        nombre=gerente.nombre,
+    )
     auth_prueba.como_gerente()
     url = "/api/v1/pagos-responsables"
     programado = client.post(

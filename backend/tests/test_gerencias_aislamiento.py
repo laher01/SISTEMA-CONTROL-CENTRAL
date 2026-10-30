@@ -45,6 +45,26 @@ def test_produccion_aislada_por_gerente(
     session.add_all([gerente_a, gerente_b, responsable, usuario, cliente])
     session.flush()
     usuario.responsable_id = responsable.id
+    session.add_all(
+        [
+            GerenteResponsable(
+                tenant_id=tenant_id,
+                gerente_id=gerente.id,
+                responsable_id=responsable.id,
+                activo=True,
+            )
+            for gerente in (gerente_a, gerente_b)
+        ]
+        + [
+            GerenteEmpresa(
+                tenant_id=tenant_id,
+                gerente_id=gerente.id,
+                empresa_id=cliente.id,
+                activo=True,
+            )
+            for gerente in (gerente_a, gerente_b)
+        ]
+    )
     for gerente, numero in ((gerente_a, "000001"), (gerente_b, "000002")):
         pedido = PedidoGerencia(
             tenant_id=tenant_id,
