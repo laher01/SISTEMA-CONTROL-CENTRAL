@@ -19,6 +19,7 @@ from app.api.errores import no_encontrado
 from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, RolMiembro, TipoDocumento
 from app.models import (
+    Alerta,
     AlertaManual,
     Auditoria,
     ChatMensaje,
@@ -1491,7 +1492,7 @@ def eliminar_documento(
     expediente = documento.expediente
     # La baja es operativa y definitiva. Se limpian relaciones derivadas; si el
     # documento era comprobante de pago se conserva el pago sin su archivo adjunto.
-    from app.item_models import LineaComprobanteItem
+    from app.item_models import AuditoriaFacturaItem, LineaComprobanteItem
     from app.models import PagoERP
 
     session.execute(
@@ -1573,7 +1574,46 @@ def eliminar_documento(
     session.delete(documento)
     session.flush()
     if expediente is not None and expediente.deleted_at is None:
-        actualizar_expediente(session, expediente, hoy, settings)
+        queda_documento = session.scalar(
+            select(Documento.id)
+            .where(
+                Documento.tenant_id == tenant_id,
+                Documento.expediente_id == expediente.id,
+                Documento.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+        if queda_documento is None:
+            # Si se retiró el último archivo, eliminar también el expediente:
+            # de lo contrario quedan filas vacías que reaparecen en Expedientes.
+            session.execute(
+                delete(Alerta).where(
+                    Alerta.tenant_id == tenant_id,
+                    Alerta.expediente_id == expediente.id,
+                )
+            )
+            session.execute(
+                delete(AlertaManual).where(
+                    AlertaManual.tenant_id == tenant_id,
+                    AlertaManual.expediente_id == expediente.id,
+                )
+            )
+            session.execute(
+                delete(Auditoria).where(
+                    Auditoria.tenant_id == tenant_id,
+                    Auditoria.entidad == "expediente",
+                    Auditoria.entidad_id == expediente.id,
+                )
+            )
+            session.execute(
+                delete(AuditoriaFacturaItem).where(
+                    AuditoriaFacturaItem.tenant_id == tenant_id,
+                    AuditoriaFacturaItem.expediente_id == expediente.id,
+                )
+            )
+            session.delete(expediente)
+        else:
+            actualizar_expediente(session, expediente, hoy, settings)
     session.commit()
     eliminar_cache_ocr(
         sha_archivo,
