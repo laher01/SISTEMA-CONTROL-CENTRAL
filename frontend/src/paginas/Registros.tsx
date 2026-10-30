@@ -1,4 +1,4 @@
-import { useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { conParametros, eliminar, enviarFormulario, obtener, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
@@ -47,6 +47,18 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
   });
   const { datos, error, cargando, recargar } = useDatos<RegistroResumen>(ruta);
   const { datos: opciones } = useDatos<RegistroOpciones>("/api/v1/registros/opciones");
+
+  useEffect(() => {
+    const actualizarAlVolver = () => {
+      if (document.visibilityState === "visible") recargar();
+    };
+    const intervalo = window.setInterval(actualizarAlVolver, 30_000);
+    document.addEventListener("visibilitychange", actualizarAlVolver);
+    return () => {
+      window.clearInterval(intervalo);
+      document.removeEventListener("visibilitychange", actualizarAlVolver);
+    };
+  }, [recargar]);
 
   const puedeVerJerarquia = ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA"].includes(
     sesion.rol,
@@ -123,6 +135,9 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
             Compras con totales, propiedad, emisor, receptor y documentación del expediente.
           </p>
         </div>
+        <button type="button" className="secundario" onClick={recargar} disabled={cargando}>
+          {cargando ? "Actualizando…" : "Actualizar registros"}
+        </button>
       </div>
 
       <section className="panel-configuracion">
