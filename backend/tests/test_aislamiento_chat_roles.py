@@ -12,7 +12,7 @@ from tests.conftest import AuthPrueba
 
 @pytest.mark.parametrize(
     "rol",
-    ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"],
+    ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"],
 )
 def test_chat_no_permita_contactos_entre_tenants(
     client: TestClient, session: Session, auth_prueba: AuthPrueba, rol: str

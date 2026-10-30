@@ -36,7 +36,7 @@ def habilitar_retiro_usuario(session: Session, auth_prueba: AuthPrueba) -> None:
     session.commit()
 
 
-def test_pago_generado_bloquea_documento_y_expediente_incluso_para_admin(
+def test_pago_generado_no_bloquea_eliminacion_operativa_para_admin(
     client: TestClient,
     session: Session,
     auth_prueba: AuthPrueba,
@@ -69,36 +69,30 @@ def test_pago_generado_bloquea_documento_y_expediente_incluso_para_admin(
     expedientes = client.get("/api/v1/expedientes")
     assert expedientes.status_code == 200, expedientes.text
     vista = next(f for f in expedientes.json() if f["id"] == str(expediente.id))
-    assert vista["puede_eliminar"] is False
+    assert vista["puede_eliminar"] is True
 
     registros = client.get("/api/v1/registros")
     assert registros.status_code == 200, registros.text
     fila = next(f for f in registros.json()["filas"] if f["expediente_id"] == str(expediente.id))
-    assert fila["puede_eliminar"] is False
+    assert fila["puede_eliminar"] is True
 
     ruta_documento = f"/api/v1/documentos/{documento['id']}"
     ruta_expediente = f"/api/v1/expedientes/{expediente.id}"
-    documento_bloqueado = client.delete(ruta_documento)
-    expediente_bloqueado = client.delete(ruta_expediente)
-    assert documento_bloqueado.status_code == 409, documento_bloqueado.text
-    assert expediente_bloqueado.status_code == 409, expediente_bloqueado.text
-    assert "Liquidación" in documento_bloqueado.text
     previsualizacion = client.post(
         "/api/v1/documentos/previsualizar-retirada",
         json={"documentos_ids": [documento["id"]]},
     )
     assert previsualizacion.status_code == 200, previsualizacion.text
-    assert previsualizacion.json()["aptos"] == 0
-    assert previsualizacion.json()["resultados"][0]["estado"] == "BLOQUEADO"
-    assert client.get(ruta_documento).status_code == 200
-    assert client.get(ruta_expediente).status_code == 200
-
-    session.delete(pago)
-    session.commit()
+    assert previsualizacion.json()["aptos"] == 1
+    assert previsualizacion.json()["resultados"][0]["estado"] == "APTO_ELIMINACION"
+    assert client.delete(ruta_documento).status_code == 200
+    assert client.get(ruta_documento).status_code == 404
     assert client.delete(ruta_expediente).status_code == 200
+    assert client.get(ruta_expediente).status_code == 404
+    assert session.get(PagoERP, pago.id) is not None
 
 
-def test_voucher_vinculado_a_pago_no_puede_retirarse(
+def test_voucher_vinculado_a_pago_se_desacopla_al_retirarlo(
     client: TestClient, session: Session, auth_prueba: AuthPrueba
 ) -> None:
     respuesta = client.post(
@@ -126,12 +120,13 @@ def test_voucher_vinculado_a_pago_no_puede_retirarse(
     session.commit()
     auth_prueba.como_admin()
     eliminado = client.delete(f"/api/v1/documentos/{documento['id']}")
-    assert eliminado.status_code == 409, eliminado.text
-    assert "Voucher" in eliminado.text
-    assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
+    assert eliminado.status_code == 200, eliminado.text
+    session.expire_all()
+    assert session.get(PagoERP, pago.id).voucher_documento_id is None
+    assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 404
 
 
-def test_pago_gestor_generado_bloquea_expediente(
+def test_pago_gestor_generado_no_bloquea_eliminacion_del_admin(
     client: TestClient, session: Session, auth_prueba: AuthPrueba
 ) -> None:
     respuesta = client.post(
@@ -169,11 +164,11 @@ def test_pago_gestor_generado_bloquea_expediente(
     session.commit()
     auth_prueba.como_admin()
     resultado = client.delete(f"/api/v1/expedientes/{expediente.id}")
-    assert resultado.status_code == 409, resultado.text
-    assert "GESTOR" in resultado.text
+    assert resultado.status_code == 200, resultado.text
+    assert client.get(f"/api/v1/expedientes/{expediente.id}").status_code == 404
 
 
-def test_pago_responsable_generado_bloquea_expediente(
+def test_pago_responsable_generado_no_bloquea_eliminacion_del_admin(
     client: TestClient, session: Session, auth_prueba: AuthPrueba
 ) -> None:
     respuesta = client.post(
@@ -214,11 +209,11 @@ def test_pago_responsable_generado_bloquea_expediente(
     session.commit()
     auth_prueba.como_admin()
     resultado = client.delete(f"/api/v1/expedientes/{expediente.id}")
-    assert resultado.status_code == 409, resultado.text
-    assert "RESPONSABLE" in resultado.text
+    assert resultado.status_code == 200, resultado.text
+    assert client.get(f"/api/v1/expedientes/{expediente.id}").status_code == 404
 
 
-def test_voucher_de_otro_periodo_bloquea_retiro_integral_misd(
+def test_voucher_de_otro_periodo_no_bloquea_eliminacion_del_expediente(
     client: TestClient, session: Session, auth_prueba: AuthPrueba
 ) -> None:
     factura_subida = client.post(
@@ -237,11 +232,6 @@ def test_voucher_de_otro_periodo_bloquea_retiro_integral_misd(
     voucher.expediente_id = UUID(expediente_id)
     # Evitar retener bloqueos de escritura al abrir la sesión HTTP de MISD.
     session.commit()
-    solicitud = client.post(
-        "/api/v1/misd/solicitudes",
-        json={"expediente_id": expediente_id, "motivo": "Retiro pendiente de revisión"},
-    )
-    assert solicitud.status_code == 201, solicitud.text
     pago = PagoERP(
         tenant_id=auth_prueba.contexto.tenant_id,
         usuario_id=auth_prueba.contexto.usuario_id,
@@ -257,11 +247,11 @@ def test_voucher_de_otro_periodo_bloquea_retiro_integral_misd(
     )
     session.add(pago)
     session.commit()
-    retirada = client.post(f"/api/v1/misd/solicitudes/{solicitud.json()['id']}/ejecutar")
-    assert retirada.status_code == 409, retirada.text
     auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 409
-    assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 200
+    assert client.delete(f"/api/v1/expedientes/{expediente_id}").status_code == 200
+    session.expire_all()
+    assert session.get(PagoERP, pago.id).voucher_documento_id is None
+    assert client.get(f"/api/v1/expedientes/{expediente_id}").status_code == 404
 
 
 @pytest.mark.parametrize("primer_evento", ["pago", "retirada"])

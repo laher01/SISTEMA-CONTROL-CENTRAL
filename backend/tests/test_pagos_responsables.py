@@ -1,12 +1,20 @@
 """Regresiones de comisiones por receptor y pago exclusivo a Responsable."""
 
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models import Empresa, Expediente, Miembro
+from app.models import (
+    ChatMensaje,
+    CuentaAcceso,
+    Empresa,
+    Expediente,
+    GerenteResponsable,
+    Miembro,
+)
 from tests.conftest import AuthPrueba
 
 
@@ -124,3 +132,167 @@ def test_comisiones_gerencia_por_cliente_y_autorizacion(
         json={"fecha_pago": "2026-10-09", "referencia_pago": "BANCO-99999"},
     )
     assert prohibido.status_code == 403
+
+
+def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
+    client: TestClient,
+    session: Session,
+    auth_prueba: AuthPrueba,
+) -> None:
+    tenant_id = auth_prueba.contexto.tenant_id
+    responsable = Miembro(
+        tenant_id=tenant_id,
+        codigo="RESP-COBROS",
+        nombre="Responsable cobros",
+        rol="RESPONSABLE",
+        activo=True,
+    )
+    gerente = Miembro(
+        tenant_id=tenant_id,
+        codigo="GER-COBROS",
+        nombre="Gerente cobros",
+        rol="GERENTE",
+        activo=True,
+    )
+    usuario = Miembro(
+        tenant_id=tenant_id,
+        codigo="USR-COBROS",
+        nombre="Usuario cobros",
+        rol="USUARIO",
+        responsable_id=responsable.id,
+        porcentaje_con_agente=Decimal("2.0"),
+        porcentaje_sin_agente=Decimal("1.5"),
+        activo=True,
+    )
+    cliente_agente = Empresa(
+        tenant_id=tenant_id,
+        ruc="20111111111",
+        razon_social="CLIENTE AGENTE",
+        autorizada=True,
+        tipo_relacion="CLIENTE",
+        agente_retencion=True,
+    )
+    cliente_sin_agente = Empresa(
+        tenant_id=tenant_id,
+        ruc="20222222222",
+        razon_social="CLIENTE NORMAL",
+        autorizada=True,
+        tipo_relacion="CLIENTE",
+        agente_retencion=False,
+    )
+    proveedor = Empresa(
+        tenant_id=tenant_id,
+        ruc="20333333333",
+        razon_social="PROVEEDOR",
+        autorizada=True,
+        tipo_relacion="PROVEEDOR",
+        agente_retencion=False,
+    )
+    session.add_all([responsable, gerente, usuario, cliente_agente, cliente_sin_agente, proveedor])
+    session.flush()
+    usuario.responsable_id = responsable.id
+    session.add(
+        GerenteResponsable(
+            tenant_id=tenant_id,
+            gerente_id=gerente.id,
+            responsable_id=responsable.id,
+            activo=True,
+        )
+    )
+    for serie, correlativo, receptor, monto in (
+        ("F001", "00001", cliente_agente, Decimal("1000.00")),
+        ("F002", "00002", cliente_sin_agente, Decimal("2000.00")),
+    ):
+        session.add(
+            Expediente(
+                tenant_id=tenant_id,
+                emisor_id=proveedor.id,
+                receptor_id=receptor.id,
+                tipo_comprobante="FACT",
+                serie=serie,
+                correlativo=correlativo,
+                fecha_emision=date(2026, 9, 15),
+                moneda="PEN",
+                importe_total=monto,
+                usuario_id=usuario.id,
+                gerente_id=gerente.id,
+            )
+        )
+    cuenta_responsable = CuentaAcceso(
+        tenant_id=tenant_id,
+        login="RESP-COBROS",
+        password_hash="hash-pruebas",
+        miembro_id=responsable.id,
+        activo=True,
+        cambio_clave_obligatorio=False,
+    )
+    cuenta_gerente = CuentaAcceso(
+        tenant_id=tenant_id,
+        login="GER-COBROS",
+        password_hash="hash-pruebas",
+        miembro_id=gerente.id,
+        activo=True,
+        cambio_clave_obligatorio=False,
+    )
+    session.add_all([cuenta_responsable, cuenta_gerente])
+    session.commit()
+    auth_prueba.contexto = replace(
+        auth_prueba.contexto,
+        cuenta_id=cuenta_responsable.id,
+        miembro_id=responsable.id,
+        rol="RESPONSABLE",
+        usuario_id=None,
+        gestor_id=None,
+    )
+
+    params = {
+        "desde": "2026-09-01",
+        "hasta": "2026-09-30",
+        "moneda": "PEN",
+        "gerente_ids": str(gerente.id),
+    }
+    resumen = client.get("/api/v1/pagos-responsables/equipo-resumen", params=params)
+    assert resumen.status_code == 200, resumen.text
+    datos = resumen.json()
+    assert datos["gerentes"] == [
+        {
+            "gerente_id": str(gerente.id),
+            "gerente_codigo": "GER-COBROS",
+            "gerente_nombre": "Gerente cobros",
+            "produccion": "3000.00",
+            "comision": "100.00",
+        }
+    ]
+    assert len(datos["clientes"]) == 2
+    assert {fila["porcentaje"] for fila in datos["clientes"]} == {"3.0", "3.5"}
+    assert len(datos["proveedores"]) == 1
+    assert datos["proveedores"][0]["produccion"] == "3000.00"
+    assert len(datos["usuarios"]) == 1
+    assert datos["usuarios"][0]["produccion"] == "3000.00"
+    assert datos["usuarios"][0]["comision_referencial_usuario"] == "50.00"
+
+    solicitud = client.post(
+        "/api/v1/pagos-responsables/solicitudes-cobro",
+        json={
+            "gerente_id": str(gerente.id),
+            "desde": "2026-09-01",
+            "hasta": "2026-09-30",
+            "moneda": "PEN",
+        },
+    )
+    assert solicitud.status_code == 201, solicitud.text
+    assert solicitud.json()["comision"] == "100.00"
+    assert (
+        session.query(ChatMensaje).filter_by(destinatario_cuenta_id=cuenta_gerente.id).count() == 1
+    )
+    auth_prueba.contexto = replace(
+        auth_prueba.contexto,
+        cuenta_id=cuenta_gerente.id,
+        miembro_id=gerente.id,
+        rol="GERENTE",
+        usuario_id=None,
+        gestor_id=None,
+    )
+    recibidas = client.get("/api/v1/pagos-responsables/solicitudes-cobro")
+    assert recibidas.status_code == 200, recibidas.text
+    assert recibidas.json()[0]["id"] == solicitud.json()["id"]

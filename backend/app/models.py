@@ -740,6 +740,23 @@ class PagoResponsableERP(ConId, ConTenant, ConCreacion, Base):
     fecha_reprogramada: Mapped[date | None] = mapped_column(Date)
 
 
+class SolicitudCobroResponsableERP(ConId, ConTenant, ConCreacion, Base):
+    """Solicitud de cobro emitida por Responsable a cada Gerente seleccionado."""
+
+    __tablename__ = "solicitudes_cobro_responsables_erp"
+    gerente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    responsable_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    periodo_desde: Mapped[date] = mapped_column(Date)
+    periodo_hasta: Mapped[date] = mapped_column(Date)
+    moneda: Mapped[str] = mapped_column(String(3))
+    produccion_total: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    comision_total: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    detalle: Mapped[JsonDict] = mapped_column(default=dict)
+    estado: Mapped[str] = mapped_column(String(20), default="SOLICITADA", index=True)
+    observacion: Mapped[str | None] = mapped_column(String(500))
+    creado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
+
+
 class MovimientoPagoResponsable(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "movimientos_pagos_responsables"
     __table_args__ = (UniqueConstraint("pago_id", "referencia"),)

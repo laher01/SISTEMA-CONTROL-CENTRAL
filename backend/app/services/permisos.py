@@ -15,14 +15,10 @@ def permiso_habilitado(
     permiso: str,
 ) -> bool:
     if permiso == PERMISO_ELIMINAR_REGISTROS:
-        # La política MISD nunca concede retiro a roles técnicos o Secretaría.
-        if rol in ("SUPERADMIN", "SECRETARIA"):
-            return False
-        # Administración y Gestor mantienen el comportamiento predeterminado que
-        # muestra Configuración. Los roles delegados dependen del permiso explícito
-        # configurado por el tenant; una fila ausente equivale a denegación.
-        if rol in ("ADMINISTRADOR", "GESTOR"):
-            return True
+        # Matriz operativa fija: Gestor/User eliminan dentro de su ámbito;
+        # Responsable solo solicita aprobación a Administración; Administración
+        # puede eliminar en todo el tenant. Gerencia, Secretaría y Superadmin no.
+        return rol in ("ADMINISTRADOR", "RESPONSABLE", "USUARIO", "GESTOR")
     configurado = session.scalar(
         select(PermisoConfigurado).where(
             PermisoConfigurado.tenant_id == tenant_id,

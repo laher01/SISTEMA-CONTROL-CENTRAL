@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const BASE = import.meta.env.VITE_API_URL ?? "";
 
@@ -96,6 +96,7 @@ interface Estado<T> {
 export function useDatos<T>(ruta: string | null) {
   const [version, setVersion] = useState(0);
   const [estado, setEstado] = useState<Estado<T>>({ ruta: "", version: -1 });
+  const recargar = useCallback(() => setVersion((v) => v + 1), []);
 
   useEffect(() => {
     let vigente = true;
@@ -116,7 +117,7 @@ export function useDatos<T>(ruta: string | null) {
     datos: actual ? estado.datos : undefined,
     error: actual ? estado.error : undefined,
     cargando: ruta !== null && (!actual || estado.version !== version),
-    recargar: () => setVersion((v) => v + 1),
+    recargar,
   };
 }
 

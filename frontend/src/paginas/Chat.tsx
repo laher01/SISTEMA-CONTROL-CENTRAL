@@ -37,7 +37,7 @@ export default function Chat() {
     if (!seleccionado) return;
     const intervalo = window.setInterval(() => recargar(), 15000);
     return () => window.clearInterval(intervalo);
-  }, [seleccionado]);
+  }, [seleccionado, recargar]);
 
   const enviar = async (evento: FormEvent) => {
     evento.preventDefault();

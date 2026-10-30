@@ -77,6 +77,21 @@ def listar(
                 or_(Expediente.emisor_id == Empresa.id, Expediente.receptor_id == Empresa.id),
             )
         )
+    elif auth.rol == RolMiembro.RESPONSABLE:
+        subordinados = select(Miembro.id).where(
+            Miembro.tenant_id == tenant_id,
+            Miembro.responsable_id == auth.miembro_id,
+            Miembro.rol == RolMiembro.USUARIO,
+            Miembro.deleted_at.is_(None),
+        )
+        consulta = consulta.where(
+            exists().where(
+                Expediente.tenant_id == tenant_id,
+                Expediente.deleted_at.is_(None),
+                Expediente.usuario_id.in_(subordinados),
+                or_(Expediente.emisor_id == Empresa.id, Expediente.receptor_id == Empresa.id),
+            )
+        )
     if autorizada is not None:
         consulta = consulta.where(Empresa.autorizada == autorizada)
     if sin_clasificar:
@@ -114,6 +129,8 @@ def listar(
             usuarios_q = usuarios_q.where(alcance_expedientes_gerente(auth))
         elif auth.rol == RolMiembro.USUARIO:
             usuarios_q = usuarios_q.where(Expediente.usuario_id == auth.usuario_id)
+        elif auth.rol == RolMiembro.RESPONSABLE:
+            usuarios_q = usuarios_q.where(Miembro.responsable_id == auth.miembro_id)
 
         usuarios = [
             EmpresaUsuarioOut(id=u.id, codigo=u.codigo, nombre=u.nombre)
@@ -146,6 +163,8 @@ def notificar_clasificacion(
         RolMiembro.SECRETARIA,
         RolMiembro.USUARIO,
         "GESTOR",
+        RolMiembro.RESPONSABLE,
+        RolMiembro.GERENTE,
     ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin permiso para solicitar clasificación")
     empresas = list(
@@ -164,12 +183,27 @@ def notificar_clasificacion(
     )
     if not empresas:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "No hay empresas pendientes")
-    if auth.rol in (RolMiembro.USUARIO, "GESTOR"):
-        filtro = (
-            Expediente.usuario_id == auth.usuario_id
-            if auth.rol == RolMiembro.USUARIO
-            else Expediente.gestor_id == auth.gestor_id
-        )
+    if auth.rol in (
+        RolMiembro.USUARIO,
+        "GESTOR",
+        RolMiembro.RESPONSABLE,
+        RolMiembro.GERENTE,
+    ):
+        if auth.rol == RolMiembro.USUARIO:
+            filtro = Expediente.usuario_id == auth.usuario_id
+        elif auth.rol == "GESTOR":
+            filtro = Expediente.gestor_id == auth.gestor_id
+        elif auth.rol == RolMiembro.RESPONSABLE:
+            filtro = Expediente.usuario_id.in_(
+                select(Miembro.id).where(
+                    Miembro.tenant_id == tenant_id,
+                    Miembro.responsable_id == auth.miembro_id,
+                    Miembro.rol == RolMiembro.USUARIO,
+                    Miembro.deleted_at.is_(None),
+                )
+            )
+        else:
+            filtro = alcance_expedientes_gerente(auth)
         permitidas = set(
             session.scalars(
                 select(Empresa.id).where(
@@ -240,11 +274,43 @@ def actualizar(
     empresa_id: uuid.UUID,
     datos: EmpresaActualizar,
 ) -> Empresa:
-    if auth.rol not in (RolMiembro.SUPERADMIN, RolMiembro.ADMINISTRADOR, RolMiembro.SECRETARIA):
+    if auth.rol not in (
+        RolMiembro.SUPERADMIN,
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.SECRETARIA,
+        RolMiembro.RESPONSABLE,
+        RolMiembro.GERENTE,
+    ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "No tiene permiso para modificar Empresas")
     empresa = session.get(Empresa, empresa_id)
     if empresa is None or empresa.tenant_id != tenant_id or empresa.deleted_at:
         raise no_encontrado("Empresa")
+    if auth.rol in (RolMiembro.RESPONSABLE, RolMiembro.GERENTE):
+        if datos.model_fields_set != {"autorizada"}:
+            raise HTTPException(403, "Solo puede autorizar clientes dentro de su ámbito")
+        if auth.rol == RolMiembro.RESPONSABLE:
+            ámbito = exists().where(
+                Expediente.tenant_id == tenant_id,
+                Expediente.deleted_at.is_(None),
+                Expediente.receptor_id == empresa.id,
+                Expediente.usuario_id.in_(
+                    select(Miembro.id).where(
+                        Miembro.tenant_id == tenant_id,
+                        Miembro.responsable_id == auth.miembro_id,
+                        Miembro.rol == RolMiembro.USUARIO,
+                        Miembro.deleted_at.is_(None),
+                    )
+                ),
+            )
+        else:
+            ámbito = exists().where(
+                Expediente.tenant_id == tenant_id,
+                Expediente.deleted_at.is_(None),
+                Expediente.receptor_id == empresa.id,
+                alcance_expedientes_gerente(auth),
+            )
+        if not session.query(ámbito).scalar():
+            raise no_encontrado("Empresa")
     anterior = {
         "ruc": empresa.ruc,
         "razon_social": empresa.razon_social,

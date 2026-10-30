@@ -56,3 +56,17 @@ def procesar_con_cache(
             if temporal is not None:
                 temporal.unlink(missing_ok=True)
     return resultado
+
+
+def eliminar_cache_ocr(
+    sha256_archivo: str,
+    tenant_id: str,
+    carpeta: Path,
+    limite_caracteres: int,
+    max_paginas_ocr: int,
+) -> None:
+    """Retira el resultado OCR persistente asociado al archivo eliminado."""
+    clave = hashlib.sha256(
+        f"{VERSION_CACHE}:{sha256_archivo}:{limite_caracteres}:{max_paginas_ocr}".encode()
+    ).hexdigest()
+    (carpeta / tenant_id / clave[:2] / f"{clave}.json").unlink(missing_ok=True)

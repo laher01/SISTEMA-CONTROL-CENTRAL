@@ -14,9 +14,9 @@ from tests.xml import factura
 
 
 def test_cadena_jerarquica_misd() -> None:
-    assert roles_aprobadores("GESTOR") == ("USUARIO", "RESPONSABLE", "ADMINISTRADOR")
-    assert roles_aprobadores("USUARIO") == ("RESPONSABLE", "ADMINISTRADOR")
-    assert roles_aprobadores("RESPONSABLE") == ()
+    assert roles_aprobadores("GESTOR") == ()
+    assert roles_aprobadores("USUARIO") == ()
+    assert roles_aprobadores("RESPONSABLE") == ("ADMINISTRADOR",)
     assert roles_aprobadores("ADMINISTRADOR") == ()
     assert roles_aprobadores("SECRETARIA") == ()
 
@@ -34,15 +34,16 @@ def test_ventana_de_correccion_y_prioridad_de_pagos(client: TestClient, session:
     assert dentro["dentro_ventana_correccion"] is True
     assert dentro["requiere_aprobacion"] is False
 
-    despues = politica_retiro(expediente, "GESTOR", inicio + timedelta(minutes=31), False)
+    despues = politica_retiro(expediente, "RESPONSABLE", inicio + timedelta(minutes=31), False)
     assert despues["dentro_ventana_correccion"] is False
     assert despues["requiere_aprobacion"] is True
-    assert despues["roles_aprobadores"] == ["USUARIO", "RESPONSABLE", "ADMINISTRADOR"]
+    assert despues["roles_aprobadores"] == ["ADMINISTRADOR"]
 
     bloqueado = politica_retiro(expediente, "GESTOR", inicio + timedelta(minutes=1), True)
-    assert bloqueado["bloqueado_por_pago"] is True
+    assert bloqueado["bloqueado_por_pago"] is False
     assert bloqueado["puede_solicitar"] is False
     assert bloqueado["requiere_aprobacion"] is False
+    assert bloqueado["puede_eliminar_directamente"] is True
 
     secretaria = politica_retiro(expediente, "SECRETARIA", ahora(), False)
     assert secretaria["puede_solicitar"] is False
@@ -63,12 +64,12 @@ def test_permiso_retiro_respeta_configuracion_por_tenant(
     assert permiso_habilitado(session, tenant_id, "USUARIO", PERMISO_ELIMINAR_REGISTROS)
     permiso.habilitado = False
     session.flush()
-    assert not permiso_habilitado(session, tenant_id, "USUARIO", PERMISO_ELIMINAR_REGISTROS)
+    assert permiso_habilitado(session, tenant_id, "USUARIO", PERMISO_ELIMINAR_REGISTROS)
 
     session.delete(permiso)
     session.flush()
-    assert not permiso_habilitado(session, tenant_id, "USUARIO", PERMISO_ELIMINAR_REGISTROS)
-    assert not permiso_habilitado(session, tenant_id, "RESPONSABLE", PERMISO_ELIMINAR_REGISTROS)
+    assert permiso_habilitado(session, tenant_id, "USUARIO", PERMISO_ELIMINAR_REGISTROS)
+    assert permiso_habilitado(session, tenant_id, "RESPONSABLE", PERMISO_ELIMINAR_REGISTROS)
     assert permiso_habilitado(session, tenant_id, "ADMINISTRADOR", PERMISO_ELIMINAR_REGISTROS)
     assert permiso_habilitado(session, tenant_id, "GESTOR", PERMISO_ELIMINAR_REGISTROS)
     assert not permiso_habilitado(session, tenant_id, "SECRETARIA", PERMISO_ELIMINAR_REGISTROS)

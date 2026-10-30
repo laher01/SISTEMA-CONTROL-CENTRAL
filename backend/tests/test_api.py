@@ -18,10 +18,33 @@ from tests.xml import RECEPTOR, factura, guia
 
 
 def subir(client: TestClient, nombre: str, contenido: bytes, **form: str) -> dict[str, object]:
-    respuesta = client.post("/api/v1/documentos", files={"archivo": (nombre, contenido)}, data=form)
+    auth_prueba = client.app.state.auth_prueba
+    contexto_original = auth_prueba.contexto
+    auth_prueba.como_gestor(auth_prueba.gestor_id, auth_prueba.usuario_id)
+    try:
+        respuesta = client.post(
+            "/api/v1/documentos", files={"archivo": (nombre, contenido)}, data=form
+        )
+    finally:
+        auth_prueba.contexto = contexto_original
     assert respuesta.status_code == 201, respuesta.text
     datos: dict[str, object] = respuesta.json()
     return datos
+
+
+def test_solo_gestor_puede_cargar_documentos(client: TestClient, auth_prueba: AuthPrueba) -> None:
+    client.app.state.auto_gestor_upload_for_tests = False
+    respuesta_usuario = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("usuario.pdf", b"%PDF-1.7 user")},
+    )
+    assert respuesta_usuario.status_code == 403
+    auth_prueba.como_gestor(auth_prueba.gestor_id, auth_prueba.usuario_id)
+    respuesta_gestor = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("gestor.pdf", b"%PDF-1.7 gestor")},
+    )
+    assert respuesta_gestor.status_code == 201, respuesta_gestor.text
 
 
 def expediente(client: TestClient, expediente_id: object) -> dict[str, object]:
@@ -615,7 +638,9 @@ def test_reingreso_tras_eliminacion_crea_documento_nuevo(
     auth_prueba.como_usuario(usuario_id)
     segundo = subir(client, "reingreso.pdf", contenido)
     assert segundo["id"] != primero["id"]
-    assert forzados == [False, True]
+    # El caché OCR asociado al archivo se limpia al eliminarlo; la nueva carga
+    # no reutiliza extracción anterior, aunque no necesita forzar el modo.
+    assert forzados == [False, False]
 
 
 def test_reingreso_de_factura_eliminada_crea_documento_nuevo_en_expediente_activo(
@@ -635,7 +660,7 @@ def test_reingreso_de_factura_eliminada_crea_documento_nuevo_en_expediente_activ
     assert nuevo["expediente_id"] == original["expediente_id"]
 
 
-def test_eliminacion_concurrente_no_duplica_auditoria_ni_falla_parcial(
+def test_eliminacion_concurrente_no_deja_huella_ni_falla_parcial(
     client: TestClient,
     auth_prueba: AuthPrueba,
     engine: Engine,
@@ -659,7 +684,7 @@ def test_eliminacion_concurrente_no_duplica_auditoria_ni_falla_parcial(
         estados = sorted(future.result(timeout=30) for future in futures)
 
     assert estados == [200, 404]
-    assert session.query(Auditoria).filter(Auditoria.accion == "DOCUMENTO_ELIMINADO").count() == 1
+    assert session.query(Auditoria).filter(Auditoria.accion == "DOCUMENTO_ELIMINADO").count() == 0
 
 
 def test_reprocesamiento_masivo_repara_razones_sociales(
@@ -1281,7 +1306,7 @@ def test_previsualizar_retirada_no_cambia_documentos(
         ("retirada-documento-sin-expediente.pdf", b"%PDF-1.7 vencido"),
     ],
 )
-def test_previsualizar_retirada_exige_misd_fuera_de_ventana(
+def test_usuario_puede_eliminar_sus_documentos_sin_ventana_de_tiempo(
     client: TestClient,
     auth_prueba: AuthPrueba,
     session: Session,
@@ -1317,10 +1342,10 @@ def test_previsualizar_retirada_exige_misd_fuera_de_ventana(
         json={"documentos_ids": [documento["id"]]},
     )
     assert previa.status_code == 200, previa.text
-    assert previa.json()["aptos"] == 0
-    assert previa.json()["resultados"][0]["estado"] == "REQUIERE_MISD"
-    assert client.delete(f"/api/v1/documentos/{documento['id']}").status_code == 409
-    assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 200
+    assert previa.json()["aptos"] == 1
+    assert previa.json()["resultados"][0]["estado"] == "APTO_ELIMINACION"
+    assert client.delete(f"/api/v1/documentos/{documento['id']}").status_code == 200
+    assert client.get(f"/api/v1/documentos/{documento['id']}").status_code == 404
 
 
 def test_previsualizar_retirada_no_filtra_identificadores_ajenos(
@@ -1528,7 +1553,7 @@ def test_ambitos_documentales_cinco_roles(
         assert error.value.status_code == 404
 
 
-def test_pago_voucher_impide_retirada_y_conserva_vinculos(
+def test_retiro_elimina_vinculos_y_desacopla_voucher_de_pago(
     client: TestClient,
     auth_prueba: AuthPrueba,
     session: Session,
@@ -1564,11 +1589,12 @@ def test_pago_voucher_impide_retirada_y_conserva_vinculos(
     session.commit()
     referencia_id, pago_id = referencia.id, pago.id
     auth_prueba.como_admin()
-    assert client.delete(f"/api/v1/documentos/{doc_id}").status_code == 409
+    respuesta = client.delete(f"/api/v1/documentos/{doc_id}")
+    assert respuesta.status_code == 200, respuesta.text
     session.expire_all()
-    assert session.get(ReferenciaGRE, referencia_id).documento_id == doc_id
-    assert session.get(PagoERP, pago_id).voucher_documento_id == doc_id
-    assert client.get(f"/api/v1/documentos/{doc_id}").status_code == 200
+    assert session.get(ReferenciaGRE, referencia_id) is None
+    assert session.get(PagoERP, pago_id).voucher_documento_id is None
+    assert client.get(f"/api/v1/documentos/{doc_id}").status_code == 404
 
 
 def test_misd_secretaria_no_retiro_documentos_ni_expedientes(
@@ -1598,7 +1624,7 @@ def test_misd_cliente_autorizado_requiere_administrador(
     session.commit()
     auth_prueba.contexto = replace(auth_prueba.contexto, rol="GERENTE")
     # El gerente sin ámbito no debe descubrir la existencia del expediente.
-    assert client.delete(f"/api/v1/expedientes/{registro.id}").status_code == 404
+    assert client.delete(f"/api/v1/expedientes/{registro.id}").status_code == 403
     auth_prueba.como_admin()
     assert client.delete(f"/api/v1/expedientes/{registro.id}").status_code == 200
 

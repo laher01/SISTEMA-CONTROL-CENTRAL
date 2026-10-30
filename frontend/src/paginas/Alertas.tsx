@@ -44,6 +44,7 @@ export default function Alertas({ sesion }: { sesion: SesionActual }) {
   };
 
   const puedeEnviar = sesion.rol === "SECRETARIA" || sesion.rol === "ADMINISTRADOR";
+  const puedeResolverMensajes = ["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA", "USUARIO", "GESTOR"].includes(sesion.rol);
   const mostrarRuta = ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE"].includes(sesion.rol);
 
   return (
@@ -99,7 +100,7 @@ export default function Alertas({ sesion }: { sesion: SesionActual }) {
                   ) : "General"}
                 </td>
                 <td>
-                  {!a.resuelta && (
+                  {!a.resuelta && puedeResolverMensajes && (
                     <button
                       onClick={async () => {
                         await enviarJson<AlertaManual>(

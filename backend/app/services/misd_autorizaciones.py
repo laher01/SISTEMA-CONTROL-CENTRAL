@@ -1,7 +1,4 @@
-"""Política MISD de autorización para eliminación definitiva.
-
-La ventana de corrección no deroga las reglas de pagos, ámbito, ni conservación.
-"""
+"""Política operativa de eliminación definitiva por jerarquía."""
 
 from datetime import UTC, datetime, timedelta
 
@@ -35,14 +32,8 @@ def _en_utc(valor: datetime) -> datetime:
 
 
 def roles_aprobadores(rol_solicitante: str) -> tuple[str, ...]:
-    """Jerarquía de solicitud para retiros fuera de la ventana inicial."""
-    if rol_solicitante == "GESTOR":
-        return ("USUARIO", "RESPONSABLE", "ADMINISTRADOR")
-    if rol_solicitante == "USUARIO":
-        return ("RESPONSABLE", "ADMINISTRADOR")
-    if rol_solicitante in ("RESPONSABLE", "ADMINISTRADOR"):
-        return ()
-    return ()
+    """Solo el Responsable eleva una solicitud a Administración."""
+    return ("ADMINISTRADOR",) if rol_solicitante == "RESPONSABLE" else ()
 
 
 def politica_retiro(
@@ -51,21 +42,15 @@ def politica_retiro(
     instante: datetime,
     bloqueado_por_pago: bool,
 ) -> dict[str, object]:
-    """Previsualiza autorizaciones sin conceder permiso de eliminación."""
+    """Describe el flujo actual; pagos y antigüedad no bloquean la eliminación."""
     ventana = dentro_ventana_correccion(expediente, instante)
     aprobadores = roles_aprobadores(rol)
-    rol_permitido = rol in (
-        "ADMINISTRADOR",
-        "RESPONSABLE",
-        "USUARIO",
-        "GESTOR",
-    )
+    puede_eliminar = rol in ("ADMINISTRADOR", "USUARIO", "GESTOR")
     return {
-        "bloqueado_por_pago": bloqueado_por_pago,
+        "bloqueado_por_pago": False,
         "dentro_ventana_correccion": ventana,
-        "puede_solicitar": rol_permitido and not bloqueado_por_pago,
-        "requiere_aprobacion": (
-            rol_permitido and not bloqueado_por_pago and not ventana and bool(aprobadores)
-        ),
-        "roles_aprobadores": list(aprobadores) if not ventana else [],
+        "puede_solicitar": rol == "RESPONSABLE",
+        "puede_eliminar_directamente": puede_eliminar,
+        "requiere_aprobacion": rol == "RESPONSABLE",
+        "roles_aprobadores": list(aprobadores),
     }

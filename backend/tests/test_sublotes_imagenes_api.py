@@ -34,7 +34,7 @@ def ejecutar(archivos: list[UploadFile], sesion: SesionFalsa):
             almacen=None,
             hoy=None,
             tenant_id=uuid.uuid4(),
-            auth=None,
+            auth=SimpleNamespace(rol="GESTOR"),
             archivos=archivos,
         )
     )
@@ -123,7 +123,7 @@ def test_sublote_conserva_tenant_y_auth_en_cada_imagen(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tenant = uuid.uuid4()
-    auth = object()
+    auth = SimpleNamespace(rol="GESTOR")
     vistos: list[tuple[object, object]] = []
 
     async def recibir(**kwargs):
@@ -185,7 +185,7 @@ def test_sublote_rechaza_tamano_total_declarado(
                 almacen=None,
                 hoy=None,
                 tenant_id=uuid.uuid4(),
-                auth=None,
+                auth=SimpleNamespace(rol="GESTOR"),
                 archivos=archivos,
             )
         )

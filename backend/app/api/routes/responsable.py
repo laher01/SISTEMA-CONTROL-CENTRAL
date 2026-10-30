@@ -57,6 +57,14 @@ class NuevoSaldoIn(BaseModel):
     detalle: str = Field(min_length=8, max_length=500)
 
 
+class NuevoAdelantoIn(BaseModel):
+    usuario_id: uuid.UUID
+    fecha: date
+    moneda: str = Field(pattern="^(PEN|USD)$")
+    monto: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    descripcion: str = Field(min_length=4, max_length=500)
+
+
 class ConfirmarLiquidacionIn(BaseModel):
     fecha_pago: date
     referencia_pago: str = Field(min_length=4, max_length=160)
@@ -374,6 +382,44 @@ def listar_adelantos_pendientes(
     ]
 
 
+@router.post("/pagos/adelantos", status_code=status.HTTP_201_CREATED)
+def registrar_adelanto(
+    datos: NuevoAdelantoIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str]:
+    usuario = _autorizar_pago(session, tenant_id, auth, datos.usuario_id)
+    adelanto = AdelantoERP(
+        tenant_id=tenant_id,
+        usuario_id=usuario.id,
+        creado_por_cuenta_id=auth.cuenta_id,
+        fecha=datos.fecha,
+        moneda=datos.moneda,
+        monto=datos.monto,
+        descripcion=datos.descripcion.strip(),
+        aplicado=False,
+    )
+    session.add(adelanto)
+    session.flush()
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "ADELANTO_USUARIO_REGISTRADO",
+        "adelanto",
+        adelanto.id,
+        {
+            "usuario_id": str(usuario.id),
+            "fecha": datos.fecha.isoformat(),
+            "moneda": datos.moneda,
+            "monto": str(datos.monto),
+            "actor": auth.codigo,
+        },
+    )
+    session.commit()
+    return {"id": str(adelanto.id), "estado": "PENDIENTE"}
+
+
 class NuevaFormulaNexusIn(BaseModel):
     usuario_id: uuid.UUID
     nombre: str = Field(min_length=3, max_length=160)
@@ -636,26 +682,11 @@ def cotizar_pago_usuario(
     _autorizar_pago(session, tenant_id, auth, datos.usuario_id)
     produccion, tasa, bruto_produccion, _ = _base_pago_usuario(session, tenant_id, datos)
     saldos, adelantos, total_pendientes = _componentes_pendientes(session, tenant_id, datos)
-    if set(datos.porcentajes_saldos) != set(datos.saldo_ids):
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "Indique el porcentaje histórico de cada saldo seleccionado",
-        )
-    tasas_historicas = datos.porcentajes_saldos.values()
-    if any(not t.is_finite() or t < 0 or t > 100 for t in tasas_historicas):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Porcentaje histórico inválido")
     saldos_total = sum((Decimal(s.monto) for s in saldos), Decimal("0"))
     adelantos_total = sum((Decimal(a.monto) for a in adelantos), Decimal("0"))
     base = produccion + saldos_total
-    bruto = bruto_produccion + sum(
-        (
-            (Decimal(s.monto) * datos.porcentajes_saldos[s.id] / Decimal("100")).quantize(
-                Decimal("0.01")
-            )
-            for s in saldos
-        ),
-        Decimal("0"),
-    )
+    # Un saldo ya es dinero adeudado: se suma en soles/dólares, sin aplicar comisión.
+    bruto = bruto_produccion + saldos_total
     neto = bruto - adelantos_total
     return {
         "produccion": str(produccion),
@@ -700,26 +731,10 @@ def programar_pago_usuario(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "Explique en observaciones por qué no se descuentan todos los adelantos",
         )
-    if set(datos.porcentajes_saldos) != set(datos.saldo_ids):
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "Indique el porcentaje histórico de cada saldo seleccionado",
-        )
-    tasas_historicas = datos.porcentajes_saldos.values()
-    if any(not t.is_finite() or t < 0 or t > 100 for t in tasas_historicas):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Porcentaje histórico inválido")
     saldos_total = sum((Decimal(s.monto) for s in saldos), Decimal("0"))
     adelantos_total = sum((Decimal(a.monto) for a in adelantos), Decimal("0"))
     base = produccion + saldos_total
-    bruto = bruto_produccion + sum(
-        (
-            (Decimal(s.monto) * datos.porcentajes_saldos[s.id] / Decimal("100")).quantize(
-                Decimal("0.01")
-            )
-            for s in saldos
-        ),
-        Decimal("0"),
-    )
+    bruto = bruto_produccion + saldos_total
     neto = bruto - adelantos_total
     if neto < 0:
         raise HTTPException(
@@ -780,9 +795,7 @@ def programar_pago_usuario(
                 {"id": str(s.id), "mes": s.periodo_mes.isoformat(), "monto": str(s.monto)}
                 for s in saldos
             ],
-            "tasas_saldos_historicos": {
-                str(s.id): str(datos.porcentajes_saldos[s.id]) for s in saldos
-            },
+            "saldos_importes_directos": [str(s.monto) for s in saldos],
             "adelantos_descontados": [{"id": str(a.id), "monto": str(a.monto)} for a in adelantos],
             "adelantos_omitidos": omitidos,
             "observacion_adelantos": datos.observacion_adelantos,

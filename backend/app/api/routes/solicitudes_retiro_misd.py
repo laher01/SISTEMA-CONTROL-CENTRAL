@@ -4,30 +4,30 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 
-from app.api.deps import AlmacenDep, OperativeAuthDep, SessionDep, TenantDep
+from app.api.deps import AlmacenDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.models import (
     Alerta,
     AlertaManual,
+    Auditoria,
     ChatMensaje,
+    CorreccionIA,
     CuentaAcceso,
     Documento,
     EliminacionArchivoPendiente,
     Expediente,
     Miembro,
+    PagoERP,
+    ReferenciaGRE,
+    RelacionDocumento,
+    SolicitudCargaEmisor,
     SolicitudRetiroMISD,
     ahora,
 )
 from app.services import auditoria
-from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
-from app.services.eliminacion import (
-    bloquear_clave_archivo,
-    procesar_archivo_pendiente,
-    tablas_que_referencian,
-)
-from app.services.misd_autorizaciones import dentro_ventana_correccion
-from app.services.misd_pagos import motivo_bloqueo_liquidacion, motivo_bloqueo_voucher
+from app.services.cache_ocr import eliminar_cache_ocr
+from app.services.eliminacion import procesar_archivo_pendiente
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 
 router = APIRouter(prefix="/misd/solicitudes", tags=["misd"])
@@ -44,23 +44,20 @@ class ResolverRetiro(BaseModel):
 
 
 def _ambito(expediente: Expediente, auth: OperativeAuthDep, session: SessionDep) -> bool:
-    if auth.rol == "GESTOR":
-        return auth.gestor_id is not None and expediente.gestor_id == auth.gestor_id
-    if auth.rol == "USUARIO":
-        return auth.usuario_id is not None and expediente.usuario_id == auth.usuario_id
-    if auth.rol == "RESPONSABLE":
-        return bool(
-            auth.miembro_id
-            and session.scalar(
-                select(Miembro.id).where(
-                    Miembro.id == expediente.usuario_id,
-                    Miembro.tenant_id == expediente.tenant_id,
-                    Miembro.responsable_id == auth.miembro_id,
-                    Miembro.deleted_at.is_(None),
-                )
+    if auth.rol == "ADMINISTRADOR":
+        return True
+    if auth.rol != "RESPONSABLE" or auth.miembro_id is None or expediente.usuario_id is None:
+        return False
+    return bool(
+        session.scalar(
+            select(Miembro.id).where(
+                Miembro.id == expediente.usuario_id,
+                Miembro.tenant_id == expediente.tenant_id,
+                Miembro.responsable_id == auth.miembro_id,
+                Miembro.deleted_at.is_(None),
             )
         )
-    return auth.rol == "ADMINISTRADOR"
+    )
 
 
 def _es_aprobador(
@@ -69,29 +66,14 @@ def _es_aprobador(
     auth: OperativeAuthDep,
     session: SessionDep,
 ) -> bool:
-    if auth.rol == "ADMINISTRADOR":
-        return True
-    if auth.rol == "RESPONSABLE" and auth.miembro_id is not None:
-        return bool(
-            session.scalar(
-                select(Miembro.id).where(
-                    Miembro.id == expediente.usuario_id,
-                    Miembro.tenant_id == expediente.tenant_id,
-                    Miembro.responsable_id == auth.miembro_id,
-                    Miembro.deleted_at.is_(None),
-                )
-            )
-        ) and solicitud.solicitante_rol in ("GESTOR", "USUARIO")
-    if auth.rol == "USUARIO" and solicitud.solicitante_rol == "GESTOR":
-        return auth.usuario_id is not None and expediente.usuario_id == auth.usuario_id
-    return False
+    # Solo Administración aprueba una solicitud de retiro de Responsable.
+    return auth.rol == "ADMINISTRADOR" and solicitud.solicitante_rol == "RESPONSABLE"
 
 
 def _aprobacion_sigue_vigente(
     solicitud: SolicitudRetiroMISD, expediente: Expediente, session: SessionDep
 ) -> bool:
-    """Revalida que la cuenta aprobadora conserve su autoridad jerárquica."""
-    if solicitud.aprobado_por_cuenta_id is None:
+    if solicitud.aprobado_por_cuenta_id is None or solicitud.solicitante_rol != "RESPONSABLE":
         return False
     cuenta = session.get(CuentaAcceso, solicitud.aprobado_por_cuenta_id)
     if (
@@ -102,27 +84,12 @@ def _aprobacion_sigue_vigente(
     ):
         return False
     miembro = session.get(Miembro, cuenta.miembro_id) if cuenta.miembro_id else None
-    if (
-        miembro is None
-        or miembro.tenant_id != expediente.tenant_id
-        or miembro.deleted_at is not None
-        or not miembro.activo
-    ):
-        return False
-    if miembro.rol == "ADMINISTRADOR":
-        return True
-    usuario = session.get(Miembro, expediente.usuario_id) if expediente.usuario_id else None
-    if usuario is None or usuario.tenant_id != expediente.tenant_id:
-        return False
-    if miembro.rol == "RESPONSABLE":
-        return (
-            solicitud.solicitante_rol in ("USUARIO", "GESTOR")
-            and usuario.responsable_id == miembro.id
-        )
-    return (
-        miembro.rol == "USUARIO"
-        and solicitud.solicitante_rol == "GESTOR"
-        and usuario.id == miembro.id
+    return bool(
+        miembro
+        and miembro.tenant_id == expediente.tenant_id
+        and miembro.rol == "ADMINISTRADOR"
+        and miembro.activo
+        and miembro.deleted_at is None
     )
 
 
@@ -157,7 +124,7 @@ def _notificar(
 def _destinatarios_aprobacion(
     session: SessionDep, tenant_id: uuid.UUID, expediente: Expediente
 ) -> set[uuid.UUID]:
-    ids = set(
+    return set(
         session.scalars(
             select(CuentaAcceso.id).where(
                 CuentaAcceso.tenant_id == tenant_id,
@@ -173,22 +140,6 @@ def _destinatarios_aprobacion(
             )
         )
     )
-    if expediente.usuario_id is not None:
-        usuario = session.get(Miembro, expediente.usuario_id)
-        if usuario is not None and usuario.tenant_id == tenant_id:
-            ids.update(
-                session.scalars(
-                    select(CuentaAcceso.id).where(
-                        CuentaAcceso.tenant_id == tenant_id,
-                        CuentaAcceso.miembro_id.in_(
-                            [ident for ident in (usuario.id, usuario.responsable_id) if ident]
-                        ),
-                        CuentaAcceso.activo.is_(True),
-                        CuentaAcceso.deleted_at.is_(None),
-                    )
-                )
-            )
-    return ids
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -209,10 +160,10 @@ def solicitar(
     )
     if expediente is None or not _ambito(expediente, auth, session):
         raise HTTPException(404, "Expediente no encontrado")
-    if not permiso_habilitado(session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS):
-        raise HTTPException(403, "Sin permiso para solicitar retirada")
-    if motivo_bloqueo_liquidacion(session, expediente) is not None:
-        raise HTTPException(409, "Expediente bloqueado por liquidación generada")
+    if auth.rol != "RESPONSABLE" or not permiso_habilitado(
+        session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS
+    ):
+        raise HTTPException(403, "Solo el Responsable puede solicitar aprobación a Administración")
     pendiente = session.scalar(
         select(SolicitudRetiroMISD.id).where(
             SolicitudRetiroMISD.tenant_id == tenant_id,
@@ -231,7 +182,7 @@ def solicitar(
         solicitante_gestor_id=auth.gestor_id,
         motivo=datos.motivo.strip(),
         estado="PENDIENTE",
-        notificado_a={"roles": ["ADMINISTRADOR", "RESPONSABLE", "USUARIO"]},
+        notificado_a={"roles": ["ADMINISTRADOR"]},
     )
     session.add(nueva)
     session.flush()
@@ -321,11 +272,10 @@ def resolver(
         raise HTTPException(403, "El solicitante no puede aprobar su propia solicitud")
     if solicitud.estado != "PENDIENTE":
         raise HTTPException(409, "Solicitud ya resuelta")
-    if datos.aprobar and (
-        expediente.deleted_at is not None
-        or motivo_bloqueo_liquidacion(session, expediente) is not None
-    ):
-        raise HTTPException(409, "El expediente ya no admite retiro")
+    if auth.rol != "ADMINISTRADOR" or solicitud.solicitante_rol != "RESPONSABLE":
+        raise HTTPException(403, "Solo Administración aprueba solicitudes de Responsables")
+    if datos.aprobar and expediente.deleted_at is not None:
+        raise HTTPException(409, "El expediente ya fue eliminado")
     solicitud.estado = "APROBADA" if datos.aprobar else "RECHAZADA"
     solicitud.aprobado_por_cuenta_id = auth.cuenta_id
     solicitud.decidido_at = ahora()
@@ -355,12 +305,12 @@ def resolver(
 def ejecutar(
     solicitud_id: uuid.UUID,
     session: SessionDep,
+    settings: SettingsDep,
     almacen: AlmacenDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
 ) -> dict[str, object]:
     """Elimina físicamente tras autorización MISD y revalidación transaccional."""
-    bloquear_tenant_financiero(session, tenant_id)
     solicitud = session.scalar(
         select(SolicitudRetiroMISD)
         .where(
@@ -396,15 +346,12 @@ def ejecutar(
         raise HTTPException(409, "Solicitud rechazada")
     if expediente.deleted_at is not None:
         raise HTTPException(409, "Expediente ya retirado")
-    if motivo_bloqueo_liquidacion(session, expediente) is not None:
-        raise HTTPException(409, "Expediente bloqueado por liquidación generada")
-
-    # La ventana NO prevalece sobre un cliente registrado protegido.
-    aprobacion_necesaria = (expediente.receptor.autorizada and auth.rol != "ADMINISTRADOR") or (
-        auth.rol in ("GESTOR", "USUARIO") and not dentro_ventana_correccion(expediente, ahora())
-    )
-    if aprobacion_necesaria and solicitud.estado != "APROBADA":
-        raise HTTPException(409, "Se requiere aprobación jerárquica")
+    if auth.rol != "RESPONSABLE" or solicitud.solicitante_rol != "RESPONSABLE":
+        raise HTTPException(
+            403, "Solo el Responsable solicitante puede ejecutar el retiro aprobado"
+        )
+    if solicitud.estado != "APROBADA":
+        raise HTTPException(409, "Administración aún no aprobó el retiro")
     if solicitud.estado not in ("PENDIENTE", "APROBADA"):
         raise HTTPException(409, "Solicitud en estado incompatible")
     if solicitud.estado == "APROBADA" and not _aprobacion_sigue_vigente(
@@ -426,24 +373,94 @@ def ejecutar(
         if documentos
         else []
     )
-    referencias = tablas_que_referencian(
-        session,
-        documento_ids={documento.id for documento in documentos_obj},
-        expediente_id=expediente.id,
-    )
-    if referencias:
-        raise HTTPException(
-            409, "Eliminación bloqueada por dependencias: " + ", ".join(referencias)
+    ids_documentos = {documento.id for documento in documentos_obj}
+    sha_por_ruta = {documento.ruta_storage: documento.sha256 for documento in documentos_obj}
+    sha_documentos = {documento.sha256 for documento in documentos_obj}
+    solicitudes_carga = (
+        list(
+            session.scalars(
+                select(SolicitudCargaEmisor).where(
+                    SolicitudCargaEmisor.tenant_id == tenant_id,
+                    SolicitudCargaEmisor.sha256_archivo.in_(sha_documentos),
+                )
+            )
         )
-    for documento in documentos_obj:
-        if motivo_bloqueo_voucher(session, tenant_id, documento.id) is not None:
-            raise HTTPException(409, "Expediente contiene un voucher vinculado a un pago")
-    pendientes = [
-        EliminacionArchivoPendiente(tenant_id=tenant_id, ruta_storage=documento.ruta_storage)
-        for documento in documentos_obj
+        if sha_documentos
+        else []
+    )
+    ids_solicitudes_carga = {fila.id for fila in solicitudes_carga}
+    for solicitud_carga in solicitudes_carga:
+        if solicitud_carga.ruta_temporal:
+            sha_por_ruta[solicitud_carga.ruta_temporal] = solicitud_carga.sha256_archivo
+        session.execute(
+            delete(AlertaManual).where(
+                AlertaManual.tenant_id == tenant_id,
+                AlertaManual.mensaje.contains(str(solicitud_carga.id)),
+            )
+        )
+        session.delete(solicitud_carga)
+    from app.item_models import LineaComprobanteItem
+
+    if ids_documentos:
+        session.execute(
+            delete(RelacionDocumento).where(
+                (RelacionDocumento.origen_id.in_(ids_documentos))
+                | (RelacionDocumento.destino_id.in_(ids_documentos))
+            )
+        )
+        session.execute(
+            delete(ReferenciaGRE).where(
+                (ReferenciaGRE.documento_id.in_(ids_documentos))
+                | (ReferenciaGRE.expediente_id == expediente.id)
+            )
+        )
+        session.execute(delete(CorreccionIA).where(CorreccionIA.documento_id.in_(ids_documentos)))
+        session.execute(
+            delete(LineaComprobanteItem).where(
+                LineaComprobanteItem.documento_id.in_(ids_documentos)
+            )
+        )
+        session.execute(
+            update(PagoERP)
+            .where(PagoERP.tenant_id == tenant_id, PagoERP.voucher_documento_id.in_(ids_documentos))
+            .values(voucher_documento_id=None)
+        )
+    solicitudes_exp = list(
+        session.scalars(
+            select(SolicitudRetiroMISD.id).where(
+                SolicitudRetiroMISD.tenant_id == tenant_id,
+                SolicitudRetiroMISD.expediente_id == expediente.id,
+            )
+        )
+    )
+    ids_auditoria = ids_documentos | {expediente.id} | set(solicitudes_exp) | ids_solicitudes_carga
+    session.execute(
+        delete(Auditoria).where(
+            Auditoria.tenant_id == tenant_id,
+            Auditoria.entidad_id.in_(ids_auditoria),
+            Auditoria.entidad.in_(
+                {"documento", "expediente", "solicitud_retiro", "solicitud_carga_emisor"}
+            ),
+        )
+    )
+    session.execute(
+        delete(ChatMensaje).where(
+            ChatMensaje.tenant_id == tenant_id,
+            ChatMensaje.texto.contains(str(expediente.id)),
+        )
+    )
+    session.execute(
+        delete(SolicitudRetiroMISD).where(
+            SolicitudRetiroMISD.tenant_id == tenant_id,
+            SolicitudRetiroMISD.expediente_id == expediente.id,
+        )
+    )
+    rutas = [documento.ruta_storage for documento in documentos_obj] + [
+        fila.ruta_temporal for fila in solicitudes_carga if fila.ruta_temporal
     ]
-    for sha256 in sorted(documento.sha256 for documento in documentos_obj):
-        bloquear_clave_archivo(session, tenant_id, sha256)
+    pendientes = [
+        EliminacionArchivoPendiente(tenant_id=tenant_id, ruta_storage=ruta) for ruta in rutas
+    ]
     session.add_all(pendientes)
     session.execute(
         delete(Alerta).where(
@@ -458,44 +475,27 @@ def ejecutar(
         )
     )
     for documento in documentos_obj:
-        auditoria.registrar(
-            session,
-            tenant_id,
-            "DOCUMENTO_ELIMINADO_CON_EXPEDIENTE",
-            "documento",
-            documento.id,
-            {"expediente_id": str(expediente.id), "sha256": documento.sha256},
-        )
         session.delete(documento)
     session.delete(expediente)
-    solicitud.estado = "EJECUTADA"
-    auditoria.registrar(
-        session,
-        tenant_id,
-        "MISD_RETIRO_EJECUTADO",
-        "solicitud_retiro",
-        solicitud.id,
-        {"expediente_id": str(expediente.id), "actor_cuenta_id": str(auth.cuenta_id)},
-    )
-    destinatarios = _destinatarios_aprobacion(session, tenant_id, expediente)
-    if solicitud.aprobado_por_cuenta_id is not None:
-        destinatarios.add(solicitud.aprobado_por_cuenta_id)
-    _notificar(
-        session,
-        tenant_id,
-        auth.cuenta_id,
-        destinatarios,
-        f"MISD: expediente {expediente.id} eliminado definitivamente.",
-    )
     session.commit()
-    archivos_eliminados = sum(
-        procesar_archivo_pendiente(session, almacen, pendiente) for pendiente in pendientes
-    )
+    for sha_archivo in set(sha_por_ruta.values()):
+        eliminar_cache_ocr(
+            sha_archivo,
+            str(tenant_id),
+            settings.storage_dir / "_ocr_cache",
+            settings.max_extracted_chars,
+            settings.max_ocr_pdf_pages,
+        )
+    archivos_eliminados = 0
+    for pendiente in pendientes:
+        if procesar_archivo_pendiente(session, almacen, pendiente):
+            archivos_eliminados += 1
+            session.delete(pendiente)
     session.commit()
     return {
         "id": str(solicitud.id),
-        "estado": solicitud.estado,
+        "estado": "EJECUTADA",
         "documentos_eliminados": len(documentos_obj),
         "archivos_eliminados": archivos_eliminados,
-        "archivos_pendientes": len(documentos_obj) - archivos_eliminados,
+        "archivos_pendientes": len(pendientes) - archivos_eliminados,
     }

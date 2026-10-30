@@ -224,7 +224,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
         setResultadoEliminacion(
           creadas + " solicitud(es) MISD enviada(s)" +
             (yaPendientes ? " · " + yaPendientes + " ya estaban pendientes" : "") +
-            ". El responsable o administración debe aprobarlas; después WILLI01 ejecuta el retiro." +
+            ". Administración debe aprobarlas; después el Responsable solicitante ejecuta el retiro." +
             (expedientesFuera > 0
               ? " " + expedientesFuera + " documento(s) quedaron seleccionados sin cambios."
               : ""),
@@ -352,14 +352,14 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
         <div>
           <h2>Documentos</h2>
           <p className="tenue">
-            Bandeja central para revisar, filtrar, reprocesar y eliminar documentos con auditoría.
+            Bandeja para revisar registros, filtrar expedientes y resolver correcciones de documentos.
           </p>
         </div>
         <div className="acciones-documento">
           <button onClick={reprocesarYCompletar} disabled={reprocesando}>
             {reprocesando ? "Reprocesando…" : "Reprocesar y completar datos"}
           </button>
-          <Link className="boton-enlace" to="/subir">Subir documentos</Link>
+          {sesion.rol === "GESTOR" && <Link className="boton-enlace" to="/subir">Subir documentos</Link>}
         </div>
       </div>
 
@@ -644,12 +644,15 @@ function FilaDocumento({
       <td>
         <div className="acciones-documento">
           <button disabled={ocupado} onClick={reprocesar}>Reprocesar</button>
-          <button className="peligro" disabled={ocupado} onClick={eliminarDocumento}>Eliminar</button>
-          {(sesion.rol === "GESTOR" || sesion.rol === "USUARIO") && (
+          {sesion.rol === "RESPONSABLE" ? (
             <button className="secundario" disabled={ocupado || !documento.expediente_id} onClick={solicitarRetiroMisd}>
-              Solicitar retiro MISD
+              Solicitar aprobación para eliminar expediente
             </button>
-          )}
+          ) : ["ADMINISTRADOR", "GESTOR", "USUARIO"].includes(sesion.rol) ? (
+            <button className="peligro" disabled={ocupado} onClick={eliminarDocumento}>
+              Eliminar definitivamente
+            </button>
+          ) : null}
         </div>
       </td>
     </tr>

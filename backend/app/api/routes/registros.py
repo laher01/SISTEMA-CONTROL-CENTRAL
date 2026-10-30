@@ -13,12 +13,7 @@ from app.models import Documento, Empresa, Expediente, Gestor, Miembro
 from app.schemas import FiltroOpcion, RegistroFila, RegistroOpciones, RegistroResumen
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.expedientes import documentos_faltantes, documentos_principales, tipos_presentes
-from app.services.misd_pagos import motivo_bloqueo_liquidacion
-from app.services.permisos import (
-    PERMISO_ELIMINAR_REGISTROS,
-    permiso_habilitado,
-    requiere_autorizacion_administrativa,
-)
+from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 
 router = APIRouter(prefix="/registros", tags=["registros"])
 
@@ -217,6 +212,7 @@ def listar(
         RolMiembro.ADMINISTRADOR,
         RolMiembro.GERENTE,
         RolMiembro.SECRETARIA,
+        RolMiembro.RESPONSABLE,
     ):
         consulta = consulta.where(Expediente.usuario_id == usuario_id)
     if gestor_id is not None and auth.rol in (
@@ -225,6 +221,7 @@ def listar(
         RolMiembro.GERENTE,
         RolMiembro.SECRETARIA,
         RolMiembro.USUARIO,
+        RolMiembro.RESPONSABLE,
     ):
         consulta = consulta.where(Expediente.gestor_id == gestor_id)
     if emisor and emisor.strip():
@@ -306,11 +303,26 @@ def listar(
                 opcionales.append(tipo)
 
         mostrar_propiedad = auth.rol != RolMiembro.GERENTE
-        puede_eliminar = (
-            puede_eliminar_rol
-            and (auth.rol != "GESTOR" or expediente.gestor_id == auth.gestor_id)
-            and not requiere_autorizacion_administrativa(auth.rol, expediente.receptor.autorizada)
-            and motivo_bloqueo_liquidacion(session, expediente) is None
+        puede_eliminar = puede_eliminar_rol and (
+            auth.rol == RolMiembro.ADMINISTRADOR
+            or (auth.rol == "GESTOR" and expediente.gestor_id == auth.gestor_id)
+            or (
+                auth.rol == RolMiembro.USUARIO
+                and (
+                    expediente.usuario_id == auth.usuario_id
+                    or bool(
+                        expediente.gestor_id
+                        and session.scalar(
+                            select(Gestor.id).where(
+                                Gestor.id == expediente.gestor_id,
+                                Gestor.tenant_id == tenant_id,
+                                Gestor.usuario_id == auth.usuario_id,
+                                Gestor.deleted_at.is_(None),
+                            )
+                        )
+                    )
+                )
+            )
         )
         filas.append(
             RegistroFila(
@@ -364,6 +376,16 @@ def _aplicar_ambito(consulta: Any, auth: OperativeAuthDep) -> Any:
         return consulta.where(Expediente.gestor_id == auth.gestor_id)
     if auth.rol == RolMiembro.USUARIO:
         return consulta.where(Expediente.usuario_id == auth.usuario_id)
+    if auth.rol == RolMiembro.RESPONSABLE:
+        if auth.miembro_id is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Responsable sin identidad")
+        subordinados = select(Miembro.id).where(
+            Miembro.tenant_id == auth.tenant_id,
+            Miembro.responsable_id == auth.miembro_id,
+            Miembro.rol == RolMiembro.USUARIO,
+            Miembro.deleted_at.is_(None),
+        )
+        return consulta.where(Expediente.usuario_id.in_(subordinados))
     if auth.rol == RolMiembro.GERENTE:
         return consulta.where(alcance_expedientes_gerente(auth))
     return consulta

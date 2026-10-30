@@ -14,7 +14,7 @@ from app.api.deps import get_contexto_actual, get_hoy
 from app.core.config import Settings, get_settings
 from app.core.db import get_session
 from app.main import app
-from app.models import Base, CuentaAcceso, Miembro
+from app.models import Base, CuentaAcceso, Gestor, Miembro
 from app.security import ContextoAcceso
 from app.services.expedientes import obtener_tenant
 
@@ -27,8 +27,12 @@ class Reloj:
 
 
 class AuthPrueba:
-    def __init__(self, contexto: ContextoAcceso) -> None:
+    def __init__(
+        self, contexto: ContextoAcceso, gestor_id: uuid.UUID, usuario_id: uuid.UUID
+    ) -> None:
         self.contexto = contexto
+        self.gestor_id = gestor_id
+        self.usuario_id = usuario_id
 
     def como_superadmin(self) -> None:
         self.contexto = ContextoAcceso(
@@ -148,6 +152,14 @@ def auth_prueba(engine: Engine, settings: Settings) -> AuthPrueba:
         )
         session.add(usuario)
         session.flush()
+        gestor = Gestor(
+            tenant_id=tenant.id,
+            codigo="TESTGST",
+            nombre="Gestor de pruebas",
+            usuario_id=usuario.id,
+        )
+        session.add(gestor)
+        session.flush()
         cuenta = CuentaAcceso(
             tenant_id=tenant.id,
             login="TESTUSR",
@@ -170,7 +182,7 @@ def auth_prueba(engine: Engine, settings: Settings) -> AuthPrueba:
             nombre=usuario.nombre,
             cambio_clave_obligatorio=False,
         )
-    return AuthPrueba(contexto)
+    return AuthPrueba(contexto, gestor.id, usuario.id)
 
 
 @pytest.fixture
@@ -190,6 +202,29 @@ def client(
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_hoy] = lambda: reloj.hoy
     app.dependency_overrides[get_contexto_actual] = lambda: auth_prueba.contexto
+    app.state.auth_prueba = auth_prueba
+    app.state.auto_gestor_upload_for_tests = True
     with TestClient(app, base_url="https://testserver") as c:
+        post_original = c.post
+
+        def post_con_gestor_de_prueba(url: str, *args: object, **kwargs: object):
+            rutas_carga = {
+                "/api/v1/documentos",
+                "/api/v1/documentos/paquete",
+                "/api/v1/documentos/lote-imagenes",
+            }
+            contexto_original = auth_prueba.contexto
+            if (
+                app.state.auto_gestor_upload_for_tests
+                and url in rutas_carga
+                and contexto_original.rol in {"USUARIO", "ADMINISTRADOR"}
+            ):
+                auth_prueba.como_gestor(auth_prueba.gestor_id, auth_prueba.usuario_id)
+            try:
+                return post_original(url, *args, **kwargs)
+            finally:
+                auth_prueba.contexto = contexto_original
+
+        c.post = post_con_gestor_de_prueba  # type: ignore[method-assign]
         yield c
     app.dependency_overrides.clear()
