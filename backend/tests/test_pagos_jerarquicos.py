@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Empresa, Expediente, Gestor, Miembro, PlanLiquidacion
 from app.security import ContextoAcceso
-from tests.conftest import AuthPrueba
+from tests.conftest import AuthPrueba, completar_facturas_de_prueba
 
 
 def test_pagos_por_jerarquia(client: TestClient, auth_prueba: AuthPrueba, session: Session) -> None:
@@ -99,6 +99,7 @@ def test_pagos_por_jerarquia(client: TestClient, auth_prueba: AuthPrueba, sessio
             ),
         ]
     )
+    completar_facturas_de_prueba(session)
     session.commit()
 
     datos = {

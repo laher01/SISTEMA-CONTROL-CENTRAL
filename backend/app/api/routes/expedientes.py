@@ -56,6 +56,8 @@ from app.services.eliminacion import (
 from app.services.expedientes import (
     buscar_expediente,
     documentos_faltantes,
+    eliminar_expediente_vacio,
+    expediente_tiene_documentos_activos,
     fecha_limite,
     recalcular_expedientes,
 )
@@ -134,13 +136,120 @@ def previsualizar_expedientes_vacios(
                 "documentos_activos": 0,
                 "documentos_historicos": int(documentos_historicos),
                 "referencias_gre": int(referencias),
-                "apto_limpieza_atomica": documentos_historicos == 0,
+                "requiere_limpieza_historica": documentos_historicos > 0,
+                "apto_limpieza_atomica": True,
             }
         )
     return {
         "solo_lectura": True,
         "total": len(resultados),
         "resultados": resultados,
+    }
+
+
+@router.post("/previsualizar-vacios/limpiar")
+def limpiar_expedientes_vacios_confirmados(
+    session: SessionDep,
+    almacen: AlmacenDep,
+    settings: SettingsDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    expediente_ids: list[uuid.UUID],
+) -> dict[str, object]:
+    """Limpia únicamente IDs revisados que sigan sin documentos activos."""
+    if auth.rol != RolMiembro.ADMINISTRADOR:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Administración puede limpiar vacíos")
+    if not expediente_ids or len(expediente_ids) > 200:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Seleccione de 1 a 200 expedientes",
+        )
+    if len(set(expediente_ids)) != len(expediente_ids):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "IDs repetidos")
+
+    filas = list(
+        session.scalars(
+            select(Expediente)
+            .where(
+                Expediente.tenant_id == tenant_id,
+                Expediente.deleted_at.is_(None),
+                Expediente.id.in_(expediente_ids),
+            )
+            .with_for_update()
+        )
+    )
+    if len(filas) != len(expediente_ids):
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Uno o más expedientes ya no están disponibles",
+        )
+    sha_archivos = set(
+        session.scalars(
+            select(Documento.sha256).where(
+                Documento.tenant_id == tenant_id,
+                Documento.expediente_id.in_(expediente_ids),
+            )
+        )
+    )
+    con_documentos = [
+        str(fila.id)
+        for fila in filas
+        if (
+            session.scalar(
+                select(Documento.id)
+                .where(
+                    Documento.tenant_id == tenant_id,
+                    Documento.expediente_id == fila.id,
+                    Documento.deleted_at.is_(None),
+                )
+                .limit(1)
+            )
+            is not None
+        )
+    ]
+    if con_documentos:
+        session.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {
+                "mensaje": "La revisión encontró documentos activos; "
+                "no se limpió ningún expediente",
+                "expedientes": con_documentos,
+            },
+        )
+
+    pendientes: list[EliminacionArchivoPendiente] = []
+    for fila in filas:
+        if not eliminar_expediente_vacio(session, fila, pendientes):
+            session.rollback()
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "El expediente cambió durante la limpieza",
+            )
+    session.commit()
+
+    from app.services.cache_ocr import eliminar_cache_ocr
+
+    for sha_archivo in sha_archivos:
+        eliminar_cache_ocr(
+            sha_archivo,
+            str(tenant_id),
+            settings.storage_dir / "_ocr_cache",
+            settings.max_extracted_chars,
+            settings.max_ocr_pdf_pages,
+        )
+
+    archivos_eliminados = 0
+    for pendiente in pendientes:
+        if procesar_archivo_pendiente(session, almacen, pendiente):
+            session.delete(pendiente)
+            archivos_eliminados += 1
+    session.commit()
+    return {
+        "expedientes_eliminados": len(filas),
+        "archivos_eliminados": archivos_eliminados,
+        "archivos_pendientes": len(pendientes) - archivos_eliminados,
+        "expediente_ids": [str(fila.id) for fila in filas],
     }
 
 
@@ -228,7 +337,9 @@ def listar(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[ExpedienteOut]:
     consulta = select(Expediente).where(
-        Expediente.tenant_id == tenant_id, Expediente.deleted_at.is_(None)
+        Expediente.tenant_id == tenant_id,
+        Expediente.deleted_at.is_(None),
+        expediente_tiene_documentos_activos(),
     )
     if auth.rol == "GESTOR":
         consulta = consulta.where(Expediente.gestor_id == auth.gestor_id)
@@ -391,7 +502,11 @@ def resumen_empresas_por_rol(
         "GESTOR",
     ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin acceso al resumen")
-    condiciones = [Expediente.tenant_id == tenant_id, Expediente.deleted_at.is_(None)]
+    condiciones = [
+        Expediente.tenant_id == tenant_id,
+        Expediente.deleted_at.is_(None),
+        expediente_tiene_documentos_activos(),
+    ]
     if fecha_desde:
         condiciones.append(Expediente.fecha_emision >= fecha_desde)
     if fecha_hasta:
@@ -487,7 +602,9 @@ def resumen_filtrado(
     dia: date | None = None,
 ) -> dict[str, int | Decimal]:
     consulta = select(Expediente).where(
-        Expediente.tenant_id == tenant_id, Expediente.deleted_at.is_(None)
+        Expediente.tenant_id == tenant_id,
+        Expediente.deleted_at.is_(None),
+        expediente_tiene_documentos_activos(),
     )
     if auth.rol == "GESTOR":
         consulta = consulta.where(Expediente.gestor_id == auth.gestor_id)
@@ -635,6 +752,7 @@ def listar_ids(
     consulta = select(Expediente.id).where(
         Expediente.tenant_id == tenant_id,
         Expediente.deleted_at.is_(None),
+        expediente_tiene_documentos_activos(),
     )
     if auth.rol == "GESTOR":
         consulta = consulta.where(Expediente.gestor_id == auth.gestor_id)
@@ -764,6 +882,7 @@ def imprimir_lote(
                 Expediente.tenant_id == tenant_id,
                 Expediente.id.in_(ids_unicos),
                 Expediente.deleted_at.is_(None),
+                expediente_tiene_documentos_activos(),
             )
         )
     )
@@ -1060,6 +1179,19 @@ def detalle(
 ) -> ExpedienteDetalle:
     expediente = session.get(Expediente, expediente_id)
     if expediente is None or expediente.tenant_id != tenant_id or expediente.deleted_at:
+        raise no_encontrado("Expediente")
+    if (
+        session.scalar(
+            select(Documento.id)
+            .where(
+                Documento.tenant_id == tenant_id,
+                Documento.expediente_id == expediente.id,
+                Documento.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+        is None
+    ):
         raise no_encontrado("Expediente")
     if auth.rol == "GESTOR" and expediente.gestor_id != auth.gestor_id:
         raise no_encontrado("Expediente")

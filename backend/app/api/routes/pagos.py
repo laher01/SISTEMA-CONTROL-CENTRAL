@@ -52,6 +52,7 @@ from app.security import cuenta_administradora_responsable
 from app.services import auditoria
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.distribucion_jonatan import calcular_distribucion_jonatan
+from app.services.expedientes import expediente_tiene_documentos_activos
 
 router = APIRouter(prefix="/pagos", tags=["pagos"])
 
@@ -221,6 +222,7 @@ def clientes_pago(
                 select(Expediente.receptor_id).where(
                     Expediente.tenant_id == tenant_id,
                     Expediente.deleted_at.is_(None),
+                    expediente_tiene_documentos_activos(),
                     alcance_expedientes_gerente(auth),
                 )
             )
@@ -350,6 +352,7 @@ def consolidado_compras(
             .where(
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
+                expediente_tiene_documentos_activos(),
                 Expediente.fecha_emision.between(desde, hasta),
                 Expediente.moneda == moneda,
                 Empresa.tenant_id == tenant_id,
@@ -370,6 +373,7 @@ def consolidado_compras(
             .where(
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
+                expediente_tiene_documentos_activos(),
                 Expediente.fecha_emision.between(desde, hasta),
                 Expediente.moneda == moneda,
                 Miembro.tenant_id == tenant_id,
@@ -419,6 +423,7 @@ def consolidado_compras(
             .where(
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
+                expediente_tiene_documentos_activos(),
                 Expediente.fecha_emision.between(desde, hasta),
                 Expediente.moneda == moneda,
                 alcance_expedientes_gerente(auth),
@@ -473,6 +478,7 @@ def consolidado_flujos(
         .where(
             Expediente.tenant_id == tenant_id,
             Expediente.deleted_at.is_(None),
+            expediente_tiene_documentos_activos(),
             Expediente.fecha_emision.between(desde, hasta),
             Expediente.moneda == moneda,
             Empresa.tenant_id == tenant_id,
@@ -545,6 +551,7 @@ def resumen_clientes(
                 select(func.coalesce(func.sum(Expediente.importe_total), 0)).where(
                     Expediente.tenant_id == tenant_id,
                     Expediente.deleted_at.is_(None),
+                    expediente_tiene_documentos_activos(),
                     Expediente.receptor_id == cliente.id,
                     Expediente.moneda == moneda,
                     Expediente.fecha_emision >= desde,
@@ -558,6 +565,7 @@ def resumen_clientes(
                 select(func.coalesce(func.sum(Expediente.importe_total), 0)).where(
                     Expediente.tenant_id == tenant_id,
                     Expediente.deleted_at.is_(None),
+                    expediente_tiene_documentos_activos(),
                     Expediente.receptor_id == cliente.id,
                     Expediente.moneda == moneda,
                     Expediente.fecha_emision < desde,
@@ -806,6 +814,7 @@ def _resumen_pedido(
     base_filtros = (
         Expediente.tenant_id == tenant_id,
         Expediente.deleted_at.is_(None),
+        expediente_tiene_documentos_activos(),
         Expediente.receptor_id == pedido.cliente_id,
         Expediente.moneda == pedido.moneda,
         Expediente.fecha_emision >= desde,

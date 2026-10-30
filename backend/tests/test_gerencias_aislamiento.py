@@ -16,7 +16,7 @@ from app.models import (
 )
 from app.security import ContextoAcceso
 from app.services.ingesta import atribuir_gerencia_inequivoca
-from tests.conftest import AuthPrueba
+from tests.conftest import AuthPrueba, completar_facturas_de_prueba
 
 
 def test_produccion_aislada_por_gerente(
@@ -76,6 +76,7 @@ def test_produccion_aislada_por_gerente(
                 pedido_gerencia_id=pedido.id,
             )
         )
+    completar_facturas_de_prueba(session)
     session.commit()
 
     def como(gerente: Miembro) -> None:

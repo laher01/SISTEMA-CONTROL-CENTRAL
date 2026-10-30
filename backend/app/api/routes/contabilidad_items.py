@@ -18,6 +18,7 @@ from app.item_models import AuditoriaFacturaItem, LineaComprobanteItem, Producto
 from app.models import Documento, Expediente, Miembro
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.contabilidad_items_auditoria import registrar_decision, resolver_propuesta
+from app.services.expedientes import expediente_tiene_documentos_activos
 
 router = APIRouter(prefix="/contabilidad-items", tags=["contabilidad-items"])
 
@@ -89,6 +90,7 @@ def resumen(
             Expediente.tenant_id == auth.tenant_id,
             Documento.deleted_at.is_(None),
             Expediente.deleted_at.is_(None),
+            expediente_tiene_documentos_activos(),
             ProductoItem.activo.is_(True),
             alcance,
             or_(
@@ -205,6 +207,7 @@ def facturas_por_producto(
             Expediente.tenant_id == auth.tenant_id,
             Documento.deleted_at.is_(None),
             Expediente.deleted_at.is_(None),
+            expediente_tiene_documentos_activos(),
             _alcance(auth),
             or_(
                 ultimo_estado.is_(None),
@@ -298,6 +301,7 @@ def conciliacion(
         .where(
             Expediente.tenant_id == auth.tenant_id,
             Expediente.deleted_at.is_(None),
+            expediente_tiene_documentos_activos(),
             _alcance(auth),
         )
         .group_by(Expediente.moneda)
@@ -339,6 +343,7 @@ def detalle_expediente(
             Expediente.id == expediente_id,
             Expediente.tenant_id == auth.tenant_id,
             Expediente.deleted_at.is_(None),
+            expediente_tiene_documentos_activos(),
             _alcance(auth),
         )
     )

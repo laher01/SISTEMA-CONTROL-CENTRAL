@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Empresa, Expediente, Miembro
 from app.security import ContextoAcceso
-from tests.conftest import AuthPrueba
+from tests.conftest import AuthPrueba, completar_facturas_de_prueba
 
 
 def test_pagos_consolidados_historicos_y_privacidad(
@@ -77,6 +77,7 @@ def test_pagos_consolidados_historicos_y_privacidad(
             gerente_id=None,
         )
     )
+    completar_facturas_de_prueba(session)
     session.commit()
 
     def iniciar(gerente: Miembro) -> None:

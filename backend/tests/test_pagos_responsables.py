@@ -15,7 +15,7 @@ from app.models import (
     GerenteResponsable,
     Miembro,
 )
-from tests.conftest import AuthPrueba
+from tests.conftest import AuthPrueba, completar_facturas_de_prueba
 
 
 def _preparar(session: Session, auth_prueba: AuthPrueba) -> tuple[str, str]:
@@ -59,6 +59,7 @@ def _preparar(session: Session, auth_prueba: AuthPrueba) -> tuple[str, str]:
         gerente_id=auth_prueba.contexto.miembro_id,
     )
     session.add(factura)
+    completar_facturas_de_prueba(session)
     session.commit()
     return str(responsable.id), str(cliente.id)
 
@@ -235,6 +236,7 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
         cambio_clave_obligatorio=False,
     )
     session.add_all([cuenta_responsable, cuenta_gerente])
+    completar_facturas_de_prueba(session)
     session.commit()
     auth_prueba.contexto = replace(
         auth_prueba.contexto,

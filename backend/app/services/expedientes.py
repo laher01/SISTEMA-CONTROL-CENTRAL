@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.config import Settings
 from app.enums import EstadoExpediente, Moneda, TipoAlerta, TipoComprobante, TipoDocumento
@@ -13,14 +14,26 @@ from app.models import (
     AlertaManual,
     Auditoria,
     ChatMensaje,
+    CorreccionIA,
     Documento,
+    EliminacionArchivoPendiente,
     Empresa,
     Expediente,
+    PagoERP,
     ReferenciaGRE,
+    RelacionDocumento,
+    SolicitudCargaEmisor,
     SolicitudRetiroMISD,
     Tenant,
     ahora,
 )
+
+
+def expediente_tiene_documentos_activos() -> ColumnElement[bool]:
+    """Condición SQL compartida para excluir cascarones de todos los listados."""
+    return Expediente.documentos.any(
+        (Documento.tenant_id == Expediente.tenant_id) & Documento.deleted_at.is_(None)
+    )
 
 
 def obtener_tenant(session: Session, nombre: str) -> Tenant:
@@ -112,25 +125,57 @@ def buscar_expediente(
     return session.scalars(consulta).first()
 
 
-def eliminar_expediente_vacio(session: Session, expediente: Expediente) -> bool:
-    """Purga un cascarón sin documentos para que no contamine una nueva ingesta.
+def eliminar_expediente_vacio(
+    session: Session,
+    expediente: Expediente,
+    archivos_pendientes: list[EliminacionArchivoPendiente] | None = None,
+) -> bool:
+    """Purga un expediente sin documentos activos y sus restos históricos.
 
-    Devuelve False si queda cualquier fila de documento asociada, incluso una
-    eliminada lógicamente; en ese caso hace falta revisar antes de purgar.
+    Los documentos activos son una barrera estricta. Las filas ya eliminadas
+    lógicamente se limpian junto con sus dependencias y se encolan sus archivos
+    para que el borrado físico revalide que ningún documento activo los reutiliza.
     """
-    tiene_documentos = session.scalar(
+    documentos_activos = session.scalar(
         select(Documento.id)
         .where(
             Documento.tenant_id == expediente.tenant_id,
             Documento.expediente_id == expediente.id,
+            Documento.deleted_at.is_(None),
         )
         .limit(1)
     )
-    if tiene_documentos is not None:
+    if documentos_activos is not None:
         return False
 
-    from app.item_models import AuditoriaFacturaItem
+    from app.item_models import AuditoriaFacturaItem, LineaComprobanteItem
 
+    documentos_historicos = list(
+        session.scalars(
+            select(Documento)
+            .where(
+                Documento.tenant_id == expediente.tenant_id,
+                Documento.expediente_id == expediente.id,
+            )
+            .with_for_update()
+        )
+    )
+    documento_ids = {documento.id for documento in documentos_historicos}
+    solicitudes_carga = (
+        list(
+            session.scalars(
+                select(SolicitudCargaEmisor).where(
+                    SolicitudCargaEmisor.tenant_id == expediente.tenant_id,
+                    SolicitudCargaEmisor.sha256_archivo.in_(
+                        {documento.sha256 for documento in documentos_historicos}
+                    ),
+                )
+            )
+        )
+        if documentos_historicos
+        else []
+    )
+    solicitudes_carga_ids = {solicitud.id for solicitud in solicitudes_carga}
     solicitudes_misd = set(
         session.scalars(
             select(SolicitudRetiroMISD.id).where(
@@ -139,6 +184,77 @@ def eliminar_expediente_vacio(session: Session, expediente: Expediente) -> bool:
             )
         )
     )
+
+    if documento_ids:
+        session.execute(
+            delete(RelacionDocumento).where(
+                RelacionDocumento.origen_id.in_(documento_ids)
+                | RelacionDocumento.destino_id.in_(documento_ids)
+            )
+        )
+        session.execute(delete(ReferenciaGRE).where(ReferenciaGRE.documento_id.in_(documento_ids)))
+        session.execute(delete(CorreccionIA).where(CorreccionIA.documento_id.in_(documento_ids)))
+        session.execute(
+            delete(LineaComprobanteItem).where(LineaComprobanteItem.documento_id.in_(documento_ids))
+        )
+        session.execute(
+            update(PagoERP)
+            .where(
+                PagoERP.tenant_id == expediente.tenant_id,
+                PagoERP.voucher_documento_id.in_(documento_ids),
+            )
+            .values(voucher_documento_id=None)
+        )
+        session.execute(
+            delete(Auditoria).where(
+                Auditoria.tenant_id == expediente.tenant_id,
+                Auditoria.entidad == "documento",
+                Auditoria.entidad_id.in_(documento_ids),
+            )
+        )
+    if solicitudes_carga_ids:
+        session.execute(
+            delete(Auditoria).where(
+                Auditoria.tenant_id == expediente.tenant_id,
+                Auditoria.entidad == "solicitud_carga_emisor",
+                Auditoria.entidad_id.in_(solicitudes_carga_ids),
+            )
+        )
+        for solicitud_id in solicitudes_carga_ids:
+            session.execute(
+                delete(AlertaManual).where(
+                    AlertaManual.tenant_id == expediente.tenant_id,
+                    AlertaManual.mensaje.contains(str(solicitud_id)),
+                )
+            )
+        for solicitud in solicitudes_carga:
+            if solicitud.ruta_temporal:
+                pendiente = EliminacionArchivoPendiente(
+                    tenant_id=expediente.tenant_id,
+                    ruta_storage=solicitud.ruta_temporal,
+                )
+                session.add(pendiente)
+                if archivos_pendientes is not None:
+                    archivos_pendientes.append(pendiente)
+            session.delete(solicitud)
+    if documento_ids:
+        session.execute(
+            delete(Auditoria).where(
+                Auditoria.tenant_id == expediente.tenant_id,
+                Auditoria.entidad == "solicitud_retiro",
+                Auditoria.entidad_id.in_(solicitudes_misd),
+            )
+        )
+        for documento in documentos_historicos:
+            pendiente = EliminacionArchivoPendiente(
+                tenant_id=expediente.tenant_id,
+                ruta_storage=documento.ruta_storage,
+            )
+            session.add(pendiente)
+            if archivos_pendientes is not None:
+                archivos_pendientes.append(pendiente)
+            session.delete(documento)
+
     session.execute(
         update(ReferenciaGRE)
         .where(
@@ -330,7 +446,9 @@ def recalcular_expedientes(
     receptor_id: uuid.UUID | None = None,
 ) -> int:
     consulta = select(Expediente).where(
-        Expediente.tenant_id == tenant_id, Expediente.deleted_at.is_(None)
+        Expediente.tenant_id == tenant_id,
+        Expediente.deleted_at.is_(None),
+        expediente_tiene_documentos_activos(),
     )
     if receptor_id is not None:
         consulta = consulta.where(Expediente.receptor_id == receptor_id)

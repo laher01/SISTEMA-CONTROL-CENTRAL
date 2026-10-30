@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models import Empresa, Expediente, Gestor, PagoGestor
-from tests.conftest import AuthPrueba
+from tests.conftest import AuthPrueba, completar_facturas_de_prueba
 
 
 def test_liquidacion_gestor_conserva_snapshot_de_porcentaje_y_saldo(
@@ -44,6 +44,7 @@ def test_liquidacion_gestor_conserva_snapshot_de_porcentaje_y_saldo(
             gestor_id=gestor.id,
         )
     )
+    completar_facturas_de_prueba(session)
     session.commit()
 
     datos = {
@@ -58,6 +59,7 @@ def test_liquidacion_gestor_conserva_snapshot_de_porcentaje_y_saldo(
     assert Decimal(programacion.json()["saldo"]) == Decimal("20.00")
 
     gestor.porcentaje_comision = Decimal("7.0000")
+    completar_facturas_de_prueba(session)
     session.commit()
 
     cotizacion_nueva = client.post("/api/v1/pagos-gestores/cotizar", json=datos)
@@ -79,6 +81,7 @@ def test_liquidacion_gestor_conserva_snapshot_de_porcentaje_y_saldo(
     solapado = {**datos, "desde": "2026-10-15", "hasta": "2026-11-14"}
     assert client.post("/api/v1/pagos-gestores/programar", json=solapado).status_code == 409
     pago_historico.saldo = Decimal("10.00")
+    completar_facturas_de_prueba(session)
     session.commit()
     assert client.delete(f"/api/v1/pagos-gestores/{pago_id}").status_code == 409
     assert session.get(PagoGestor, uuid.UUID(pago_id)) is not None

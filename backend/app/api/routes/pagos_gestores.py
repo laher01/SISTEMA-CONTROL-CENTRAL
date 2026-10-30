@@ -14,6 +14,7 @@ from app.enums import RolMiembro
 from app.models import Empresa, Expediente, Gestor, PagoGestor
 from app.services import auditoria
 from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
+from app.services.expedientes import expediente_tiene_documentos_activos
 
 router = APIRouter(prefix="/pagos-gestores", tags=["pagos-gestores"])
 
@@ -63,6 +64,7 @@ def _calcular(
                 Expediente.usuario_id == usuario_id,
                 Expediente.gestor_id == gestor.id,
                 Expediente.deleted_at.is_(None),
+                expediente_tiene_documentos_activos(),
                 Expediente.receptor.has(
                     Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
                 ),

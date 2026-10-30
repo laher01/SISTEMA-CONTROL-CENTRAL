@@ -12,7 +12,7 @@ from app.models import (
     PedidoGerencia,
 )
 from app.security import ContextoAcceso
-from tests.conftest import AuthPrueba
+from tests.conftest import AuthPrueba, completar_facturas_de_prueba
 
 
 def test_responsable_solo_consulta_su_equipo(
@@ -67,6 +67,7 @@ def test_responsable_solo_consulta_su_equipo(
             monto_asignado=Decimal("90.00"),
         )
     )
+    completar_facturas_de_prueba(session)
     session.commit()
 
     assert client.get("/api/v1/responsable/resumen").status_code == 403

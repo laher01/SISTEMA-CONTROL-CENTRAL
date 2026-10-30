@@ -1,8 +1,9 @@
 import uuid
 
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
-from tests.conftest import AuthPrueba
+from tests.conftest import AuthPrueba, completar_facturas_de_prueba
 from tests.xml import RECEPTOR, factura
 
 
@@ -143,7 +144,9 @@ def test_factura_menor_al_umbral_no_exige_voucher_ni_guia(
     assert "GRR" not in detalle["faltantes"]
 
 
-def test_rhe_se_busca_con_prefijo_rhe(client: TestClient, auth_prueba: AuthPrueba) -> None:
+def test_rhe_se_busca_con_prefijo_rhe(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
     usuario, gestor = crear_usuario_y_gestor(client, auth_prueba)
     auth_prueba.como_gestor(
         uuid.UUID(str(gestor["id"])),
@@ -166,6 +169,7 @@ def test_rhe_se_busca_con_prefijo_rhe(client: TestClient, auth_prueba: AuthPrueb
     creado = respuesta.json()
     assert creado["usuario_id"] == usuario["id"]
     assert creado["gestor_id"] == gestor["id"]
+    completar_facturas_de_prueba(session)
 
     busqueda = client.get("/api/v1/expedientes", params={"buscar": "RHE-E001-15"})
     assert busqueda.status_code == 200, busqueda.text

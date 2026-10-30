@@ -1568,6 +1568,7 @@ def eliminar_documento(
     _avisar_eliminacion(session, tenant_id, auth, documento)
     ruta_storage = documento.ruta_storage
     sha_archivo = documento.sha256
+    sha_archivos_eliminados = {sha_archivo}
     bloquear_clave_archivo(session, tenant_id, sha_archivo)
     pendientes = [
         EliminacionArchivoPendiente(tenant_id=tenant_id, ruta_storage=ruta)
@@ -1589,18 +1590,27 @@ def eliminar_documento(
         if queda_documento is None:
             # La misma purga completa se usa al retirar el último documento y
             # al reemplazar cascarones heredados durante una nueva ingesta.
-            if not eliminar_expediente_vacio(session, expediente):
+            sha_archivos_eliminados.update(
+                session.scalars(
+                    select(Documento.sha256).where(
+                        Documento.tenant_id == tenant_id,
+                        Documento.expediente_id == expediente.id,
+                    )
+                )
+            )
+            if not eliminar_expediente_vacio(session, expediente, pendientes):
                 actualizar_expediente(session, expediente, hoy, settings)
         else:
             actualizar_expediente(session, expediente, hoy, settings)
     session.commit()
-    eliminar_cache_ocr(
-        sha_archivo,
-        str(tenant_id),
-        settings.storage_dir / "_ocr_cache",
-        settings.max_extracted_chars,
-        settings.max_ocr_pdf_pages,
-    )
+    for sha_eliminado in sha_archivos_eliminados:
+        eliminar_cache_ocr(
+            sha_eliminado,
+            str(tenant_id),
+            settings.storage_dir / "_ocr_cache",
+            settings.max_extracted_chars,
+            settings.max_ocr_pdf_pages,
+        )
     todos_completados = True
     for pendiente in pendientes:
         if procesar_archivo_pendiente(session, almacen, pendiente):

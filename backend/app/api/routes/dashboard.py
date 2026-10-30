@@ -13,7 +13,7 @@ from app.enums import EstadoDocumento, EstadoExpediente, Moneda, RolMiembro, Tip
 from app.models import Alerta, Documento, Empresa, Expediente, Gestor, Miembro
 from app.schemas import DashboardDesglose, DashboardDesgloseFila, DashboardResumen, MontosMoneda
 from app.services.ambito_gerencia import alcance_expedientes_gerente
-from app.services.expedientes import documentos_faltantes
+from app.services.expedientes import documentos_faltantes, expediente_tiene_documentos_activos
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -61,6 +61,7 @@ def detalle_secretaria(
         .where(
             Expediente.tenant_id == tenant_id,
             Expediente.deleted_at.is_(None),
+            expediente_tiene_documentos_activos(),
             Expediente.fecha_emision >= desde,
             Expediente.fecha_emision <= hasta,
         )
@@ -222,6 +223,7 @@ def resumen_secretaria_clientes(
             Expediente.tenant_id == tenant_id,
             Empresa.tenant_id == tenant_id,
             Expediente.deleted_at.is_(None),
+            expediente_tiene_documentos_activos(),
             Expediente.fecha_emision >= desde,
             Expediente.fecha_emision <= hasta,
         )
@@ -259,6 +261,7 @@ def _alcance_dashboard(
     condiciones: list[ColumnElement[bool]] = [
         Expediente.tenant_id == tenant_id,
         Expediente.deleted_at.is_(None),
+        expediente_tiene_documentos_activos(),
     ]
     if auth.rol == "GESTOR":
         condiciones.append(Expediente.gestor_id == auth.gestor_id)
@@ -527,6 +530,7 @@ def resumen(
                     Expediente.tenant_id == tenant_id,
                     alcance_expedientes_gerente(auth),
                     Expediente.deleted_at.is_(None),
+                    expediente_tiene_documentos_activos(),
                 )
             )
         )
@@ -581,6 +585,7 @@ def desglose(
         .where(
             Expediente.tenant_id == tenant_id,
             Expediente.deleted_at.is_(None),
+            expediente_tiene_documentos_activos(),
         )
     )
     consulta = consulta.where(

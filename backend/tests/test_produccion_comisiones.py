@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models import Empresa, Expediente, Miembro
-from tests.conftest import AuthPrueba
+from tests.conftest import AuthPrueba, completar_facturas_de_prueba
 
 
 def test_produccion_por_receptor_usa_documentos_del_usuario_y_periodo(
@@ -37,6 +37,7 @@ def test_produccion_por_receptor_usa_documentos_del_usuario_y_periodo(
             usuario_id=usuario_id,
         )
     )
+    completar_facturas_de_prueba(session)
     session.commit()
 
     parametros = {
@@ -66,6 +67,7 @@ def test_produccion_por_receptor_usa_documentos_del_usuario_y_periodo(
         tenant_id=tenant_id, codigo="OTROUSR", nombre="Otro usuario", rol="USUARIO", activo=True
     )
     session.add(otro_usuario)
+    completar_facturas_de_prueba(session)
     session.commit()
     invalido = client.get(
         "/api/v1/comisiones/produccion-receptores",

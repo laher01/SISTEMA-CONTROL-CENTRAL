@@ -13,6 +13,7 @@ from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
 from app.models import Empresa, Expediente, Gestor, Miembro
 from app.services.comisiones import calcular_comisiones_por_receptor
+from app.services.expedientes import expediente_tiene_documentos_activos
 
 router = APIRouter(prefix="/comisiones", tags=["comisiones"])
 
@@ -62,6 +63,7 @@ def receptores_de_usuario(
                 Expediente.tenant_id == tenant_id,
                 Expediente.usuario_id == usuario_id,
                 Expediente.deleted_at.is_(None),
+                expediente_tiene_documentos_activos(),
             )
             .distinct()
             .order_by(Empresa.razon_social)
@@ -107,6 +109,7 @@ def produccion_por_receptor(
     filtros = [
         Expediente.tenant_id == tenant_id,
         Expediente.deleted_at.is_(None),
+        expediente_tiene_documentos_activos(),
         Expediente.usuario_id == usuario_id,
         Expediente.fecha_emision >= desde,
         Expediente.fecha_emision <= hasta,
@@ -187,6 +190,7 @@ def simular(
     filtros = [
         Expediente.tenant_id == tenant_id,
         Expediente.deleted_at.is_(None),
+        expediente_tiene_documentos_activos(),
         Expediente.receptor.has(Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)),
         Expediente.usuario_id == datos.usuario_id,
         Expediente.fecha_emision >= datos.desde,

@@ -28,6 +28,7 @@ from app.models import (
 from app.services import auditoria
 from app.services.cache_ocr import eliminar_cache_ocr
 from app.services.eliminacion import procesar_archivo_pendiente
+from app.services.expedientes import expediente_tiene_documentos_activos
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 
 router = APIRouter(prefix="/misd/solicitudes", tags=["misd"])
@@ -155,6 +156,7 @@ def solicitar(
             Expediente.id == datos.expediente_id,
             Expediente.tenant_id == tenant_id,
             Expediente.deleted_at.is_(None),
+            expediente_tiene_documentos_activos(),
         )
         .with_for_update()
     )

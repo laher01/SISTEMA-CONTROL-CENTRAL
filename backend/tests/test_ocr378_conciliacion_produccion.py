@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models import Empresa, Expediente
-from tests.conftest import AuthPrueba
+from tests.conftest import AuthPrueba, completar_facturas_de_prueba
 
 
 def test_resumen_autorizado_y_produccion_comisiones_con_pendiente(
@@ -49,6 +49,7 @@ def test_resumen_autorizado_y_produccion_comisiones_con_pendiente(
         )
     ]
     session.add_all(expedientes)
+    completar_facturas_de_prueba(session)
     session.commit()
 
     resumen = client.get("/api/v1/expedientes/resumen")
@@ -71,12 +72,14 @@ def test_resumen_autorizado_y_produccion_comisiones_con_pendiente(
     assert Decimal(produccion.json()[0]["produccion"]) == Decimal("425.00")
 
     expedientes[1].pendiente_aprobacion = False
+    completar_facturas_de_prueba(session)
     session.commit()
     aprobado = client.get("/api/v1/expedientes/resumen")
     assert aprobado.status_code == 200, aprobado.text
     assert Decimal(str(aprobado.json()["total_pen_autorizado"])) == Decimal("425.00")
 
     expedientes[1].pendiente_aprobacion = True
+    completar_facturas_de_prueba(session)
     session.commit()
     revocado = client.get("/api/v1/expedientes/resumen")
     assert revocado.status_code == 200, revocado.text
