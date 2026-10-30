@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
+from sqlalchemy.sql.selectable import Subquery
 
 from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.enums import RolMiembro
@@ -101,7 +102,7 @@ def _redondear(valor: Decimal) -> Decimal:
     return valor.quantize(CENTIMO, rounding=ROUND_HALF_UP)
 
 
-def _candidatos_gerencia(tenant_id: uuid.UUID):
+def _candidatos_gerencia(tenant_id: uuid.UUID) -> Subquery:
     gerente = aliased(Miembro)
     return (
         select(
@@ -149,7 +150,7 @@ def _candidatos_gerencia(tenant_id: uuid.UUID):
     )
 
 
-def _gerencia_resuelta(tenant_id: uuid.UUID):
+def _gerencia_resuelta(tenant_id: uuid.UUID) -> Subquery:
     """Resuelve el Gerente desde Organización y no exige que exista un pedido.
 
     Una relación compartida solo se resuelve cuando el expediente ya tiene un
