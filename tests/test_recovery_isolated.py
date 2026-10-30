@@ -69,7 +69,7 @@ class RecoveryFixtureTests(unittest.TestCase):
             workflow,
         )
         self.assertIn("environment: staging", workflow)
-        self.assertIn("test \"\u0024{{ github.ref_name }}\" = \"main\"", workflow)
+        self.assertIn('test "${{ github.ref_name }}" = "main"', workflow)
         self.assertIn("deploy/preflight-backup-restore-items.sh", workflow)
         self.assertIn(
             "needs: [verify-backend, verify-frontend, verify-recovery-isolated, verify-recovery-docker]",
