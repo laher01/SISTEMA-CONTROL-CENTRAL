@@ -20,14 +20,11 @@ from app.models import (
     ahora,
 )
 from app.services import auditoria
-from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
 from app.services.eliminacion import (
     bloquear_clave_archivo,
     procesar_archivo_pendiente,
     tablas_que_referencian,
 )
-from app.services.misd_autorizaciones import dentro_ventana_correccion
-from app.services.misd_pagos import motivo_bloqueo_liquidacion, motivo_bloqueo_voucher
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 
 router = APIRouter(prefix="/misd/solicitudes", tags=["misd"])
@@ -44,24 +41,20 @@ class ResolverRetiro(BaseModel):
 
 
 def _ambito(expediente: Expediente, auth: OperativeAuthDep, session: SessionDep) -> bool:
-    if auth.rol == "GESTOR":
-        return auth.gestor_id is not None and expediente.gestor_id == auth.gestor_id
-    if auth.rol == "USUARIO":
-        return auth.usuario_id is not None and expediente.usuario_id == auth.usuario_id
-    if auth.rol == "RESPONSABLE":
-        return bool(
-            auth.miembro_id
-            and session.scalar(
-                select(Miembro.id).where(
-                    Miembro.id == expediente.usuario_id,
-                    Miembro.tenant_id == expediente.tenant_id,
-                    Miembro.responsable_id == auth.miembro_id,
-                    Miembro.deleted_at.is_(None),
-                )
+    if auth.rol == "ADMINISTRADOR":
+        return True
+    if auth.rol != "RESPONSABLE" or auth.miembro_id is None or expediente.usuario_id is None:
+        return False
+    return bool(
+        session.scalar(
+            select(Miembro.id).where(
+                Miembro.id == expediente.usuario_id,
+                Miembro.tenant_id == expediente.tenant_id,
+                Miembro.responsable_id == auth.miembro_id,
+                Miembro.deleted_at.is_(None),
             )
         )
-    return auth.rol == "ADMINISTRADOR"
-
+    )
 
 def _es_aprobador(
     solicitud: SolicitudRetiroMISD,
@@ -69,29 +62,13 @@ def _es_aprobador(
     auth: OperativeAuthDep,
     session: SessionDep,
 ) -> bool:
-    if auth.rol == "ADMINISTRADOR":
-        return True
-    if auth.rol == "RESPONSABLE" and auth.miembro_id is not None:
-        return bool(
-            session.scalar(
-                select(Miembro.id).where(
-                    Miembro.id == expediente.usuario_id,
-                    Miembro.tenant_id == expediente.tenant_id,
-                    Miembro.responsable_id == auth.miembro_id,
-                    Miembro.deleted_at.is_(None),
-                )
-            )
-        ) and solicitud.solicitante_rol in ("GESTOR", "USUARIO")
-    if auth.rol == "USUARIO" and solicitud.solicitante_rol == "GESTOR":
-        return auth.usuario_id is not None and expediente.usuario_id == auth.usuario_id
-    return False
-
+    # Solo Administración aprueba una solicitud de retiro de Responsable.
+    return auth.rol == "ADMINISTRADOR" and solicitud.solicitante_rol == "RESPONSABLE"
 
 def _aprobacion_sigue_vigente(
     solicitud: SolicitudRetiroMISD, expediente: Expediente, session: SessionDep
 ) -> bool:
-    """Revalida que la cuenta aprobadora conserve su autoridad jerárquica."""
-    if solicitud.aprobado_por_cuenta_id is None:
+    if solicitud.aprobado_por_cuenta_id is None or solicitud.solicitante_rol != "RESPONSABLE":
         return False
     cuenta = session.get(CuentaAcceso, solicitud.aprobado_por_cuenta_id)
     if (
@@ -102,29 +79,13 @@ def _aprobacion_sigue_vigente(
     ):
         return False
     miembro = session.get(Miembro, cuenta.miembro_id) if cuenta.miembro_id else None
-    if (
-        miembro is None
-        or miembro.tenant_id != expediente.tenant_id
-        or miembro.deleted_at is not None
-        or not miembro.activo
-    ):
-        return False
-    if miembro.rol == "ADMINISTRADOR":
-        return True
-    usuario = session.get(Miembro, expediente.usuario_id) if expediente.usuario_id else None
-    if usuario is None or usuario.tenant_id != expediente.tenant_id:
-        return False
-    if miembro.rol == "RESPONSABLE":
-        return (
-            solicitud.solicitante_rol in ("USUARIO", "GESTOR")
-            and usuario.responsable_id == miembro.id
-        )
-    return (
-        miembro.rol == "USUARIO"
-        and solicitud.solicitante_rol == "GESTOR"
-        and usuario.id == miembro.id
+    return bool(
+        miembro
+        and miembro.tenant_id == expediente.tenant_id
+        and miembro.rol == "ADMINISTRADOR"
+        and miembro.activo
+        and miembro.deleted_at is None
     )
-
 
 def _notificar(
     session: SessionDep,
@@ -209,10 +170,10 @@ def solicitar(
     )
     if expediente is None or not _ambito(expediente, auth, session):
         raise HTTPException(404, "Expediente no encontrado")
-    if not permiso_habilitado(session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS):
-        raise HTTPException(403, "Sin permiso para solicitar retirada")
-    if motivo_bloqueo_liquidacion(session, expediente) is not None:
-        raise HTTPException(409, "Expediente bloqueado por liquidación generada")
+    if auth.rol != "RESPONSABLE" or not permiso_habilitado(
+        session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS
+    ):
+        raise HTTPException(403, "Solo el Responsable puede solicitar aprobación a Administración")
     pendiente = session.scalar(
         select(SolicitudRetiroMISD.id).where(
             SolicitudRetiroMISD.tenant_id == tenant_id,
@@ -231,7 +192,7 @@ def solicitar(
         solicitante_gestor_id=auth.gestor_id,
         motivo=datos.motivo.strip(),
         estado="PENDIENTE",
-        notificado_a={"roles": ["ADMINISTRADOR", "RESPONSABLE", "USUARIO"]},
+        notificado_a={"roles": ["ADMINISTRADOR"]},
     )
     session.add(nueva)
     session.flush()
@@ -321,11 +282,10 @@ def resolver(
         raise HTTPException(403, "El solicitante no puede aprobar su propia solicitud")
     if solicitud.estado != "PENDIENTE":
         raise HTTPException(409, "Solicitud ya resuelta")
-    if datos.aprobar and (
-        expediente.deleted_at is not None
-        or motivo_bloqueo_liquidacion(session, expediente) is not None
-    ):
-        raise HTTPException(409, "El expediente ya no admite retiro")
+    if auth.rol != "ADMINISTRADOR" or solicitud.solicitante_rol != "RESPONSABLE":
+        raise HTTPException(403, "Solo Administración aprueba solicitudes de Responsables")
+    if datos.aprobar and expediente.deleted_at is not None:
+        raise HTTPException(409, "El expediente ya fue eliminado")
     solicitud.estado = "APROBADA" if datos.aprobar else "RECHAZADA"
     solicitud.aprobado_por_cuenta_id = auth.cuenta_id
     solicitud.decidido_at = ahora()
@@ -360,7 +320,6 @@ def ejecutar(
     auth: OperativeAuthDep,
 ) -> dict[str, object]:
     """Elimina físicamente tras autorización MISD y revalidación transaccional."""
-    bloquear_tenant_financiero(session, tenant_id)
     solicitud = session.scalar(
         select(SolicitudRetiroMISD)
         .where(
@@ -396,15 +355,10 @@ def ejecutar(
         raise HTTPException(409, "Solicitud rechazada")
     if expediente.deleted_at is not None:
         raise HTTPException(409, "Expediente ya retirado")
-    if motivo_bloqueo_liquidacion(session, expediente) is not None:
-        raise HTTPException(409, "Expediente bloqueado por liquidación generada")
-
-    # La ventana NO prevalece sobre un cliente registrado protegido.
-    aprobacion_necesaria = (expediente.receptor.autorizada and auth.rol != "ADMINISTRADOR") or (
-        auth.rol in ("GESTOR", "USUARIO") and not dentro_ventana_correccion(expediente, ahora())
-    )
-    if aprobacion_necesaria and solicitud.estado != "APROBADA":
-        raise HTTPException(409, "Se requiere aprobación jerárquica")
+    if auth.rol != "RESPONSABLE" or solicitud.solicitante_rol != "RESPONSABLE":
+        raise HTTPException(403, "Solo el Responsable solicitante puede ejecutar el retiro aprobado")
+    if solicitud.estado != "APROBADA":
+        raise HTTPException(409, "Administración aún no aprobó el retiro")
     if solicitud.estado not in ("PENDIENTE", "APROBADA"):
         raise HTTPException(409, "Solicitud en estado incompatible")
     if solicitud.estado == "APROBADA" and not _aprobacion_sigue_vigente(
@@ -435,9 +389,6 @@ def ejecutar(
         raise HTTPException(
             409, "Eliminación bloqueada por dependencias: " + ", ".join(referencias)
         )
-    for documento in documentos_obj:
-        if motivo_bloqueo_voucher(session, tenant_id, documento.id) is not None:
-            raise HTTPException(409, "Expediente contiene un voucher vinculado a un pago")
     pendientes = [
         EliminacionArchivoPendiente(tenant_id=tenant_id, ruta_storage=documento.ruta_storage)
         for documento in documentos_obj
@@ -464,7 +415,7 @@ def ejecutar(
             "DOCUMENTO_ELIMINADO_CON_EXPEDIENTE",
             "documento",
             documento.id,
-            {"expediente_id": str(expediente.id), "sha256": documento.sha256},
+            {"expediente_id": str(expediente.id), "tipo_documento": documento.tipo_documento},
         )
         session.delete(documento)
     session.delete(expediente)
