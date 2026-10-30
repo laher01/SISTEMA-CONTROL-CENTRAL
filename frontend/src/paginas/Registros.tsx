@@ -234,6 +234,8 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
       <Paginacion
         pagina={pagina}
         hayMas={(datos?.filas.length ?? 0) === POR_PAGINA}
+        total={datos?.total_registros}
+        porPagina={POR_PAGINA}
         alCambiar={(p) => cambiar("pagina", String(p))}
       />
     </>

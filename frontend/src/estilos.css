@@ -313,7 +313,25 @@ button:disabled {
 .paginacion {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 1rem;
+}
+
+.paginacion button.activa {
+  color: #fff;
+  background: var(--primario);
+  border-color: var(--primario);
+  font-weight: 700;
+}
+
+.paginacion > span[aria-live] {
+  margin: 0 0.35rem;
+}
+
+.paginacion-ellipsis {
+  color: #627d98;
+  padding: 0 0.15rem;
 }
 
 .tenue {
