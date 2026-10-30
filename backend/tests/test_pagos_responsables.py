@@ -15,6 +15,7 @@ from app.models import (
     GerenteEmpresa,
     GerenteResponsable,
     Miembro,
+    PagoResponsableERP,
     PedidoGerencia,
 )
 from tests.conftest import AuthPrueba, completar_facturas_de_prueba
@@ -165,6 +166,90 @@ def test_comisiones_gerencia_por_cliente_y_autorizacion(
         json={"fecha_pago": "2026-10-09", "referencia_pago": "BANCO-99999"},
     )
     assert prohibido.status_code == 403
+
+
+def test_cartera_actual_no_reasigna_factura_ya_atribuida_a_otro_gerente(
+    client: TestClient,
+    session: Session,
+    auth_prueba: AuthPrueba,
+) -> None:
+    responsable_id, _cliente_id = _preparar(session, auth_prueba)
+    gerente_anterior_id = auth_prueba.contexto.miembro_id
+    assert gerente_anterior_id is not None
+    responsable = session.query(Miembro).filter_by(codigo="RESP-01").one()
+    empresa = session.query(Empresa).filter_by(ruc="20538821374").one()
+    relacion_anterior = (
+        session.query(GerenteEmpresa)
+        .filter_by(
+            gerente_id=gerente_anterior_id,
+            empresa_id=empresa.id,
+        )
+        .one()
+    )
+    relacion_anterior.activo = False
+
+    gerente_nuevo = Miembro(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="GER-NUEVO",
+        nombre="Gerente nuevo",
+        rol="GERENTE",
+        activo=True,
+    )
+    session.add(gerente_nuevo)
+    session.flush()
+    session.add_all(
+        [
+            GerenteResponsable(
+                tenant_id=auth_prueba.contexto.tenant_id,
+                gerente_id=gerente_nuevo.id,
+                responsable_id=responsable.id,
+                activo=True,
+            ),
+            GerenteEmpresa(
+                tenant_id=auth_prueba.contexto.tenant_id,
+                gerente_id=gerente_nuevo.id,
+                empresa_id=empresa.id,
+                activo=True,
+            ),
+            PagoResponsableERP(
+                tenant_id=auth_prueba.contexto.tenant_id,
+                gerente_id=gerente_anterior_id,
+                responsable_id=responsable.id,
+                periodo_desde=date(2026, 9, 1),
+                periodo_hasta=date(2026, 9, 30),
+                moneda="PEN",
+                produccion_total=Decimal("1000.00"),
+                comision_total=Decimal("35.00"),
+                detalle={"filas": []},
+                estado="PAGADO",
+                creado_por_cuenta_id=auth_prueba.contexto.cuenta_id,
+            ),
+        ]
+    )
+    session.commit()
+
+    auth_prueba.contexto = replace(
+        auth_prueba.contexto,
+        miembro_id=gerente_nuevo.id,
+        rol="GERENTE",
+        codigo=gerente_nuevo.codigo,
+        nombre=gerente_nuevo.nombre,
+    )
+    params = {"desde": "2026-09-01", "hasta": "2026-09-30", "moneda": "PEN"}
+    resumen = client.get("/api/v1/pagos-responsables/resumen", params=params)
+    assert resumen.status_code == 200, resumen.text
+    assert resumen.json()["total_produccion"] == "0.00"
+
+    duplicado = client.post(
+        "/api/v1/pagos-responsables/programar",
+        json={
+            "responsable_id": responsable_id,
+            "desde": "2026-09-01",
+            "hasta": "2026-09-30",
+            "moneda": "PEN",
+        },
+    )
+    assert duplicado.status_code == 422, duplicado.text
 
 
 def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(

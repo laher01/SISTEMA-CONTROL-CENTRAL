@@ -9,7 +9,7 @@ from typing import Literal
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, case, exists, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.selectable import Subquery
@@ -173,17 +173,21 @@ def _gerencia_resuelta(tenant_id: uuid.UUID) -> Subquery:
         .limit(1)
         .scalar_subquery()
     )
-    candidato_guardado_vigente = exists(
-        select(1).where(
-            candidatos.c.expediente_id == Expediente.id,
-            candidatos.c.gerente_id == Expediente.gerente_id,
-        )
-    )
     gerente_guardado = aliased(Miembro)
+    # Expediente.gerente_id is a prior explicit financial attribution. Keep it
+    # stable even if the current portfolio changes, so settled production is
+    # never reassigned to another Gerente and offered for a second payment.
+    asignacion_guardada = and_(
+        Expediente.gerente_id.is_not(None),
+        gerente_guardado.tenant_id == tenant_id,
+        gerente_guardado.rol == RolMiembro.GERENTE,
+        gerente_guardado.deleted_at.is_(None),
+    )
     return (
         select(
             Expediente.id.label("expediente_id"),
             case(
+                (asignacion_guardada, Expediente.gerente_id),
                 (conteos.c.cantidad == 1, candidato_unico),
                 else_=Expediente.gerente_id,
             ).label("gerente_id"),
@@ -194,17 +198,10 @@ def _gerencia_resuelta(tenant_id: uuid.UUID) -> Subquery:
         .outerjoin(gerente_guardado, gerente_guardado.id == Expediente.gerente_id)
         .where(
             or_(
-                conteos.c.cantidad == 1,
+                asignacion_guardada,
                 and_(
-                    Expediente.gerente_id.is_not(None),
-                    gerente_guardado.tenant_id == tenant_id,
-                    gerente_guardado.rol == RolMiembro.GERENTE,
-                    gerente_guardado.activo.is_(True),
-                    gerente_guardado.deleted_at.is_(None),
-                    or_(
-                        conteos.c.cantidad.is_(None),
-                        candidato_guardado_vigente,
-                    ),
+                    Expediente.gerente_id.is_(None),
+                    conteos.c.cantidad == 1,
                 ),
             )
         )
