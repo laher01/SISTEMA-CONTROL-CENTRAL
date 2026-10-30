@@ -102,18 +102,24 @@ def previsualizar_expedientes_vacios(
     )
     resultados: list[dict[str, object]] = []
     for expediente in filas:
-        documentos_historicos = session.scalar(
-            select(func.count(Documento.id)).where(
-                Documento.tenant_id == tenant_id,
-                Documento.expediente_id == expediente.id,
+        documentos_historicos = (
+            session.scalar(
+                select(func.count(Documento.id)).where(
+                    Documento.tenant_id == tenant_id,
+                    Documento.expediente_id == expediente.id,
+                )
             )
-        ) or 0
-        referencias = session.scalar(
-            select(func.count(ReferenciaGRE.id)).where(
-                ReferenciaGRE.tenant_id == tenant_id,
-                ReferenciaGRE.expediente_id == expediente.id,
+            or 0
+        )
+        referencias = (
+            session.scalar(
+                select(func.count(ReferenciaGRE.id)).where(
+                    ReferenciaGRE.tenant_id == tenant_id,
+                    ReferenciaGRE.expediente_id == expediente.id,
+                )
             )
-        ) or 0
+            or 0
+        )
         resultados.append(
             {
                 "expediente_id": str(expediente.id),
