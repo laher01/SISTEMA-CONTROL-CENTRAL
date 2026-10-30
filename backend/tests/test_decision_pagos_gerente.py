@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Empresa, Expediente, Miembro
 from app.security import ContextoAcceso
-from tests.conftest import AuthPrueba
+from tests.conftest import AuthPrueba, completar_facturas_de_prueba
 
 
 def test_gerente_incorpora_historicos_con_auditoria_y_aislamiento(
@@ -48,6 +48,7 @@ def test_gerente_incorpora_historicos_con_auditoria_y_aislamiento(
         )
         session.add(item)
         pendientes.append(item)
+    completar_facturas_de_prueba(session)
     session.commit()
 
     def sesion_gerente(m: Miembro) -> None:

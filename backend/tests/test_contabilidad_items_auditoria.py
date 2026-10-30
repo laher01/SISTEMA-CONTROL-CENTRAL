@@ -17,6 +17,7 @@ from app.services.contabilidad_items_auditoria import (
     resolver_propuesta,
     ultima_decision,
 )
+from tests.conftest import completar_facturas_de_prueba
 
 
 def _expediente(session: Session, tenant_id: uuid.UUID) -> Expediente:
@@ -37,6 +38,7 @@ def _expediente(session: Session, tenant_id: uuid.UUID) -> Expediente:
     )
     session.add(expediente)
     session.flush()
+    completar_facturas_de_prueba(session)
     return expediente
 
 
@@ -251,6 +253,7 @@ def test_conciliacion_sin_duplicar_y_resolucion_actualiza_importes(session, auth
         session, secretaria, segundo.id, "OBSERVAR", "Sustento pendiente"
     )
     registrar_decision(session, secretaria, tercero.id, "DESACTIVAR", "Revisión pendiente")
+    completar_facturas_de_prueba(session)
     admin = replace(contexto, rol="ADMINISTRADOR")
     filas = conciliacion(session, admin)
     assert len(filas) == 1

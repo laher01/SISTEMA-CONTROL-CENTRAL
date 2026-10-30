@@ -148,6 +148,8 @@ def eliminar_expediente_vacio(
     if documentos_activos is not None:
         return False
 
+    from app.item_models import AuditoriaFacturaItem, LineaComprobanteItem
+
     documentos_historicos = list(
         session.scalars(
             select(Documento)
@@ -184,8 +186,6 @@ def eliminar_expediente_vacio(
     )
 
     if documento_ids:
-        from app.item_models import AuditoriaFacturaItem, LineaComprobanteItem
-
         session.execute(
             delete(RelacionDocumento).where(
                 RelacionDocumento.origen_id.in_(documento_ids)

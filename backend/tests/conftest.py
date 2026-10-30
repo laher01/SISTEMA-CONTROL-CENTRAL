@@ -14,11 +14,42 @@ from app.api.deps import get_contexto_actual, get_hoy
 from app.core.config import Settings, get_settings
 from app.core.db import get_session
 from app.main import app
-from app.models import Base, CuentaAcceso, Gestor, Miembro
+from app.models import Base, CuentaAcceso, Documento, Expediente, Gestor, Miembro
 from app.security import ContextoAcceso
 from app.services.expedientes import obtener_tenant
 
 TEST_DATABASE_URL = os.environ.get("FC_TEST_DATABASE_URL", "sqlite+pysqlite:///:memory:")
+
+
+def completar_facturas_de_prueba(session: Session) -> None:
+    """Adjunta un documento sintético a expedientes sembrados como facturas.
+
+    Varias pruebas históricas construían solo la cabecera de la factura. La
+    aplicación ahora exige un documento activo para contabilizarla, así que
+    estas pruebas deben representar el expediente completo.
+    """
+    session.flush()
+    expedientes = session.query(Expediente).filter(Expediente.deleted_at.is_(None)).all()
+    for expediente in expedientes:
+        if any(documento.deleted_at is None for documento in expediente.documentos):
+            continue
+        if expediente.documentos:
+            continue
+        session.add(
+            Documento(
+                tenant_id=expediente.tenant_id,
+                expediente_id=expediente.id,
+                tipo_documento="FACT",
+                estado="RELACIONADO",
+                sha256=uuid.uuid4().hex * 2,
+                nombre_original=f"{expediente.serie}-{expediente.correlativo}.pdf",
+                mime_type="application/pdf",
+                tamano_bytes=1,
+                ruta_storage=f"test/{uuid.uuid4().hex}.pdf",
+                formato_origen="PRUEBA",
+            )
+        )
+    session.flush()
 
 
 class Reloj:

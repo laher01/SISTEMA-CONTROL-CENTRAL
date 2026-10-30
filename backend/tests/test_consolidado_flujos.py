@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models import AbonoClienteERP, Empresa, Expediente
-from tests.conftest import AuthPrueba
+from tests.conftest import AuthPrueba, completar_facturas_de_prueba
 
 
 def test_flujos_por_periodo_y_acceso(
@@ -43,6 +43,7 @@ def test_flujos_por_periodo_y_acceso(
             monto=Decimal("70.00"),
         )
     )
+    completar_facturas_de_prueba(session)
     session.commit()
     url = "/api/v1/pagos/consolidado-flujos"
     params = {"desde": "2026-10-01", "hasta": "2026-10-31", "moneda": "PEN"}

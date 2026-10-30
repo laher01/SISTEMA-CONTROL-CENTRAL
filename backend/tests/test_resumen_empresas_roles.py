@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models import Empresa, Expediente, Gestor, Miembro
-from tests.conftest import AuthPrueba
+from tests.conftest import AuthPrueba, completar_facturas_de_prueba
 
 
 @pytest.mark.parametrize("rol", ["GERENTE", "SECRETARIA"])
@@ -73,6 +73,7 @@ def test_resumen_por_empresa_respeta_fechas_monedas_y_usuario(
                 importe_total=Decimal(monto),
             )
         )
+    completar_facturas_de_prueba(session)
     session.commit()
     auth_prueba.como_usuario(usuario.id)
     respuesta = client.get(
@@ -161,6 +162,7 @@ def test_responsable_resumen_incluye_solo_usuarios_propios(
                 importe_total=Decimal(monto),
             )
         )
+    completar_facturas_de_prueba(session)
     session.commit()
     auth_prueba.contexto = replace(
         auth_prueba.contexto, rol="RESPONSABLE", miembro_id=responsable.id

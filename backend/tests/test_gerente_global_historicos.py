@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Empresa, Expediente, Miembro
 from app.security import ContextoAcceso
-from tests.conftest import AuthPrueba
+from tests.conftest import AuthPrueba, completar_facturas_de_prueba
 
 
 def test_gerente_global_ve_historicos_sin_ver_otros_gerentes(
@@ -48,6 +48,7 @@ def test_gerente_global_ve_historicos_sin_ver_otros_gerentes(
                 gerente_id=origen,
             )
         )
+    completar_facturas_de_prueba(session)
     session.commit()
 
     def ingresar(codigo: str, gerente_id) -> None:

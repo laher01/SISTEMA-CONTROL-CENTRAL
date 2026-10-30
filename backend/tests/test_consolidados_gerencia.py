@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models import Empresa, Expediente, Miembro
-from tests.conftest import AuthPrueba
+from tests.conftest import AuthPrueba, completar_facturas_de_prueba
 
 
 def test_consolidado_clientes_y_responsables(
@@ -50,6 +50,7 @@ def test_consolidado_clientes_y_responsables(
                 gerente_id=auth_prueba.contexto.miembro_id,
             )
         )
+    completar_facturas_de_prueba(session)
     session.commit()
     auth_prueba.como_gerente()
     url = "/api/v1/pagos/consolidado"

@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models import AdelantoERP, Empresa, Expediente, Miembro, SaldoCompraERP
-from tests.conftest import AuthPrueba
+from tests.conftest import AuthPrueba, completar_facturas_de_prueba
 
 
 def test_cotizacion_y_programacion_coinciden_con_saldo_historico(
@@ -66,6 +66,7 @@ def test_cotizacion_y_programacion_coinciden_con_saldo_historico(
         descripcion="Adelanto de prueba",
     )
     session.add_all([saldo, adelanto])
+    completar_facturas_de_prueba(session)
     session.commit()
 
     datos = {
@@ -118,6 +119,7 @@ def test_saldo_se_suma_como_importe_directo_sin_porcentaje(
         creado_por_cuenta_id=auth_prueba.contexto.cuenta_id,
     )
     session.add(saldo)
+    completar_facturas_de_prueba(session)
     session.commit()
     respuesta = client.post(
         "/api/v1/responsable/pagos/cotizar",

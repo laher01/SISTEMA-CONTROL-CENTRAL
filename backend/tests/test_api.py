@@ -13,7 +13,7 @@ from app.core.config import Settings
 from app.models import Auditoria, Empresa, Expediente
 from app.services import procesamiento_documental
 from app.services.procesamiento_documental import ResultadoProcesamiento, sugerir_tipo
-from tests.conftest import AuthPrueba, Reloj
+from tests.conftest import AuthPrueba, Reloj, completar_facturas_de_prueba
 from tests.xml import RECEPTOR, factura, guia
 
 
@@ -173,7 +173,7 @@ def test_expediente_vencido_queda_rojo(
     }
 
 
-def test_crear_expediente_manual_rhe_sin_guia(client: TestClient) -> None:
+def test_crear_expediente_manual_rhe_sin_guia(client: TestClient, session: Session) -> None:
     datos = {
         "receptor": {"ruc": RECEPTOR, "razon_social": "CLIENTE SAC"},
         "emisor": {"ruc": "10456789012", "razon_social": "JUAN PEREZ"},
@@ -188,6 +188,7 @@ def test_crear_expediente_manual_rhe_sin_guia(client: TestClient) -> None:
     creado = respuesta.json()
     assert creado["correlativo"] == "15"
     assert creado["requiere_guia"] is False
+    completar_facturas_de_prueba(session)
 
     detalle = expediente(client, creado["id"])
     assert detalle["faltantes"] == ["RHE"]
