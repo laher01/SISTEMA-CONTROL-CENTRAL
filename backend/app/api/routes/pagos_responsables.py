@@ -594,9 +594,7 @@ def resumen_equipo_responsable(
                 Empresa.tenant_id == tenant_id,
                 Empresa.deleted_at.is_(None),
             )
-            .group_by(
-                gerente_proveedor.c.gerente_id, Empresa.id, Empresa.ruc, Empresa.razon_social
-            )
+            .group_by(gerente_proveedor.c.gerente_id, Empresa.id, Empresa.ruc, Empresa.razon_social)
         )
     )
     proveedores = [
