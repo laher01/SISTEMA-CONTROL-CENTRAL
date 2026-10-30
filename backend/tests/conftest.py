@@ -1,8 +1,10 @@
 import os
 import uuid
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,7 +12,7 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.api.deps import get_contexto_actual, get_hoy
+from app.api.deps import RUTAS_CARGA_SOLO_GESTOR, get_contexto_actual, get_hoy
 from app.core.config import Settings, get_settings
 from app.core.db import get_session
 from app.main import app
@@ -186,7 +188,7 @@ def auth_prueba(engine: Engine, settings: Settings) -> AuthPrueba:
 
 
 @pytest.fixture
-def client(
+def client_estricto(
     engine: Engine,
     settings: Settings,
     reloj: Reloj,
@@ -228,3 +230,27 @@ def client(
         c.post = post_con_gestor_de_prueba  # type: ignore[method-assign]
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client(
+    client_estricto: TestClient,
+    auth_prueba: AuthPrueba,
+) -> Iterator[TestClient]:
+    """Seed document scenarios as Gestor; permission tests use client_estricto."""
+    request_original = client_estricto.request
+
+    def request_con_carga_gestor(method: str, url: str, *args: object, **kwargs: object):
+        contexto_anterior = auth_prueba.contexto
+        ruta = urlsplit(str(url)).path
+        cambiar_rol = method.upper() == "POST" and ruta in RUTAS_CARGA_SOLO_GESTOR
+        if cambiar_rol and contexto_anterior.rol != "GESTOR":
+            auth_prueba.contexto = replace(contexto_anterior, rol="GESTOR", gestor_id=None)
+        try:
+            return request_original(method, url, *args, **kwargs)
+        finally:
+            if cambiar_rol:
+                auth_prueba.contexto = contexto_anterior
+
+    client_estricto.request = request_con_carga_gestor  # type: ignore[method-assign]
+    yield client_estricto
