@@ -399,6 +399,8 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
       <Paginacion
         pagina={pagina}
         hayMas={(datos?.length ?? 0) === POR_PAGINA}
+        total={resumen?.total_expedientes}
+        porPagina={POR_PAGINA}
         alCambiar={(p) => cambiar("pagina", String(p))}
       />
     </>
