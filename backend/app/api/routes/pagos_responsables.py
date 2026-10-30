@@ -32,6 +32,7 @@ from app.models import (
 from app.services import auditoria
 from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
 from app.services.expedientes import expediente_tiene_documentos_activos
+from app.services.ingesta import atribuir_gerencia_inequivoca
 
 router = APIRouter(prefix="/pagos-responsables", tags=["pagos-responsables"])
 MONEDAS = {"PEN", "USD"}
@@ -62,6 +63,12 @@ class ProgramarPagoResponsableIn(BaseModel):
 class ConfirmarPagoResponsableIn(BaseModel):
     fecha_pago: date
     referencia_pago: str = Field(min_length=4, max_length=160)
+
+
+class SincronizarEquipoCobrosIn(BaseModel):
+    desde: date
+    hasta: date
+    moneda: str = Field(pattern="^(PEN|USD)$")
 
 
 def _ambito(auth: OperativeAuthDep, responsable_id: uuid.UUID | None = None) -> None:
@@ -677,6 +684,50 @@ def resumen_equipo_responsable(
                 for fila in pendientes_atribucion
             ],
         },
+    }
+
+
+@router.post("/equipo-sincronizar")
+def sincronizar_equipo_cobros(
+    datos: SincronizarEquipoCobrosIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, object]:
+    """Vincula solo expedientes con un Pedido de Gerencia coincidente y único."""
+    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
+    _periodo(datos.desde, datos.hasta, datos.moneda)
+    expedientes = list(
+        session.scalars(
+            select(Expediente)
+            .join(Miembro, Miembro.id == Expediente.usuario_id)
+            .where(
+                Expediente.tenant_id == tenant_id,
+                Expediente.deleted_at.is_(None),
+                expediente_tiene_documentos_activos(),
+                Expediente.gerente_id.is_(None),
+                Expediente.fecha_emision.between(datos.desde, datos.hasta),
+                Expediente.moneda == datos.moneda,
+                Miembro.tenant_id == tenant_id,
+                Miembro.rol == RolMiembro.USUARIO,
+                Miembro.responsable_id == auth.miembro_id,
+                Miembro.deleted_at.is_(None),
+            )
+            .with_for_update(of=Expediente)
+        )
+    )
+    vinculados = []
+    for expediente in expedientes:
+        atribuir_gerencia_inequivoca(session, expediente)
+        if expediente.gerente_id is not None:
+            vinculados.append(expediente)
+    session.commit()
+    return {
+        "vinculados": len(vinculados),
+        "produccion": str(
+            _redondear(sum((Decimal(e.importe_total) for e in vinculados), Decimal("0")))
+        ),
     }
 
 

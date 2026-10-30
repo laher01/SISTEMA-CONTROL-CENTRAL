@@ -12,8 +12,10 @@ from app.models import (
     CuentaAcceso,
     Empresa,
     Expediente,
+    GerenteEmpresa,
     GerenteResponsable,
     Miembro,
+    PedidoGerencia,
 )
 from tests.conftest import AuthPrueba, completar_facturas_de_prueba
 
@@ -189,6 +191,14 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
         tipo_relacion="CLIENTE",
         agente_retencion=False,
     )
+    cliente_pedido = Empresa(
+        tenant_id=tenant_id,
+        ruc="20555555555",
+        razon_social="CLIENTE CON PEDIDO POSTERIOR",
+        autorizada=True,
+        tipo_relacion="CLIENTE",
+        agente_retencion=False,
+    )
     proveedor = Empresa(
         tenant_id=tenant_id,
         ruc="20333333333",
@@ -205,6 +215,7 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
             cliente_agente,
             cliente_sin_agente,
             cliente_no_autorizado,
+            cliente_pedido,
             proveedor,
         ]
     )
@@ -253,6 +264,43 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
             usuario_id=usuario.id,
         )
     )
+    # Documento cargado antes de que se cree su pedido mensual.
+    session.add(
+        Expediente(
+            tenant_id=tenant_id,
+            emisor_id=proveedor.id,
+            receptor_id=cliente_pedido.id,
+            tipo_comprobante="FACT",
+            serie="F005",
+            correlativo="00005",
+            fecha_emision=date(2026, 9, 15),
+            moneda="PEN",
+            importe_total=Decimal("700.00"),
+            usuario_id=usuario.id,
+        )
+    )
+    session.add_all(
+        [
+            GerenteEmpresa(
+                tenant_id=tenant_id,
+                gerente_id=gerente.id,
+                empresa_id=cliente_pedido.id,
+                activo=True,
+            ),
+            PedidoGerencia(
+                tenant_id=tenant_id,
+                gerente_id=gerente.id,
+                responsable_id=responsable.id,
+                cliente_id=cliente_pedido.id,
+                periodo_mes=date(2026, 9, 1),
+                moneda="PEN",
+                monto_solicitado=Decimal("1000.00"),
+                modalidad="POR_PEDIDO",
+                modo_distribucion="MANUAL",
+                estado="ACTIVO",
+            ),
+        ]
+    )
     # La producción de un receptor pendiente de autorización también debe
     # aparecer como excluida, sin formar parte de la comisión.
     session.add(
@@ -298,6 +346,13 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
         gestor_id=None,
     )
 
+    sincronizacion = client.post(
+        "/api/v1/pagos-responsables/equipo-sincronizar",
+        json={"desde": "2026-09-01", "hasta": "2026-09-30", "moneda": "PEN"},
+    )
+    assert sincronizacion.status_code == 200, sincronizacion.text
+    assert sincronizacion.json() == {"vinculados": 1, "produccion": "700.00"}
+
     params = {
         "desde": "2026-09-01",
         "hasta": "2026-09-30",
@@ -312,17 +367,17 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
             "gerente_id": str(gerente.id),
             "gerente_codigo": "GER-COBROS",
             "gerente_nombre": "Gerente cobros",
-            "produccion": "3000.00",
-            "comision": "100.00",
+            "produccion": "3700.00",
+            "comision": "124.50",
         }
     ]
-    assert len(datos["clientes"]) == 2
+    assert len(datos["clientes"]) == 3
     assert {fila["porcentaje"] for fila in datos["clientes"]} == {"3.0", "3.5"}
     assert len(datos["proveedores"]) == 1
-    assert datos["proveedores"][0]["produccion"] == "3000.00"
+    assert datos["proveedores"][0]["produccion"] == "3700.00"
     assert len(datos["usuarios"]) == 1
-    assert datos["usuarios"][0]["produccion"] == "3000.00"
-    assert datos["usuarios"][0]["comision_referencial_usuario"] == "50.00"
+    assert datos["usuarios"][0]["produccion"] == "3700.00"
+    assert datos["usuarios"][0]["comision_referencial_usuario"] == "60.50"
     assert datos["pendientes_revision"]["cantidad"] == 2
     assert datos["pendientes_revision"]["produccion"] == "750.00"
     assert {fila["motivo"] for fila in datos["pendientes_revision"]["expedientes"]} == {
@@ -340,7 +395,7 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
         },
     )
     assert solicitud.status_code == 201, solicitud.text
-    assert solicitud.json()["comision"] == "100.00"
+    assert solicitud.json()["comision"] == "124.50"
     assert (
         session.query(ChatMensaje).filter_by(destinatario_cuenta_id=cuenta_gerente.id).count() == 1
     )

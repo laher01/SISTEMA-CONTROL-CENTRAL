@@ -58,6 +58,7 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const [mensaje, setMensaje] = useState("");
   const [desdeCobro, setDesdeCobro] = useState(new Date().toISOString().slice(0, 8) + "01");
   const [hastaCobro, setHastaCobro] = useState(new Date().toISOString().slice(0, 10));
+  const [sincronizandoCobros, setSincronizandoCobros] = useState(false);
   const [subpestanaCobro, setSubpestanaCobro] = useState<SubpestanaCobro>("CLIENTES");
   const [gerentesSeleccionados, setGerentesSeleccionados] = useState<string[] | null>(null);
   const { datos: vinculosGerencia } = useDatos<GerenteVinculado[]>("/api/v1/gerencias/vinculos");
@@ -218,6 +219,27 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
       setErrorPago(e instanceof Error ? e.message : String(e));
     }
   };
+  const sincronizarCobros = async () => {
+    setSincronizandoCobros(true);
+    setMensaje("");
+    try {
+      const resultado = await enviarJson<{ vinculados: number; produccion: string }>(
+        "/api/v1/pagos-responsables/equipo-sincronizar",
+        "POST",
+        { desde: desdeCobro, hasta: hastaCobro, moneda },
+      );
+      cobrosEquipo.recargar();
+      setMensaje(
+        resultado.vinculados > 0
+          ? `Se vincularon ${resultado.vinculados} expedientes con pedidos inequívocos por ${formatearMonto(moneda, resultado.produccion)}.`
+          : "No hay expedientes pendientes con un único pedido coincidente. Revisa los documentos excluidos abajo.",
+      );
+    } catch (error) {
+      setMensaje(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSincronizandoCobros(false);
+    }
+  };
   const distribuir = async (pedidoId: string) => {
     setGuardando(true);
     setMensaje("");
@@ -363,8 +385,11 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
         <div className="filtros">
           <label>Desde <input type="date" value={desdeCobro} onChange={(e) => setDesdeCobro(e.target.value)} /></label>
           <label>Hasta <input type="date" value={hastaCobro} onChange={(e) => setHastaCobro(e.target.value)} /></label>
-          <button type="button" onClick={() => cobrosEquipo.recargar()}>Actualizar periodo</button>
+          <button type="button" disabled={sincronizandoCobros} onClick={() => void sincronizarCobros()}>
+            {sincronizandoCobros ? "Vinculando pedidos…" : "Vincular pedidos coincidentes y actualizar"}
+          </button>
         </div>
+        {mensaje && <p role="status">{mensaje}</p>}
         <fieldset>
           <legend>Gerentes incluidos</legend>
           {vinculosActivos.map((v) => <label key={v.gerente_id} className="bloque">
