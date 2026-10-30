@@ -60,14 +60,24 @@ class RecoveryFixtureTests(unittest.TestCase):
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, msg=f"{script}: {result.stderr}")
 
-    def test_recovery_gate_stays_fail_closed_for_pr(self):
+    def test_deploy_is_main_only_and_uses_verified_staging(self):
         workflow = (Path(__file__).resolve().parents[1] /
                     ".github/workflows/deploy-staging.yml").read_text()
-        self.assertIn("github.ref == 'refs/heads/main'", workflow)
-        self.assertIn("vars.ORACLE_AUTO_DEPLOY_ENABLED == 'true'", workflow)
-        self.assertIn('test "$RECOVERY_READY" = "true"', workflow)
-        self.assertIn("oracle-autodeploy", workflow)
-        self.assertIn("needs: [verify-backend, verify-frontend, verify-recovery-isolated, verify-recovery-docker]", workflow)
+        self.assertIn(
+            "if: github.ref == 'refs/heads/main' && "
+            "(github.event_name == 'workflow_dispatch' || github.event_name == 'push')",
+            workflow,
+        )
+        self.assertIn("environment: staging", workflow)
+        self.assertIn("test \"\u0024{{ github.ref_name }}\" = \"main\"", workflow)
+        self.assertIn("deploy/preflight-backup-restore-items.sh", workflow)
+        self.assertIn(
+            "needs: [verify-backend, verify-frontend, verify-recovery-isolated, verify-recovery-docker]",
+            workflow,
+        )
+        self.assertNotIn("ORACLE_AUTO_DEPLOY_ENABLED", workflow)
+        self.assertNotIn("ORACLE_RECOVERY_VERIFIED", workflow)
+        self.assertNotIn("oracle-autodeploy", workflow)
 
 
 if __name__ == "__main__":
