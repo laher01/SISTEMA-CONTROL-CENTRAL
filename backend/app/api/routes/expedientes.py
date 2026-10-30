@@ -73,6 +73,71 @@ NUMERO_RHE_RE = re.compile(r"^rhe-([a-z0-9]{4})-0*(\d+)$")
 router = APIRouter(prefix="/expedientes", tags=["expedientes"])
 
 
+@router.get("/previsualizar-vacios")
+def previsualizar_expedientes_vacios(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, object]:
+    """Lista expedientes sin documentos activos sin modificar ningún dato."""
+    if auth.rol != RolMiembro.ADMINISTRADOR:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Administración puede revisar vacíos")
+
+    filas = list(
+        session.scalars(
+            select(Expediente)
+            .where(
+                Expediente.tenant_id == tenant_id,
+                Expediente.deleted_at.is_(None),
+                ~Expediente.id.in_(
+                    select(Documento.expediente_id).where(
+                        Documento.tenant_id == tenant_id,
+                        Documento.expediente_id.is_not(None),
+                        Documento.deleted_at.is_(None),
+                    )
+                ),
+            )
+            .order_by(Expediente.created_at, Expediente.id)
+        )
+    )
+    resultados: list[dict[str, object]] = []
+    for expediente in filas:
+        documentos_historicos = session.scalar(
+            select(func.count(Documento.id)).where(
+                Documento.tenant_id == tenant_id,
+                Documento.expediente_id == expediente.id,
+            )
+        ) or 0
+        referencias = session.scalar(
+            select(func.count(ReferenciaGRE.id)).where(
+                ReferenciaGRE.tenant_id == tenant_id,
+                ReferenciaGRE.expediente_id == expediente.id,
+            )
+        ) or 0
+        resultados.append(
+            {
+                "expediente_id": str(expediente.id),
+                "tipo_comprobante": expediente.tipo_comprobante,
+                "serie": expediente.serie,
+                "correlativo": expediente.correlativo_original or expediente.correlativo,
+                "fecha_emision": expediente.fecha_emision.isoformat(),
+                "emisor_ruc": expediente.emisor.ruc,
+                "receptor_ruc": expediente.receptor.ruc,
+                "usuario_id": str(expediente.usuario_id) if expediente.usuario_id else None,
+                "gestor_id": str(expediente.gestor_id) if expediente.gestor_id else None,
+                "documentos_activos": 0,
+                "documentos_historicos": int(documentos_historicos),
+                "referencias_gre": int(referencias),
+                "apto_limpieza_atomica": documentos_historicos == 0,
+            }
+        )
+    return {
+        "solo_lectura": True,
+        "total": len(resultados),
+        "resultados": resultados,
+    }
+
+
 @router.post("", response_model=ExpedienteOut, status_code=status.HTTP_201_CREATED)
 def crear(
     session: SessionDep,

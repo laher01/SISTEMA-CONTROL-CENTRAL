@@ -65,7 +65,11 @@ from app.services.eliminacion import (
     bloquear_clave_archivo,
     procesar_archivo_pendiente,
 )
-from app.services.expedientes import actualizar_expediente, buscar_expediente
+from app.services.expedientes import (
+    actualizar_expediente,
+    buscar_expediente,
+    eliminar_expediente_vacio,
+)
 from app.services.identidad_cotizaciones import identidad_cotizacion
 from app.services.ingesta import (
     ArchivoSubido,
@@ -1940,6 +1944,8 @@ def crear_expediente_asistido(
         emisor_ruc,
         receptor_ruc,
     )
+    if existente is not None and eliminar_expediente_vacio(session, existente):
+        existente = None
     if existente is not None and documento.expediente_id != existente.id:
         # Nunca incorporar un nuevo archivo a una identidad fiscal existente
         # sin comparación explícita. La asociación puede revisarse en Gestor.

@@ -45,6 +45,80 @@ def test_eliminar_ultimo_documento_elimina_expediente_y_permite_reingreso(
     assert nuevo["expediente_id"] != str(expediente_id)
 
 
+def test_reingreso_no_reutiliza_expediente_vacio_y_asigna_al_gestor_actual(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    session: Session,
+) -> None:
+    numero = "F001-00000882"
+    creado = client.post(
+        "/api/v1/expedientes",
+        json={
+            "receptor": {"ruc": "20100000001", "razon_social": "CLIENTE SAC"},
+            "emisor": {"ruc": "20500000002", "razon_social": "PROVEEDOR SAC"},
+            "tipo_comprobante": "FACT",
+            "serie": "F001",
+            "correlativo": "00000882",
+            "fecha_emision": "2026-09-10",
+            "moneda": "PEN",
+            "importe_total": "123.45",
+            "requiere_guia": False,
+        },
+    )
+    assert creado.status_code == 201, creado.text
+    expediente_vacio_id = UUID(creado.json()["id"])
+
+    documento = _subir_factura(client, numero)
+    expediente_nuevo_id = UUID(str(documento["expediente_id"]))
+    assert expediente_nuevo_id != expediente_vacio_id
+    assert session.get(Expediente, expediente_vacio_id) is None
+
+    expediente_nuevo = session.get(Expediente, expediente_nuevo_id)
+    assert expediente_nuevo is not None
+    assert expediente_nuevo.gestor_id == auth_prueba.gestor_id
+    assert expediente_nuevo.usuario_id == auth_prueba.usuario_id
+
+
+def test_previsualizacion_de_vacios_es_admin_y_solo_lectura(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    session: Session,
+) -> None:
+    creado = client.post(
+        "/api/v1/expedientes",
+        json={
+            "receptor": {"ruc": "20100000001", "razon_social": "CLIENTE SAC"},
+            "emisor": {"ruc": "20500000002", "razon_social": "PROVEEDOR SAC"},
+            "tipo_comprobante": "FACT",
+            "serie": "F001",
+            "correlativo": "00000883",
+            "fecha_emision": "2026-09-10",
+            "moneda": "PEN",
+            "importe_total": "123.45",
+            "requiere_guia": False,
+        },
+    )
+    assert creado.status_code == 201, creado.text
+    expediente_id = UUID(creado.json()["id"])
+
+    no_autorizado = client.get("/api/v1/expedientes/previsualizar-vacios")
+    assert no_autorizado.status_code == 403
+
+    auth_prueba.como_admin()
+    respuesta = client.get("/api/v1/expedientes/previsualizar-vacios")
+    assert respuesta.status_code == 200, respuesta.text
+    resultado = next(
+        fila
+        for fila in respuesta.json()["resultados"]
+        if fila["expediente_id"] == str(expediente_id)
+    )
+    assert respuesta.json()["solo_lectura"] is True
+    assert resultado["documentos_activos"] == 0
+    assert resultado["documentos_historicos"] == 0
+    assert resultado["apto_limpieza_atomica"] is True
+    assert session.get(Expediente, expediente_id) is not None
+
+
 def test_resumen_de_responsable_respeta_filtros_de_usuario_y_gestor(
     client: TestClient,
     auth_prueba: AuthPrueba,

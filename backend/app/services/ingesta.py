@@ -26,6 +26,7 @@ from app.services.eliminacion import bloquear_clave_archivo
 from app.services.expedientes import (
     actualizar_expediente,
     buscar_expediente,
+    eliminar_expediente_vacio,
     obtener_o_crear_empresa,
     requiere_bancarizacion,
 )
@@ -471,6 +472,8 @@ def _expediente_para_comprobante(
             comprobante.emisor.ruc,
             comprobante.receptor.ruc,
         )
+        if expediente is not None and eliminar_expediente_vacio(session, expediente):
+            expediente = None
         if expediente is not None:
             return expediente
         if comprobante.moneda is None or comprobante.importe_total is None:

@@ -3,12 +3,24 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.enums import EstadoExpediente, Moneda, TipoAlerta, TipoComprobante, TipoDocumento
-from app.models import Alerta, Empresa, Expediente, Tenant, ahora
+from app.models import (
+    Alerta,
+    AlertaManual,
+    Auditoria,
+    ChatMensaje,
+    Documento,
+    Empresa,
+    Expediente,
+    ReferenciaGRE,
+    SolicitudRetiroMISD,
+    Tenant,
+    ahora,
+)
 
 
 def obtener_tenant(session: Session, nombre: str) -> Tenant:
@@ -98,6 +110,75 @@ def buscar_expediente(
     if receptor_ruc is not None and tipo_comprobante != TipoComprobante.RHE:
         consulta = consulta.where(receptor.c.ruc == receptor_ruc)
     return session.scalars(consulta).first()
+
+
+def eliminar_expediente_vacio(session: Session, expediente: Expediente) -> bool:
+    """Purga un cascarón sin documentos para que no contamine una nueva ingesta.
+
+    Devuelve False si queda cualquier fila de documento asociada, incluso una
+    eliminada lógicamente; en ese caso hace falta revisar antes de purgar.
+    """
+    tiene_documentos = session.scalar(
+        select(Documento.id)
+        .where(
+            Documento.tenant_id == expediente.tenant_id,
+            Documento.expediente_id == expediente.id,
+        )
+        .limit(1)
+    )
+    if tiene_documentos is not None:
+        return False
+
+    from app.item_models import AuditoriaFacturaItem
+
+    session.execute(
+        update(ReferenciaGRE)
+        .where(
+            ReferenciaGRE.tenant_id == expediente.tenant_id,
+            ReferenciaGRE.expediente_id == expediente.id,
+        )
+        .values(expediente_id=None, resuelta_at=None)
+    )
+    session.execute(
+        delete(Alerta).where(
+            Alerta.tenant_id == expediente.tenant_id,
+            Alerta.expediente_id == expediente.id,
+        )
+    )
+    session.execute(
+        delete(AlertaManual).where(
+            AlertaManual.tenant_id == expediente.tenant_id,
+            AlertaManual.expediente_id == expediente.id,
+        )
+    )
+    session.execute(
+        delete(SolicitudRetiroMISD).where(
+            SolicitudRetiroMISD.tenant_id == expediente.tenant_id,
+            SolicitudRetiroMISD.expediente_id == expediente.id,
+        )
+    )
+    session.execute(
+        delete(AuditoriaFacturaItem).where(
+            AuditoriaFacturaItem.tenant_id == expediente.tenant_id,
+            AuditoriaFacturaItem.expediente_id == expediente.id,
+        )
+    )
+    session.execute(
+        delete(Auditoria).where(
+            Auditoria.tenant_id == expediente.tenant_id,
+            Auditoria.entidad == "expediente",
+            Auditoria.entidad_id == expediente.id,
+        )
+    )
+    session.execute(
+        delete(ChatMensaje).where(
+            ChatMensaje.tenant_id == expediente.tenant_id,
+            ChatMensaje.texto.contains(str(expediente.id)),
+        )
+    )
+    session.delete(expediente)
+    session.flush()
+    return True
 
 
 def documentos_principales(expediente: Expediente, settings: Settings) -> list[TipoDocumento]:
