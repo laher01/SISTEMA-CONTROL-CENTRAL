@@ -304,6 +304,8 @@ def test_limpieza_de_previsualizacion_purga_solo_expedientes_aun_vacios(
     )
     assert limpieza.status_code == 200, limpieza.text
     assert limpieza.json()["expedientes_eliminados"] == 2
+    assert limpieza.json()["archivos_eliminados"] >= 1
+    session.expire_all()
     assert session.get(Expediente, UUID(vacio_id)) is None
     assert session.get(Expediente, UUID(str(historico["expediente_id"]))) is None
     assert session.get(Documento, documento_historico_id) is None
