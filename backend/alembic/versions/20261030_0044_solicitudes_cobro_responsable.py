@@ -52,6 +52,11 @@ def upgrade() -> None:
         "solicitudes_cobro_responsables_erp",
         ["responsable_id"],
     )
+    op.create_index(
+        "ix_solicitudes_cobro_responsables_erp_estado",
+        "solicitudes_cobro_responsables_erp",
+        ["estado"],
+    )
 
 
 def downgrade() -> None:
@@ -65,6 +70,10 @@ def downgrade() -> None:
     )
     op.drop_index(
         "ix_solicitudes_cobro_responsables_erp_tenant_id",
+        table_name="solicitudes_cobro_responsables_erp",
+    )
+    op.drop_index(
+        "ix_solicitudes_cobro_responsables_erp_estado",
         table_name="solicitudes_cobro_responsables_erp",
     )
     op.drop_table("solicitudes_cobro_responsables_erp")

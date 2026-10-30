@@ -660,7 +660,7 @@ def test_reingreso_de_factura_eliminada_crea_documento_nuevo_en_expediente_activ
     assert nuevo["expediente_id"] == original["expediente_id"]
 
 
-def test_eliminacion_concurrente_no_duplica_auditoria_ni_falla_parcial(
+def test_eliminacion_concurrente_no_deja_huella_ni_falla_parcial(
     client: TestClient,
     auth_prueba: AuthPrueba,
     engine: Engine,
@@ -684,7 +684,7 @@ def test_eliminacion_concurrente_no_duplica_auditoria_ni_falla_parcial(
         estados = sorted(future.result(timeout=30) for future in futures)
 
     assert estados == [200, 404]
-    assert session.query(Auditoria).filter(Auditoria.accion == "DOCUMENTO_ELIMINADO").count() == 1
+    assert session.query(Auditoria).filter(Auditoria.accion == "DOCUMENTO_ELIMINADO").count() == 0
 
 
 def test_reprocesamiento_masivo_repara_razones_sociales(
