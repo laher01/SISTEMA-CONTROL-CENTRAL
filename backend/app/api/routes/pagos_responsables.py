@@ -30,6 +30,7 @@ from app.models import (
 )
 from app.services import auditoria
 from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
+from app.services.expedientes import expediente_tiene_documentos_activos
 
 router = APIRouter(prefix="/pagos-responsables", tags=["pagos-responsables"])
 MONEDAS = {"PEN", "USD"}
@@ -123,6 +124,7 @@ def _calculo(
         .where(
             Expediente.tenant_id == tenant_id,
             Expediente.deleted_at.is_(None),
+            expediente_tiene_documentos_activos(),
             Expediente.fecha_emision >= desde,
             Expediente.fecha_emision <= hasta,
             Expediente.moneda == moneda,
@@ -265,6 +267,7 @@ def resumen(
             .where(
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
+                expediente_tiene_documentos_activos(),
                 Expediente.receptor.has(
                     Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
                 ),
@@ -311,6 +314,7 @@ def resumen(
                 .where(
                     Expediente.tenant_id == tenant_id,
                     Expediente.deleted_at.is_(None),
+                    expediente_tiene_documentos_activos(),
                     Expediente.receptor.has(
                         Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
                     ),
@@ -463,6 +467,7 @@ def resumen_equipo_responsable(
             .where(
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
+                expediente_tiene_documentos_activos(),
                 Expediente.fecha_emision.between(desde, hasta),
                 Expediente.moneda == moneda,
                 Expediente.gerente_id.in_(elegidos),
@@ -512,6 +517,7 @@ def resumen_equipo_responsable(
             .where(
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
+                expediente_tiene_documentos_activos(),
                 Expediente.fecha_emision.between(desde, hasta),
                 Expediente.moneda == moneda,
                 Expediente.gerente_id.in_(elegidos),
@@ -799,6 +805,7 @@ def incorporar_historicos(
             .where(
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
+                expediente_tiene_documentos_activos(),
                 Expediente.receptor.has(
                     Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
                 ),

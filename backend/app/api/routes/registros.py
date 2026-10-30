@@ -12,7 +12,12 @@ from app.enums import Moneda, RolMiembro, TipoDocumento
 from app.models import Documento, Empresa, Expediente, Gestor, Miembro
 from app.schemas import FiltroOpcion, RegistroFila, RegistroOpciones, RegistroResumen
 from app.services.ambito_gerencia import alcance_expedientes_gerente
-from app.services.expedientes import documentos_faltantes, documentos_principales, tipos_presentes
+from app.services.expedientes import (
+    documentos_faltantes,
+    documentos_principales,
+    expediente_tiene_documentos_activos,
+    tipos_presentes,
+)
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 
 router = APIRouter(prefix="/registros", tags=["registros"])
@@ -128,6 +133,7 @@ def opciones(
                     Expediente.tenant_id == tenant_id,
                     alcance_expedientes_gerente(auth),
                     Expediente.deleted_at.is_(None),
+                    expediente_tiene_documentos_activos(),
                 )
             )
         )
@@ -137,6 +143,7 @@ def opciones(
                     Expediente.tenant_id == tenant_id,
                     alcance_expedientes_gerente(auth),
                     Expediente.deleted_at.is_(None),
+                    expediente_tiene_documentos_activos(),
                 )
             )
         )
@@ -195,6 +202,7 @@ def listar(
         .where(
             Expediente.tenant_id == tenant_id,
             Expediente.deleted_at.is_(None),
+            expediente_tiene_documentos_activos(),
         )
     )
 

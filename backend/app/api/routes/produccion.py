@@ -9,6 +9,7 @@ from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
 from app.models import Empresa, Expediente, Gestor, Miembro
 from app.schemas import ComprasProveedorFila, ProduccionFila, ProduccionResumen
+from app.services.expedientes import expediente_tiene_documentos_activos
 
 router = APIRouter(prefix="/produccion", tags=["produccion"])
 
@@ -33,6 +34,7 @@ def resumen(session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep) -
         .where(
             Expediente.tenant_id == tenant_id,
             Expediente.deleted_at.is_(None),
+            expediente_tiene_documentos_activos(),
             Expediente.receptor.has(Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)),
         )
         .where(*_scope(auth))
@@ -109,6 +111,7 @@ def compras(
         .where(
             Expediente.tenant_id == tenant_id,
             Expediente.deleted_at.is_(None),
+            expediente_tiene_documentos_activos(),
         )
         .where(*_scope(auth))
         .group_by(

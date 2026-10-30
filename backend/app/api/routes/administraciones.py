@@ -14,6 +14,7 @@ from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep
 from app.enums import RolMiembro
 from app.models import CuentaAcceso, Documento, Empresa, Expediente, Gestor, Miembro, Tenant
 from app.security import crear_o_restablecer_cuenta
+from app.services.expedientes import expediente_tiene_documentos_activos
 from app.tenant_host import validar_subdominio
 
 
@@ -173,7 +174,9 @@ def inspeccionar_tenant(
         or 0,
         "expedientes": session.scalar(
             select(func.count(Expediente.id)).where(
-                Expediente.tenant_id == tenant_id, Expediente.deleted_at.is_(None)
+                Expediente.tenant_id == tenant_id,
+                Expediente.deleted_at.is_(None),
+                expediente_tiene_documentos_activos(),
             )
         )
         or 0,

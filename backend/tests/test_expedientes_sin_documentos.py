@@ -1,10 +1,11 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models import Expediente, Miembro
+from app.models import Documento, Expediente, Miembro
 from app.security import ContextoAcceso
 from tests.conftest import AuthPrueba
 from tests.xml import factura
@@ -160,3 +161,150 @@ def test_resumen_de_responsable_respeta_filtros_de_usuario_y_gestor(
     assert len(lista.json()) == resumen.json()["total_expedientes"] == 1
     assert lista.json()[0]["id"] == documento["expediente_id"]
     assert Decimal(resumen.json()["total_pen"]) == Decimal("123.45")
+
+
+def test_exp_vacio_no_aparece_ni_suma_en_responsable_o_administrador(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    session: Session,
+) -> None:
+    documento = _subir_factura(client, "F001-00000993")
+    creado = client.post(
+        "/api/v1/expedientes",
+        json={
+            "receptor": {"ruc": "20100000001", "razon_social": "CLIENTE SAC"},
+            "emisor": {"ruc": "20500000002", "razon_social": "PROVEEDOR SAC"},
+            "tipo_comprobante": "FACT",
+            "serie": "F001",
+            "correlativo": "00000994",
+            "fecha_emision": "2026-09-10",
+            "moneda": "PEN",
+            "importe_total": "999.00",
+            "requiere_guia": False,
+        },
+    )
+    assert creado.status_code == 201, creado.text
+    expediente_vacio_id = creado.json()["id"]
+
+    usuario = session.get(Miembro, auth_prueba.usuario_id)
+    assert usuario is not None
+    responsable = Miembro(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="RESP-GHOST-TEST",
+        nombre="Responsable de prueba",
+        rol="RESPONSABLE",
+        activo=True,
+    )
+    session.add(responsable)
+    session.flush()
+    usuario.responsable_id = responsable.id
+    session.commit()
+
+    contexto_usuario = auth_prueba.contexto
+    auth_responsable = ContextoAcceso(
+        cuenta_id=contexto_usuario.cuenta_id,
+        tenant_id=contexto_usuario.tenant_id,
+        rol="RESPONSABLE",
+        miembro_id=responsable.id,
+        gestor_id=None,
+        usuario_id=None,
+        codigo=responsable.codigo,
+        nombre=responsable.nombre,
+        cambio_clave_obligatorio=False,
+    )
+
+    for rol in ("RESPONSABLE", "ADMINISTRADOR"):
+        auth_prueba.contexto = auth_responsable if rol == "RESPONSABLE" else contexto_usuario
+        if rol == "ADMINISTRADOR":
+            auth_prueba.como_admin()
+
+        lista = client.get("/api/v1/expedientes")
+        resumen = client.get("/api/v1/expedientes/resumen")
+        dashboard = client.get("/api/v1/dashboard/resumen")
+        desglose = client.get("/api/v1/dashboard/desglose", params={"agrupar_por": "usuario"})
+        alertas = client.get("/api/v1/alertas")
+
+        assert lista.status_code == resumen.status_code == 200
+        assert dashboard.status_code == desglose.status_code == 200
+        assert alertas.status_code == 200
+        assert [fila["id"] for fila in lista.json()] == [documento["expediente_id"]]
+        assert resumen.json()["total_expedientes"] == 1
+        assert Decimal(resumen.json()["total_pen"]) == Decimal("123.45")
+        assert dashboard.json()["expedientes_total"] == 1
+        assert Decimal(
+            str(
+                next(item for item in dashboard.json()["montos"] if item["moneda"] == "PEN")[
+                    "no_bancarizable"
+                ]
+            )
+        ) == Decimal("123.45")
+        assert len(desglose.json()["filas"]) == 1
+        assert Decimal(str(desglose.json()["filas"][0]["total_pen"])) == Decimal("123.45")
+        assert expediente_vacio_id not in {fila["id"] for fila in lista.json()}
+        assert expediente_vacio_id not in {fila["expediente_id"] for fila in alertas.json()}
+
+
+def test_limpieza_de_previsualizacion_purga_solo_expedientes_aun_vacios(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    session: Session,
+) -> None:
+    creado = client.post(
+        "/api/v1/expedientes",
+        json={
+            "receptor": {"ruc": "20100000001", "razon_social": "CLIENTE SAC"},
+            "emisor": {"ruc": "20500000002", "razon_social": "PROVEEDOR SAC"},
+            "tipo_comprobante": "FACT",
+            "serie": "F001",
+            "correlativo": "00000995",
+            "fecha_emision": "2026-09-10",
+            "moneda": "PEN",
+            "importe_total": "999.00",
+            "requiere_guia": False,
+        },
+    )
+    assert creado.status_code == 201, creado.text
+    vacio_id = creado.json()["id"]
+    historico = _subir_factura(client, "F001-00000997")
+    documento_historico = session.get(Documento, UUID(str(historico["id"])))
+    assert documento_historico is not None
+    documento_historico_id = documento_historico.id
+    documento_historico.deleted_at = datetime.now(UTC)
+    session.commit()
+    activo = _subir_factura(client, "F001-00000996")
+
+    auth_prueba.como_admin()
+    preview = client.get("/api/v1/expedientes/previsualizar-vacios")
+    assert preview.status_code == 200, preview.text
+    candidato = next(
+        fila for fila in preview.json()["resultados"] if fila["expediente_id"] == vacio_id
+    )
+    assert candidato["apto_limpieza_atomica"] is True
+    candidato_historico = next(
+        fila
+        for fila in preview.json()["resultados"]
+        if fila["expediente_id"] == historico["expediente_id"]
+    )
+    assert candidato_historico["documentos_activos"] == 0
+    assert candidato_historico["documentos_historicos"] == 1
+    assert candidato_historico["requiere_limpieza_historica"] is True
+    assert client.get(f"/api/v1/expedientes/{vacio_id}").status_code == 404
+
+    rechazo = client.post(
+        "/api/v1/expedientes/previsualizar-vacios/limpiar",
+        json=[vacio_id, historico["expediente_id"], activo["expediente_id"]],
+    )
+    assert rechazo.status_code == 409
+    assert session.get(Expediente, UUID(vacio_id)) is not None
+    assert session.get(Expediente, UUID(str(activo["expediente_id"]))) is not None
+
+    limpieza = client.post(
+        "/api/v1/expedientes/previsualizar-vacios/limpiar",
+        json=[vacio_id, historico["expediente_id"]],
+    )
+    assert limpieza.status_code == 200, limpieza.text
+    assert limpieza.json()["expedientes_eliminados"] == 2
+    assert session.get(Expediente, UUID(vacio_id)) is None
+    assert session.get(Expediente, UUID(str(historico["expediente_id"]))) is None
+    assert session.get(Documento, documento_historico_id) is None
+    assert session.get(Expediente, UUID(str(activo["expediente_id"]))) is not None

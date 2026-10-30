@@ -26,6 +26,7 @@ from app.models import (
 )
 from app.services import auditoria
 from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
+from app.services.expedientes import expediente_tiene_documentos_activos
 
 router = APIRouter(prefix="/responsable", tags=["responsable"])
 
@@ -199,6 +200,7 @@ def _base_pago_usuario(
             Expediente.tenant_id == tenant_id,
             Expediente.usuario_id == datos.usuario_id,
             Expediente.deleted_at.is_(None),
+            expediente_tiene_documentos_activos(),
             Expediente.moneda == datos.moneda,
             Expediente.fecha_emision >= datos.desde,
             Expediente.fecha_emision <= datos.hasta,
@@ -1023,6 +1025,7 @@ def resumen_equipo(
             Empresa.deleted_at.is_(None),
             Expediente.usuario_id.in_(ids),
             Expediente.deleted_at.is_(None),
+            expediente_tiene_documentos_activos(),
         )
         .group_by(
             Expediente.usuario_id,

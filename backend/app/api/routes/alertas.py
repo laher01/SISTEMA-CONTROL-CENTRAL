@@ -8,6 +8,7 @@ from app.enums import RolMiembro, TipoAlerta
 from app.models import Alerta, Expediente, Miembro
 from app.schemas import AlertaOut
 from app.services.ambito_gerencia import alcance_expedientes_gerente
+from app.services.expedientes import expediente_tiene_documentos_activos
 from app.services.jerarquia_documental import nombres_jerarquia
 
 router = APIRouter(prefix="/alertas", tags=["alertas"])
@@ -31,6 +32,7 @@ def listar(
             Alerta.tenant_id == tenant_id,
             Expediente.tenant_id == tenant_id,
             Expediente.deleted_at.is_(None),
+            expediente_tiene_documentos_activos(),
             Alerta.resuelta == resuelta,
         )
     )
