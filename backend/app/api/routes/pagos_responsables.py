@@ -9,8 +9,9 @@ from typing import Literal
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import aliased
 
 from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.enums import RolMiembro
@@ -31,6 +32,7 @@ from app.models import (
 from app.services import auditoria
 from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
 from app.services.expedientes import expediente_tiene_documentos_activos
+from app.services.ingesta import atribuir_gerencia_inequivoca
 
 router = APIRouter(prefix="/pagos-responsables", tags=["pagos-responsables"])
 MONEDAS = {"PEN", "USD"}
@@ -61,6 +63,12 @@ class ProgramarPagoResponsableIn(BaseModel):
 class ConfirmarPagoResponsableIn(BaseModel):
     fecha_pago: date
     referencia_pago: str = Field(min_length=4, max_length=160)
+
+
+class SincronizarEquipoCobrosIn(BaseModel):
+    desde: date
+    hasta: date
+    moneda: str = Field(pattern="^(PEN|USD)$")
 
 
 def _ambito(auth: OperativeAuthDep, responsable_id: uuid.UUID | None = None) -> None:
@@ -499,6 +507,54 @@ def resumen_equipo_responsable(
         if gid in by_id
     ]
 
+    # Hacer visibles los expedientes del periodo excluidos del cálculo por
+    # receptor aún no autorizado o por falta de atribución a Gerencia. No se
+    # incluyen en el cobro hasta corregir la causa.
+    receptor_pendiente = aliased(Empresa)
+    pendientes_atribucion = list(
+        session.execute(
+            select(
+                Expediente.id,
+                Expediente.tipo_comprobante,
+                Expediente.serie,
+                Expediente.correlativo,
+                Expediente.fecha_emision,
+                Expediente.importe_total,
+                Miembro.codigo,
+                Miembro.nombre,
+                receptor_pendiente.ruc,
+                receptor_pendiente.razon_social,
+                receptor_pendiente.autorizada,
+            )
+            .join(Miembro, Miembro.id == Expediente.usuario_id)
+            .join(receptor_pendiente, receptor_pendiente.id == Expediente.receptor_id)
+            .where(
+                Expediente.tenant_id == tenant_id,
+                Expediente.deleted_at.is_(None),
+                expediente_tiene_documentos_activos(),
+                or_(
+                    Expediente.gerente_id.is_(None),
+                    and_(
+                        Expediente.gerente_id.in_(elegidos),
+                        receptor_pendiente.autorizada.is_(False),
+                    ),
+                ),
+                Expediente.fecha_emision.between(desde, hasta),
+                Expediente.moneda == moneda,
+                Miembro.tenant_id == tenant_id,
+                Miembro.rol == RolMiembro.USUARIO,
+                Miembro.responsable_id == auth.miembro_id,
+                Miembro.deleted_at.is_(None),
+                receptor_pendiente.tenant_id == tenant_id,
+                receptor_pendiente.deleted_at.is_(None),
+            )
+            .order_by(Expediente.fecha_emision, Expediente.serie, Expediente.correlativo)
+        )
+    )
+    total_pendiente = _redondear(
+        sum((Decimal(fila.importe_total) for fila in pendientes_atribucion), Decimal("0"))
+    )
+
     resumen_usuarios = list(
         session.execute(
             select(
@@ -608,6 +664,70 @@ def resumen_equipo_responsable(
         "clientes": clientes,
         "proveedores": proveedores,
         "usuarios": usuarios,
+        "pendientes_revision": {
+            "cantidad": len(pendientes_atribucion),
+            "produccion": str(total_pendiente),
+            "expedientes": [
+                {
+                    "expediente_id": str(fila.id),
+                    "comprobante": f"{fila.tipo_comprobante} {fila.serie}-{fila.correlativo}",
+                    "fecha": fila.fecha_emision.isoformat(),
+                    "usuario_codigo": fila.codigo,
+                    "usuario_nombre": fila.nombre,
+                    "cliente_ruc": fila.ruc,
+                    "cliente_nombre": fila.razon_social,
+                    "produccion": str(_redondear(Decimal(fila.importe_total))),
+                    "motivo": (
+                        "RECEPTOR_NO_AUTORIZADO" if not fila.autorizada else "GERENCIA_SIN_VINCULO"
+                    ),
+                }
+                for fila in pendientes_atribucion
+            ],
+        },
+    }
+
+
+@router.post("/equipo-sincronizar")
+def sincronizar_equipo_cobros(
+    datos: SincronizarEquipoCobrosIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, object]:
+    """Vincula solo expedientes con un Pedido de Gerencia coincidente y único."""
+    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
+    _periodo(datos.desde, datos.hasta, datos.moneda)
+    expedientes = list(
+        session.scalars(
+            select(Expediente)
+            .join(Miembro, Miembro.id == Expediente.usuario_id)
+            .where(
+                Expediente.tenant_id == tenant_id,
+                Expediente.deleted_at.is_(None),
+                expediente_tiene_documentos_activos(),
+                Expediente.gerente_id.is_(None),
+                Expediente.fecha_emision.between(datos.desde, datos.hasta),
+                Expediente.moneda == datos.moneda,
+                Miembro.tenant_id == tenant_id,
+                Miembro.rol == RolMiembro.USUARIO,
+                Miembro.responsable_id == auth.miembro_id,
+                Miembro.deleted_at.is_(None),
+            )
+            .with_for_update(of=Expediente)
+        )
+    )
+    vinculados = []
+    for expediente in expedientes:
+        atribuir_gerencia_inequivoca(session, expediente)
+        if expediente.gerente_id is not None:
+            vinculados.append(expediente)
+    session.commit()
+    return {
+        "vinculados": len(vinculados),
+        "produccion": str(
+            _redondear(sum((Decimal(e.importe_total) for e in vinculados), Decimal("0")))
+        ),
     }
 
 

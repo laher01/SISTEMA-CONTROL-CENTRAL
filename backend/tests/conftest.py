@@ -50,6 +50,9 @@ def completar_facturas_de_prueba(session: Session) -> None:
             )
         )
     session.flush()
+    # El cliente de prueba consulta con una sesión distinta (como la API real).
+    # Publicar los fixtures antes de verificar la respuesta en PostgreSQL.
+    session.commit()
 
 
 class Reloj:

@@ -40,6 +40,7 @@ interface CobrosEquipo {
   clientes: { gerente_id: string; gerente_codigo: string; gerente_nombre: string; cliente_ruc: string; cliente_nombre: string; produccion: string; porcentaje: string; comision: string }[];
   proveedores: { gerente_id: string; gerente_codigo: string; gerente_nombre: string; ruc: string; razon_social: string; documentos: number; produccion: string }[];
   usuarios: { gerente_id: string; gerente_codigo: string; gerente_nombre: string; usuario_id: string; usuario_codigo: string; usuario_nombre: string; documentos: number; produccion: string; porcentaje_usuario: string | null; comision_referencial_usuario: string | null }[];
+  pendientes_revision: { cantidad: number; produccion: string; expedientes: { expediente_id: string; comprobante: string; fecha: string; usuario_codigo: string; usuario_nombre: string; cliente_ruc: string; cliente_nombre: string; produccion: string; motivo: "RECEPTOR_NO_AUTORIZADO" | "GERENCIA_SIN_VINCULO" }[] };
 }
 type Pestana = "USUARIOS" | "PEDIDOS" | "COBROS" | "PAGOS";
 type SubpestanaCobro = "PROVEEDORES" | "CLIENTES" | "USUARIOS";
@@ -57,6 +58,7 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const [mensaje, setMensaje] = useState("");
   const [desdeCobro, setDesdeCobro] = useState(new Date().toISOString().slice(0, 8) + "01");
   const [hastaCobro, setHastaCobro] = useState(new Date().toISOString().slice(0, 10));
+  const [sincronizandoCobros, setSincronizandoCobros] = useState(false);
   const [subpestanaCobro, setSubpestanaCobro] = useState<SubpestanaCobro>("CLIENTES");
   const [gerentesSeleccionados, setGerentesSeleccionados] = useState<string[] | null>(null);
   const { datos: vinculosGerencia } = useDatos<GerenteVinculado[]>("/api/v1/gerencias/vinculos");
@@ -217,6 +219,27 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
       setErrorPago(e instanceof Error ? e.message : String(e));
     }
   };
+  const sincronizarCobros = async () => {
+    setSincronizandoCobros(true);
+    setMensaje("");
+    try {
+      const resultado = await enviarJson<{ vinculados: number; produccion: string }>(
+        "/api/v1/pagos-responsables/equipo-sincronizar",
+        "POST",
+        { desde: desdeCobro, hasta: hastaCobro, moneda },
+      );
+      cobrosEquipo.recargar();
+      setMensaje(
+        resultado.vinculados > 0
+          ? `Se vincularon ${resultado.vinculados} expedientes con pedidos inequívocos por ${formatearMonto(moneda, resultado.produccion)}.`
+          : "No hay expedientes pendientes con un único pedido coincidente. Revisa los documentos excluidos abajo.",
+      );
+    } catch (error) {
+      setMensaje(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSincronizandoCobros(false);
+    }
+  };
   const distribuir = async (pedidoId: string) => {
     setGuardando(true);
     setMensaje("");
@@ -362,8 +385,11 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
         <div className="filtros">
           <label>Desde <input type="date" value={desdeCobro} onChange={(e) => setDesdeCobro(e.target.value)} /></label>
           <label>Hasta <input type="date" value={hastaCobro} onChange={(e) => setHastaCobro(e.target.value)} /></label>
-          <button type="button" onClick={() => cobrosEquipo.recargar()}>Actualizar periodo</button>
+          <button type="button" disabled={sincronizandoCobros} onClick={() => void sincronizarCobros()}>
+            {sincronizandoCobros ? "Vinculando pedidos…" : "Vincular pedidos coincidentes y actualizar"}
+          </button>
         </div>
+        {mensaje && <p role="status">{mensaje}</p>}
         <fieldset>
           <legend>Gerentes incluidos</legend>
           {vinculosActivos.map((v) => <label key={v.gerente_id} className="bloque">
@@ -400,12 +426,27 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
             <button type="button" aria-pressed={subpestanaCobro === "CLIENTES"} onClick={() => setSubpestanaCobro("CLIENTES")}>Clientes</button>
             <button type="button" aria-pressed={subpestanaCobro === "USUARIOS"} onClick={() => setSubpestanaCobro("USUARIOS")}>Usuarios (referencia)</button>
           </nav>
+          {cobrosEquipo.datos.pendientes_revision.cantidad > 0 && <section className="panel-configuracion" role="status">
+            <h4>Documentos fuera del cálculo de cobros</h4>
+            <p>
+              Hay {cobrosEquipo.datos.pendientes_revision.cantidad} expedientes activos por {formatearMonto(moneda, cobrosEquipo.datos.pendientes_revision.produccion)} excluidos del cobro. Revisa la autorización del cliente o la relación con Gerencia/Pedido; no se atribuyen ni comisionan automáticamente.
+            </p>
+            <table><thead><tr><th>Comprobante</th><th>Fecha</th><th>Usuario</th><th>Cliente</th><th>Motivo</th><th>Producción excluida</th></tr></thead>
+              <tbody>{cobrosEquipo.datos.pendientes_revision.expedientes.map((p) => <tr key={p.expediente_id}>
+                <td>{p.comprobante}</td><td>{p.fecha}</td><td>{p.usuario_codigo} · {p.usuario_nombre}</td>
+                <td>{p.cliente_nombre} · {p.cliente_ruc}</td>
+                <td>{p.motivo === "RECEPTOR_NO_AUTORIZADO" ? "Cliente no autorizado" : "Sin vínculo a Gerencia/Pedido"}</td>
+                <td>{formatearMonto(moneda, p.produccion)}</td>
+              </tr>)}</tbody>
+            </table>
+          </section>}
           {subpestanaCobro === "PROVEEDORES" && <table>
             <thead><tr><th>Gerente</th><th>RUC proveedor</th><th>Proveedor</th><th>Documentos</th><th>Compras</th></tr></thead>
             <tbody>{cobrosEquipo.datos.proveedores.map((p, i) => <tr key={`${p.gerente_id}-${p.ruc}-${i}`}>
               <td>{p.gerente_codigo}</td><td>{p.ruc}</td><td>{p.razon_social}</td><td>{p.documentos}</td><td>{formatearMonto(moneda, p.produccion)}</td>
             </tr>)}</tbody>
           </table>}
+          {subpestanaCobro === "PROVEEDORES" && cobrosEquipo.datos.proveedores.length === 0 && <p>No hay compras de proveedores autorizados vinculadas a los Gerentes seleccionados en este periodo.</p>}
           {subpestanaCobro === "CLIENTES" && <table>
             <thead><tr><th>Gerente</th><th>RUC cliente</th><th>Cliente / receptor</th><th>Producción</th><th>% acordado</th><th>Comisión a cobrar</th></tr></thead>
             <tbody>{cobrosEquipo.datos.clientes.map((c, i) => <tr key={`${c.gerente_id}-${c.cliente_ruc}-${i}`}>
@@ -413,6 +454,7 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
               <td>{formatearMonto(moneda, c.produccion)}</td><td>{c.porcentaje}%</td><td>{formatearMonto(moneda, c.comision)}</td>
             </tr>)}</tbody>
           </table>}
+          {subpestanaCobro === "CLIENTES" && cobrosEquipo.datos.clientes.length === 0 && <p>No hay producción de clientes autorizados vinculada a los Gerentes seleccionados en este periodo.</p>}
           {subpestanaCobro === "USUARIOS" && <table>
             <thead><tr><th>Gerente</th><th>Usuario</th><th>Documentos</th><th>Producción</th><th>% Usuario</th><th>Comisión referencial</th></tr></thead>
             <tbody>{cobrosEquipo.datos.usuarios.map((u, i) => <tr key={`${u.gerente_id}-${u.usuario_id}-${i}`}>
@@ -421,6 +463,7 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
               <td>{u.comision_referencial_usuario ? formatearMonto(moneda, u.comision_referencial_usuario) : "Sin tasa"}</td>
             </tr>)}</tbody>
           </table>}
+          {subpestanaCobro === "USUARIOS" && cobrosEquipo.datos.usuarios.length === 0 && <p>No hay producción vinculada a los Gerentes seleccionados para este periodo.</p>}
           <h4>Solicitudes de cobro enviadas</h4>
           {(solicitudesCobro ?? []).filter((s) => s.moneda === moneda).map((s) => <p key={s.id}>
             {s.desde}–{s.hasta} · {s.estado} · Producción {formatearMonto(moneda, s.produccion)} · Comisión {formatearMonto(moneda, s.comision)}
