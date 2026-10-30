@@ -30,7 +30,19 @@ interface CotizacionUsuario {
   porcentaje: string; bruto: string; adelantos: string; neto: string;
   adelantos_pendientes: number;
 }
+interface CotizacionJonatan {
+  modo_base: string; base: string; gente_lima: string; javier: string;
+  jonatan: string; total_distribuido: string; excluido_alex: string;
+}
+interface GerenteVinculado { gerente_id: string; gerente_codigo?: string | null; gerente_nombre?: string | null; activo: boolean }
+interface CobrosEquipo {
+  gerentes: { gerente_id: string; gerente_codigo: string; gerente_nombre: string; produccion: string; comision: string }[];
+  clientes: { gerente_id: string; gerente_codigo: string; gerente_nombre: string; cliente_ruc: string; cliente_nombre: string; produccion: string; porcentaje: string; comision: string }[];
+  proveedores: { gerente_id: string; gerente_codigo: string; gerente_nombre: string; ruc: string; razon_social: string; documentos: number; produccion: string }[];
+  usuarios: { gerente_id: string; gerente_codigo: string; gerente_nombre: string; usuario_id: string; usuario_codigo: string; usuario_nombre: string; documentos: number; produccion: string; porcentaje_usuario: string | null; comision_referencial_usuario: string | null }[];
+}
 type Pestana = "USUARIOS" | "PEDIDOS" | "COBROS" | "PAGOS";
+type SubpestanaCobro = "PROVEEDORES" | "CLIENTES" | "USUARIOS";
 
 export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?: Pestana }) {
   const pestana = inicial;
@@ -43,6 +55,23 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const [usuarioDestino, setUsuarioDestino] = useState<Record<string, string>>({});
   const [montos, setMontos] = useState<Record<string, string>>({});
   const [mensaje, setMensaje] = useState("");
+  const [desdeCobro, setDesdeCobro] = useState(new Date().toISOString().slice(0, 8) + "01");
+  const [hastaCobro, setHastaCobro] = useState(new Date().toISOString().slice(0, 10));
+  const [subpestanaCobro, setSubpestanaCobro] = useState<SubpestanaCobro>("CLIENTES");
+  const [gerentesSeleccionados, setGerentesSeleccionados] = useState<string[] | null>(null);
+  const { datos: vinculosGerencia } = useDatos<GerenteVinculado[]>("/api/v1/gerencias/vinculos");
+  const { datos: solicitudesCobro, recargar: recargarSolicitudesCobro } = useDatos<Array<{
+    id: string; gerente_id: string; desde: string; hasta: string; moneda: string;
+    produccion: string; comision: string; estado: string;
+  }>>("/api/v1/pagos-responsables/solicitudes-cobro");
+  const vinculosActivos = vinculosGerencia?.filter((v) => v.activo) ?? [];
+  const gerentesIncluidos = gerentesSeleccionados ?? vinculosActivos.map((v) => v.gerente_id);
+  const parametrosCobro = new URLSearchParams({ desde: desdeCobro, hasta: hastaCobro, moneda });
+  gerentesIncluidos.forEach((id) => parametrosCobro.append("gerente_ids", id));
+  const urlCobro = gerentesIncluidos.length
+    ? `/api/v1/pagos-responsables/equipo-resumen?${parametrosCobro.toString()}`
+    : null;
+  const cobrosEquipo = useDatos<CobrosEquipo>(urlCobro);
   const [guardando, setGuardando] = useState(false);
   const [nombreNuevo, setNombreNuevo] = useState("");
   const [porcentajeConNuevo, setPorcentajeConNuevo] = useState("1.5");
@@ -80,10 +109,17 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const [desdePago, setDesdePago] = useState(new Date().toISOString().slice(0, 7) + "-01");
   const [hastaPago, setHastaPago] = useState(new Date().toISOString().slice(0, 10));
   const [cotizacion, setCotizacion] = useState<CotizacionUsuario | null>(null);
-  const [porcentajesSaldos, setPorcentajesSaldos] = useState<Record<string, string>>({});
+  const [cotizacionJonatan, setCotizacionJonatan] = useState<CotizacionJonatan | null>(null);
+  const [baseJonatan, setBaseJonatan] = useState("");
+  const [usarTotalJonatan, setUsarTotalJonatan] = useState(false);
+  const esJonatan = (equipo?.usuarios.find((u) => u.id === usuarioPago)?.codigo ?? "")
+    .trim().toUpperCase() === "JONA01";
   const [saldosSeleccionados, setSaldosSeleccionados] = useState<string[]>([]);
   const [adelantosSeleccionados, setAdelantosSeleccionados] = useState<string[]>([]);
   const [observacionAdelantos, setObservacionAdelantos] = useState("");
+  const [adelantoFecha, setAdelantoFecha] = useState(new Date().toISOString().slice(0, 10));
+  const [adelantoMonto, setAdelantoMonto] = useState("");
+  const [adelantoDescripcion, setAdelantoDescripcion] = useState("");
   const [saldoMes, setSaldoMes] = useState(new Date().toISOString().slice(0, 7));
   const [saldoMonto, setSaldoMonto] = useState("");
   const [saldoDetalle, setSaldoDetalle] = useState("");
@@ -102,7 +138,6 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const parametrosPago = {
     usuario_id: usuarioPago, desde: desdePago, hasta: hastaPago, moneda,
     saldo_ids: saldosSeleccionados, adelanto_ids: adelantosSeleccionados,
-    porcentajes_saldos: Object.fromEntries(saldosSeleccionados.map((id) => [id, porcentajesSaldos[id] || null])),
     observacion_adelantos: observacionAdelantos.trim() || null,
   };
   const crearSaldo = async () => {
@@ -117,6 +152,17 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
       setMensaje("Saldo mensual registrado con trazabilidad.");
     } catch (e) { setErrorPago(String(e)); }
   };
+  const crearAdelanto = async () => {
+    try {
+      await enviarJson("/api/v1/responsable/pagos/adelantos", "POST", {
+        usuario_id: usuarioPago, fecha: adelantoFecha, moneda,
+        monto: adelantoMonto, descripcion: adelantoDescripcion.trim(),
+      });
+      setAdelantoMonto(""); setAdelantoDescripcion("");
+      adelantosPendientes.recargar(); setCotizacion(null);
+      setMensaje("Adelanto registrado para descontar al programar el pago.");
+    } catch (e) { setErrorPago(String(e)); }
+  };
   const confirmarLiquidacion = async (id: string) => {
     try {
       await enviarJson("/api/v1/responsable/pagos/" + id + "/confirmar", "POST", {
@@ -127,11 +173,22 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
     } catch (e) { setErrorPago(String(e)); }
   };
   const cotizarPago = async () => {
-    setCotizacion(null); setErrorPago("");
+    setCotizacion(null); setCotizacionJonatan(null); setErrorPago("");
     try {
-      setCotizacion(await enviarJson<CotizacionUsuario>(
+      const resultado = await enviarJson<CotizacionUsuario>(
         "/api/v1/responsable/pagos/cotizar", "POST", parametrosPago,
-      ));
+      );
+      setCotizacion(resultado);
+      if (esJonatan) {
+        const especial = await enviarJson<CotizacionJonatan>(
+          "/api/v1/responsable/pagos/formulas/simular-jonatan", "POST", {
+            usuario_id: usuarioPago, total_emitido: resultado.produccion,
+            base_autorizada: usarTotalJonatan ? null : baseJonatan,
+            usar_total_emitido: usarTotalJonatan,
+          },
+        );
+        setCotizacionJonatan(especial);
+      }
     } catch (e) { setErrorPago(String(e)); }
   };
   const programarPago = async () => {
@@ -148,6 +205,17 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
       await eliminar("/api/v1/responsable/pagos/" + id);
       recargarEquipo(); liquidaciones.recargar(); saldosPendientes.recargar(); adelantosPendientes.recargar(); setMensaje("Programación anulada.");
     } catch (e) { setErrorPago(String(e)); }
+  };
+  const generarSolicitudCobro = async (gerenteId: string) => {
+    try {
+      await enviarJson("/api/v1/pagos-responsables/solicitudes-cobro", "POST", {
+        gerente_id: gerenteId, desde: desdeCobro, hasta: hastaCobro, moneda,
+      });
+      recargarSolicitudesCobro();
+      setMensaje("Solicitud de cobro enviada a Gerencia.");
+    } catch (e) {
+      setErrorPago(e instanceof Error ? e.message : String(e));
+    }
   };
   const distribuir = async (pedidoId: string) => {
     setGuardando(true);
@@ -167,7 +235,6 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const nombreUsuario = (id: string) =>
     equipo?.usuarios.find((u) => u.id === id)?.codigo ?? "Usuario";
   const pedidos = (equipo?.pedidos ?? []).filter((p) => p.moneda === moneda);
-  const clientes = (equipo?.clientes ?? []).filter((p) => p.moneda === moneda);
   const pagos = (equipo?.pagos ?? []).filter((p) => p.moneda === moneda);
   const sumar = (valores: string[]) => valores.reduce((a, n) => a + Number(n), 0);
   return (
@@ -290,20 +357,80 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
         {pedidos.length === 0 && <p>Gerencia aún no te ha asignado pedidos brutos en esta moneda.</p>}
       </>}
       {pestana === "COBROS" && <>
-        <h3>Clientes y producción documentada del equipo</h3>
-        <p>Producción registrada: <strong>{formatearMonto(moneda, sumar(clientes.map((c) => c.produccion)))}</strong></p>
-        <p className="tenue">La producción no equivale a cobros recibidos. Las comisiones de Usuarios son referenciales según su porcentaje y condición de agente; no equivalen a la comisión que Gerencia debe al Responsable ni a un pago autorizado.</p>
-        <table><thead><tr><th>Usuario</th><th>RUC</th><th>Cliente/Receptor</th><th>Expedientes</th><th>Producción</th><th>Agente de retención</th><th>% Usuario</th><th>Comisión referencial Usuario</th></tr></thead>
-          <tbody>{clientes.map((c) => <tr key={`${c.usuario_id}-${c.receptor_id}-${c.moneda}`}>
-            <td>{nombreUsuario(c.usuario_id)}</td><td>{c.ruc}</td><td>{c.razon_social}</td>
-            <td>{c.expedientes}</td><td>{formatearMonto(moneda, c.produccion)}</td><td>{c.agente_retencion ? "Sí" : "No"}</td><td>{c.porcentaje_usuario === null ? "Sin tasa" : `${c.porcentaje_usuario}%`}</td><td>{c.comision_usuario_referencial === null ? "Sin tasa" : formatearMonto(moneda, c.comision_usuario_referencial)}</td></tr>)}</tbody>
-        </table>
-        {clientes.length === 0 && <p>No hay expedientes vinculados a tus Usuarios en esta moneda.</p>}
+        <h3>Cobros y clientes</h3>
+        <p className="tenue">Consulta la producción del periodo. El cálculo de clientes aplica el porcentaje de comisión acordado por receptor; proveedores y Usuarios son vistas separadas.</p>
+        <div className="filtros">
+          <label>Desde <input type="date" value={desdeCobro} onChange={(e) => setDesdeCobro(e.target.value)} /></label>
+          <label>Hasta <input type="date" value={hastaCobro} onChange={(e) => setHastaCobro(e.target.value)} /></label>
+          <button type="button" onClick={() => cobrosEquipo.recargar()}>Actualizar periodo</button>
+        </div>
+        <fieldset>
+          <legend>Gerentes incluidos</legend>
+          {vinculosActivos.map((v) => <label key={v.gerente_id} className="bloque">
+            <input type="checkbox" checked={gerentesIncluidos.includes(v.gerente_id)}
+              onChange={(e) => setGerentesSeleccionados((actual) => {
+                const incluidos = actual ?? vinculosActivos.map((vinculo) => vinculo.gerente_id);
+                return e.target.checked
+                  ? [...new Set([...incluidos, v.gerente_id])]
+                  : incluidos.filter((id) => id !== v.gerente_id);
+              })} />
+            {v.gerente_codigo ?? v.gerente_id} · {v.gerente_nombre ?? "Gerente"}
+          </label>)}
+          {vinculosActivos.length === 0 && <p>No tienes Gerentes vinculados activos.</p>}
+        </fieldset>
+        {cobrosEquipo.cargando && <p>Cargando resumen…</p>}
+        {cobrosEquipo.error && <p role="alert">{cobrosEquipo.error}</p>}
+        {cobrosEquipo.datos && <>
+          <section className="panel-configuracion">
+            <strong>Totales del periodo: {desdeCobro} al {hastaCobro}</strong>
+            <p>Producción bruta: <strong>{formatearMonto(moneda, sumar(cobrosEquipo.datos.gerentes.map((g) => g.produccion)))}</strong></p>
+            <p>Comisión que corresponde cobrar: <strong>{formatearMonto(moneda, sumar(cobrosEquipo.datos.gerentes.map((g) => g.comision)))}</strong></p>
+          </section>
+          <h4>Resumen por Gerente</h4>
+          <table><thead><tr><th>Gerente</th><th>Producción bruta</th><th>Comisión a cobrar</th><th>Solicitud</th></tr></thead>
+            <tbody>{cobrosEquipo.datos.gerentes.map((g) => <tr key={g.gerente_id}>
+              <td>{g.gerente_codigo} · {g.gerente_nombre}</td>
+              <td>{formatearMonto(moneda, g.produccion)}</td>
+              <td>{formatearMonto(moneda, g.comision)}</td>
+              <td><button type="button" onClick={() => void generarSolicitudCobro(g.gerente_id)}>Enviar solicitud de cobro</button></td>
+            </tr>)}</tbody>
+          </table>
+          <nav className="filtros" aria-label="Vistas de cobros">
+            <button type="button" aria-pressed={subpestanaCobro === "PROVEEDORES"} onClick={() => setSubpestanaCobro("PROVEEDORES")}>Proveedores</button>
+            <button type="button" aria-pressed={subpestanaCobro === "CLIENTES"} onClick={() => setSubpestanaCobro("CLIENTES")}>Clientes</button>
+            <button type="button" aria-pressed={subpestanaCobro === "USUARIOS"} onClick={() => setSubpestanaCobro("USUARIOS")}>Usuarios (referencia)</button>
+          </nav>
+          {subpestanaCobro === "PROVEEDORES" && <table>
+            <thead><tr><th>Gerente</th><th>RUC proveedor</th><th>Proveedor</th><th>Documentos</th><th>Compras</th></tr></thead>
+            <tbody>{cobrosEquipo.datos.proveedores.map((p, i) => <tr key={`${p.gerente_id}-${p.ruc}-${i}`}>
+              <td>{p.gerente_codigo}</td><td>{p.ruc}</td><td>{p.razon_social}</td><td>{p.documentos}</td><td>{formatearMonto(moneda, p.produccion)}</td>
+            </tr>)}</tbody>
+          </table>}
+          {subpestanaCobro === "CLIENTES" && <table>
+            <thead><tr><th>Gerente</th><th>RUC cliente</th><th>Cliente / receptor</th><th>Producción</th><th>% acordado</th><th>Comisión a cobrar</th></tr></thead>
+            <tbody>{cobrosEquipo.datos.clientes.map((c, i) => <tr key={`${c.gerente_id}-${c.cliente_ruc}-${i}`}>
+              <td>{c.gerente_codigo}</td><td>{c.cliente_ruc}</td><td>{c.cliente_nombre}</td>
+              <td>{formatearMonto(moneda, c.produccion)}</td><td>{c.porcentaje}%</td><td>{formatearMonto(moneda, c.comision)}</td>
+            </tr>)}</tbody>
+          </table>}
+          {subpestanaCobro === "USUARIOS" && <table>
+            <thead><tr><th>Gerente</th><th>Usuario</th><th>Documentos</th><th>Producción</th><th>% Usuario</th><th>Comisión referencial</th></tr></thead>
+            <tbody>{cobrosEquipo.datos.usuarios.map((u, i) => <tr key={`${u.gerente_id}-${u.usuario_id}-${i}`}>
+              <td>{u.gerente_codigo}</td><td>{u.usuario_codigo} · {u.usuario_nombre}</td><td>{u.documentos}</td>
+              <td>{formatearMonto(moneda, u.produccion)}</td><td>{u.porcentaje_usuario ? `${u.porcentaje_usuario}%` : "Sin tasa"}</td>
+              <td>{u.comision_referencial_usuario ? formatearMonto(moneda, u.comision_referencial_usuario) : "Sin tasa"}</td>
+            </tr>)}</tbody>
+          </table>}
+          <h4>Solicitudes de cobro enviadas</h4>
+          {(solicitudesCobro ?? []).filter((s) => s.moneda === moneda).map((s) => <p key={s.id}>
+            {s.desde}–{s.hasta} · {s.estado} · Producción {formatearMonto(moneda, s.produccion)} · Comisión {formatearMonto(moneda, s.comision)}
+          </p>)}
+        </>}
       </>}
       {pestana === "PAGOS" && <>
         <h3>Pago de Usuarios</h3>
         <p>Saldo programado: <strong>{formatearMonto(moneda, sumar(pagos.filter((p) => p.estado === "PROGRAMADO").map((p) => p.saldo)))}</strong></p>
-        <p className="tenue">La base es la producción registrada por Usuario, multiplicada por el porcentaje de su plan vigente. Programar no equivale a pagar.</p>
+        <p className="tenue">El cálculo aplica el porcentaje del plan a la producción. Los saldos pendientes se suman como dinero adeudado, sin porcentaje; los adelantos se descuentan una sola vez. Programar no equivale a pagar.</p>
         <div className="filtros">
           <label>Usuario <select value={usuarioPago} onChange={(e) => { setUsuarioPago(e.target.value); setCotizacion(null); }}>
             <option value="">Seleccionar Usuario</option>
@@ -311,8 +438,27 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
           </select></label>
           <label>Desde <input type="date" value={desdePago} onChange={(e) => { setDesdePago(e.target.value); setCotizacion(null); }} /></label>
           <label>Hasta <input type="date" value={hastaPago} onChange={(e) => { setHastaPago(e.target.value); setCotizacion(null); }} /></label>
-          <button type="button" disabled={!usuarioPago} onClick={() => void cotizarPago()}>Calcular pago</button>
+          <button type="button" disabled={!usuarioPago || (esJonatan && !usarTotalJonatan && !(Number(baseJonatan) > 0))}
+            onClick={() => void cotizarPago()}>{esJonatan ? "Calcular distribución especial" : "Calcular pago"}</button>
         </div>
+        {esJonatan && <section className="panel-configuracion">
+          <h4>Regla especial JONA01 — distribución 2.6875 %</h4>
+          <p className="tenue">Elige una base manual autorizada o confirma expresamente el total emitido. Esta simulación muestra los importes por beneficiario y no registra giros.</p>
+          <label><input type="checkbox" checked={usarTotalJonatan}
+            onChange={(e) => { setUsarTotalJonatan(e.target.checked); setCotizacionJonatan(null); }} />
+            Confirmo usar el total emitido del periodo
+          </label>
+          {!usarTotalJonatan && <label>Base manual autorizada
+            <input type="number" min="0.01" step="0.01" value={baseJonatan}
+              onChange={(e) => { setBaseJonatan(e.target.value); setCotizacionJonatan(null); }} />
+          </label>}
+          {cotizacionJonatan && <table><thead><tr><th>Bolsa / beneficiario</th><th>Importe</th></tr></thead><tbody>
+            <tr><td>Gente y Lima</td><td>{formatearMonto(moneda, cotizacionJonatan.gente_lima)}</td></tr>
+            <tr><td>Javier</td><td>{formatearMonto(moneda, cotizacionJonatan.javier)}</td></tr>
+            <tr><td>Jonatan</td><td>{formatearMonto(moneda, cotizacionJonatan.jonatan)}</td></tr>
+            <tr><th>Total distribuido</th><th>{formatearMonto(moneda, cotizacionJonatan.total_distribuido)}</th></tr>
+          </tbody></table>}
+        </section>}
         {usuarioPago && <>
           <h4>Saldos de compras pendientes por mes</h4>
           <div className="filtros">
@@ -331,16 +477,18 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
                 onChange={(e) => { setCotizacion(null); setSaldosSeleccionados((v) =>
                   e.target.checked ? [...v, s.id] : v.filter((x) => x !== s.id)); }} />
               {s.periodo_mes.slice(0, 7)} · {s.detalle} · {formatearMonto(moneda, s.monto)}
-              {saldosSeleccionados.includes(s.id) && (
-                <span> % histórico del saldo (obligatorio)
-                  <input type="number" min="0" max="100" step="0.0001"
-                    value={porcentajesSaldos[s.id] ?? ""}
-                    onChange={(e) => { setCotizacion(null); setPorcentajesSaldos((v) => ({ ...v, [s.id]: e.target.value })); }}
-                    placeholder="Tasa pactada para ese mes" required />
-                </span>
-              )}
             </label>
           )}
+          <h4>Registrar adelanto entregado</h4>
+          <div className="filtros">
+            <label>Fecha <input type="date" value={adelantoFecha} onChange={(e) => setAdelantoFecha(e.target.value)} /></label>
+            <label>Monto <input type="number" min="0.01" step="0.01" value={adelantoMonto}
+              onChange={(e) => setAdelantoMonto(e.target.value)} /></label>
+            <label>Descripción <input value={adelantoDescripcion} maxLength={500}
+              onChange={(e) => setAdelantoDescripcion(e.target.value)} placeholder="Motivo del adelanto" /></label>
+            <button type="button" disabled={!adelantoMonto || adelantoDescripcion.trim().length < 4}
+              onClick={() => void crearAdelanto()}>Agregar adelanto</button>
+          </div>
           <h4>Adelantos pendientes: seleccionar los que se descontarán</h4>
           {(adelantosPendientes.datos ?? []).filter((a) => a.moneda === moneda).map((a) =>
             <label key={a.id} className="bloque">
@@ -364,7 +512,8 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
           {" · "}Bruto: {formatearMonto(moneda, cotizacion.bruto)}
           {" · "}Adelantos: {formatearMonto(moneda, cotizacion.adelantos)}
           {" · "}<strong>Neto: {formatearMonto(moneda, cotizacion.neto)}</strong>
-          <button type="button" onClick={() => void programarPago()}>Programar</button>
+          {!esJonatan && <button type="button" onClick={() => void programarPago()}>Programar</button>}
+          {esJonatan && <span className="tenue">La fórmula especial queda en simulación; el pago estándar está deshabilitado para no enviar el total a un solo Usuario.</span>}
         </p>}
         <h4>Confirmar pagos programados</h4>
         <div className="filtros">

@@ -15,6 +15,7 @@ type PestanaEmpresa = "PROVEEDORES" | "CLIENTES";
 
 export default function Empresas({ sesion }: { sesion: SesionActual }) {
   const puedeClasificar = sesion.rol === "SUPERADMIN" || sesion.rol === "ADMINISTRADOR";
+  const puedeAutorizar = puedeClasificar || sesion.rol === "SECRETARIA" || sesion.rol === "RESPONSABLE" || sesion.rol === "GERENTE";
   const { datos, error, cargando, recargar } = useDatos<Empresa[]>("/api/v1/empresas");
   const [params] = useSearchParams();
   const rucFiltro = params.get("ruc") ?? "";
@@ -326,7 +327,7 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
                       type="checkbox"
                       aria-label={`Autorizada ${empresa.ruc}`}
                       checked={empresa.autorizada}
-                      disabled={!puedeClasificar}
+                      disabled={!puedeAutorizar}
                       onChange={(ev) => cambiar(empresa, "autorizada", ev.target.checked)}
                     />
                   </td>

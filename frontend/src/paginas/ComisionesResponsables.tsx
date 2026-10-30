@@ -96,6 +96,10 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
     conParametros("/api/v1/pagos-responsables/resumen", { desde, hasta, moneda }),
   );
   const pagos = useDatos<Pago[]>("/api/v1/pagos-responsables");
+  const solicitudesCobro = useDatos<Array<{
+    id: string; responsable_id: string; gerente_id: string; desde: string; hasta: string;
+    moneda: string; produccion: string; comision: string; estado: string; observacion: string;
+  }>>("/api/v1/pagos-responsables/solicitudes-cobro");
   const pagosFiltrados = (pagos.datos ?? []).filter(p =>
     (!responsableSeleccionado || p.responsable_id === responsableSeleccionado) &&
     p.moneda === moneda && p.periodo_desde >= desde && p.periodo_hasta <= hasta
@@ -254,6 +258,14 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
         <option value="PEN">PEN</option><option value="USD">USD</option>
       </select></label>
     </div>
+  {solicitudesCobro.datos?.some((s) => s.estado === "SOLICITADA" && s.moneda === moneda) && <section className="panel-configuracion">
+    <h4>Solicitudes de cobro recibidas de Responsables</h4>
+    <p className="tenue">Son solicitudes informativas de cobro; no programan ni confirman el pago automáticamente.</p>
+    {solicitudesCobro.datos.filter((s) => s.estado === "SOLICITADA" && s.moneda === moneda).map((s) => <p key={s.id}>
+      {responsables.find((r) => r[0] === s.responsable_id)?.[1] ?? "Responsable"} · {s.desde}–{s.hasta} ·
+      {" "}Producción {formatearMonto(moneda, s.produccion)} · Comisión solicitada {formatearMonto(moneda, s.comision)}
+    </p>)}
+  </section>}
     <div className="filtros">
       <label>Responsable activo
         <select aria-label="Seleccionar Responsable" value={responsableSeleccionado}

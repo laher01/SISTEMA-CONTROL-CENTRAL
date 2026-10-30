@@ -6,7 +6,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
@@ -16,13 +16,17 @@ from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.enums import RolMiembro
 from app.models import (
     Auditoria,
+    ChatMensaje,
     ComisionResponsableRegla,
+    CuentaAcceso,
     Empresa,
     Expediente,
+    GerenteResponsable,
     Miembro,
     MovimientoPagoResponsable,
     PagoResponsableERP,
     PedidoGerencia,
+    SolicitudCobroResponsableERP,
 )
 from app.services import auditoria
 from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
@@ -358,6 +362,395 @@ def resumen(
             _redondear(sum((Decimal(total) for _, total, _ in historicos), Decimal("0")))
         )
     return resultado
+
+
+def _gerentes_de_responsable(
+    session: SessionDep, tenant_id: uuid.UUID, responsable_id: uuid.UUID
+) -> list[Miembro]:
+    ids = list(
+        session.scalars(
+            select(GerenteResponsable.gerente_id)
+            .join(Miembro, Miembro.id == GerenteResponsable.gerente_id)
+            .where(
+                GerenteResponsable.tenant_id == tenant_id,
+                GerenteResponsable.responsable_id == responsable_id,
+                GerenteResponsable.activo.is_(True),
+                Miembro.tenant_id == tenant_id,
+                Miembro.rol == RolMiembro.GERENTE,
+                Miembro.activo.is_(True),
+                Miembro.deleted_at.is_(None),
+            )
+        )
+    )
+    return list(
+        session.scalars(
+            select(Miembro)
+            .where(
+                Miembro.tenant_id == tenant_id,
+                Miembro.id.in_(ids),
+                Miembro.rol == RolMiembro.GERENTE,
+                Miembro.activo.is_(True),
+                Miembro.deleted_at.is_(None),
+            )
+            .order_by(Miembro.nombre)
+        )
+    )
+
+
+@router.get("/equipo-resumen")
+def resumen_equipo_responsable(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    desde: date,
+    hasta: date,
+    moneda: str = "PEN",
+    gerente_ids: list[uuid.UUID] = Query(default=[]),
+) -> dict[str, object]:
+    """Consulta por gerente, clientes, proveedores y Usuarios de referencia."""
+    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
+    _periodo(desde, hasta, moneda)
+    disponibles = _gerentes_de_responsable(session, tenant_id, auth.miembro_id)
+    by_id = {g.id: g for g in disponibles}
+    elegidos = gerente_ids or list(by_id)
+    if (
+        not elegidos
+        or len(elegidos) != len(set(elegidos))
+        or any(gid not in by_id for gid in elegidos)
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Seleccione Gerentes vinculados y activos",
+        )
+    clientes: list[dict[str, object]] = []
+    gerentes: list[dict[str, object]] = []
+    for gerente_id in elegidos:
+        calculo = _calculo(session, tenant_id, desde, hasta, moneda, auth.miembro_id, gerente_id)
+        filas = calculo["filas"]
+        assert isinstance(filas, list)
+        gerentes.append(
+            {
+                "gerente_id": str(gerente_id),
+                "gerente_codigo": by_id[gerente_id].codigo,
+                "gerente_nombre": by_id[gerente_id].nombre,
+                "produccion": calculo["total_produccion"],
+                "comision": calculo["total_comisiones"],
+            }
+        )
+        for fila in filas:
+            clientes.append(
+                {
+                    **fila,
+                    "gerente_id": str(gerente_id),
+                    "gerente_codigo": by_id[gerente_id].codigo,
+                    "gerente_nombre": by_id[gerente_id].nombre,
+                }
+            )
+
+    resumen_proveedores = list(
+        session.execute(
+            select(
+                Expediente.gerente_id,
+                Empresa.id,
+                Empresa.ruc,
+                Empresa.razon_social,
+                func.count(Expediente.id),
+                func.sum(Expediente.importe_total),
+            )
+            .join(Miembro, Miembro.id == Expediente.usuario_id)
+            .join(Empresa, Empresa.id == Expediente.emisor_id)
+            .where(
+                Expediente.tenant_id == tenant_id,
+                Expediente.deleted_at.is_(None),
+                Expediente.fecha_emision.between(desde, hasta),
+                Expediente.moneda == moneda,
+                Expediente.gerente_id.in_(elegidos),
+                Expediente.receptor.has(
+                    Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
+                ),
+                Miembro.tenant_id == tenant_id,
+                Miembro.rol == RolMiembro.USUARIO,
+                Miembro.responsable_id == auth.miembro_id,
+                Miembro.deleted_at.is_(None),
+                Empresa.tenant_id == tenant_id,
+                Empresa.deleted_at.is_(None),
+            )
+            .group_by(Expediente.gerente_id, Empresa.id, Empresa.ruc, Empresa.razon_social)
+        )
+    )
+    proveedores = [
+        {
+            "gerente_id": str(gid),
+            "gerente_codigo": by_id[gid].codigo,
+            "gerente_nombre": by_id[gid].nombre,
+            "proveedor_id": str(pid),
+            "ruc": ruc,
+            "razon_social": nombre,
+            "documentos": int(cantidad),
+            "produccion": str(_redondear(Decimal(total or 0))),
+        }
+        for gid, pid, ruc, nombre, cantidad, total in resumen_proveedores
+        if gid in by_id
+    ]
+
+    resumen_usuarios = list(
+        session.execute(
+            select(
+                Expediente.gerente_id,
+                Miembro.id,
+                Miembro.codigo,
+                Miembro.nombre,
+                Empresa.agente_retencion,
+                Miembro.porcentaje_con_agente,
+                Miembro.porcentaje_sin_agente,
+                func.count(Expediente.id),
+                func.sum(Expediente.importe_total),
+            )
+            .join(Miembro, Miembro.id == Expediente.usuario_id)
+            .join(Empresa, Empresa.id == Expediente.receptor_id)
+            .where(
+                Expediente.tenant_id == tenant_id,
+                Expediente.deleted_at.is_(None),
+                Expediente.fecha_emision.between(desde, hasta),
+                Expediente.moneda == moneda,
+                Expediente.gerente_id.in_(elegidos),
+                Empresa.autorizada.is_(True),
+                Empresa.deleted_at.is_(None),
+                Miembro.tenant_id == tenant_id,
+                Miembro.rol == RolMiembro.USUARIO,
+                Miembro.responsable_id == auth.miembro_id,
+                Miembro.deleted_at.is_(None),
+            )
+            .group_by(
+                Expediente.gerente_id,
+                Miembro.id,
+                Miembro.codigo,
+                Miembro.nombre,
+                Empresa.agente_retencion,
+                Miembro.porcentaje_con_agente,
+                Miembro.porcentaje_sin_agente,
+            )
+        )
+    )
+    usuarios_agrupados: dict[tuple[uuid.UUID, uuid.UUID], dict[str, object]] = {}
+    for (
+        gid,
+        uid,
+        codigo,
+        nombre,
+        agente,
+        tasa_agente,
+        tasa_sin,
+        cantidad,
+        total,
+    ) in resumen_usuarios:
+        if gid not in by_id:
+            continue
+        tasa_aplicable = tasa_agente if agente else tasa_sin
+        tasa = Decimal(tasa_aplicable) if tasa_aplicable is not None else None
+        importe = Decimal(total or 0)
+        llave = (gid, uid)
+        agregado = usuarios_agrupados.setdefault(
+            llave,
+            {
+                "gerente_id": str(gid),
+                "gerente_codigo": by_id[gid].codigo,
+                "gerente_nombre": by_id[gid].nombre,
+                "usuario_id": str(uid),
+                "usuario_codigo": codigo,
+                "usuario_nombre": nombre,
+                "documentos": 0,
+                "produccion_decimal": Decimal("0"),
+                "comision_decimal": Decimal("0"),
+                "tasa_completa": True,
+            },
+        )
+        agregado["documentos"] = int(str(agregado["documentos"])) + int(cantidad)
+        agregado["produccion_decimal"] = Decimal(str(agregado["produccion_decimal"])) + importe
+        if tasa is None:
+            agregado["tasa_completa"] = False
+        else:
+            agregado["comision_decimal"] = Decimal(str(agregado["comision_decimal"])) + _redondear(
+                importe * tasa / Decimal("100")
+            )
+    usuarios = []
+    for agregado in usuarios_agrupados.values():
+        produccion = Decimal(str(agregado.pop("produccion_decimal")))
+        comision = Decimal(str(agregado.pop("comision_decimal")))
+        tasa_completa = bool(agregado.pop("tasa_completa"))
+        porcentaje = (
+            _redondear(comision / produccion * Decimal("100"))
+            if tasa_completa and produccion
+            else None
+        )
+        usuarios.append(
+            {
+                **agregado,
+                "produccion": str(_redondear(produccion)),
+                "porcentaje_usuario": str(porcentaje) if porcentaje is not None else None,
+                "comision_referencial_usuario": (
+                    str(_redondear(comision)) if tasa_completa else None
+                ),
+            }
+        )
+    return {
+        "desde": desde.isoformat(),
+        "hasta": hasta.isoformat(),
+        "moneda": moneda,
+        "gerentes": gerentes,
+        "clientes": clientes,
+        "proveedores": proveedores,
+        "usuarios": usuarios,
+    }
+
+
+class SolicitudCobroIn(BaseModel):
+    gerente_id: uuid.UUID
+    desde: date
+    hasta: date
+    moneda: str = Field(pattern="^(PEN|USD)$")
+    observacion: str | None = Field(default=None, max_length=500)
+
+
+@router.post("/solicitudes-cobro", status_code=status.HTTP_201_CREATED)
+def solicitar_cobro_a_gerente(
+    datos: SolicitudCobroIn,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> dict[str, str]:
+    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
+    gerente = next(
+        (
+            g
+            for g in _gerentes_de_responsable(session, tenant_id, auth.miembro_id)
+            if g.id == datos.gerente_id
+        ),
+        None,
+    )
+    if gerente is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Gerente no vinculado")
+    resultado = _calculo(
+        session, tenant_id, datos.desde, datos.hasta, datos.moneda, auth.miembro_id, gerente.id
+    )
+    filas = resultado["filas"]
+    assert isinstance(filas, list)
+    if not filas:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Sin producción autorizada en el periodo",
+        )
+    duplicada = session.scalar(
+        select(SolicitudCobroResponsableERP.id).where(
+            SolicitudCobroResponsableERP.tenant_id == tenant_id,
+            SolicitudCobroResponsableERP.responsable_id == auth.miembro_id,
+            SolicitudCobroResponsableERP.gerente_id == gerente.id,
+            SolicitudCobroResponsableERP.periodo_desde == datos.desde,
+            SolicitudCobroResponsableERP.periodo_hasta == datos.hasta,
+            SolicitudCobroResponsableERP.moneda == datos.moneda,
+            SolicitudCobroResponsableERP.estado == "SOLICITADA",
+        )
+    )
+    if duplicada is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Ya existe una solicitud pendiente para ese Gerente y periodo",
+        )
+    solicitud = SolicitudCobroResponsableERP(
+        tenant_id=tenant_id,
+        gerente_id=gerente.id,
+        responsable_id=auth.miembro_id,
+        periodo_desde=datos.desde,
+        periodo_hasta=datos.hasta,
+        moneda=datos.moneda,
+        produccion_total=Decimal(str(resultado["total_produccion"])),
+        comision_total=Decimal(str(resultado["total_comisiones"])),
+        detalle={"filas": filas},
+        estado="SOLICITADA",
+        observacion=datos.observacion,
+        creado_por_cuenta_id=auth.cuenta_id,
+    )
+    session.add(solicitud)
+    cuentas_gerente = session.scalars(
+        select(CuentaAcceso).where(
+            CuentaAcceso.tenant_id == tenant_id,
+            CuentaAcceso.miembro_id == gerente.id,
+            CuentaAcceso.activo.is_(True),
+            CuentaAcceso.deleted_at.is_(None),
+        )
+    )
+    for cuenta in cuentas_gerente:
+        session.add(
+            ChatMensaje(
+                tenant_id=tenant_id,
+                remitente_cuenta_id=auth.cuenta_id,
+                destinatario_cuenta_id=cuenta.id,
+                texto=(
+                    f"Solicitud de cobro de {auth.codigo}: {datos.desde} al {datos.hasta}. "
+                    f"Producción {datos.moneda} {resultado['total_produccion']}; "
+                    f"comisión solicitada {datos.moneda} {resultado['total_comisiones']}."
+                ),
+            )
+        )
+    session.flush()
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "COBRO_RESPONSABLE_SOLICITADO",
+        "solicitud_cobro_responsable",
+        solicitud.id,
+        {
+            "gerente_id": str(gerente.id),
+            "periodo_desde": datos.desde.isoformat(),
+            "periodo_hasta": datos.hasta.isoformat(),
+            "moneda": datos.moneda,
+            "produccion": str(solicitud.produccion_total),
+            "comision": str(solicitud.comision_total),
+            "actor": auth.codigo,
+        },
+    )
+    session.commit()
+    return {
+        "id": str(solicitud.id),
+        "estado": solicitud.estado,
+        "produccion": str(solicitud.produccion_total),
+        "comision": str(solicitud.comision_total),
+    }
+
+
+@router.get("/solicitudes-cobro")
+def listar_solicitudes_cobro(
+    session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
+) -> list[dict[str, object]]:
+    if auth.rol not in (RolMiembro.RESPONSABLE, RolMiembro.GERENTE, RolMiembro.ADMINISTRADOR):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin acceso a solicitudes de cobro")
+    consulta = select(SolicitudCobroResponsableERP).where(
+        SolicitudCobroResponsableERP.tenant_id == tenant_id
+    )
+    if auth.rol == RolMiembro.RESPONSABLE:
+        consulta = consulta.where(SolicitudCobroResponsableERP.responsable_id == auth.miembro_id)
+    elif auth.rol == RolMiembro.GERENTE:
+        consulta = consulta.where(SolicitudCobroResponsableERP.gerente_id == auth.miembro_id)
+    filas = session.scalars(
+        consulta.order_by(SolicitudCobroResponsableERP.created_at.desc()).limit(100)
+    )
+    return [
+        {
+            "id": str(f.id),
+            "responsable_id": str(f.responsable_id),
+            "gerente_id": str(f.gerente_id),
+            "desde": f.periodo_desde.isoformat(),
+            "hasta": f.periodo_hasta.isoformat(),
+            "moneda": f.moneda,
+            "produccion": str(f.produccion_total),
+            "comision": str(f.comision_total),
+            "estado": f.estado,
+            "observacion": f.observacion or "",
+        }
+        for f in filas
+    ]
 
 
 class IncorporarHistoricosIn(BaseModel):

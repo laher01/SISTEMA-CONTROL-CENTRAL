@@ -126,7 +126,13 @@ def test_responsable_resumen_incluye_solo_usuarios_propios(
     )
     ajeno = Miembro(tenant_id=tenant, codigo="USR-AJENO", nombre="Ajeno", rol="USUARIO")
     emisor = Empresa(tenant_id=tenant, ruc="20999999991", razon_social="Proveedor")
-    receptor = Empresa(tenant_id=tenant, ruc="20999999992", razon_social="Cliente")
+    receptor = Empresa(
+        tenant_id=tenant,
+        ruc="20999999992",
+        razon_social="Cliente",
+        autorizada=False,
+        tipo_relacion="CLIENTE",
+    )
     session.add_all([responsable, ajeno, emisor, receptor])
     session.flush()
     gestor = Gestor(tenant_id=tenant, codigo="GES-RESUMEN", nombre="Gestor", usuario_id=usuario.id)
@@ -168,6 +174,16 @@ def test_responsable_resumen_incluye_solo_usuarios_propios(
     assert detalle_propio.status_code == 200, detalle_propio.text
     detalle_ajeno = client.get(f"/api/v1/expedientes/{ajenos.id}")
     assert detalle_ajeno.status_code == 404, detalle_ajeno.text
+    registros = client.get("/api/v1/registros")
+    assert registros.status_code == 200, registros.text
+    assert {fila["expediente_id"] for fila in registros.json()["filas"]} == {str(propios.id)}
+    empresas = client.get("/api/v1/empresas")
+    assert empresas.status_code == 200, empresas.text
+    assert {fila["id"] for fila in empresas.json()} == {str(emisor.id), str(receptor.id)}
+    autorizacion = client.patch(f"/api/v1/empresas/{receptor.id}", json={"autorizada": True})
+    assert autorizacion.status_code == 200, autorizacion.text
+    ajena = client.patch(f"/api/v1/empresas/{emisor.id}", json={"autorizada": True})
+    assert ajena.status_code == 404, ajena.text
     response = client.get("/api/v1/expedientes/resumen-empresas")
     assert response.status_code == 200, response.text
     data = response.json()

@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
-from sqlalchemy import case, delete, func, or_, select
+from sqlalchemy import case, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import InstrumentedAttribute
@@ -25,14 +25,20 @@ from app.enums import EstadoExpediente, RolMiembro
 from app.models import (
     Alerta,
     AlertaManual,
+    Auditoria,
+    ChatMensaje,
+    CorreccionIA,
     Documento,
     EliminacionArchivoPendiente,
     Empresa,
     Expediente,
     Gestor,
     Miembro,
+    PagoERP,
+    ReferenciaGRE,
+    RelacionDocumento,
+    SolicitudCargaEmisor,
     SolicitudRetiroMISD,
-    ahora,
 )
 from app.schemas import (
     ExpedienteDetalle,
@@ -44,11 +50,8 @@ from app.schemas import (
 from app.security import cuenta_administradora_responsable
 from app.services import auditoria
 from app.services.ambito_gerencia import alcance_expedientes_gerente, expediente_visible_gerente
-from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
 from app.services.eliminacion import (
-    bloquear_clave_archivo,
     procesar_archivo_pendiente,
-    tablas_que_referencian,
 )
 from app.services.expedientes import (
     buscar_expediente,
@@ -58,13 +61,10 @@ from app.services.expedientes import (
 )
 from app.services.ingesta import crear_expediente
 from app.services.jerarquia_documental import nombres_jerarquia
-from app.services.misd_autorizaciones import dentro_ventana_correccion
-from app.services.misd_pagos import motivo_bloqueo_liquidacion, motivo_bloqueo_voucher
 from app.services.pdf_consolidado import pdf_con_documentos
 from app.services.permisos import (
     PERMISO_ELIMINAR_REGISTROS,
     permiso_habilitado,
-    requiere_autorizacion_administrativa,
 )
 
 NUMERO_RE = re.compile(r"^([a-z0-9]{4})-0*(\d+)$")
@@ -268,8 +268,27 @@ def listar(
                 "fecha_carga": primeras_cargas.get(fila.id),
                 "puede_eliminar": (
                     permiso_habilitado(session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS)
-                    and not requiere_autorizacion_administrativa(auth.rol, fila.receptor.autorizada)
-                    and motivo_bloqueo_liquidacion(session, fila) is None
+                    and (
+                        auth.rol == RolMiembro.ADMINISTRADOR
+                        or (auth.rol == "GESTOR" and fila.gestor_id == auth.gestor_id)
+                        or (
+                            auth.rol == RolMiembro.USUARIO
+                            and (
+                                fila.usuario_id == auth.usuario_id
+                                or bool(
+                                    fila.gestor_id
+                                    and session.scalar(
+                                        select(Gestor.id).where(
+                                            Gestor.id == fila.gestor_id,
+                                            Gestor.tenant_id == tenant_id,
+                                            Gestor.usuario_id == auth.usuario_id,
+                                            Gestor.deleted_at.is_(None),
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
                 ),
             }
         )
@@ -997,12 +1016,12 @@ def detalle(
 @router.delete("/{expediente_id}")
 def eliminar(
     session: SessionDep,
+    settings: SettingsDep,
     almacen: AlmacenDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
     expediente_id: uuid.UUID,
 ) -> dict[str, object]:
-    bloquear_tenant_financiero(session, tenant_id)
     expediente = session.scalar(
         select(Expediente)
         .where(
@@ -1016,8 +1035,24 @@ def eliminar(
         raise no_encontrado("Expediente")
     if auth.rol == "GESTOR" and expediente.gestor_id != auth.gestor_id:
         raise no_encontrado("Expediente")
-    if not _visible_para_auth(expediente, auth, session):
+    if auth.rol == RolMiembro.USUARIO:
+        gestor_de_usuario = bool(
+            expediente.gestor_id
+            and session.scalar(
+                select(Gestor.id).where(
+                    Gestor.id == expediente.gestor_id,
+                    Gestor.tenant_id == tenant_id,
+                    Gestor.usuario_id == auth.usuario_id,
+                    Gestor.deleted_at.is_(None),
+                )
+            )
+        )
+        if expediente.usuario_id != auth.usuario_id and not gestor_de_usuario:
+            raise no_encontrado("Expediente")
+    if auth.rol == RolMiembro.RESPONSABLE and not _visible_para_auth(expediente, auth, session):
         raise no_encontrado("Expediente")
+    if auth.rol == RolMiembro.RESPONSABLE:
+        raise HTTPException(409, "El Responsable debe solicitar aprobación a Administración")
     if auth.rol == RolMiembro.SUPERADMIN or not permiso_habilitado(
         session,
         tenant_id,
@@ -1029,39 +1064,6 @@ def eliminar(
             "No tiene permiso para eliminar registros",
         )
 
-    if auth.rol in ("GESTOR", "USUARIO") and not dentro_ventana_correccion(expediente, ahora()):
-        raise HTTPException(409, "Fuera de ventana: retire mediante autorización MISD")
-
-    if requiere_autorizacion_administrativa(auth.rol, expediente.receptor.autorizada):
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "El cliente está autorizado: debe solicitar aprobación a ADMINISTRACIÓN",
-        )
-
-    solicitud_pendiente = session.scalar(
-        select(SolicitudRetiroMISD.id).where(
-            SolicitudRetiroMISD.tenant_id == tenant_id,
-            SolicitudRetiroMISD.expediente_id == expediente.id,
-            SolicitudRetiroMISD.estado.in_(["PENDIENTE", "APROBADA"]),
-        )
-    )
-    if solicitud_pendiente is not None:
-        raise HTTPException(409, "Hay una solicitud MISD de eliminación pendiente")
-
-    bloqueo = motivo_bloqueo_liquidacion(session, expediente)
-    if bloqueo is not None:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            f"Eliminación bloqueada: {bloqueo}",
-        )
-
-    if any(
-        documento.deleted_at is None
-        and motivo_bloqueo_voucher(session, tenant_id, documento.id) is not None
-        for documento in expediente.documentos
-    ):
-        raise HTTPException(409, "Expediente contiene un voucher vinculado a un pago")
-
     documentos = list(
         session.scalars(
             select(Documento)
@@ -1069,25 +1071,92 @@ def eliminar(
             .with_for_update()
         )
     )
-    referencias = tablas_que_referencian(
-        session,
-        documento_ids={documento.id for documento in documentos},
-        expediente_id=expediente.id,
-    )
-    if referencias:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "Eliminación bloqueada por dependencias: " + ", ".join(referencias),
+    from app.item_models import LineaComprobanteItem
+    from app.services.cache_ocr import eliminar_cache_ocr
+
+    documento_ids = {documento.id for documento in documentos}
+    sha_archivos = {documento.sha256 for documento in documentos}
+    solicitudes_carga = (
+        list(
+            session.scalars(
+                select(SolicitudCargaEmisor).where(
+                    SolicitudCargaEmisor.tenant_id == tenant_id,
+                    SolicitudCargaEmisor.sha256_archivo.in_(sha_archivos),
+                )
+            )
         )
-    for documento in documentos:
-        if motivo_bloqueo_voucher(session, tenant_id, documento.id) is not None:
-            raise HTTPException(409, "Expediente contiene un voucher vinculado a un pago")
-    pendientes = [
-        EliminacionArchivoPendiente(tenant_id=tenant_id, ruta_storage=documento.ruta_storage)
-        for documento in documentos
+        if sha_archivos
+        else []
+    )
+    ids_solicitudes_carga = {solicitud.id for solicitud in solicitudes_carga}
+    sha_por_ruta = {documento.ruta_storage: documento.sha256 for documento in documentos}
+    for solicitud in solicitudes_carga:
+        if solicitud.ruta_temporal:
+            sha_por_ruta[solicitud.ruta_temporal] = solicitud.sha256_archivo
+        session.execute(
+            delete(AlertaManual).where(
+                AlertaManual.tenant_id == tenant_id,
+                AlertaManual.mensaje.contains(str(solicitud.id)),
+            )
+        )
+        session.delete(solicitud)
+    solicitudes_ids = set(
+        session.scalars(
+            select(SolicitudRetiroMISD.id).where(
+                SolicitudRetiroMISD.tenant_id == tenant_id,
+                SolicitudRetiroMISD.expediente_id == expediente.id,
+            )
+        )
+    )
+    if documento_ids:
+        session.execute(
+            delete(RelacionDocumento).where(
+                RelacionDocumento.origen_id.in_(documento_ids)
+                | RelacionDocumento.destino_id.in_(documento_ids)
+            )
+        )
+        session.execute(delete(ReferenciaGRE).where(ReferenciaGRE.documento_id.in_(documento_ids)))
+        session.execute(delete(CorreccionIA).where(CorreccionIA.documento_id.in_(documento_ids)))
+        session.execute(
+            delete(LineaComprobanteItem).where(LineaComprobanteItem.documento_id.in_(documento_ids))
+        )
+        session.execute(
+            update(PagoERP)
+            .where(
+                PagoERP.tenant_id == tenant_id,
+                PagoERP.voucher_documento_id.in_(documento_ids),
+            )
+            .values(voucher_documento_id=None)
+        )
+    session.execute(
+        delete(Auditoria).where(
+            Auditoria.tenant_id == tenant_id,
+            Auditoria.entidad_id.in_(
+                documento_ids | solicitudes_ids | ids_solicitudes_carga | {expediente.id}
+            ),
+            Auditoria.entidad.in_(
+                {"documento", "solicitud_retiro", "solicitud_carga_emisor", "expediente"}
+            ),
+        )
+    )
+    session.execute(
+        delete(ChatMensaje).where(
+            ChatMensaje.tenant_id == tenant_id,
+            ChatMensaje.texto.contains(str(expediente.id)),
+        )
+    )
+    session.execute(
+        delete(SolicitudRetiroMISD).where(
+            SolicitudRetiroMISD.tenant_id == tenant_id,
+            SolicitudRetiroMISD.expediente_id == expediente.id,
+        )
+    )
+    rutas = [documento.ruta_storage for documento in documentos] + [
+        solicitud.ruta_temporal for solicitud in solicitudes_carga if solicitud.ruta_temporal
     ]
-    for sha256 in sorted(documento.sha256 for documento in documentos):
-        bloquear_clave_archivo(session, tenant_id, sha256)
+    pendientes = [
+        EliminacionArchivoPendiente(tenant_id=tenant_id, ruta_storage=ruta) for ruta in rutas
+    ]
     session.add_all(pendientes)
     session.execute(
         delete(Alerta).where(
@@ -1102,38 +1171,27 @@ def eliminar(
         )
     )
     for documento in documentos:
-        auditoria.registrar(
-            session,
-            tenant_id,
-            "DOCUMENTO_ELIMINADO_CON_EXPEDIENTE",
-            "documento",
-            documento.id,
-            {"expediente_id": str(expediente.id), "sha256": documento.sha256},
-        )
         session.delete(documento)
-    auditoria.registrar(
-        session,
-        tenant_id,
-        "EXPEDIENTE_ELIMINADO",
-        "expediente",
-        expediente.id,
-        {
-            "tipo": expediente.tipo_comprobante,
-            "serie": expediente.serie,
-            "correlativo": expediente.correlativo,
-        },
-    )
     session.delete(expediente)
     session.commit()
+    for sha_archivo in set(sha_por_ruta.values()):
+        eliminar_cache_ocr(
+            sha_archivo,
+            str(tenant_id),
+            settings.storage_dir / "_ocr_cache",
+            settings.max_extracted_chars,
+            settings.max_ocr_pdf_pages,
+        )
     archivos_eliminados = 0
     for pendiente in pendientes:
         if procesar_archivo_pendiente(session, almacen, pendiente):
             archivos_eliminados += 1
+            session.delete(pendiente)
     session.commit()
     return {
         "documentos_eliminados": len(documentos),
         "archivos_eliminados": archivos_eliminados,
-        "archivos_pendientes": len(documentos) - archivos_eliminados,
+        "archivos_pendientes": len(pendientes) - archivos_eliminados,
     }
 
 

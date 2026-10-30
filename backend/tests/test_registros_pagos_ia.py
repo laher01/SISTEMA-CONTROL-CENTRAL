@@ -382,7 +382,10 @@ def test_filtros_jerarquicos_por_rol(
     opciones_usuario = client.get("/api/v1/registros/opciones")
     assert opciones_usuario.status_code == 200, opciones_usuario.text
     assert opciones_usuario.json()["usuarios"] == []
-    assert [item["id"] for item in opciones_usuario.json()["gestores"]] == [str(gestor.id)]
+    assert {item["id"] for item in opciones_usuario.json()["gestores"]} == {
+        str(gestor.id),
+        str(auth_prueba.gestor_id),
+    }
 
     filtrado_usuario = client.get(
         "/api/v1/registros",

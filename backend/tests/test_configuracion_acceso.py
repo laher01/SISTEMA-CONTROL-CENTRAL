@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
@@ -76,6 +77,36 @@ def test_mantenimiento_preserva_expediente_con_historial_misd(
     )
     assert subida.status_code == 201, subida.text
     expediente_id = subida.json()["expediente_id"]
+    usuario = session.get(Miembro, auth_prueba.usuario_id)
+    assert usuario is not None
+    responsable = Miembro(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        codigo="RESP-MANTENIMIENTO",
+        nombre="Responsable mantenimiento",
+        rol="RESPONSABLE",
+        activo=True,
+    )
+    session.add(responsable)
+    session.flush()
+    usuario.responsable_id = responsable.id
+    cuenta_responsable = CuentaAcceso(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        login="RESP-MANTENIMIENTO",
+        password_hash="hash-pruebas",
+        miembro_id=responsable.id,
+        activo=True,
+        cambio_clave_obligatorio=False,
+    )
+    session.add(cuenta_responsable)
+    session.commit()
+    auth_prueba.contexto = replace(
+        auth_prueba.contexto,
+        cuenta_id=cuenta_responsable.id,
+        miembro_id=responsable.id,
+        rol="RESPONSABLE",
+        usuario_id=None,
+        gestor_id=None,
+    )
     solicitud = client.post(
         "/api/v1/misd/solicitudes",
         json={"expediente_id": expediente_id, "motivo": "Retiro sujeto a revisión"},

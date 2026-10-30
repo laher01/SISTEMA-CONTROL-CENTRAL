@@ -74,6 +74,30 @@ def _permitido(session: SessionDep, auth: OperativeAuthDep, cuenta: CuentaAcceso
         return gestor is not None and gestor.usuario_id == auth.usuario_id
     if auth.rol == "GESTOR":
         return rol_destino == RolMiembro.USUARIO and cuenta.miembro_id == auth.usuario_id
+    if auth.rol == RolMiembro.RESPONSABLE:
+        if cuenta.miembro_id is not None:
+            miembro = session.get(Miembro, cuenta.miembro_id)
+            return bool(
+                miembro
+                and miembro.tenant_id == auth.tenant_id
+                and miembro.rol == RolMiembro.USUARIO
+                and miembro.responsable_id == auth.miembro_id
+                and miembro.deleted_at is None
+            )
+        if cuenta.gestor_id is not None:
+            gestor = session.get(Gestor, cuenta.gestor_id)
+            usuario = (
+                session.get(Miembro, gestor.usuario_id) if gestor and gestor.usuario_id else None
+            )
+            return bool(
+                gestor
+                and gestor.tenant_id == auth.tenant_id
+                and gestor.deleted_at is None
+                and usuario
+                and usuario.responsable_id == auth.miembro_id
+                and usuario.tenant_id == auth.tenant_id
+                and usuario.deleted_at is None
+            )
     return False
 
 

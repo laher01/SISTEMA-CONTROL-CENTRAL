@@ -82,6 +82,21 @@ def get_contexto_operativo(
     permitido_responsable = (
         (
             request.method == "GET"
+            and request.url.path in {"/api/v1/registros", "/api/v1/registros/opciones"}
+        )
+        or (request.url.path.startswith("/api/v1/chat/") and request.method in {"GET", "POST"})
+        or (request.method == "GET" and request.url.path == "/api/v1/empresas")
+        or (request.method == "PATCH" and request.url.path.startswith("/api/v1/empresas/"))
+        or (
+            request.method == "POST"
+            and request.url.path == "/api/v1/empresas/notificar-clasificacion"
+        )
+        or (
+            request.method == "GET"
+            and request.url.path in {"/api/v1/alertas", "/api/v1/mensajes-alerta"}
+        )
+        or (
+            request.method == "GET"
             and request.url.path
             in {
                 "/api/v1/contabilidad-items",
@@ -115,6 +130,16 @@ def get_contexto_operativo(
             }
         )
         or (request.method == "GET" and request.url.path == "/api/v1/responsable/resumen")
+        or (request.method == "GET" and request.url.path == "/api/v1/pagos-responsables/resumen")
+        or (
+            request.method == "GET"
+            and request.url.path == "/api/v1/pagos-responsables/equipo-resumen"
+        )
+        or (
+            request.method in {"GET", "POST"}
+            and request.url.path == "/api/v1/pagos-responsables/solicitudes-cobro"
+        )
+        or (request.method == "GET" and request.url.path == "/api/v1/pagos-responsables")
         or (request.method == "GET" and request.url.path == "/api/v1/expedientes/resumen-empresas")
         or (request.method == "GET" and request.url.path == "/api/v1/gestores")
         or (
@@ -173,6 +198,17 @@ def get_contexto_operativo(
             and request.url.path.endswith("/distribuir")
         )
         or (request.method in {"GET", "POST"} and request.url.path == "/api/v1/misd/solicitudes")
+        or (
+            request.method == "POST"
+            and request.url.path == "/api/v1/documentos/previsualizar-retirada"
+        )
+        or (
+            request.method == "DELETE"
+            and (
+                request.url.path.startswith("/api/v1/documentos/")
+                or request.url.path.startswith("/api/v1/expedientes/")
+            )
+        )
         or (
             request.method == "POST"
             and len(request.url.path.split("/")) == 7

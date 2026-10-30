@@ -13,21 +13,23 @@ interface SolicitudMISD {
   es_solicitante: boolean;
 }
 
-export default function AprobacionesMISD() {
+export default function AprobacionesMISD({ rol }: { rol: "ADMINISTRADOR" | "RESPONSABLE" }) {
   const { datos, error, cargando, recargar } = useDatos<SolicitudMISD[]>(
     "/api/v1/misd/solicitudes",
   );
 
   return (
     <>
-      <h2>Aprobaciones MISD</h2>
+      <h2>{rol === "ADMINISTRADOR" ? "Aprobaciones MISD" : "Mis solicitudes MISD"}</h2>
       <p>
-        Revisa solicitudes para retirar documentos o expedientes. Aprobar una solicitud
-        autoriza el retiro; el solicitante todavía debe ejecutar la eliminación.
+        {rol === "ADMINISTRADOR"
+          ? "Revisa solicitudes de Responsables. Al aprobar, el Responsable solicitante ejecuta el retiro definitivo."
+          : "Consulta el estado de tus solicitudes. Después de la aprobación de Administración, tú ejecutas el retiro definitivo."}
       </p>
       <p className="tenue">
-        Solo puedes resolver solicitudes dentro de tu ámbito. No puedes aprobar una solicitud
-        que presentaste con tu propia cuenta.
+        {rol === "ADMINISTRADOR"
+          ? "Solo Administración puede aprobar o rechazar solicitudes."
+          : "No se elimina ningún archivo hasta que Administración apruebe y tú confirmes la ejecución."}
       </p>
       {error && <p role="alert" className="error">{error}</p>}
       {cargando && <p>Cargando solicitudes…</p>}
@@ -50,6 +52,7 @@ export default function AprobacionesMISD() {
               <FilaSolicitud
                 key={solicitud.id}
                 solicitud={solicitud}
+                rol={rol}
                 alResolver={recargar}
               />
             ))}
@@ -62,9 +65,11 @@ export default function AprobacionesMISD() {
 
 function FilaSolicitud({
   solicitud,
+  rol,
   alResolver,
 }: {
   solicitud: SolicitudMISD;
+  rol: "ADMINISTRADOR" | "RESPONSABLE";
   alResolver: () => void;
 }) {
   const { datos: expediente, cargando } = useDatos<Expediente>(
@@ -145,7 +150,7 @@ function FilaSolicitud({
       <td>{solicitud.motivo}</td>
       <td>{solicitud.estado}</td>
       <td>
-        {solicitud.estado === "PENDIENTE" && !solicitud.es_solicitante ? (
+        {rol === "ADMINISTRADOR" && solicitud.estado === "PENDIENTE" ? (
           <>
             <button disabled={procesando} onClick={() => void resolver(true)}>
               Aprobar
@@ -154,7 +159,7 @@ function FilaSolicitud({
               Rechazar
             </button>
           </>
-        ) : solicitud.estado === "APROBADA" && solicitud.es_solicitante ? (
+        ) : rol === "RESPONSABLE" && solicitud.estado === "APROBADA" && solicitud.es_solicitante ? (
           <button className="peligro" disabled={procesando} onClick={() => void ejecutarRetiro()}>
             Ejecutar retiro definitivo
           </button>

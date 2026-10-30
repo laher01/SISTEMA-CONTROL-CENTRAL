@@ -10,7 +10,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, sta
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from pypdf import PdfReader
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, case, delete, false, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, selectinload
 
@@ -21,6 +21,9 @@ from app.enums import EstadoDocumento, Moneda, RolMiembro, TipoDocumento
 from app.models import (
     AlertaManual,
     Auditoria,
+    ChatMensaje,
+    CorreccionIA,
+    CuentaAcceso,
     Documento,
     EliminacionArchivoPendiente,
     Empresa,
@@ -31,7 +34,6 @@ from app.models import (
     RelacionDocumento,
     SolicitudCargaEmisor,
     SolicitudRetiroMISD,
-    ahora,
 )
 from app.schemas import (
     DocumentoOut,
@@ -57,12 +59,10 @@ from app.services.automatizacion_documental import (
     guardar_procesamiento,
     registrar_fallo,
 )
-from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
-from app.services.cache_ocr import procesar_con_cache
+from app.services.cache_ocr import eliminar_cache_ocr, procesar_con_cache
 from app.services.eliminacion import (
     bloquear_clave_archivo,
     procesar_archivo_pendiente,
-    tablas_que_referencian,
 )
 from app.services.expedientes import actualizar_expediente, buscar_expediente
 from app.services.identidad_cotizaciones import identidad_cotizacion
@@ -78,12 +78,9 @@ from app.services.ingesta import (
 from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.lotes_imagenes import MAX_IMAGENES_POR_SUBLOTE
 from app.services.metadatos_documento import metadatos_individuales
-from app.services.misd_autorizaciones import dentro_ventana_documento
-from app.services.misd_pagos import motivo_bloqueo_liquidacion, motivo_bloqueo_voucher
 from app.services.permisos import (
     PERMISO_ELIMINAR_REGISTROS,
     permiso_habilitado,
-    requiere_autorizacion_administrativa,
 )
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 from app.services.relaciones_documentales import sugerir_relaciones
@@ -162,10 +159,8 @@ async def importar_paquete_pdf(
     Se mantiene la deduplicación existente por SHA y clave fiscal.
     Cada comprobante tiene su propia transacción; un error no borra otros.
     """
-    if auth.rol not in ("GESTOR", RolMiembro.USUARIO):
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN, "Solo Usuario o Gestor puede importar paquetes"
-        )
+    if auth.rol != "GESTOR":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Gestor puede cargar documentos")
     if auth.usuario_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "La sesión no tiene Usuario propietario")
     limite = settings.max_upload_mb * 1024 * 1024
@@ -378,6 +373,8 @@ async def subir_sublote_imagenes(
     documentos que ya fueron registrados correctamente en el mismo sublote.
     El endpoint no agrupa páginas en una factura; eso exige revisión del usuario.
     """
+    if auth.rol != "GESTOR":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Gestor puede cargar documentos")
     if not 1 <= len(archivos) <= MAX_IMAGENES_POR_SUBLOTE:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -451,6 +448,8 @@ async def subir_documento(
     tipo_documento: Annotated[TipoDocumento | None, Form()] = None,
     expediente_id: Annotated[uuid.UUID | None, Form()] = None,
 ) -> Documento:
+    if auth.rol != "GESTOR":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Gestor puede cargar documentos")
     limite = settings.max_upload_mb * 1024 * 1024
     contenido = await archivo.read(limite + 1)
     if len(contenido) > limite:
@@ -465,28 +464,10 @@ async def subir_documento(
     if auth.rol == "GESTOR":
         gestor_id = auth.gestor_id
         usuario_id = auth.usuario_id
-    elif auth.rol == RolMiembro.USUARIO:
-        gestor_id = None
-        usuario_id = auth.usuario_id
-    elif auth.rol == RolMiembro.SECRETARIA:
-        if expediente_id is None:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN,
-                "Secretaría solo puede adjuntar documentos a expedientes existentes",
-            )
-        expediente_secretaria = session.get(Expediente, expediente_id)
-        if (
-            expediente_secretaria is None
-            or expediente_secretaria.tenant_id != tenant_id
-            or expediente_secretaria.deleted_at
-        ):
-            raise no_encontrado("Expediente")
-        gestor_id = expediente_secretaria.gestor_id
-        usuario_id = expediente_secretaria.usuario_id
     else:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            "Solo Usuario, Gestor o Secretaría puede cargar documentos operativos",
+            "Solo Gestor puede cargar documentos",
         )
     if usuario_id is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "La sesión no tiene un Usuario propietario")
@@ -1120,6 +1101,83 @@ def _validar_ambito_documento(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Documento no encontrado")
 
 
+def _puede_eliminar_documento(
+    session: SessionDep, auth: OperativeAuthDep, documento: Documento
+) -> bool:
+    """Comprueba el ámbito de eliminación, que es más amplio para Usuario que la lectura."""
+    if auth.rol == "ADMINISTRADOR":
+        return True
+    if auth.rol == "RESPONSABLE":
+        return False  # requiere aprobación de Administración por MISD
+    if auth.rol == "USUARIO":
+        if auth.usuario_id is None:
+            return False
+        if documento.usuario_id == auth.usuario_id:
+            return True
+        return bool(
+            documento.gestor_id
+            and session.scalar(
+                select(Gestor.id).where(
+                    Gestor.id == documento.gestor_id,
+                    Gestor.tenant_id == documento.tenant_id,
+                    Gestor.usuario_id == auth.usuario_id,
+                    Gestor.deleted_at.is_(None),
+                )
+            )
+        )
+    if auth.rol == "GESTOR":
+        return auth.gestor_id is not None and documento.gestor_id == auth.gestor_id
+    return False
+
+
+def _avisar_eliminacion(
+    session: SessionDep, tenant_id: uuid.UUID, actor: OperativeAuthDep, documento: Documento
+) -> None:
+    """Informa a la cadena operativa afectada sin conservar datos ni hashes del archivo."""
+    usuario = session.get(Miembro, documento.usuario_id) if documento.usuario_id else None
+    gestor = session.get(Gestor, documento.gestor_id) if documento.gestor_id else None
+    ids_miembros = {
+        ident
+        for ident in (
+            usuario.id if usuario else None,
+            usuario.responsable_id if usuario else None,
+            gestor.usuario_id if gestor else None,
+        )
+        if ident is not None
+    }
+    cuentas = (
+        set(
+            session.scalars(
+                select(CuentaAcceso.id).where(
+                    CuentaAcceso.tenant_id == tenant_id,
+                    or_(
+                        CuentaAcceso.miembro_id.in_(ids_miembros),
+                        CuentaAcceso.gestor_id == gestor.id if gestor else false(),
+                    ),
+                    CuentaAcceso.activo.is_(True),
+                    CuentaAcceso.deleted_at.is_(None),
+                )
+            )
+        )
+        if ids_miembros
+        else set()
+    )
+    texto = (
+        "Se eliminó definitivamente un documento de tu equipo. "
+        f"Tipo: {documento.tipo_documento or 'sin clasificar'}."
+    )
+    for cuenta_id in cuentas:
+        if cuenta_id != actor.cuenta_id:
+            session.add(
+                ChatMensaje(
+                    tenant_id=tenant_id,
+                    remitente_cuenta_id=actor.cuenta_id,
+                    destinatario_cuenta_id=cuenta_id,
+                    texto=texto,
+                )
+            )
+
+
 def _validar_ambito_expediente(
     auth: OperativeAuthDep, expediente: Expediente, session: SessionDep
 ) -> None:
@@ -1265,13 +1323,16 @@ def capacidades_documentales(
     auth: OperativeAuthDep,
 ) -> dict[str, bool]:
     """Permisos generales efectivos; el ámbito individual se valida en cada acción."""
-    permitido = auth.rol != RolMiembro.SUPERADMIN and permiso_habilitado(
-        session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS
-    )
+    puede_eliminar_directamente = auth.rol in {
+        "ADMINISTRADOR",
+        "USUARIO",
+        "GESTOR",
+    } and permiso_habilitado(session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS)
+    puede_solicitar_o_eliminar = auth.rol == "RESPONSABLE" or puede_eliminar_directamente
     return {
-        "puede_retirar": permitido,
+        "puede_retirar": puede_solicitar_o_eliminar,
         "puede_restaurar": False,
-        "puede_eliminar_definitivamente": permitido,
+        "puede_eliminar_definitivamente": puede_eliminar_directamente,
     }
 
 
@@ -1299,33 +1360,14 @@ def previsualizar_retirada(
         if documento is None or documento.tenant_id != tenant_id or documento.deleted_at:
             resultados.append({"id": str(documento_id), "estado": "NO_DISPONIBLE"})
             continue
-        try:
-            _validar_ambito_documento(auth, documento, session)
-        except HTTPException:
+        if auth.rol == "RESPONSABLE":
+            if _documento_de_responsable(session, auth, documento.usuario_id):
+                resultados.append({"id": str(documento_id), "estado": "REQUIERE_MISD"})
+            else:
+                resultados.append({"id": str(documento_id), "estado": "NO_DISPONIBLE"})
+            continue
+        if not _puede_eliminar_documento(session, auth, documento):
             resultados.append({"id": str(documento_id), "estado": "NO_DISPONIBLE"})
-            continue
-        expediente = documento.expediente
-        if auth.rol in ("GESTOR", "USUARIO") and not dentro_ventana_documento(documento, ahora()):
-            resultados.append({"id": str(documento_id), "estado": "REQUIERE_MISD"})
-            continue
-        if expediente is not None and (
-            requiere_autorizacion_administrativa(auth.rol, expediente.receptor.autorizada)
-            or motivo_bloqueo_liquidacion(session, expediente) is not None
-        ):
-            resultados.append({"id": str(documento_id), "estado": "BLOQUEADO"})
-            continue
-        if motivo_bloqueo_voucher(session, tenant_id, documento.id) is not None:
-            resultados.append({"id": str(documento_id), "estado": "BLOQUEADO"})
-            continue
-        dependencias = tablas_que_referencian(session, documento_ids={documento.id})
-        if dependencias:
-            resultados.append(
-                {
-                    "id": str(documento_id),
-                    "estado": "BLOQUEADO",
-                    "motivo": "Referencias activas: " + ", ".join(dependencias),
-                }
-            )
             continue
         resultados.append({"id": str(documento_id), "estado": "APTO_ELIMINACION"})
     return {
@@ -1400,7 +1442,6 @@ def eliminar_documento(
     auth: OperativeAuthDep,
     documento_id: uuid.UUID,
 ) -> dict[str, str]:
-    bloquear_tenant_financiero(session, tenant_id)
     candidato = session.scalar(
         select(Documento).where(
             Documento.id == documento_id,
@@ -1433,8 +1474,11 @@ def eliminar_documento(
     )
     if documento is None:
         raise no_encontrado("Documento")
-    _validar_ambito_documento(auth, documento, session)
-    if auth.rol == RolMiembro.SUPERADMIN or not permiso_habilitado(
+    if auth.rol == "RESPONSABLE":
+        if _documento_de_responsable(session, auth, documento.usuario_id):
+            raise HTTPException(409, "El Responsable debe solicitar aprobación a Administración")
+        raise no_encontrado("Documento")
+    if not _puede_eliminar_documento(session, auth, documento) or not permiso_habilitado(
         session,
         tenant_id,
         auth.rol,
@@ -1445,68 +1489,107 @@ def eliminar_documento(
             "No tiene permiso para eliminar registros",
         )
     expediente = documento.expediente
-    if auth.rol in ("GESTOR", "USUARIO") and not dentro_ventana_documento(documento, ahora()):
-        raise HTTPException(409, "Fuera de ventana: retire mediante autorización MISD")
-    if expediente is not None and requiere_autorizacion_administrativa(
-        auth.rol, expediente.receptor.autorizada
-    ):
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "El cliente está autorizado: debe solicitar aprobación a ADMINISTRACIÓN",
+    # La baja es operativa y definitiva. Se limpian relaciones derivadas; si el
+    # documento era comprobante de pago se conserva el pago sin su archivo adjunto.
+    from app.item_models import LineaComprobanteItem
+    from app.models import PagoERP
+
+    session.execute(
+        delete(RelacionDocumento).where(
+            (RelacionDocumento.origen_id == documento.id)
+            | (RelacionDocumento.destino_id == documento.id)
         )
-    if (
-        expediente is not None
-        and session.scalar(
-            select(SolicitudRetiroMISD.id).where(
+    )
+    session.execute(delete(ReferenciaGRE).where(ReferenciaGRE.documento_id == documento.id))
+    session.execute(delete(CorreccionIA).where(CorreccionIA.documento_id == documento.id))
+    session.execute(
+        delete(LineaComprobanteItem).where(LineaComprobanteItem.documento_id == documento.id)
+    )
+    session.execute(
+        update(PagoERP)
+        .where(PagoERP.tenant_id == tenant_id, PagoERP.voucher_documento_id == documento.id)
+        .values(voucher_documento_id=None)
+    )
+    solicitudes_misd = set()
+    if expediente is not None:
+        solicitudes_misd = set(
+            session.scalars(
+                select(SolicitudRetiroMISD.id).where(
+                    SolicitudRetiroMISD.tenant_id == tenant_id,
+                    SolicitudRetiroMISD.expediente_id == expediente.id,
+                )
+            )
+        )
+    solicitudes_emisor = list(
+        session.scalars(
+            select(SolicitudCargaEmisor).where(
+                SolicitudCargaEmisor.tenant_id == tenant_id,
+                SolicitudCargaEmisor.sha256_archivo == documento.sha256,
+            )
+        )
+    )
+    ids_solicitudes_emisor = {solicitud.id for solicitud in solicitudes_emisor}
+    rutas_cuarentena = [
+        solicitud.ruta_temporal for solicitud in solicitudes_emisor if solicitud.ruta_temporal
+    ]
+    session.execute(
+        delete(Auditoria).where(
+            Auditoria.tenant_id == tenant_id,
+            Auditoria.entidad_id.in_({documento.id} | solicitudes_misd | ids_solicitudes_emisor),
+            Auditoria.entidad.in_({"documento", "solicitud_retiro", "solicitud_carga_emisor"}),
+        )
+    )
+    for solicitud_id in ids_solicitudes_emisor:
+        session.execute(
+            delete(AlertaManual).where(
+                AlertaManual.tenant_id == tenant_id,
+                AlertaManual.mensaje.contains(str(solicitud_id)),
+            )
+        )
+    if expediente is not None:
+        session.execute(
+            delete(ChatMensaje).where(
+                ChatMensaje.tenant_id == tenant_id,
+                ChatMensaje.texto.contains(str(expediente.id)),
+            )
+        )
+        session.execute(
+            delete(SolicitudRetiroMISD).where(
                 SolicitudRetiroMISD.tenant_id == tenant_id,
                 SolicitudRetiroMISD.expediente_id == expediente.id,
-                SolicitudRetiroMISD.estado.in_(["PENDIENTE", "APROBADA"]),
             )
         )
-        is not None
-    ):
-        raise HTTPException(409, "Hay una solicitud MISD de eliminación pendiente")
-    if expediente is not None:
-        bloqueo = motivo_bloqueo_liquidacion(session, expediente)
-        if bloqueo is not None:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                f"Eliminación bloqueada: {bloqueo}",
-            )
-    bloqueo_voucher = motivo_bloqueo_voucher(session, tenant_id, documento.id)
-    if bloqueo_voucher is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, f"Eliminación bloqueada: {bloqueo_voucher}")
-    referencias = tablas_que_referencian(session, documento_ids={documento.id})
-    if referencias:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "Eliminación bloqueada por dependencias: " + ", ".join(referencias),
-        )
+    for solicitud in solicitudes_emisor:
+        session.delete(solicitud)
+    _avisar_eliminacion(session, tenant_id, auth, documento)
     ruta_storage = documento.ruta_storage
-    bloquear_clave_archivo(session, tenant_id, documento.sha256)
-    pendiente = EliminacionArchivoPendiente(tenant_id=tenant_id, ruta_storage=ruta_storage)
-    session.add(pendiente)
-    auditoria.registrar(
-        session,
-        tenant_id,
-        "DOCUMENTO_ELIMINADO",
-        "documento",
-        documento.id,
-        {
-            "nombre_original": documento.nombre_original,
-            "sha256": documento.sha256,
-            "expediente_id": str(documento.expediente_id) if documento.expediente_id else None,
-            "tipo_documento": documento.tipo_documento,
-        },
-    )
+    sha_archivo = documento.sha256
+    bloquear_clave_archivo(session, tenant_id, sha_archivo)
+    pendientes = [
+        EliminacionArchivoPendiente(tenant_id=tenant_id, ruta_storage=ruta)
+        for ruta in [ruta_storage, *rutas_cuarentena]
+    ]
+    session.add_all(pendientes)
     session.delete(documento)
     session.flush()
     if expediente is not None and expediente.deleted_at is None:
         actualizar_expediente(session, expediente, hoy, settings)
     session.commit()
-    procesar_archivo_pendiente(session, almacen, pendiente)
+    eliminar_cache_ocr(
+        sha_archivo,
+        str(tenant_id),
+        settings.storage_dir / "_ocr_cache",
+        settings.max_extracted_chars,
+        settings.max_ocr_pdf_pages,
+    )
+    todos_completados = True
+    for pendiente in pendientes:
+        if procesar_archivo_pendiente(session, almacen, pendiente):
+            session.delete(pendiente)
+        else:
+            todos_completados = False
     session.commit()
-    return {"estado": "completado" if pendiente.estado == "COMPLETADO" else "pendiente"}
+    return {"estado": "completado" if todos_completados else "pendiente"}
 
 
 @router.post("/{documento_id}/restaurar")

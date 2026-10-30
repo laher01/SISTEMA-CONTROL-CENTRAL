@@ -82,9 +82,9 @@ def test_cotizacion_y_programacion_coinciden_con_saldo_historico(
     resultado = cotizacion.json()
     assert Decimal(resultado["produccion"]) == Decimal("35000.00")
     assert Decimal(resultado["saldos_agregados"]) == Decimal("1000.00")
-    assert Decimal(resultado["bruto"]) == Decimal("917.50")
+    assert Decimal(resultado["bruto"]) == Decimal("1897.50")
     assert Decimal(resultado["adelantos"]) == Decimal("150.00")
-    assert Decimal(resultado["neto"]) == Decimal("767.50")
+    assert Decimal(resultado["neto"]) == Decimal("1747.50")
 
     programacion = client.post("/api/v1/responsable/pagos/programar", json=datos)
     assert programacion.status_code == 201, programacion.text
@@ -102,7 +102,7 @@ def test_cotizacion_y_programacion_coinciden_con_saldo_historico(
     assert duplicado.status_code == 409
 
 
-def test_saldo_sin_porcentaje_historico_rechazado(
+def test_saldo_se_suma_como_importe_directo_sin_porcentaje(
     client: TestClient, session: Session, auth_prueba: AuthPrueba
 ) -> None:
     auth_prueba.como_admin()
@@ -129,4 +129,6 @@ def test_saldo_sin_porcentaje_historico_rechazado(
             "saldo_ids": [str(saldo.id)],
         },
     )
-    assert respuesta.status_code == 422
+    assert respuesta.status_code == 200, respuesta.text
+    assert Decimal(respuesta.json()["saldos_agregados"]) == Decimal("1000.00")
+    assert Decimal(respuesta.json()["bruto"]) == Decimal("1000.00")

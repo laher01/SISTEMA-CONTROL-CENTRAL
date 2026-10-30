@@ -56,19 +56,19 @@ const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = 
   { a: "/mi-equipo/pagos", texto: "Pago de Usuarios", icono: "▣", roles: ["RESPONSABLE"] },
   { a: "/pago-gestores", texto: "Pago de Gestores", icono: "▣", roles: ["USUARIO"] },
   { a: "/comisiones", texto: "Simular comisiones", icono: "◉", roles: ["RESPONSABLE", "USUARIO"] },
-  { a: "/subir", texto: "Subir documentos", icono: "↑", roles: ["USUARIO", "GESTOR"] },
+  { a: "/subir", texto: "Subir documentos", icono: "↑", roles: ["GESTOR"] },
   { a: "/mi-recepcion", texto: "Recepción Automática", icono: "✉", roles: ["GESTOR"] },
   {
     a: "/registros",
     texto: "Registros",
     icono: "▦",
-    roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"],
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"],
   },
   {
     a: "/chat",
     texto: "Chat interno",
     icono: "◌",
-    roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"],
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"],
   },
   {
     a: "/secretaria",
@@ -86,31 +86,31 @@ const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = 
     a: "/expedientes",
     texto: "Expedientes",
     icono: "▱",
-    roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"],
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"],
   },
   {
     a: "/aprobaciones-misd",
-    texto: "Aprobaciones MISD",
+    texto: "Solicitudes MISD",
     icono: "✓",
-    roles: ["ADMINISTRADOR", "RESPONSABLE", "USUARIO", "GESTOR"],
+    roles: ["ADMINISTRADOR", "RESPONSABLE"],
   },
   {
     a: "/pendientes",
     texto: "Pendientes",
     icono: "◷",
-    roles: ["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA", "USUARIO", "GESTOR"],
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"],
   },
   {
     a: "/alertas",
     texto: "Alertas",
     icono: "⚑",
-    roles: ["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA", "USUARIO", "GESTOR"],
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"],
   },
   {
     a: "/empresas",
     texto: "Empresas",
     icono: "▥",
-    roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "USUARIO", "GESTOR"],
+    roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"],
   },
   { a: "/organizacion", texto: "Organización", icono: "♧", roles: ["SUPERADMIN", "ADMINISTRADOR", "RESPONSABLE", "USUARIO"] },
   {
@@ -232,7 +232,7 @@ export default function App() {
           <>
           <Route path="/" element={sesion.es_administracion_demo && sesion.rol === "ADMINISTRADOR" ? <Navigate to="/organizacion" replace /> : <Dashboard key={`${sesion.rol}-${sesion.codigo}`} sesion={sesion} />} />
           <Route path="/ingresar" element={<Navigate to="/" replace />} />
-          <Route path="/subir" element={<Subir sesion={sesion} />} />
+          <Route path="/subir" element={sesion.rol === "GESTOR" ? <Subir sesion={sesion} /> : <Navigate to="/" replace />} />
           <Route path="/registros" element={sesion.rol === "SECRETARIA" && activaciones?.registros === false ? <Navigate to="/expedientes" replace /> : <Registros sesion={sesion} />} />
           <Route path="/mi-recepcion" element={sesion.rol === "GESTOR" ? <RecepcionGestor /> : <Navigate to="/" replace />} />
           <Route path="/chat" element={<Chat />} />
@@ -242,7 +242,7 @@ export default function App() {
           <Route path="/expedientes" element={<Expedientes sesion={sesion} />} />
           <Route path="/expedientes/:id" element={<ExpedienteDetalle />} />
           <Route path="/pendientes" element={<Pendientes />} />
-          <Route path="/aprobaciones-misd" element={["ADMINISTRADOR", "RESPONSABLE", "USUARIO", "GESTOR"].includes(sesion.rol) ? <AprobacionesMISD /> : <Navigate to="/expedientes" replace />} />
+          <Route path="/aprobaciones-misd" element={sesion.rol === "ADMINISTRADOR" || sesion.rol === "RESPONSABLE" ? <AprobacionesMISD rol={sesion.rol} /> : <Navigate to="/expedientes" replace />} />
           <Route path="/alertas" element={<Alertas sesion={sesion} />} />
           <Route path="/empresas" element={<Empresas sesion={sesion} />} />
           <Route path="/mi-equipo" element={<MiEquipoResponsable />} />

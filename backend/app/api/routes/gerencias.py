@@ -32,6 +32,8 @@ class VinculoOut(BaseModel):
     gerente_id: uuid.UUID
     responsable_id: uuid.UUID
     activo: bool
+    gerente_codigo: str | None = None
+    gerente_nombre: str | None = None
 
 
 def _administracion(auth: OperativeAuthDep) -> None:
@@ -57,7 +59,7 @@ def _miembro_activo(
 @router.get("/vinculos", response_model=list[VinculoOut])
 def vinculos(
     session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep
-) -> list[GerenteResponsable]:
+) -> list[dict[str, object]]:
     if auth.rol not in (
         RolMiembro.SUPERADMIN,
         RolMiembro.ADMINISTRADOR,
@@ -74,7 +76,27 @@ def vinculos(
         if auth.miembro_id is None:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Responsable sin identidad")
         query = query.where(GerenteResponsable.responsable_id == auth.miembro_id)
-    return list(session.scalars(query.order_by(GerenteResponsable.created_at)))
+    relaciones = list(session.scalars(query.order_by(GerenteResponsable.created_at)))
+    gerentes = {
+        m.id: m
+        for m in session.scalars(
+            select(Miembro).where(
+                Miembro.tenant_id == tenant_id,
+                Miembro.id.in_({v.gerente_id for v in relaciones}),
+            )
+        )
+    }
+    return [
+        {
+            "id": v.id,
+            "gerente_id": v.gerente_id,
+            "responsable_id": v.responsable_id,
+            "activo": v.activo,
+            "gerente_codigo": gerentes[v.gerente_id].codigo if v.gerente_id in gerentes else None,
+            "gerente_nombre": gerentes[v.gerente_id].nombre if v.gerente_id in gerentes else None,
+        }
+        for v in relaciones
+    ]
 
 
 @router.put("/vinculos", response_model=VinculoOut)
