@@ -131,6 +131,14 @@ def eliminar_expediente_vacio(session: Session, expediente: Expediente) -> bool:
 
     from app.item_models import AuditoriaFacturaItem
 
+    solicitudes_misd = set(
+        session.scalars(
+            select(SolicitudRetiroMISD.id).where(
+                SolicitudRetiroMISD.tenant_id == expediente.tenant_id,
+                SolicitudRetiroMISD.expediente_id == expediente.id,
+            )
+        )
+    )
     session.execute(
         update(ReferenciaGRE)
         .where(
@@ -170,6 +178,14 @@ def eliminar_expediente_vacio(session: Session, expediente: Expediente) -> bool:
             Auditoria.entidad_id == expediente.id,
         )
     )
+    if solicitudes_misd:
+        session.execute(
+            delete(Auditoria).where(
+                Auditoria.tenant_id == expediente.tenant_id,
+                Auditoria.entidad == "solicitud_retiro",
+                Auditoria.entidad_id.in_(solicitudes_misd),
+            )
+        )
     session.execute(
         delete(ChatMensaje).where(
             ChatMensaje.tenant_id == expediente.tenant_id,
