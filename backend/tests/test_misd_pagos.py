@@ -87,7 +87,8 @@ def test_pago_generado_no_bloquea_eliminacion_operativa_para_admin(
     assert previsualizacion.json()["resultados"][0]["estado"] == "APTO_ELIMINACION"
     assert client.delete(ruta_documento).status_code == 200
     assert client.get(ruta_documento).status_code == 404
-    assert client.delete(ruta_expediente).status_code == 200
+    # La eliminación del último documento ya purga el expediente vacío.
+    assert client.delete(ruta_expediente).status_code == 404
     assert client.get(ruta_expediente).status_code == 404
     assert session.get(PagoERP, pago.id) is not None
 

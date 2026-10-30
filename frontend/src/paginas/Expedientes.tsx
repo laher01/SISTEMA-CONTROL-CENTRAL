@@ -115,7 +115,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
     (!buscar.trim() || guia.factura.toLowerCase().includes(buscar.trim().toLowerCase()) ||
       guia.emisor_ruc.includes(buscar.trim()) || guia.receptor_ruc.includes(buscar.trim()))
   );
-  const { datos: resumen } = useDatos<{ total_expedientes: number; total_pen: string; total_usd: string }>(
+  const { datos: resumen, error: errorResumen, recargar: recargarResumen } = useDatos<{ total_expedientes: number; total_pen: string; total_usd: string }>(
     conParametros("/api/v1/expedientes/resumen", filtrosBase),
   );
 
@@ -209,6 +209,11 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
   return (
     <>
       <h2>Expedientes</h2>
+      <div className="acciones">
+        <button type="button" onClick={() => { recargar(); recargarResumen(); }}>
+          Actualizar expedientes y total
+        </button>
+      </div>
       <div className="filtros">
         <FiltroJerarquia sesion={sesion} responsableId={responsableId} usuarioId={usuarioId} gestorId={gestorId} cambiar={cambiar} />
         <select aria-label="Tipo de empresa" value={tipoEmpresa} onChange={(e) => cambiar("tipo_empresa", e.target.value)}>
@@ -252,6 +257,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
       <section className="panel-configuracion">
         <strong>Total del filtro completo (todas las páginas)</strong>
         <p>{resumen?.total_expedientes ?? "…"} expedientes · {monto("PEN", resumen?.total_pen ?? "0")} · {monto("USD", resumen?.total_usd ?? "0")}</p>
+        {errorResumen && <p role="alert">No se pudo calcular el total del filtro: {errorResumen}</p>}
       </section>
 
       <section className="panel-configuracion" aria-label="GRE en espera de factura">

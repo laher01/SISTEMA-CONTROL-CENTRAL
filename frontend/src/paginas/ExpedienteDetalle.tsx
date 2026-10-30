@@ -13,7 +13,7 @@ import {
 } from "../formato";
 import { TIPOS_DOCUMENTO, type Documento, type ExpedienteDetalle as Detalle, type TipoDocumento } from "../tipos";
 
-export default function ExpedienteDetalle() {
+export default function ExpedienteDetalle({ sesion }: { sesion: { rol: string } }) {
   const { id = "" } = useParams();
   const { datos, error, cargando, recargar } = useDatos<Detalle>(`/api/v1/expedientes/${id}`);
 
@@ -84,7 +84,9 @@ export default function ExpedienteDetalle() {
 
           <h3>Documentos</h3>
           <TablaDocumentos documentos={datos.documentos} />
-          <AgregarDocumento expedienteId={datos.id} sugerido={datos.faltantes[0]} alSubir={recargar} />
+          {sesion.rol === "GESTOR" && (
+            <AgregarDocumento expedienteId={datos.id} sugerido={datos.faltantes[0]} alSubir={recargar} />
+          )}
         </>
       )}
     </Estado>

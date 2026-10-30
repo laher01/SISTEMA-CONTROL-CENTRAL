@@ -657,7 +657,8 @@ def test_reingreso_de_factura_eliminada_crea_documento_nuevo_en_expediente_activ
     auth_prueba.como_usuario(usuario_id)
     nuevo = subir(client, "factura-reingreso.xml", contenido)
     assert nuevo["id"] != original["id"]
-    assert nuevo["expediente_id"] == original["expediente_id"]
+    assert nuevo["expediente_id"] != original["expediente_id"]
+    assert client.get(f"/api/v1/expedientes/{original['expediente_id']}").status_code == 404
 
 
 def test_eliminacion_concurrente_no_deja_huella_ni_falla_parcial(

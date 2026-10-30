@@ -64,7 +64,11 @@ from app.services.eliminacion import (
     bloquear_clave_archivo,
     procesar_archivo_pendiente,
 )
-from app.services.expedientes import actualizar_expediente, buscar_expediente
+from app.services.expedientes import (
+    actualizar_expediente,
+    buscar_expediente,
+    eliminar_expediente_vacio,
+)
 from app.services.identidad_cotizaciones import identidad_cotizacion
 from app.services.ingesta import (
     ArchivoSubido,
@@ -1573,7 +1577,22 @@ def eliminar_documento(
     session.delete(documento)
     session.flush()
     if expediente is not None and expediente.deleted_at is None:
-        actualizar_expediente(session, expediente, hoy, settings)
+        queda_documento = session.scalar(
+            select(Documento.id)
+            .where(
+                Documento.tenant_id == tenant_id,
+                Documento.expediente_id == expediente.id,
+                Documento.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+        if queda_documento is None:
+            # La misma purga completa se usa al retirar el último documento y
+            # al reemplazar cascarones heredados durante una nueva ingesta.
+            if not eliminar_expediente_vacio(session, expediente):
+                actualizar_expediente(session, expediente, hoy, settings)
+        else:
+            actualizar_expediente(session, expediente, hoy, settings)
     session.commit()
     eliminar_cache_ocr(
         sha_archivo,
@@ -1900,6 +1919,8 @@ def crear_expediente_asistido(
         emisor_ruc,
         receptor_ruc,
     )
+    if existente is not None and eliminar_expediente_vacio(session, existente):
+        existente = None
     if existente is not None and documento.expediente_id != existente.id:
         # Nunca incorporar un nuevo archivo a una identidad fiscal existente
         # sin comparación explícita. La asociación puede revisarse en Gestor.

@@ -19,7 +19,11 @@ from app.enums import EstadoDocumento, Moneda, TipoComprobante, TipoDocumento
 from app.models import Documento, Empresa, Expediente
 from app.services import auditoria
 from app.services.contabilidad_items_ubl import registrar_items_pdf_estacion
-from app.services.expedientes import buscar_expediente, obtener_o_crear_empresa
+from app.services.expedientes import (
+    buscar_expediente,
+    eliminar_expediente_vacio,
+    obtener_o_crear_empresa,
+)
 from app.services.extraccion_campos import razon_social_confiable
 from app.services.ingesta import (
     ComprobanteYaRegistrado,
@@ -308,6 +312,8 @@ def aplicar_automaticamente(
         emisor_ruc,
         receptor_ruc,
     )
+    if expediente is not None and eliminar_expediente_vacio(session, expediente):
+        expediente = None
     creado = expediente is None
     # Cuando un documento histórico vuelve a procesarse, recuperar su formato
     # original únicamente si la identidad fiscal normalizada coincide.

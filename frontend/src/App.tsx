@@ -240,7 +240,7 @@ export default function App() {
           <Route path="/contabilidad-items" element={<ContabilidadItems />} />
           <Route path="/documentos" element={sesion.rol === "SECRETARIA" && activaciones?.documentos === false ? <Navigate to="/expedientes" replace /> : <Documentos sesion={sesion} />} />
           <Route path="/expedientes" element={<Expedientes sesion={sesion} />} />
-          <Route path="/expedientes/:id" element={<ExpedienteDetalle />} />
+          <Route path="/expedientes/:id" element={<ExpedienteDetalle sesion={sesion} />} />
           <Route path="/pendientes" element={<Pendientes />} />
           <Route path="/aprobaciones-misd" element={sesion.rol === "ADMINISTRADOR" || sesion.rol === "RESPONSABLE" ? <AprobacionesMISD rol={sesion.rol} /> : <Navigate to="/expedientes" replace />} />
           <Route path="/alertas" element={<Alertas sesion={sesion} />} />
