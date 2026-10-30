@@ -113,19 +113,149 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
     try {
       const vista = await enviarJson<{
         aptos: number;
-        resultados: { estado: string }[];
+        resultados: { id: string; estado: string }[];
       }>(
         "/api/v1/documentos/previsualizar-retirada",
         "POST",
         { documentos_ids: elegidos.map((d) => d.id) },
       );
+      const estadoPorId = new Map(vista.resultados.map((fila) => [fila.id, fila.estado]));
+      const requierenMisd = elegidos.filter(
+        (documento) => estadoPorId.get(documento.id) === "REQUIERE_MISD",
+      );
+
+      if (requierenMisd.length > 0) {
+        const expedientesConBloqueo = new Set(
+          elegidos
+            .filter((documento) => {
+              const estado = estadoPorId.get(documento.id);
+              return estado !== "REQUIERE_MISD" && estado !== "APTO_ELIMINACION";
+            })
+            .map((documento) => documento.expediente_id)
+            .filter((id): id is string => Boolean(id)),
+        );
+        const expedientesSolicitables = [...new Set(
+          requierenMisd
+            .map((documento) => documento.expediente_id)
+            .filter((id): id is string => Boolean(id))
+            .filter((id) => !expedientesConBloqueo.has(id)),
+        )];
+        const sinExpediente = requierenMisd.filter((documento) => !documento.expediente_id).length;
+        const bloqueadosMisd = [...new Set(
+          requierenMisd
+            .map((documento) => documento.expediente_id)
+            .filter((id): id is string => Boolean(id))
+            .filter((id) => expedientesConBloqueo.has(id)),
+        )].length;
+
+        if (expedientesSolicitables.length === 0) {
+          setErrorEliminacion(
+            "No se creó ninguna solicitud: los expedientes seleccionados están bloqueados o no tienen expediente asociado.",
+          );
+          return;
+        }
+
+        const motivo = window.prompt(
+          "Motivo para las " + expedientesSolicitables.length +
+            " solicitudes MISD (mínimo 8 caracteres):",
+        );
+        if (motivo === null) return;
+        if (motivo.trim().length < 8) {
+          setErrorEliminacion("Escribe un motivo de al menos 8 caracteres.");
+          return;
+        }
+        const expedientesFuera = elegidos.filter(
+          (documento) => !documento.expediente_id ||
+            !expedientesSolicitables.includes(documento.expediente_id),
+        ).length;
+        const confirmado = window.confirm(
+          "Se enviará una solicitud MISD por cada uno de los " +
+            expedientesSolicitables.length +
+            " expedientes. Cada solicitud abarca el expediente completo y todos sus documentos vinculados. " +
+            "Esto no borra archivos ahora." +
+            (expedientesFuera > 0
+              ? " " + expedientesFuera +
+                " documento(s) de otros expedientes o bloqueados quedarán sin cambios."
+              : "") +
+            " ¿Deseas continuar?",
+        );
+        if (!confirmado) return;
+
+        setEliminandoLote(true);
+        setErrorEliminacion("");
+        setResultadoEliminacion("");
+        const expedientesEnviados = new Set<string>();
+        const fallidos: string[] = [];
+        let creadas = 0;
+        let yaPendientes = 0;
+        try {
+          for (const expedienteId of expedientesSolicitables) {
+            try {
+              await enviarJson("/api/v1/misd/solicitudes", "POST", {
+                expediente_id: expedienteId,
+                motivo: motivo.trim(),
+              });
+              creadas += 1;
+              expedientesEnviados.add(expedienteId);
+            } catch (error) {
+              const mensaje = error instanceof Error ? error.message : String(error);
+              if (mensaje.includes("Ya existe una solicitud pendiente")) {
+                yaPendientes += 1;
+                expedientesEnviados.add(expedienteId);
+              } else {
+                fallidos.push(expedienteId + ": " + mensaje);
+              }
+            }
+          }
+        } finally {
+          setEliminandoLote(false);
+        }
+
+        const documentosTramitados = new Set(
+          elegidos
+            .filter((documento) =>
+              documento.expediente_id && expedientesEnviados.has(documento.expediente_id),
+            )
+            .map((documento) => documento.id),
+        );
+        setSeleccionados((actual) =>
+          actual.filter((id) => !documentosTramitados.has(id)),
+        );
+        setResultadoEliminacion(
+          creadas + " solicitud(es) MISD enviada(s)" +
+            (yaPendientes ? " · " + yaPendientes + " ya estaban pendientes" : "") +
+            ". El responsable o administración debe aprobarlas; después WILLI01 ejecuta el retiro." +
+            (expedientesFuera > 0
+              ? " " + expedientesFuera + " documento(s) quedaron seleccionados sin cambios."
+              : ""),
+        );
+        if (fallidos.length || sinExpediente || bloqueadosMisd) {
+          setErrorEliminacion(
+            (fallidos.length
+              ? fallidos.length + " solicitud(es) no se pudieron enviar: " +
+                fallidos.slice(0, 5).join(" | ")
+              : "") +
+              (sinExpediente
+                ? (fallidos.length ? " · " : "") + sinExpediente +
+                  " documento(s) requieren MISD pero no tienen expediente asociado."
+                : "") +
+              (bloqueadosMisd
+                ? (fallidos.length || sinExpediente ? " · " : "") + bloqueadosMisd +
+                  " expediente(s) quedaron fuera por tener documentos bloqueados."
+                : ""),
+          );
+        }
+        if (expedientesEnviados.size > 0) recargar();
+        return;
+      }
+
       if (vista.aptos !== elegidos.length) {
-        const requiereMisd = vista.resultados.filter(
-          (fila) => fila.estado === "REQUIERE_MISD",
+        const bloqueados = vista.resultados.filter(
+          (fila) => fila.estado !== "APTO_ELIMINACION",
         ).length;
         setErrorEliminacion(
-          requiereMisd > 0
-            ? `${requiereMisd} documento(s) requieren aprobación MISD antes del retiro.`
+          bloqueados > 0
+            ? bloqueados + " documento(s) no se pueden eliminar ahora por bloqueos o falta de disponibilidad."
             : "La selección contiene documentos no disponibles. Actualice la bandeja.",
         );
         return;
@@ -135,10 +265,10 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
       return;
     }
     const nombres = elegidos.slice(0, 20)
-      .map((documento) => `• ${documento.nombre_original}`).join("\n");
-    const mas = elegidos.length > 20 ? `\n…y ${elegidos.length - 20} más` : "";
+      .map((documento) => "• " + documento.nombre_original).join("\n");
+    const mas = elegidos.length > 20 ? "\n…y " + (elegidos.length - 20) + " más" : "";
     const confirmado = window.confirm([
-      `Eliminar definitivamente ${elegidos.length} documento(s)?`,
+      "Eliminar definitivamente " + elegidos.length + " documento(s)?",
       nombres,
       mas,
       "Se quitarán de contabilidad y se borrarán los archivos físicos. No se pueden restaurar.",
@@ -161,10 +291,9 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
         if (fila.estado === "ELIMINADO" || fila.estado === "ELIMINADO_ARCHIVO_PENDIENTE") {
           eliminados.push(fila.id);
           if (fila.estado === "ELIMINADO_ARCHIVO_PENDIENTE") pendientesFisicos += 1;
-        }
-        else {
+        } else {
           const documento = elegidos.find((d) => d.id === fila.id);
-          fallos.push(`${documento?.nombre_original ?? fila.id}: error ${fila.codigo ?? "desconocido"}`);
+          fallos.push((documento?.nombre_original ?? fila.id) + ": error " + (fila.codigo ?? "desconocido"));
         }
       }
     } catch (error) {
@@ -174,8 +303,8 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
     }
     setSeleccionados((actual) => actual.filter((id) => !eliminados.includes(id)));
     setResultadoEliminacion(
-      `${eliminados.length} de ${elegidos.length} eliminados.` +
-      (pendientesFisicos ? ` ${pendientesFisicos} archivo(s) siguen pendientes de borrado físico.` : ""),
+      eliminados.length + " de " + elegidos.length + " eliminados." +
+      (pendientesFisicos ? " " + pendientesFisicos + " archivo(s) siguen pendientes de borrado físico." : ""),
     );
     if (fallos.length) setErrorEliminacion(fallos.join(" | "));
     setEliminandoLote(false);
