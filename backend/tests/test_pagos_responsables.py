@@ -29,6 +29,13 @@ def _preparar(session: Session, auth_prueba: AuthPrueba) -> tuple[str, str]:
         rol="RESPONSABLE",
         activo=True,
     )
+    gerente = Miembro(
+        tenant_id=tenant_id,
+        codigo="GER-01",
+        nombre="Gerente prueba",
+        rol="GERENTE",
+        activo=True,
+    )
     usuario = Miembro(
         tenant_id=tenant_id,
         codigo="USU-01",
@@ -44,9 +51,25 @@ def _preparar(session: Session, auth_prueba: AuthPrueba) -> tuple[str, str]:
         tipo_relacion="CLIENTE",
         agente_retencion=False,
     )
-    session.add_all([responsable, usuario, cliente])
+    session.add_all([responsable, gerente, usuario, cliente])
     session.flush()
     usuario.responsable_id = responsable.id
+    session.add_all(
+        [
+            GerenteResponsable(
+                tenant_id=tenant_id,
+                gerente_id=gerente.id,
+                responsable_id=responsable.id,
+                activo=True,
+            ),
+            GerenteEmpresa(
+                tenant_id=tenant_id,
+                gerente_id=gerente.id,
+                empresa_id=cliente.id,
+                activo=True,
+            ),
+        ]
+    )
     factura = Expediente(
         tenant_id=tenant_id,
         emisor_id=cliente.id,
@@ -58,11 +81,18 @@ def _preparar(session: Session, auth_prueba: AuthPrueba) -> tuple[str, str]:
         moneda="PEN",
         importe_total=Decimal("1000.00"),
         usuario_id=usuario.id,
-        gerente_id=auth_prueba.contexto.miembro_id,
+        gerente_id=gerente.id,
     )
     session.add(factura)
     completar_facturas_de_prueba(session)
     session.commit()
+    auth_prueba.contexto = replace(
+        auth_prueba.contexto,
+        miembro_id=gerente.id,
+        rol="GERENTE",
+        codigo=gerente.codigo,
+        nombre=gerente.nombre,
+    )
     return str(responsable.id), str(cliente.id)
 
 
@@ -157,6 +187,13 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
         rol="GERENTE",
         activo=True,
     )
+    gerente_alterno = Miembro(
+        tenant_id=tenant_id,
+        codigo="GER-COBROS-2",
+        nombre="Gerente alterno",
+        rol="GERENTE",
+        activo=True,
+    )
     usuario = Miembro(
         tenant_id=tenant_id,
         codigo="USR-COBROS",
@@ -191,10 +228,26 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
         tipo_relacion="CLIENTE",
         agente_retencion=False,
     )
+    cliente_sin_vinculo = Empresa(
+        tenant_id=tenant_id,
+        ruc="20777777777",
+        razon_social="CLIENTE SIN VINCULO",
+        autorizada=True,
+        tipo_relacion="CLIENTE",
+        agente_retencion=False,
+    )
     cliente_pedido = Empresa(
         tenant_id=tenant_id,
         ruc="20555555555",
         razon_social="CLIENTE CON PEDIDO POSTERIOR",
+        autorizada=True,
+        tipo_relacion="CLIENTE",
+        agente_retencion=False,
+    )
+    cliente_compartido = Empresa(
+        tenant_id=tenant_id,
+        ruc="20666666666",
+        razon_social="CLIENTE COMPARTIDO",
         autorizada=True,
         tipo_relacion="CLIENTE",
         agente_retencion=False,
@@ -211,11 +264,14 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
         [
             responsable,
             gerente,
+            gerente_alterno,
             usuario,
             cliente_agente,
             cliente_sin_agente,
             cliente_no_autorizado,
+            cliente_sin_vinculo,
             cliente_pedido,
+            cliente_compartido,
             proveedor,
         ]
     )
@@ -225,6 +281,14 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
         GerenteResponsable(
             tenant_id=tenant_id,
             gerente_id=gerente.id,
+            responsable_id=responsable.id,
+            activo=True,
+        )
+    )
+    session.add(
+        GerenteResponsable(
+            tenant_id=tenant_id,
+            gerente_id=gerente_alterno.id,
             responsable_id=responsable.id,
             activo=True,
         )
@@ -248,23 +312,24 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
                 gerente_id=gerente.id,
             )
         )
-    # Un documento activo sin pedido inequívoco debe quedar visible para revisión,
-    # pero jamás mezclarse en el cobro atribuido al Gerente.
+    # Sin una relación de cartera, la factura queda para revisión aunque tenga
+    # un pedido correspondiente a otra empresa.
     session.add(
         Expediente(
             tenant_id=tenant_id,
             emisor_id=proveedor.id,
-            receptor_id=cliente_sin_agente.id,
+            receptor_id=cliente_sin_vinculo.id,
             tipo_comprobante="FACT",
             serie="F003",
-            correlativo="00003",
+            correlativo="00006",
             fecha_emision=date(2026, 9, 15),
             moneda="PEN",
             importe_total=Decimal("500.00"),
             usuario_id=usuario.id,
         )
     )
-    # Documento cargado antes de que se cree su pedido mensual.
+    # La cartera y la relación Responsable/Gerente bastan para contabilizar;
+    # el pedido mensual existente es una referencia, no un requisito.
     session.add(
         Expediente(
             tenant_id=tenant_id,
@@ -284,7 +349,37 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
             GerenteEmpresa(
                 tenant_id=tenant_id,
                 gerente_id=gerente.id,
+                empresa_id=cliente_agente.id,
+                activo=True,
+            ),
+            GerenteEmpresa(
+                tenant_id=tenant_id,
+                gerente_id=gerente.id,
+                empresa_id=cliente_sin_agente.id,
+                activo=True,
+            ),
+            GerenteEmpresa(
+                tenant_id=tenant_id,
+                gerente_id=gerente.id,
                 empresa_id=cliente_pedido.id,
+                activo=True,
+            ),
+            GerenteEmpresa(
+                tenant_id=tenant_id,
+                gerente_id=gerente.id,
+                empresa_id=cliente_no_autorizado.id,
+                activo=True,
+            ),
+            GerenteEmpresa(
+                tenant_id=tenant_id,
+                gerente_id=gerente.id,
+                empresa_id=cliente_compartido.id,
+                activo=True,
+            ),
+            GerenteEmpresa(
+                tenant_id=tenant_id,
+                gerente_id=gerente_alterno.id,
+                empresa_id=cliente_compartido.id,
                 activo=True,
             ),
             PedidoGerencia(
@@ -303,6 +398,20 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
     )
     # La producción de un receptor pendiente de autorización también debe
     # aparecer como excluida, sin formar parte de la comisión.
+    session.add(
+        Expediente(
+            tenant_id=tenant_id,
+            emisor_id=proveedor.id,
+            receptor_id=cliente_compartido.id,
+            tipo_comprobante="FACT",
+            serie="F006",
+            correlativo="00006",
+            fecha_emision=date(2026, 9, 15),
+            moneda="PEN",
+            importe_total=Decimal("400.00"),
+            usuario_id=usuario.id,
+        )
+    )
     session.add(
         Expediente(
             tenant_id=tenant_id,
@@ -346,13 +455,6 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
         gestor_id=None,
     )
 
-    sincronizacion = client.post(
-        "/api/v1/pagos-responsables/equipo-sincronizar",
-        json={"desde": "2026-09-01", "hasta": "2026-09-30", "moneda": "PEN"},
-    )
-    assert sincronizacion.status_code == 200, sincronizacion.text
-    assert sincronizacion.json() == {"vinculados": 1, "produccion": "700.00"}
-
     params = {
         "desde": "2026-09-01",
         "hasta": "2026-09-30",
@@ -378,11 +480,12 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
     assert len(datos["usuarios"]) == 1
     assert datos["usuarios"][0]["produccion"] == "3700.00"
     assert datos["usuarios"][0]["comision_referencial_usuario"] == "60.50"
-    assert datos["pendientes_revision"]["cantidad"] == 2
-    assert datos["pendientes_revision"]["produccion"] == "750.00"
+    assert datos["pendientes_revision"]["cantidad"] == 3
+    assert datos["pendientes_revision"]["produccion"] == "1150.00"
     assert {fila["motivo"] for fila in datos["pendientes_revision"]["expedientes"]} == {
         "GERENCIA_SIN_VINCULO",
         "RECEPTOR_NO_AUTORIZADO",
+        "GERENCIA_AMBIGUA",
     }
 
     solicitud = client.post(
