@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { conParametros, eliminar, enviarJson, urlArchivo, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
+import { conParametros, eliminar, enviarJson, obtener, urlArchivo, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
 import { Estado, Paginacion } from "../componentes";
 import FiltroJerarquia from "../componentes/FiltroJerarquia";
 import { formatearMonto } from "../formato";
@@ -97,18 +97,64 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
   const [eliminandoLote, setEliminandoLote] = useState(false);
   const [resultadoEliminacion, setResultadoEliminacion] = useState("");
   const [errorEliminacion, setErrorEliminacion] = useState("");
+  const [cargandoSeleccionFiltro, setCargandoSeleccionFiltro] = useState(false);
+  const [documentosSeleccionados, setDocumentosSeleccionados] = useState<Record<string, Documento>>({});
   const visibles = datos ?? [];
   const seleccionVisible = visibles.filter((documento) => seleccionados.includes(documento.id));
   const todosSeleccionados = visibles.length > 0 && seleccionVisible.length === visibles.length;
 
-  const alternarDocumento = (id: string, marcado: boolean) => {
-    setSeleccionados((actual) =>
-      marcado ? [...new Set([...actual, id])] : actual.filter((x) => x !== id),
-    );
+  const seleccionarTodoElFiltro = async () => {
+    if (cargandoSeleccionFiltro || eliminandoLote) return;
+    setCargandoSeleccionFiltro(true);
+    setErrorEliminacion("");
+    try {
+      const coincidencias = await obtener<Documento[]>(conParametros("/api/v1/documentos", {
+        estado,
+        responsable_id: responsableId,
+        usuario_id: usuarioId,
+        gestor_id: gestorId,
+        tipo_empresa: tipoEmpresa,
+        dia,
+        fecha_emision: fechaEmision,
+        mes,
+        serie_correlativo: correlativoBusqueda,
+        tipo_documento: tipo,
+        emisor_ruc: emisor.length === 11 ? emisor : undefined,
+        receptor_ruc: receptor.length === 11 ? receptor : undefined,
+        empresa_emisora: emisor.length === 11 ? undefined : emisor,
+        empresa_receptora: receptor.length === 11 ? undefined : receptor,
+        fecha_desde: desde,
+        fecha_hasta: hasta,
+        limit: "101",
+        offset: "0",
+      }));
+      if (coincidencias.length > 100) {
+        setErrorEliminacion("El filtro contiene más de 100 documentos. Acota los filtros para seleccionar el lote; puedes seguir usando la selección por página.");
+        return;
+      }
+      setSeleccionados(coincidencias.map((documento) => documento.id));
+      setDocumentosSeleccionados(Object.fromEntries(coincidencias.map((documento) => [documento.id, documento])));
+      setResultadoEliminacion(`${coincidencias.length} documento(s) del filtro seleccionados.`);
+    } catch (error) {
+      setErrorEliminacion(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCargandoSeleccionFiltro(false);
+    }
+  };
+
+  const alternarDocumento = (documento: Documento, marcado: boolean) => {
+    setSeleccionados((actual) => marcado
+      ? [...new Set([...actual, documento.id])]
+      : actual.filter((id) => id !== documento.id));
+    setDocumentosSeleccionados((actual) => {
+      return marcado
+        ? { ...actual, [documento.id]: documento }
+        : Object.fromEntries(Object.entries(actual).filter(([id]) => id !== documento.id));
+    });
   };
 
   const eliminarSeleccionados = async () => {
-    const elegidos = seleccionVisible;
+    const elegidos = seleccionados.map((id) => documentosSeleccionados[id]).filter((documento): documento is Documento => Boolean(documento));
     if (!elegidos.length || eliminandoLote) return;
     try {
       const vista = await enviarJson<{
@@ -221,6 +267,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
         setSeleccionados((actual) =>
           actual.filter((id) => !documentosTramitados.has(id)),
         );
+        setDocumentosSeleccionados((actual) => Object.fromEntries(Object.entries(actual).filter(([id]) => !documentosTramitados.has(id))));
         setResultadoEliminacion(
           creadas + " solicitud(es) MISD enviada(s)" +
             (yaPendientes ? " · " + yaPendientes + " ya estaban pendientes" : "") +
@@ -302,6 +349,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
       return;
     }
     setSeleccionados((actual) => actual.filter((id) => !eliminados.includes(id)));
+    setDocumentosSeleccionados((actual) => Object.fromEntries(Object.entries(actual).filter(([id]) => !eliminados.includes(id))));
     setResultadoEliminacion(
       eliminados.length + " de " + elegidos.length + " eliminados." +
       (pendientesFisicos ? " " + pendientesFisicos + " archivo(s) siguen pendientes de borrado físico." : ""),
@@ -330,6 +378,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
 
   const cambiar = (clave: string, valor: string) => {
     setSeleccionados([]);
+    setDocumentosSeleccionados({});
     const siguiente = new URLSearchParams(parametros);
     if (valor) siguiente.set(clave, valor);
     else siguiente.delete(clave);
@@ -343,6 +392,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
 
   const limpiar = () => {
     setSeleccionados([]);
+    setDocumentosSeleccionados({});
     setParametros({});
   };
 
@@ -371,10 +421,13 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
       )}
       {errorLote && <p className="error">{errorLote}</p>}
       <div className="acciones-documento">
-        <strong>{seleccionVisible.length} seleccionados en esta página</strong>
+        <strong>{seleccionados.length} seleccionados</strong>
+        <button className="secundario" disabled={cargandoSeleccionFiltro || eliminandoLote} onClick={() => void seleccionarTodoElFiltro()}>
+          {cargandoSeleccionFiltro ? "Cargando filtro…" : "Seleccionar todo el filtro (máximo 100)"}
+        </button>
         <button
           className="peligro"
-          disabled={!capacidades?.puede_retirar || !seleccionVisible.length || eliminandoLote}
+          disabled={!capacidades?.puede_retirar || !seleccionados.length || eliminandoLote}
           onClick={eliminarSeleccionados}
         >
           {eliminandoLote ? "Eliminando documentos…" : "Eliminar seleccionados"}
@@ -382,7 +435,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
         <button
           className="secundario"
           disabled={!seleccionados.length || eliminandoLote}
-          onClick={() => setSeleccionados([])}
+          onClick={() => { setSeleccionados([]); setDocumentosSeleccionados({}); }}
         >Limpiar selección</button>
       </div>
       {resultadoEliminacion && <p role="status">{resultadoEliminacion}</p>}
@@ -453,9 +506,11 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
                     aria-label="Seleccionar todos los documentos de esta página"
                     checked={todosSeleccionados}
                     disabled={eliminandoLote || !visibles.length}
-                    onChange={(e) => setSeleccionados(
-                      e.target.checked ? visibles.map((doc) => doc.id) : [],
-                    )}
+                    onChange={(e) => {
+                      const paginaSeleccionada = e.target.checked ? visibles : [];
+                      setSeleccionados(paginaSeleccionada.map((doc) => doc.id));
+                      setDocumentosSeleccionados(Object.fromEntries(paginaSeleccionada.map((doc) => [doc.id, doc])));
+                    }}
                   />
                 </th>
                 {!responsableId && <th>Responsable</th>}
@@ -477,7 +532,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
               {datos?.map((documento) => (
                 <FilaDocumento key={documento.id} documento={documento}
                   seleccionado={seleccionados.includes(documento.id)}
-                  alSeleccionar={(marcado) => alternarDocumento(documento.id, marcado)}
+                  alSeleccionar={(marcado) => alternarDocumento(documento, marcado)}
                   seleccionBloqueada={eliminandoLote}
                   sesion={sesion}
                   alCambiar={recargar} mostrarResponsable={!responsableId} mostrarUsuario={!usuarioId} mostrarGestor={!gestorId} />

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { conParametros, eliminar, enviarFormulario, obtener, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
+import { conParametros, eliminar, enviarFormulario, enviarJson, obtener, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
 import { Estado, Paginacion, Semaforo } from "../componentes";
 import FiltroJerarquia from "../componentes/FiltroJerarquia";
 import { ETIQUETA_TIPO_DOCUMENTO, formatearFecha, formatearMonto } from "../formato";
@@ -19,6 +19,9 @@ const POR_PAGINA = 100;
 
 export default function Registros({ sesion }: { sesion: SesionActual }) {
   const [parametros, setParametros] = useSearchParams();
+  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
+  const [eliminandoLote, setEliminandoLote] = useState(false);
+  const [mensajeLote, setMensajeLote] = useState("");
   const tipoEmpresa = parametros.get("tipo_empresa") ?? "";
   const responsableId = parametros.get("responsable_id") ?? "";
   const usuarioId = parametros.get("usuario_id") ?? "";
@@ -29,6 +32,9 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
   const desde = parametros.get("fecha_desde") ?? "";
   const hasta = parametros.get("fecha_hasta") ?? "";
   const mes = parametros.get("mes") ?? "";
+  const ultimoDiaMes = mes ? new Date(Date.UTC(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0)).getUTCDate() : 0;
+  const inicioMes = mes ? `${mes}-01` : "";
+  const finMes = mes ? `${mes}-${String(ultimoDiaMes).padStart(2, "0")}` : "";
   const pagina = Number(parametros.get("pagina") ?? "0");
 
   const ruta = conParametros("/api/v1/registros", {
@@ -47,6 +53,7 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
   });
   const { datos, error, cargando, recargar } = useDatos<RegistroResumen>(ruta);
   const { datos: opciones } = useDatos<RegistroOpciones>("/api/v1/registros/opciones");
+  const { datos: capacidades } = useDatos<{ puede_retirar: boolean }>("/api/v1/documentos/capacidades");
 
   useEffect(() => {
     const actualizarAlVolver = () => {
@@ -120,11 +127,85 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
       siguiente.delete("fecha_hasta");
     }
 
-    if (clave !== "pagina") siguiente.delete("pagina");
+    if (clave !== "pagina") {
+      siguiente.delete("pagina");
+      setSeleccionados(new Set());
+      setMensajeLote("");
+    }
     setParametros(siguiente);
   };
 
   const limpiar = () => setParametros({});
+  const alternarPagina = (seleccionar: boolean) => setSeleccionados((actual) => {
+    const siguiente = new Set(actual);
+    for (const fila of datos?.filas ?? []) {
+      if (seleccionar) siguiente.add(fila.expediente_id);
+      else siguiente.delete(fila.expediente_id);
+    }
+    return siguiente;
+  });
+  const seleccionarFiltro = async () => {
+    const ids = await obtener<string[]>(conParametros("/api/v1/expedientes/ids", {
+      responsable_id: responsableId,
+      usuario_id: usuarioId,
+      gestor_id: gestorId,
+      tipo_empresa: tipoEmpresa,
+      dia: mes ? "" : dia,
+      fecha_desde: inicioMes || desde,
+      fecha_hasta: finMes || hasta,
+      empresa_emisora: emisor.length === 11 ? undefined : emisor,
+      emisor_ruc: emisor.length === 11 ? emisor : undefined,
+      empresa_receptora: receptor.length === 11 ? undefined : receptor,
+      receptor_ruc: receptor.length === 11 ? receptor : undefined,
+      limit: "1000",
+    }));
+    setSeleccionados(new Set(ids));
+    const total = datos?.total_registros ?? 0;
+    setMensajeLote(ids.length < total
+      ? `Seleccionados ${ids.length} expedientes de ${total}. El filtro supera el máximo seleccionable por operación; reduce el rango para abarcarlo completo.`
+      : `Seleccionados ${ids.length} expedientes del filtro actual.`);
+  };
+  const eliminarSeleccion = async () => {
+    if (!seleccionados.size || eliminandoLote || !capacidades?.puede_retirar) return;
+    const ids = [...seleccionados];
+    const responsable = sesion.rol === "RESPONSABLE";
+    const motivo = responsable ? window.prompt(`Motivo para solicitar a Administración el retiro de ${ids.length} expediente(s) (mínimo 8 caracteres):`) : null;
+    if (responsable && (motivo === null || motivo.trim().length < 8)) {
+      if (motivo !== null) setMensajeLote("Escribe un motivo de al menos 8 caracteres.");
+      return;
+    }
+    const confirmar = window.confirm(responsable
+      ? `Se enviarán ${ids.length} solicitudes MISD. Administración deberá aprobarlas y tú completar la ejecución. ¿Continuar?`
+      : `Se eliminarán definitivamente ${ids.length} expedientes y todos sus documentos vinculados. ¿Continuar?`);
+    if (!confirmar) return;
+    setEliminandoLote(true);
+    const procesados: string[] = [];
+    const fallidos: string[] = [];
+    let archivosPendientes = 0;
+    try {
+      for (const id of ids) {
+        try {
+          if (responsable) {
+            await enviarJson("/api/v1/misd/solicitudes", "POST", { expediente_id: id, motivo: motivo?.trim() });
+          } else {
+            const resultado = await eliminar(`/api/v1/expedientes/${id}`) as { archivos_pendientes?: number };
+            archivosPendientes += resultado.archivos_pendientes ?? 0;
+          }
+          procesados.push(id);
+        } catch (error) {
+          fallidos.push(`${id}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      setSeleccionados((actual) => new Set([...actual].filter((id) => !procesados.includes(id))));
+      setMensajeLote(responsable
+        ? `${procesados.length} solicitud(es) MISD enviadas; ${fallidos.length} fallida(s).`
+        : `${procesados.length} de ${ids.length} expedientes eliminados; ${fallidos.length} fallida(s).${archivosPendientes ? ` ${archivosPendientes} archivo(s) esperan limpieza física.` : ""}`);
+      if (fallidos.length) setMensajeLote((actual) => `${actual} ${fallidos.slice(0, 3).join(" · ")}`);
+      if (procesados.length) recargar();
+    } finally {
+      setEliminandoLote(false);
+    }
+  };
 
   return (
     <>
@@ -195,12 +276,26 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
         <button className="secundario" onClick={limpiar}>Limpiar filtros</button>
       </div>
 
+      {capacidades?.puede_retirar && <div className="acciones" aria-label="Eliminación de expedientes seleccionados">
+        <label>
+          <input type="checkbox" aria-label="Seleccionar registros de esta página" checked={(datos?.filas.length ?? 0) > 0 && (datos?.filas ?? []).every((f) => seleccionados.has(f.expediente_id))} onChange={(e) => alternarPagina(e.target.checked)} />
+          Seleccionar página
+        </label>
+        <button type="button" onClick={() => void seleccionarFiltro()}>Seleccionar todo el filtro (máximo 1000)</button>
+        <button type="button" disabled={!seleccionados.size || eliminandoLote} className="peligro" onClick={() => void eliminarSeleccion()}>
+          {eliminandoLote ? "Procesando…" : sesion.rol === "RESPONSABLE" ? `Solicitar retiro MISD (${seleccionados.size})` : `Eliminar seleccionados (${seleccionados.size})`}
+        </button>
+        {seleccionados.size > 0 && <button type="button" onClick={() => setSeleccionados(new Set())}>Limpiar selección</button>}
+      </div>}
+      {mensajeLote && <p role="status" className="tenue">{mensajeLote}</p>}
+
       <Estado cargando={cargando} error={error} vacio={datos?.filas.length === 0}>
         <div className="tabla-responsive">
           <table className="tabla-registros">
             <thead>
               <tr>
                 <th>Estado</th>
+              <th>Seleccionar</th>
                 {mostrarResponsable && <th>Responsable</th>}
                 {mostrarUsuario && <th>Usuario</th>}
                 {mostrarGestor && <th>Gestor</th>}
@@ -224,6 +319,14 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
                   mostrarUsuario={mostrarUsuario}
                   mostrarGestor={mostrarGestor}
                   alCambiar={recargar}
+                  alSeleccionar={(activo) => setSeleccionados((actual) => {
+                    const siguiente = new Set(actual);
+                    if (activo) siguiente.add(fila.expediente_id);
+                    else siguiente.delete(fila.expediente_id);
+                    return siguiente;
+                  })}
+                  seleccionado={seleccionados.has(fila.expediente_id)}
+                  puedeSolicitarMisd={sesion.rol === "RESPONSABLE" && (capacidades?.puede_retirar ?? false)}
                 />
               ))}
             </tbody>
@@ -249,6 +352,9 @@ function FilaRegistro({
   mostrarUsuario,
   mostrarGestor,
   alCambiar,
+  alSeleccionar,
+  seleccionado,
+  puedeSolicitarMisd,
 }: {
   fila: RegistroFila;
   sesion: SesionActual;
@@ -256,6 +362,9 @@ function FilaRegistro({
   mostrarUsuario: boolean;
   mostrarGestor: boolean;
   alCambiar: () => void;
+  alSeleccionar: (activo: boolean) => void;
+  seleccionado: boolean;
+  puedeSolicitarMisd: boolean;
 }) {
   const [tipo, setTipo] = useState<TipoDocumento>("COT");
   const [ocupado, setOcupado] = useState(false);
@@ -292,6 +401,14 @@ function FilaRegistro({
     setOcupado(true);
     setError("");
     try {
+      if (sesion.rol === "RESPONSABLE") {
+        const motivo = window.prompt("Motivo para solicitar a Administración la eliminación del expediente (mínimo 8 caracteres):");
+        if (motivo === null) return;
+        if (motivo.trim().length < 8) throw new Error("Escribe un motivo de al menos 8 caracteres.");
+        await enviarJson("/api/v1/misd/solicitudes", "POST", { expediente_id: fila.expediente_id, motivo: motivo.trim() });
+        alCambiar();
+        return;
+      }
       const detalle = await obtener<ExpedienteDetalle>(
         `/api/v1/expedientes/${fila.expediente_id}`,
       );
@@ -323,6 +440,7 @@ function FilaRegistro({
   return (
     <tr>
       <td><Semaforo estado={fila.estado} /></td>
+      <td><input type="checkbox" aria-label={`Seleccionar expediente ${fila.serie}-${fila.correlativo}`} checked={seleccionado} onChange={(e) => alSeleccionar(e.target.checked)} /></td>
       {mostrarResponsable && (
         <td>{fila.responsable_codigo ? (
           <><strong>{fila.responsable_codigo}</strong><small className="bloque tenue">{fila.responsable_nombre ?? "Sin nombre"}</small></>
@@ -385,14 +503,12 @@ function FilaRegistro({
           )}
           <div>
             <Link to={"/expedientes/" + fila.expediente_id}>Ver expediente</Link>
-            {fila.puede_eliminar && (
+            {fila.puede_eliminar ? (
               <>
                 {" · "}
-                <button className="peligro enlace-boton" disabled={ocupado} onClick={retirar}>
-                  Eliminar
-                </button>
+                <button className="peligro enlace-boton" disabled={ocupado} onClick={retirar}>Eliminar expediente</button>
               </>
-            )}
+            ) : puedeSolicitarMisd ? <><br /><button className="peligro enlace-boton" disabled={ocupado} onClick={retirar}>Solicitar aprobación MISD</button></> : null}
           </div>
           {error && <small className="error bloque">{error}</small>}
         </div>
