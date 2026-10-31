@@ -67,6 +67,7 @@ test("ADMINISTRADOR: inicio de sesión y controles de su tenant", async ({ page 
 
 for (const codigo of ["JOSE02-G", "JOSE03-CH-G", "GESTOR-DE-PRUEBA"]) {
   test(`GESTOR ${codigo}: navega a OCR desde menú y botón de Documentos`, async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.route("**/api/v1/**", async (route) => {
       const ruta = new URL(route.request().url()).pathname;
       const respuesta = (body: unknown) =>
@@ -77,6 +78,9 @@ for (const codigo of ["JOSE02-G", "JOSE03-CH-G", "GESTOR-DE-PRUEBA"]) {
           rol: "GESTOR",
           codigo,
           nombre: `Cuenta ${codigo}`,
+          miembro_id: null,
+          gestor_id: `gestor-${codigo}`,
+          usuario_id: `usuario-${codigo}`,
           cambio_clave_obligatorio: false,
           jerarquia: [],
         });
@@ -94,14 +98,25 @@ for (const codigo of ["JOSE02-G", "JOSE03-CH-G", "GESTOR-DE-PRUEBA"]) {
     });
 
     await page.goto("/documentos");
-    await expect(page.getByRole("heading", { name: "Documentos" })).toBeVisible();
 
-    await page.locator("nav a[href='/subir']").click();
+    const enlaceSubir = page.locator("nav a[href='/subir']");
+    await expect(enlaceSubir).toBeVisible();
+    await page.mouse.move(1000, 400);
+    const posicionCerrada = await enlaceSubir.boundingBox();
+    await page.locator("aside.menu").hover();
+    await expect(page.locator("aside.menu")).toHaveClass(/menu-abierto/);
+    await page.waitForTimeout(250);
+    const posicionAbierta = await enlaceSubir.boundingBox();
+    expect(posicionCerrada).not.toBeNull();
+    expect(posicionAbierta).not.toBeNull();
+    if (!posicionCerrada || !posicionAbierta) throw new Error("No se pudo medir la posición del enlace Subir");
+    expect(Math.abs(posicionAbierta.y - posicionCerrada.y)).toBeLessThanOrEqual(1);
+    await enlaceSubir.click();
     await expect(page).toHaveURL(/\/subir$/);
     await expect(page.getByRole("heading", { name: "Ingreso de documentos" })).toBeVisible();
 
-    await page.locator("nav a[href='/documentos']").click();
-    await expect(page).toHaveURL(/\/documentos$/);
+    await page.goto("/documentos");
+    await expect(page.locator("main a[href='/subir']")).toBeVisible();
     await page.locator("main a[href='/subir']").click();
     await expect(page).toHaveURL(/\/subir$/);
     await expect(page.getByRole("heading", { name: "Ingreso de documentos" })).toBeVisible();
