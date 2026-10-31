@@ -64,3 +64,46 @@ test("ADMINISTRADOR: inicio de sesión y controles de su tenant", async ({ page 
   await page.getByRole("button", { name: "Configuración de acceso" }).click();
   await expect(page.getByText(/Exclusivo del ADMINISTRADOR del tenant/)).toBeVisible();
 });
+
+for (const codigo of ["JOSE02-G", "JOSE03-CH-G", "GESTOR-DE-PRUEBA"]) {
+  test(`GESTOR ${codigo}: navega a OCR desde menú y botón de Documentos`, async ({ page }) => {
+    await page.route("**/api/v1/**", async (route) => {
+      const ruta = new URL(route.request().url()).pathname;
+      const respuesta = (body: unknown) =>
+        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+
+      if (ruta === "/api/v1/auth/me") {
+        return respuesta({
+          rol: "GESTOR",
+          codigo,
+          nombre: `Cuenta ${codigo}`,
+          cambio_clave_obligatorio: false,
+          jerarquia: [],
+        });
+      }
+      if (ruta === "/api/v1/configuracion/permisos/secretaria") {
+        return respuesta({ registros: true, control_documental: true, documentos: true, expedientes: true });
+      }
+      if (ruta === "/api/v1/documentos/capacidades") {
+        return respuesta({ puede_retirar: true, puede_eliminar_definitivamente: true });
+      }
+      if (ruta === "/api/v1/documentos/resumen") {
+        return respuesta({ total_documentos: 0, total_expedientes: 0, total_pen: 0, total_usd: 0 });
+      }
+      return respuesta([]);
+    });
+
+    await page.goto("/documentos");
+    await expect(page.getByRole("heading", { name: "Documentos" })).toBeVisible();
+
+    await page.locator("nav a[href='/subir']").click();
+    await expect(page).toHaveURL(/\/subir$/);
+    await expect(page.getByRole("heading", { name: "Ingreso de documentos" })).toBeVisible();
+
+    await page.locator("nav a[href='/documentos']").click();
+    await expect(page).toHaveURL(/\/documentos$/);
+    await page.locator("main a[href='/subir']").click();
+    await expect(page).toHaveURL(/\/subir$/);
+    await expect(page.getByRole("heading", { name: "Ingreso de documentos" })).toBeVisible();
+  });
+}
