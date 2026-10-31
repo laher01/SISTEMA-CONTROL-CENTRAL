@@ -879,8 +879,11 @@ button.peligro {
 .menu-ajustable .barra-opciones { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
 .menu-ajustable .barra-opciones label { font-size: 0.65rem; color: #e1eefd; }
 .menu-ajustable .barra-opciones select { max-width: 148px; padding: 0.2rem; font-size: 0.75rem; }
+/* Mantén las filas en su sitio al expandir por hover. Si se usa display:none,
+   el encabezado aparece debajo del cursor y desplaza los enlaces justo antes
+   del clic, haciendo que el usuario abra otra opción o no navegue. */
 .menu-ajustable.menu-cerrado .barra-texto,
-.menu-ajustable.menu-cerrado .barra-opciones { display: none; }
+.menu-ajustable.menu-cerrado .barra-opciones { visibility: hidden; }
 .menu-ajustable nav a {
   display: flex;
   align-items: center;
