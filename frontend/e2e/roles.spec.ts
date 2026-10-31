@@ -68,13 +68,14 @@ test("ADMINISTRADOR: inicio de sesión y controles de su tenant", async ({ page 
 for (const codigo of ["JOSE02-G", "JOSE03-CH-G", "GESTOR-DE-PRUEBA"]) {
   test(`GESTOR ${codigo}: navega a OCR desde menú y botón de Documentos`, async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
+    let autenticado = false;
     await page.route("**/api/v1/**", async (route) => {
       const ruta = new URL(route.request().url()).pathname;
-      const respuesta = (body: unknown) =>
-        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+      const respuesta = (status: number, body: unknown) =>
+        route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 
       if (ruta === "/api/v1/auth/me") {
-        return respuesta({
+        return respuesta(autenticado ? 200 : 401, autenticado ? {
           rol: "GESTOR",
           codigo,
           nombre: `Cuenta ${codigo}`,
@@ -83,20 +84,29 @@ for (const codigo of ["JOSE02-G", "JOSE03-CH-G", "GESTOR-DE-PRUEBA"]) {
           usuario_id: `usuario-${codigo}`,
           cambio_clave_obligatorio: false,
           jerarquia: [],
-        });
+        } : { detail: "Sin sesión" });
+      }
+      if (ruta === "/api/v1/auth/login" && route.request().method() === "POST") {
+        autenticado = true;
+        return respuesta(200, { rol: "GESTOR", codigo, cambio_clave_obligatorio: false });
       }
       if (ruta === "/api/v1/configuracion/permisos/secretaria") {
-        return respuesta({ registros: true, control_documental: true, documentos: true, expedientes: true });
+        return respuesta(200, { registros: true, control_documental: true, documentos: true, expedientes: true });
       }
       if (ruta === "/api/v1/documentos/capacidades") {
-        return respuesta({ puede_retirar: true, puede_eliminar_definitivamente: true });
+        return respuesta(200, { puede_retirar: true, puede_eliminar_definitivamente: true });
       }
       if (ruta === "/api/v1/documentos/resumen") {
-        return respuesta({ total_documentos: 0, total_expedientes: 0, total_pen: 0, total_usd: 0 });
+        return respuesta(200, { total_documentos: 0, total_expedientes: 0, total_pen: 0, total_usd: 0 });
       }
-      return respuesta([]);
+      return respuesta(200, []);
     });
 
+    await page.goto("/ingresar");
+    await page.getByLabel("Espacio administrativo").fill("PRUEBAS");
+    await page.getByLabel("Usuario o correo").fill(codigo);
+    await page.getByLabel("Clave").fill("ClaveTemporal123!");
+    await page.getByRole("button", { name: "Iniciar sesión" }).click();
     await page.goto("/documentos");
 
     const enlaceSubir = page.locator("nav a[href='/subir']");
