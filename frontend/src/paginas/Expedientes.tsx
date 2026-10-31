@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { conParametros, descargarPdfExpedientes, eliminar, imprimirExpedientes, obtener, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
+import { conParametros, descargarPdfExpedientes, eliminar, enviarJson, imprimirExpedientes, obtener, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
 import { Estado, Paginacion, Semaforo } from "../componentes";
 import FiltroJerarquia from "../componentes/FiltroJerarquia";
 import { ETIQUETA_ESTADO, formatearFecha, formatearMonto, numeroExpediente } from "../formato";
@@ -29,6 +29,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
   const [mensaje, setMensaje] = useState("");
   const [imprimiendo, setImprimiendo] = useState(false);
   const [descargando, setDescargando] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
 
   const responsableId = parametros.get("responsable_id") ?? "";
   const usuarioId = parametros.get("usuario_id") ?? "";
@@ -76,9 +77,26 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
   });
   const { datos, error, cargando, recargar } = useDatos<Expediente[]>(ruta);
   const { datos: capacidades } = useDatos<{ puede_retirar: boolean }>("/api/v1/documentos/capacidades");
+  const puedeSolicitarMisd = sesion.rol === "RESPONSABLE" && (capacidades?.puede_retirar ?? false);
   const retirarExpediente = async (id: string) => {
     setMensaje("");
     try {
+      if (sesion.rol === "RESPONSABLE") {
+        if (!puedeSolicitarMisd) {
+          setMensaje("Tu cuenta no tiene habilitada la solicitud MISD.");
+          return;
+        }
+        const motivo = window.prompt("Motivo para solicitar a Administración la eliminación del expediente (mínimo 8 caracteres):");
+        if (motivo === null) return;
+        if (motivo.trim().length < 8) {
+          setMensaje("Escribe un motivo de al menos 8 caracteres.");
+          return;
+        }
+        await enviarJson("/api/v1/misd/solicitudes", "POST", { expediente_id: id, motivo: motivo.trim() });
+        setMensaje("Solicitud MISD enviada. Administración debe aprobarla; luego podrás ejecutar el retiro desde Solicitudes MISD.");
+        recargar();
+        return;
+      }
       const detalle = await obtener<ExpedienteDetalle>(`/api/v1/expedientes/${id}`);
       const listado = detalle.documentos.slice(0, 20)
         .map((documento) => `• ${documento.nombre_original}`).join("\n");
@@ -89,7 +107,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
         listado,
         mas,
         "Se borrarán del almacenamiento físico y de la lógica contable. No se pueden restaurar.",
-        "Si el cliente está autorizado, debe aprobar ADMINISTRACIÓN.",
+        "Se eliminará el expediente completo y sus documentos vinculados.",
       ].filter(Boolean).join("\n");
       if (!window.confirm(confirmacion)) return;
       const resultado = (await eliminar("/api/v1/expedientes/" + id)) as {
@@ -161,7 +179,10 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
     try {
       const ids = await obtener<string[]>(rutaIds);
       setSeleccionados(new Set(ids));
-      setMensaje(`Seleccionados ${ids.length} expedientes del filtro actual.`);
+      const total = resumen?.total_expedientes ?? ids.length;
+      setMensaje(ids.length < total
+        ? `Seleccionados ${ids.length} de ${total} expedientes. El límite por operación es 1000; reduce el filtro para incluir todos.`
+        : `Seleccionados ${ids.length} expedientes del filtro actual.`);
     } catch (e) {
       setMensaje(e instanceof Error ? e.message : String(e));
     }
@@ -203,6 +224,59 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
       setMensaje(e instanceof Error ? e.message : String(e));
     } finally {
       setDescargando(false);
+    }
+  };
+
+  const eliminarSeleccion = async () => {
+    if (!seleccionados.size || eliminando || !capacidades?.puede_retirar) return;
+    const ids = [...seleccionados];
+    const esResponsable = sesion.rol === "RESPONSABLE";
+    const motivo = esResponsable
+      ? window.prompt(`Motivo para solicitar el retiro de ${ids.length} expediente(s) a Administración (mínimo 8 caracteres):`)
+      : null;
+    if (esResponsable && (motivo === null || motivo.trim().length < 8)) {
+      if (motivo !== null) setMensaje("Escribe un motivo de al menos 8 caracteres.");
+      return;
+    }
+    if (!esResponsable && ids.some((id) => visibles.some((e) => e.id === id && !e.puede_eliminar))) {
+      setMensaje("Actualiza el listado: hay expedientes seleccionados que no están habilitados para eliminación directa.");
+      return;
+    }
+    const confirmado = window.confirm(esResponsable
+      ? `Se enviarán ${ids.length} solicitudes MISD. No se borrará nada hasta que Administración las apruebe y tú ejecutes el retiro. ¿Continuar?`
+      : `Se eliminarán definitivamente ${ids.length} expedientes y todos sus documentos. No se pueden restaurar. ¿Continuar?`);
+    if (!confirmado) return;
+
+    setEliminando(true);
+    setMensaje("");
+    const completados: string[] = [];
+    const errores: string[] = [];
+    let archivosPendientes = 0;
+    try {
+      for (const id of ids) {
+        try {
+          if (esResponsable) {
+            await enviarJson("/api/v1/misd/solicitudes", "POST", { expediente_id: id, motivo: motivo?.trim() });
+          } else {
+            const resultado = await eliminar(`/api/v1/expedientes/${id}`) as { archivos_pendientes?: number };
+            archivosPendientes += resultado.archivos_pendientes ?? 0;
+          }
+          completados.push(id);
+        } catch (e) {
+          errores.push(`${id}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+      setSeleccionados((actual) => new Set([...actual].filter((id) => !completados.includes(id))));
+      setMensaje(esResponsable
+        ? `${completados.length} solicitud(es) MISD enviadas; Administración debe resolverlas. ${errores.length ? `${errores.length} no se enviaron.` : ""}`
+        : `${completados.length} de ${ids.length} expedientes eliminados.${archivosPendientes ? ` ${archivosPendientes} archivo(s) quedaron pendientes de limpieza física.` : ""}${errores.length ? ` ${errores.length} no se eliminaron.` : ""}`);
+      if (errores.length) setMensaje((actual) => `${actual} ${errores.slice(0, 3).join(" · ")}`);
+      if (completados.length) {
+        recargar();
+        recargarResumen();
+      }
+    } finally {
+      setEliminando(false);
     }
   };
 
@@ -291,7 +365,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
 
       <div className="acciones">
         <button onClick={() => void seleccionarTodosFiltrados()}>
-          Seleccionar todos los resultados del filtro
+          Seleccionar resultados del filtro (máximo 1000)
         </button>
         <button
           disabled={seleccionados.size === 0 || imprimiendo}
@@ -305,6 +379,11 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
         >
           {descargando ? "Preparando PDF…" : `Descargar PDF (${seleccionados.size})`}
         </button>
+        {capacidades?.puede_retirar && (
+          <button className="peligro" disabled={seleccionados.size === 0 || eliminando} onClick={() => void eliminarSeleccion()}>
+            {eliminando ? "Procesando…" : sesion.rol === "RESPONSABLE" ? `Solicitar retiro MISD (${seleccionados.size})` : `Eliminar seleccionados (${seleccionados.size})`}
+          </button>
+        )}
         {seleccionados.size > 0 && (
           <button onClick={() => setSeleccionados(new Set())}>Limpiar selección</button>
         )}
@@ -335,7 +414,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
               <th>Receptor</th>
               <th className="num">Importe</th>
               <th>Descarga</th>
-              {capacidades?.puede_retirar && <th>Acciones</th>}
+        {(capacidades?.puede_retirar ?? false) && <th>Acciones</th>}
             </tr>
           </thead>
           <tbody>
@@ -381,14 +460,11 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
                 </td>
                 {capacidades?.puede_retirar && (
                   <td>
-                    <button
-                      type="button"
-                      disabled={!e.puede_eliminar}
-                      title={e.puede_eliminar ? "Retirar expediente" : "Eliminación no autorizada o bloqueada por liquidación"}
-                      onClick={() => void retirarExpediente(e.id)}
-                    >
-                      {e.puede_eliminar ? "Retirar" : "Bloqueado"}
-                    </button>
+                    {e.puede_eliminar ? (
+                      <button type="button" disabled={eliminando} onClick={() => void retirarExpediente(e.id)}>Eliminar expediente</button>
+                    ) : puedeSolicitarMisd ? (
+                      <button type="button" disabled={eliminando} onClick={() => void retirarExpediente(e.id)}>Solicitar aprobación MISD</button>
+                    ) : <span title="La eliminación directa no está autorizada o está bloqueada">Bloqueado</span>}
                   </td>
                 )}
               </tr>
