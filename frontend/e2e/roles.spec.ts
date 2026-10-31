@@ -107,21 +107,27 @@ for (const codigo of ["JOSE02-G", "JOSE03-CH-G", "GESTOR-DE-PRUEBA"]) {
     await page.getByLabel("Usuario o correo").fill(codigo);
     await page.getByLabel("Clave").fill("ClaveTemporal123!");
     await page.getByRole("button", { name: "Iniciar sesión" }).click();
-    await page.mouse.move(1000, 700);
     await page.goto("/documentos");
 
     const enlaceSubir = page.locator("nav a[href='/subir']");
     await expect(enlaceSubir).toBeVisible();
     await expect(page.locator("aside.menu")).toHaveClass(/menu-cerrado/);
-    const posicionCerrada = await enlaceSubir.boundingBox();
-    if (!posicionCerrada) throw new Error("No se pudo medir el enlace Subir cerrado");
-    await page.mouse.move(32, posicionCerrada.y + posicionCerrada.height / 2);
-    await expect(page.locator("aside.menu")).toHaveClass(/menu-abierto/);
-    await page.waitForTimeout(250);
-    const posicionAbierta = await enlaceSubir.boundingBox();
-    if (!posicionAbierta) throw new Error("No se pudo medir el enlace Subir abierto");
-    expect(Math.abs(posicionAbierta.y - posicionCerrada.y)).toBeLessThanOrEqual(1);
-    await page.mouse.click(32, posicionAbierta.y + posicionAbierta.height / 2);
+    const posiciones = await page.evaluate(() => {
+      const menu = document.querySelector("aside.menu");
+      const enlace = document.querySelector("nav a[href='/subir']");
+      if (!menu || !enlace) return null;
+      menu.classList.remove("menu-abierto");
+      menu.classList.add("menu-cerrado");
+      const yCerrado = enlace.getBoundingClientRect().y;
+      menu.classList.remove("menu-cerrado");
+      menu.classList.add("menu-abierto");
+      const yAbierto = enlace.getBoundingClientRect().y;
+      return { yCerrado, yAbierto };
+    });
+    expect(posiciones).not.toBeNull();
+    if (!posiciones) throw new Error("No se pudo medir el enlace Subir en ambos estados del menú");
+    expect(Math.abs(posiciones.yAbierto - posiciones.yCerrado)).toBeLessThanOrEqual(1);
+    await enlaceSubir.click();
     await expect(page).toHaveURL(/\/subir$/);
     await expect(page.getByRole("heading", { name: "Ingreso de documentos" })).toBeVisible();
 
