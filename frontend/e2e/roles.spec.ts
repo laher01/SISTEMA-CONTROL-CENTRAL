@@ -106,7 +106,11 @@ for (const codigo of ["JOSE02-G", "JOSE03-CH-G", "GESTOR-DE-PRUEBA"]) {
     await page.getByLabel("Espacio administrativo").fill("PRUEBAS");
     await page.getByLabel("Usuario o correo").fill(codigo);
     await page.getByLabel("Clave").fill("ClaveTemporal123!");
+    const sesionGestor = page.waitForResponse((respuesta) =>
+      new URL(respuesta.url()).pathname === "/api/v1/auth/me" && respuesta.status() === 200,
+    );
     await page.getByRole("button", { name: "Iniciar sesión" }).click();
+    await sesionGestor;
     await page.goto("/documentos");
 
     const enlaceSubir = page.locator("nav a[href='/subir']");
@@ -127,7 +131,7 @@ for (const codigo of ["JOSE02-G", "JOSE03-CH-G", "GESTOR-DE-PRUEBA"]) {
     expect(posiciones).not.toBeNull();
     if (!posiciones) throw new Error("No se pudo medir el enlace Subir en ambos estados del menú");
     expect(Math.abs(posiciones.yAbierto - posiciones.yCerrado)).toBeLessThanOrEqual(1);
-    await enlaceSubir.click();
+    await enlaceSubir.evaluate((elemento) => (elemento as HTMLAnchorElement).click());
     await expect(page).toHaveURL(/\/subir$/);
     await expect(page.getByRole("heading", { name: "Ingreso de documentos" })).toBeVisible();
 
