@@ -44,6 +44,7 @@ from app.schemas import (
     ExpedienteDetalle,
     ExpedienteIn,
     ExpedienteOut,
+    GuiaNoAplicaIn,
     ImpresionExpedientesIn,
     Recalculo,
 )
@@ -54,6 +55,7 @@ from app.services.eliminacion import (
     procesar_archivo_pendiente,
 )
 from app.services.expedientes import (
+    actualizar_expediente,
     buscar_expediente,
     documentos_faltantes,
     eliminar_expediente_vacio,
@@ -430,24 +432,31 @@ def listar(
     jerarquias = nombres_jerarquia(session, tenant_id, filas)
     ids = [fila.id for fila in filas]
     primeras_cargas: dict[uuid.UUID | None, datetime] = {}
+    conteo_documentos: dict[uuid.UUID, int] = {}
     if ids:
-        primeras_cargas = {
-            expediente_id: fecha
-            for expediente_id, fecha in session.execute(
-                select(Documento.expediente_id, func.min(Documento.created_at))
-                .where(
-                    Documento.tenant_id == tenant_id,
-                    Documento.expediente_id.in_(ids),
-                    Documento.deleted_at.is_(None),
-                )
-                .group_by(Documento.expediente_id)
-            ).all()
+        datos_documentos = session.execute(
+            select(
+                Documento.expediente_id,
+                func.min(Documento.created_at),
+                func.count(Documento.id),
+            )
+            .where(
+                Documento.tenant_id == tenant_id,
+                Documento.expediente_id.in_(ids),
+                Documento.deleted_at.is_(None),
+            )
+            .group_by(Documento.expediente_id)
+        ).all()
+        primeras_cargas = {expediente_id: fecha for expediente_id, fecha, _ in datos_documentos}
+        conteo_documentos = {
+            expediente_id: cantidad for expediente_id, _, cantidad in datos_documentos
         }
     return [
         ExpedienteOut.model_validate(fila).model_copy(
             update={
                 **jerarquias[fila.id],
                 "fecha_carga": primeras_cargas.get(fila.id),
+                "documentos_count": conteo_documentos.get(fila.id, 0),
                 "puede_eliminar": (
                     permiso_habilitado(session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS)
                     and (
@@ -1207,6 +1216,67 @@ def detalle(
     ):
         ruta = nombres_jerarquia(session, tenant_id, [expediente])[expediente.id]
         base = base.model_copy(update=ruta)
+    base = base.model_copy(
+        update={"documentos_count": sum(1 for d in expediente.documentos if d.deleted_at is None)}
+    )
+    return ExpedienteDetalle(
+        **base.model_dump(),
+        documentos=[d for d in expediente.documentos if d.deleted_at is None],
+        alertas=expediente.alertas,
+        faltantes=documentos_faltantes(expediente, settings),
+        fecha_limite=fecha_limite(expediente.fecha_emision, settings.dia_limite_expediente),
+    )
+
+
+@router.patch("/{expediente_id}/guia-no-aplica", response_model=ExpedienteDetalle)
+def confirmar_guia_no_aplica(
+    session: SessionDep,
+    settings: SettingsDep,
+    hoy: HoyDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    expediente_id: uuid.UUID,
+    datos: GuiaNoAplicaIn,
+) -> ExpedienteDetalle:
+    expediente = session.scalar(
+        select(Expediente)
+        .where(
+            Expediente.id == expediente_id,
+            Expediente.tenant_id == tenant_id,
+            Expediente.deleted_at.is_(None),
+        )
+        .with_for_update()
+    )
+    if expediente is None or expediente.tipo_comprobante != "FACT":
+        raise no_encontrado("Expediente")
+    if not _visible_para_auth(expediente, auth, session):
+        raise no_encontrado("Expediente")
+    if auth.rol not in {
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.GERENTE,
+        RolMiembro.RESPONSABLE,
+        RolMiembro.USUARIO,
+        "GESTOR",
+    }:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No puedes actualizar este expediente")
+
+    anterior = expediente.guia_no_aplica_confirmada
+    expediente.guia_no_aplica_confirmada = datos.confirmado
+    actualizar_expediente(session, expediente, hoy, settings)
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "EXPEDIENTE_GUIA_NO_APLICA_ACTUALIZADA",
+        "expediente",
+        expediente.id,
+        {"actor": auth.codigo, "confirmado_anterior": anterior, "confirmado": datos.confirmado},
+    )
+    session.commit()
+    session.refresh(expediente)
+    base = ExpedienteOut.model_validate(expediente)
+    base = base.model_copy(
+        update={"documentos_count": sum(1 for d in expediente.documentos if d.deleted_at is None)}
+    )
     return ExpedienteDetalle(
         **base.model_dump(),
         documentos=[d for d in expediente.documentos if d.deleted_at is None],

@@ -319,6 +319,7 @@ def documentos_principales(expediente: Expediente, settings: Settings) -> list[T
     if (
         expediente.tipo_comprobante == TipoComprobante.FACT
         and expediente.requiere_guia
+        and not expediente.guia_no_aplica_confirmada
         and supera_umbral
     ):
         requeridos.append(TipoDocumento.GRR)

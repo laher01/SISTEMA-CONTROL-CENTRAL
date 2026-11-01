@@ -250,6 +250,7 @@ class Expediente(ConId, ConTenant, ConCreacion, Base):
     moneda: Mapped[str] = mapped_column(String(3))
     importe_total: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     requiere_guia: Mapped[bool] = mapped_column(default=True, server_default="true")
+    guia_no_aplica_confirmada: Mapped[bool] = mapped_column(default=False, server_default="false")
     gestor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"), index=True)
     usuario_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"), index=True)
     creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
