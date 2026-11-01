@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 
 import { conParametros, descargarPdfExpedientes, eliminar, enviarJson, imprimirExpedientes, obtener, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
 import { Estado, Paginacion, Semaforo } from "../componentes";
@@ -25,6 +25,7 @@ type GreProvisional = {
 
 export default function Expedientes({ sesion }: { sesion: SesionActual }) {
   const [parametros, setParametros] = useSearchParams();
+  const ubicacion = useLocation();
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
   const [mensaje, setMensaje] = useState("");
   const [imprimiendo, setImprimiendo] = useState(false);
@@ -78,6 +79,14 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
   const { datos, error, cargando, recargar } = useDatos<Expediente[]>(ruta);
   const { datos: capacidades } = useDatos<{ puede_retirar: boolean }>("/api/v1/documentos/capacidades");
   const puedeSolicitarMisd = sesion.rol === "RESPONSABLE" && (capacidades?.puede_retirar ?? false);
+  const hrefExpediente = (expedienteId: string, indice: number) => {
+    const contexto = new URLSearchParams({
+      lista: (datos ?? []).map((item) => item.id).join(","),
+      pos: String(indice),
+      retorno: `${ubicacion.pathname}${ubicacion.search}`,
+    });
+    return `/expedientes/${expedienteId}?${contexto.toString()}`;
+  };
   const retirarExpediente = async (id: string) => {
     setMensaje("");
     try {
@@ -412,13 +421,14 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
                <th>Fecha de carga</th>
               <th>Emisor</th>
               <th>Receptor</th>
+              <th>N° Doc</th>
               <th className="num">Importe</th>
               <th>Descarga</th>
         {(capacidades?.puede_retirar ?? false) && <th>Acciones</th>}
             </tr>
           </thead>
           <tbody>
-            {datos?.map((e) => (
+            {datos?.map((e, indice) => (
               <tr key={e.id}>
                 <td>
                   <input
@@ -436,7 +446,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
                 </td>
                 <td>{e.emisor.clasificacion_proveedor ? `Tipo ${e.emisor.clasificacion_proveedor}` : "Sin clasificar"}</td>
                 <td>
-                  <Link to={`/expedientes/${e.id}`}>
+                  <Link to={hrefExpediente(e.id, indice)}>
                     {e.tipo_comprobante === "RHE"
                       ? numeroExpediente(e.tipo_comprobante, e.serie, e.correlativo_original ?? e.correlativo)
                       : "FACT " + numeroExpediente(e.tipo_comprobante, e.serie, e.correlativo_original ?? e.correlativo)}
@@ -450,6 +460,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
                   <small className="bloque tenue">RUC {e.receptor.ruc}</small>
                   {(!e.receptor.autorizada || e.pendiente_aprobacion) && <strong className="bloque" style={{ color: "#b91c1c" }}>NO VÁLIDO — CLIENTE NO AUTORIZADO · NO CONTABILIZA</strong>}
                 </td>
+                <td className="num">{e.documentos_count}</td>
                 <td className="num">{formatearMonto(e.moneda, e.importe_total)}</td>
                 <td>
                   <a href={urlPdfExpediente(e.id)} download={`expediente-${e.serie}-${e.correlativo}.pdf`}>

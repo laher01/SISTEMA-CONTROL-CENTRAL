@@ -141,6 +141,8 @@ export interface Expediente {
   moneda: Moneda;
   importe_total: string;
   requiere_guia: boolean;
+  guia_no_aplica_confirmada: boolean;
+  documentos_count: number;
   gestor_id: string | null;
   usuario_id: string | null;
   responsable_nombre?: string | null;

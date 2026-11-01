@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useRef, useState, type FormEvent } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { eliminar, enviarFormulario, enviarJson, urlArchivo, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
 import { Estado, Semaforo } from "../componentes";
@@ -16,6 +16,12 @@ import { TIPOS_DOCUMENTO, type Documento, type ExpedienteDetalle as Detalle, typ
 export default function ExpedienteDetalle({ sesion }: { sesion: { rol: string } }) {
   const { id = "" } = useParams();
   const navegar = useNavigate();
+  const ubicacion = useLocation();
+  const contexto = new URLSearchParams(ubicacion.search);
+  const listaIds = (contexto.get("lista") ?? "").split(",").filter(Boolean);
+  const posicion = Number(contexto.get("pos"));
+  const retorno = contexto.get("retorno") ?? "/expedientes";
+  const puedeNavegarLista = Number.isInteger(posicion) && listaIds[posicion] === id;
   const { datos, error, cargando, recargar } = useDatos<Detalle>(`/api/v1/expedientes/${id}`);
   const { datos: capacidades } = useDatos<{ puede_retirar: boolean; puede_eliminar_definitivamente: boolean }>("/api/v1/documentos/capacidades");
   const { datos: solicitudes, recargar: recargarSolicitudes } = useDatos<SolicitudMISD[]>("/api/v1/misd/solicitudes");
@@ -27,6 +33,31 @@ export default function ExpedienteDetalle({ sesion }: { sesion: { rol: string } 
   const [mensajeAccion, setMensajeAccion] = useState("");
   const [errorAccion, setErrorAccion] = useState("");
   const solicitudActual = solicitudes?.find((solicitud) => solicitud.expediente_id === id);
+
+  const moverEnLista = (siguiente: number) => {
+    if (!puedeNavegarLista || siguiente < 0 || siguiente >= listaIds.length) return;
+    contexto.set("pos", String(siguiente));
+    navegar(`/expedientes/${listaIds[siguiente]}?${contexto.toString()}`);
+  };
+
+  const actualizarGuiaNoAplica = async (confirmado: boolean) => {
+    if (!datos || ocupado) return;
+    setOcupado(true);
+    setErrorAccion("");
+    setMensajeAccion("");
+    try {
+      await enviarJson(`/api/v1/expedientes/${datos.id}/guia-no-aplica`, "PATCH", { confirmado });
+      setMensajeAccion(confirmado
+        ? "Se confirmó que la guía de remisión remitente no aplica. El estado se actualizó según los demás documentos faltantes."
+        : "Se retiró la confirmación manual; vuelve a aplicar la regla automática de guía.");
+      recargar();
+    } catch (e) {
+      setErrorAccion(e instanceof Error ? e.message : String(e));
+      recargar();
+    } finally {
+      setOcupado(false);
+    }
+  };
 
   const eliminarDocumento = async (documento: Documento) => {
     if (!capacidades?.puede_eliminar_definitivamente || ocupado) return;
@@ -125,6 +156,18 @@ export default function ExpedienteDetalle({ sesion }: { sesion: { rol: string } 
     <Estado cargando={cargando} error={error} vacio={!datos}>
       {datos && (
         <>
+          <div className="acciones" aria-label="Navegación de expedientes">
+            <button type="button" className="boton-enlace" onClick={() => navegar(retorno.startsWith("/expedientes") && !retorno.startsWith("//") ? retorno : "/expedientes")}>
+              Volver a registros de expedientes
+            </button>
+            {puedeNavegarLista && (
+              <>
+                <button type="button" disabled={posicion <= 0} onClick={() => moverEnLista(posicion - 1)}>← Anterior</button>
+                <span className="tenue">Expediente {posicion + 1} de {listaIds.length}</span>
+                <button type="button" disabled={posicion >= listaIds.length - 1} onClick={() => moverEnLista(posicion + 1)}>Siguiente →</button>
+              </>
+            )}
+          </div>
           <h2>
             {datos.tipo_comprobante === "RHE"
               ? numeroExpediente(datos.tipo_comprobante, datos.serie, datos.correlativo_original ?? datos.correlativo)
@@ -190,6 +233,21 @@ export default function ExpedienteDetalle({ sesion }: { sesion: { rol: string } 
             </dd>
           </dl>
 
+          {datos.tipo_comprobante === "FACT" && ["ADMINISTRADOR", "GERENTE", "RESPONSABLE", "USUARIO", "GESTOR"].includes(sesion.rol) && (
+            <section className="panel-configuracion" aria-label="Excepción manual de guía de remisión">
+              <label className="control-guia">
+                <input
+                  type="checkbox"
+                  checked={datos.guia_no_aplica_confirmada}
+                  disabled={ocupado}
+                  onChange={(evento) => void actualizarGuiaNoAplica(evento.target.checked)}
+                />
+                La guía de remisión remitente no aplica a esta factura
+              </label>
+              <p className="tenue">La confirmación queda registrada y solo excluye la guía. El expediente seguirá pendiente si falta la factura, el voucher u otro documento requerido.</p>
+            </section>
+          )}
+
           {(datos.responsable_nombre || datos.usuario_nombre || datos.gestor_nombre) && (
             <section aria-label="Ruta de responsabilidad">
               <h3>Ruta de responsabilidad</h3>
@@ -247,9 +305,7 @@ function TablaDocumentos({ documentos, puedeEliminar, ocupado, alEliminar }: { d
           <tr key={d.id}>
             <td>{d.tipo_documento ? ETIQUETA_TIPO_DOCUMENTO[d.tipo_documento] : "Sin tipo"}</td>
             <td>
-              <a href={urlArchivo(d.id)} target="_blank" rel="noreferrer">
-                {d.nombre_original}
-              </a>
+              <ArchivoPreview documento={d} />
             </td>
             <td>{formatearTamano(d.tamano_bytes)}</td>
             <td>{formatearFecha(d.created_at)}</td>
@@ -258,6 +314,43 @@ function TablaDocumentos({ documentos, puedeEliminar, ocupado, alEliminar }: { d
         ))}
       </tbody>
     </table>
+  );
+}
+
+function ArchivoPreview({ documento }: { documento: Documento }) {
+  const [modalAbierto, setModalAbierto] = useState(false);
+  const [hover, setHover] = useState(false);
+  const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const url = urlArchivo(documento.id);
+  const esImagen = documento.mime_type.startsWith("image/");
+
+  const click = () => {
+    if (temporizador.current) clearTimeout(temporizador.current);
+    temporizador.current = setTimeout(() => setModalAbierto(true), 240);
+  };
+  const dobleClick = () => {
+    if (temporizador.current) clearTimeout(temporizador.current);
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  return (
+    <span className="archivo-preview" onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      <button type="button" className="boton-archivo" onClick={click} onDoubleClick={dobleClick} aria-label={`Vista previa de ${documento.nombre_original}; doble clic para abrir en otra pestaña`}>
+        {documento.nombre_original}
+      </button>
+      {hover && esImagen && <span className="archivo-miniatura"><img src={url} alt={`Vista previa de ${documento.nombre_original}`} /></span>}
+      {modalAbierto && (
+        <div className="visor-fondo" role="presentation" onMouseDown={(evento) => { if (evento.target === evento.currentTarget) setModalAbierto(false); }}>
+          <section className="visor-archivo" role="dialog" aria-modal="true" aria-label={`Archivo ${documento.nombre_original}`}>
+            <header>
+              <strong>{documento.nombre_original}</strong>
+              <button type="button" onClick={() => setModalAbierto(false)} aria-label="Cerrar vista previa">Cerrar</button>
+            </header>
+            {esImagen ? <img className="visor-imagen" src={url} alt={documento.nombre_original} /> : documento.mime_type === "application/pdf" ? <iframe title={documento.nombre_original} src={url} /> : <p>Este formato se puede abrir en una pestaña nueva con doble clic sobre el nombre.</p>}
+          </section>
+        </div>
+      )}
+    </span>
   );
 }
 

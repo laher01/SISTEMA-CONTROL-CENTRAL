@@ -256,6 +256,8 @@ class ExpedienteOut(Orm):
     moneda: Moneda
     importe_total: Decimal
     requiere_guia: bool
+    guia_no_aplica_confirmada: bool = False
+    documentos_count: int = 0
     gestor_id: uuid.UUID | None
     usuario_id: uuid.UUID | None
     responsable_nombre: str | None = None
@@ -269,6 +271,10 @@ class ExpedienteOut(Orm):
     puede_eliminar: bool = False
     fecha_carga: datetime | None = None
     created_at: datetime
+
+
+class GuiaNoAplicaIn(BaseModel):
+    confirmado: bool
 
 
 class ExpedienteAsistidoOut(BaseModel):
