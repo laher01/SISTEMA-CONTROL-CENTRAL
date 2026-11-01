@@ -26,10 +26,15 @@ def test_totales_globales_sin_duplicar_por_documentos(client: TestClient) -> Non
     assert expedientes.status_code == 200, expedientes.text
     assert expedientes.json()["total_expedientes"] == 2
     assert Decimal(expedientes.json()["total_pen"]) == Decimal("300.00")
+    assert sum(fila["cantidad"] for fila in expedientes.json()["distribucion"]) == 2
+    assert sum(Decimal(fila["monto"]) for fila in expedientes.json()["distribucion"]) == Decimal(
+        "300.00"
+    )
 
     filtrado = client.get("/api/v1/expedientes/resumen", params={"emisor_ruc": "00000000000"})
     assert filtrado.status_code == 200, filtrado.text
     assert filtrado.json()["total_expedientes"] == 0
+    assert filtrado.json()["distribucion"] == []
 
 
 def test_eliminar_documento_actualiza_resumen_sin_eliminar_otras_facturas(

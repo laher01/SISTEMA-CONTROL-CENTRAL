@@ -593,6 +593,7 @@ def resumen_empresas_por_rol(
 @router.get("/resumen")
 def resumen_filtrado(
     session: SessionDep,
+    settings: SettingsDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
     estado: EstadoExpediente | None = None,
@@ -609,7 +610,7 @@ def resumen_filtrado(
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
     dia: date | None = None,
-) -> dict[str, int | Decimal]:
+) -> dict[str, object]:
     consulta = select(Expediente).where(
         Expediente.tenant_id == tenant_id,
         Expediente.deleted_at.is_(None),
@@ -728,12 +729,38 @@ def resumen_filtrado(
             ),
         )
     ).one()
+    distribucion = session.execute(
+        select(
+            Empresa.agente_retencion,
+            base.c.moneda,
+            case(
+                (base.c.moneda == "PEN", base.c.importe_total >= settings.umbral_bancarizacion_pen),
+                (base.c.moneda == "USD", base.c.importe_total >= settings.umbral_bancarizacion_usd),
+                else_=False,
+            ).label("bancarizable"),
+            func.count(base.c.id),
+            func.coalesce(func.sum(base.c.importe_total), 0),
+        )
+        .join(Empresa, (Empresa.id == base.c.receptor_id) & (Empresa.tenant_id == tenant_id))
+        .where(Empresa.deleted_at.is_(None))
+        .group_by(Empresa.agente_retencion, base.c.moneda, "bancarizable")
+    ).all()
     return {
         "total_expedientes": int(resultado[0]),
         "total_pen": Decimal(resultado[1]),
         "total_pen_autorizado": Decimal(resultado[3]),
         "total_usd": Decimal(resultado[2]),
         "total_usd_autorizado": Decimal(resultado[4]),
+        "distribucion": [
+            {
+                "agente_retencion": bool(agente),
+                "moneda": moneda,
+                "bancarizable": bool(bancarizable),
+                "cantidad": int(cantidad),
+                "monto": Decimal(monto),
+            }
+            for agente, moneda, bancarizable, cantidad, monto in distribucion
+        ],
     }
 
 

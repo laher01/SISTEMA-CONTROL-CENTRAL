@@ -1045,3 +1045,24 @@ button.peligro {
 :root[data-fc-densidad="amplio"] :is(th,td) { padding: .85rem 1rem; }
 :root[data-fc-densidad="compacto"] .contenido { padding: .75rem; }
 :root[data-fc-densidad="amplio"] .contenido { padding: 2rem 2.5rem; }
+.resumen-clasificacion {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+  margin: 10px 0 14px;
+  padding: 10px;
+  border-radius: 4px;
+  background: #eaf2fb;
+  border: 1px solid #c9d9eb;
+}
+
+.resumen-clasificacion__grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.85rem;
+}
+
+.resumen-clasificacion__grupo strong {
+  color: #183d62;
+}

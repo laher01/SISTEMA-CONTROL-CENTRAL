@@ -2,7 +2,8 @@
 
 import uuid
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
+from typing import cast
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
@@ -15,6 +16,7 @@ from app.models import (
     AdelantoERP,
     AplicacionAdelantoERP,
     AsignacionPedidoGerencia,
+    DevengoComisionUsuarioERP,
     Empresa,
     Expediente,
     FormulaPagoNexus,
@@ -44,6 +46,7 @@ class ProgramarUsuarioIn(BaseModel):
     saldo_ids: list[uuid.UUID] = Field(default_factory=list, max_length=100)
     porcentajes_saldos: dict[uuid.UUID, Decimal] = Field(default_factory=dict)
     adelanto_ids: list[uuid.UUID] = Field(default_factory=list, max_length=100)
+    expediente_ids: list[uuid.UUID] | None = Field(default=None, max_length=500)
     porcentaje_manual: Decimal | None = Field(
         default=None, ge=0, le=100, max_digits=7, decimal_places=4
     )
@@ -239,6 +242,165 @@ def _base_pago_usuario(
         else Decimal("0")
     )
     return produccion, tasa, calculo["bruto"], plan.id if plan is not None else None
+
+
+def _comisiones_por_factura(
+    filas: list[dict[str, object]],
+    *,
+    tasa_con: Decimal,
+    tasa_sin: Decimal,
+) -> None:
+    """Distribuye el redondeo del grupo entre sus facturas sin perder centavos."""
+    for agente, tasa in ((False, tasa_sin), (True, tasa_con)):
+        grupo = [fila for fila in filas if fila["agente_retencion"] is agente]
+        if not grupo:
+            continue
+        exactos = [Decimal(str(fila["base"])) * tasa / Decimal("100") for fila in grupo]
+        total = sum(exactos, Decimal("0")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        asignados = [monto.quantize(Decimal("0.01"), rounding=ROUND_DOWN) for monto in exactos]
+        centavos = int((total - sum(asignados, Decimal("0"))) / Decimal("0.01"))
+        orden = sorted(
+            range(len(grupo)),
+            key=lambda indice: exactos[indice] - asignados[indice],
+            reverse=True,
+        )
+        for indice in orden[:centavos]:
+            asignados[indice] += Decimal("0.01")
+        for fila, comision in zip(grupo, asignados, strict=True):
+            fila["comision"] = comision
+
+
+def _facturas_cotizables(
+    session: SessionDep,
+    tenant_id: uuid.UUID,
+    datos: ProgramarUsuarioIn,
+) -> list[dict[str, object]]:
+    usuario = session.get(Miembro, datos.usuario_id)
+    if usuario is None or usuario.tenant_id != tenant_id or usuario.rol != RolMiembro.USUARIO:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Usuario inválido")
+    tasa_con = Decimal(
+        usuario.porcentaje_con_agente
+        if usuario.porcentaje_con_agente is not None
+        else usuario.porcentaje_produccion or 0
+    )
+    tasa_sin = Decimal(
+        usuario.porcentaje_sin_agente
+        if usuario.porcentaje_sin_agente is not None
+        else usuario.porcentaje_produccion or 0
+    )
+    if datos.hasta < datos.desde or (datos.hasta - datos.desde).days > 366:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Periodo inválido")
+
+    devengos = list(
+        session.execute(
+            select(DevengoComisionUsuarioERP, PagoERP.estado)
+            .outerjoin(
+                PagoERP,
+                (PagoERP.id == DevengoComisionUsuarioERP.pago_id)
+                & (PagoERP.tenant_id == tenant_id),
+            )
+            .where(
+                DevengoComisionUsuarioERP.tenant_id == tenant_id,
+                DevengoComisionUsuarioERP.usuario_id == datos.usuario_id,
+                DevengoComisionUsuarioERP.moneda == datos.moneda,
+            )
+            .with_for_update()
+        )
+    )
+    devengo_por_expediente = {
+        devengo.expediente_id: (devengo, estado) for devengo, estado in devengos
+    }
+    filas: list[dict[str, object]] = []
+    ids_periodo: set[uuid.UUID] = set()
+    actuales = session.execute(
+        select(
+            Expediente,
+            Empresa.agente_retencion,
+        )
+        .join(
+            Empresa,
+            (Empresa.id == Expediente.receptor_id) & (Empresa.tenant_id == tenant_id),
+        )
+        .where(
+            Expediente.tenant_id == tenant_id,
+            Expediente.usuario_id == datos.usuario_id,
+            Expediente.deleted_at.is_(None),
+            expediente_tiene_documentos_activos(),
+            Expediente.moneda == datos.moneda,
+            Expediente.fecha_emision >= datos.desde,
+            Expediente.fecha_emision <= datos.hasta,
+            Empresa.deleted_at.is_(None),
+        )
+        .order_by(Expediente.fecha_emision, Expediente.serie, Expediente.correlativo)
+        .with_for_update(of=Expediente)
+    ).all()
+    nuevas: list[dict[str, object]] = []
+    for expediente, agente in actuales:
+        ids_periodo.add(expediente.id)
+        existente = devengo_por_expediente.get(expediente.id)
+        if existente is not None:
+            devengo, estado_pago = existente
+            if devengo.pago_id is None or estado_pago == "ANULADO":
+                filas.append(
+                    {
+                        "expediente_id": expediente.id,
+                        "comprobante": (
+                            f"{expediente.tipo_comprobante} {expediente.serie}-"
+                            f"{expediente.correlativo}"
+                        ),
+                        "fecha": expediente.fecha_emision,
+                        "moneda": devengo.moneda,
+                        "agente_retencion": devengo.agente_retencion,
+                        "base": Decimal(devengo.base_factura),
+                        "porcentaje": Decimal(devengo.porcentaje),
+                        "comision": Decimal(devengo.monto_comision),
+                        "arrastre": expediente.fecha_emision < datos.desde,
+                        "devengo": devengo,
+                    }
+                )
+            continue
+        nuevas.append(
+            {
+                "expediente_id": expediente.id,
+                "comprobante": (
+                    f"{expediente.tipo_comprobante} {expediente.serie}-{expediente.correlativo}"
+                ),
+                "fecha": expediente.fecha_emision,
+                "moneda": datos.moneda,
+                "agente_retencion": bool(agente),
+                "base": Decimal(expediente.importe_total),
+                "porcentaje": tasa_con if agente else tasa_sin,
+                "comision": Decimal("0"),
+                "arrastre": False,
+                "devengo": None,
+            }
+        )
+    _comisiones_por_factura(nuevas, tasa_con=tasa_con, tasa_sin=tasa_sin)
+    filas.extend(nuevas)
+    for devengo, estado_pago in devengos:
+        if devengo.expediente_id not in ids_periodo and (
+            devengo.pago_id is None or estado_pago == "ANULADO"
+        ):
+            expediente = session.get(Expediente, devengo.expediente_id)
+            if expediente is None or expediente.tenant_id != tenant_id or expediente.deleted_at:
+                continue
+            filas.append(
+                {
+                    "expediente_id": expediente.id,
+                    "comprobante": (
+                        f"{expediente.tipo_comprobante} {expediente.serie}-{expediente.correlativo}"
+                    ),
+                    "fecha": devengo.fecha_emision,
+                    "moneda": devengo.moneda,
+                    "agente_retencion": devengo.agente_retencion,
+                    "base": Decimal(devengo.base_factura),
+                    "porcentaje": Decimal(devengo.porcentaje),
+                    "comision": Decimal(devengo.monto_comision),
+                    "arrastre": True,
+                    "devengo": devengo,
+                }
+            )
+    return filas
 
 
 @router.get("/pagos/liquidaciones")
@@ -461,7 +623,7 @@ def crear_formula_nexus(
     session: SessionDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
-) -> dict[str, str | int]:
+) -> dict[str, object]:
     from app.services.nexus_propuestas import EstadoFormula, PropuestaFormula
 
     if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
@@ -680,9 +842,21 @@ def cotizar_pago_usuario(
     session: SessionDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
-) -> dict[str, str | int]:
+) -> dict[str, object]:
     _autorizar_pago(session, tenant_id, auth, datos.usuario_id)
-    produccion, tasa, bruto_produccion, _ = _base_pago_usuario(session, tenant_id, datos)
+    _base_pago_usuario(session, tenant_id, datos)
+    facturas = _facturas_cotizables(session, tenant_id, datos)
+    produccion = sum((Decimal(str(fila["base"])) for fila in facturas), Decimal("0")).quantize(
+        Decimal("0.01")
+    )
+    bruto_produccion = sum(
+        (Decimal(str(fila["comision"])) for fila in facturas), Decimal("0")
+    ).quantize(Decimal("0.01"))
+    tasa = (
+        (bruto_produccion * Decimal("100") / produccion).quantize(Decimal("0.0001"))
+        if produccion > 0
+        else Decimal("0")
+    )
     saldos, adelantos, total_pendientes = _componentes_pendientes(session, tenant_id, datos)
     saldos_total = sum((Decimal(s.monto) for s in saldos), Decimal("0"))
     adelantos_total = sum((Decimal(a.monto) for a in adelantos), Decimal("0"))
@@ -700,6 +874,19 @@ def cotizar_pago_usuario(
         "neto": str(neto),
         "adelantos_pendientes": total_pendientes,
         "moneda": datos.moneda,
+        "facturas": [
+            {
+                "expediente_id": str(fila["expediente_id"]),
+                "comprobante": str(fila["comprobante"]),
+                "fecha": cast(date, fila["fecha"]).isoformat(),
+                "agente_retencion": bool(fila["agente_retencion"]),
+                "base": str(fila["base"]),
+                "porcentaje": str(fila["porcentaje"]),
+                "comision": str(fila["comision"]),
+                "arrastre": bool(fila["arrastre"]),
+            }
+            for fila in facturas
+        ],
     }
 
 
@@ -723,7 +910,24 @@ def programar_pago_usuario(
     )
     if anterior is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Existe una liquidación que se solapa")
-    produccion, tasa, bruto_produccion, plan_id = _base_pago_usuario(session, tenant_id, datos)
+    _, _, _, plan_id = _base_pago_usuario(session, tenant_id, datos)
+    facturas = _facturas_cotizables(session, tenant_id, datos)
+    ids_disponibles = {fila["expediente_id"] for fila in facturas}
+    if datos.expediente_ids is not None and len(datos.expediente_ids) != len(
+        set(datos.expediente_ids)
+    ):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Facturas repetidas")
+    ids_seleccionados = (
+        ids_disponibles if datos.expediente_ids is None else set(datos.expediente_ids)
+    )
+    if not ids_seleccionados.issubset(ids_disponibles):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Una factura ya no está disponible; vuelva a calcular el pago",
+        )
+    facturas_seleccionadas = [
+        fila for fila in facturas if fila["expediente_id"] in ids_seleccionados
+    ]
     saldos, adelantos, total_pendientes = _componentes_pendientes(session, tenant_id, datos)
     omitidos = total_pendientes - len(adelantos)
     if omitidos > 0 and (
@@ -735,8 +939,27 @@ def programar_pago_usuario(
         )
     saldos_total = sum((Decimal(s.monto) for s in saldos), Decimal("0"))
     adelantos_total = sum((Decimal(a.monto) for a in adelantos), Decimal("0"))
-    base = produccion + saldos_total
-    bruto = bruto_produccion + saldos_total
+    produccion_seleccionada = sum(
+        (Decimal(str(fila["base"])) for fila in facturas_seleccionadas), Decimal("0")
+    ).quantize(Decimal("0.01"))
+    comision_seleccionada = sum(
+        (Decimal(str(fila["comision"])) for fila in facturas_seleccionadas), Decimal("0")
+    ).quantize(Decimal("0.01"))
+    produccion = produccion_seleccionada
+    tasa = (
+        (comision_seleccionada * Decimal("100") / produccion_seleccionada).quantize(
+            Decimal("0.0001")
+        )
+        if produccion_seleccionada > 0
+        else Decimal("0")
+    )
+    if ids_disponibles and not facturas_seleccionadas and saldos_total == 0:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Seleccione al menos una factura o un saldo pendiente",
+        )
+    base = produccion_seleccionada + saldos_total
+    bruto = comision_seleccionada + saldos_total
     neto = bruto - adelantos_total
     if neto < 0:
         raise HTTPException(
@@ -751,7 +974,13 @@ def programar_pago_usuario(
         periodo_hasta=datos.hasta,
         moneda=datos.moneda,
         produccion_total=base,
-        porcentaje=tasa,
+        porcentaje=(
+            (comision_seleccionada * Decimal("100") / produccion_seleccionada).quantize(
+                Decimal("0.0001")
+            )
+            if produccion_seleccionada > 0
+            else Decimal("0")
+        ),
         bruto=bruto,
         adelantos=adelantos_total,
         ajustes=Decimal("0"),
@@ -764,6 +993,24 @@ def programar_pago_usuario(
     session.add(pago)
     try:
         session.flush()
+        for fila in facturas:
+            devengo = cast(DevengoComisionUsuarioERP | None, fila["devengo"])
+            if devengo is None:
+                devengo = DevengoComisionUsuarioERP(
+                    tenant_id=tenant_id,
+                    usuario_id=datos.usuario_id,
+                    expediente_id=fila["expediente_id"],
+                    fecha_emision=fila["fecha"],
+                    moneda=datos.moneda,
+                    agente_retencion=bool(fila["agente_retencion"]),
+                    base_factura=Decimal(str(fila["base"])),
+                    porcentaje=Decimal(str(fila["porcentaje"])),
+                    monto_comision=Decimal(str(fila["comision"])),
+                    creado_por_cuenta_id=auth.cuenta_id,
+                )
+                session.add(devengo)
+            if fila["expediente_id"] in ids_seleccionados:
+                devengo.pago_id = pago.id
         for saldo in saldos:
             saldo.pago_id = pago.id
         for adelanto in adelantos:

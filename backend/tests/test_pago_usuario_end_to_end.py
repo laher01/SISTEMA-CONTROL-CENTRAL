@@ -6,7 +6,14 @@ from decimal import Decimal
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models import AdelantoERP, Empresa, Expediente, Miembro, SaldoCompraERP
+from app.models import (
+    AdelantoERP,
+    DevengoComisionUsuarioERP,
+    Empresa,
+    Expediente,
+    Miembro,
+    SaldoCompraERP,
+)
 from tests.conftest import AuthPrueba, completar_facturas_de_prueba
 
 
@@ -134,3 +141,84 @@ def test_saldo_se_suma_como_importe_directo_sin_porcentaje(
     assert respuesta.status_code == 200, respuesta.text
     assert Decimal(respuesta.json()["saldos_agregados"]) == Decimal("1000.00")
     assert Decimal(respuesta.json()["bruto"]) == Decimal("1000.00")
+
+
+def test_comision_no_seleccionada_se_arrastra_al_mes_siguiente(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    auth_prueba.como_admin()
+    tenant_id = auth_prueba.contexto.tenant_id
+    usuario = session.query(Miembro).filter_by(tenant_id=tenant_id, codigo="TESTUSR").one()
+    usuario.porcentaje_con_agente = Decimal("2.00")
+    usuario.porcentaje_sin_agente = Decimal("3.00")
+    agente = Empresa(
+        tenant_id=tenant_id,
+        ruc="20111111111",
+        razon_social="Cliente agente",
+        agente_retencion=True,
+    )
+    sin_agente = Empresa(
+        tenant_id=tenant_id,
+        ruc="20222222222",
+        razon_social="Cliente sin agente",
+        agente_retencion=False,
+    )
+    emisor = Empresa(tenant_id=tenant_id, ruc="20333333333", razon_social="Proveedor")
+    session.add_all([agente, sin_agente, emisor])
+    session.flush()
+    for receptor, correlativo, importe in (
+        (agente, "00007270", "9400.00"),
+        (sin_agente, "00007271", "5875.00"),
+    ):
+        session.add(
+            Expediente(
+                tenant_id=tenant_id,
+                receptor_id=receptor.id,
+                emisor_id=emisor.id,
+                usuario_id=usuario.id,
+                tipo_comprobante="01",
+                serie="F091",
+                correlativo=correlativo,
+                fecha_emision=date(2026, 9, 10),
+                moneda="PEN",
+                importe_total=Decimal(importe),
+            )
+        )
+    completar_facturas_de_prueba(session)
+    session.commit()
+    parametros = {
+        "usuario_id": str(usuario.id),
+        "desde": "2026-09-01",
+        "hasta": "2026-09-30",
+        "moneda": "PEN",
+    }
+
+    cotizacion = client.post("/api/v1/responsable/pagos/cotizar", json=parametros)
+    assert cotizacion.status_code == 200, cotizacion.text
+    lineas = cotizacion.json()["facturas"]
+    assert len(lineas) == 2
+    assert {Decimal(linea["porcentaje"]) for linea in lineas} == {
+        Decimal("2.00"),
+        Decimal("3.00"),
+    }
+    pagada_ahora = lineas[0]
+    programacion = client.post(
+        "/api/v1/responsable/pagos/programar",
+        json={**parametros, "expediente_ids": [pagada_ahora["expediente_id"]]},
+    )
+    assert programacion.status_code == 201, programacion.text
+
+    devengos = session.query(DevengoComisionUsuarioERP).filter_by(tenant_id=tenant_id).all()
+    assert len(devengos) == 2
+    assert sum(devengo.pago_id is not None for devengo in devengos) == 1
+    pendiente = next(devengo for devengo in devengos if devengo.pago_id is None)
+
+    siguiente_mes = client.post(
+        "/api/v1/responsable/pagos/cotizar",
+        json={**parametros, "desde": "2026-10-01", "hasta": "2026-10-31"},
+    )
+    assert siguiente_mes.status_code == 200, siguiente_mes.text
+    arrastres = siguiente_mes.json()["facturas"]
+    assert [linea["expediente_id"] for linea in arrastres] == [str(pendiente.expediente_id)]
+    assert arrastres[0]["arrastre"] is True
+    assert Decimal(arrastres[0]["comision"]) == Decimal(pendiente.monto_comision)

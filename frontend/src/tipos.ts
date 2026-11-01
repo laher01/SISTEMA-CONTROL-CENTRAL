@@ -175,7 +175,17 @@ export interface DashboardResumen {
   expedientes_total: number;
   por_estado: Record<EstadoExpediente, number>;
   pendientes_aprobacion: number;
-  montos: { moneda: Moneda; bancarizable: string; no_bancarizable: string }[];
+  montos: {
+    moneda: Moneda;
+    bancarizable: string;
+    no_bancarizable: string;
+    con_agente_retencion: string;
+    sin_agente_retencion: string;
+    cantidad_bancarizable: number;
+    cantidad_no_bancarizable: number;
+    cantidad_con_agente_retencion: number;
+    cantidad_sin_agente_retencion: number;
+  }[];
   alertas_abiertas: Record<TipoAlerta, number>;
   documentos_pendientes: Partial<Record<EstadoDocumento, number>>;
 }

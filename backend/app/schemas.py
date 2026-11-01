@@ -304,6 +304,12 @@ class MontosMoneda(BaseModel):
     moneda: Moneda
     bancarizable: Decimal
     no_bancarizable: Decimal
+    con_agente_retencion: Decimal = Decimal("0")
+    sin_agente_retencion: Decimal = Decimal("0")
+    cantidad_bancarizable: int = 0
+    cantidad_no_bancarizable: int = 0
+    cantidad_con_agente_retencion: int = 0
+    cantidad_sin_agente_retencion: int = 0
 
 
 class DashboardResumen(BaseModel):

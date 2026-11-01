@@ -223,6 +223,10 @@ def test_alertas_y_dashboard(client: TestClient) -> None:
     montos = {m["moneda"]: m for m in resumen["montos"]}
     assert montos["PEN"]["bancarizable"] == "2500.00"
     assert montos["USD"]["bancarizable"] == "800.00"
+    assert montos["PEN"]["sin_agente_retencion"] == "2500.00"
+    assert montos["USD"]["sin_agente_retencion"] == "800.00"
+    assert montos["PEN"]["cantidad_bancarizable"] == 1
+    assert montos["PEN"]["cantidad_sin_agente_retencion"] == 1
 
 
 def test_validaciones_de_carga(client: TestClient) -> None:

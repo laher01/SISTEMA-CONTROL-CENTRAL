@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Literal
 
 from fastapi import APIRouter
-from sqlalchemy import case, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import aliased, selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -460,15 +460,53 @@ def resumen(
     montos: list[MontosMoneda] = []
     for moneda, umbral in umbrales.items():
         es_bancarizable = Expediente.importe_total >= umbral
-        fila = session.execute(
+        filas = session.execute(
             select(
-                func.coalesce(func.sum(case((es_bancarizable, Expediente.importe_total))), 0),
-                func.coalesce(func.sum(case((~es_bancarizable, Expediente.importe_total))), 0),
-            ).where(*vigentes, Expediente.moneda == moneda)
-        ).one()
+                Empresa.agente_retencion,
+                es_bancarizable,
+                func.count(Expediente.id),
+                func.coalesce(func.sum(Expediente.importe_total), 0),
+            )
+            .join(
+                Empresa,
+                (Empresa.id == Expediente.receptor_id) & (Empresa.tenant_id == tenant_id),
+            )
+            .where(*vigentes, Expediente.moneda == moneda, Empresa.deleted_at.is_(None))
+            .group_by(Empresa.agente_retencion, es_bancarizable)
+        ).all()
+        bancarizable = Decimal("0")
+        no_bancarizable = Decimal("0")
+        con_agente = Decimal("0")
+        sin_agente = Decimal("0")
+        cantidad_bancarizable = 0
+        cantidad_no_bancarizable = 0
+        cantidad_con_agente = 0
+        cantidad_sin_agente = 0
+        for agente, bancarizable_fila, cantidad, importe in filas:
+            importe_decimal = Decimal(importe)
+            if bancarizable_fila:
+                bancarizable += importe_decimal
+                cantidad_bancarizable += cantidad
+            else:
+                no_bancarizable += importe_decimal
+                cantidad_no_bancarizable += cantidad
+            if agente:
+                con_agente += importe_decimal
+                cantidad_con_agente += cantidad
+            else:
+                sin_agente += importe_decimal
+                cantidad_sin_agente += cantidad
         montos.append(
             MontosMoneda(
-                moneda=moneda, bancarizable=Decimal(fila[0]), no_bancarizable=Decimal(fila[1])
+                moneda=moneda,
+                bancarizable=bancarizable,
+                no_bancarizable=no_bancarizable,
+                con_agente_retencion=con_agente,
+                sin_agente_retencion=sin_agente,
+                cantidad_bancarizable=cantidad_bancarizable,
+                cantidad_no_bancarizable=cantidad_no_bancarizable,
+                cantidad_con_agente_retencion=cantidad_con_agente,
+                cantidad_sin_agente_retencion=cantidad_sin_agente,
             )
         )
 

@@ -29,6 +29,11 @@ interface CotizacionUsuario {
   produccion: string; saldos_agregados: string; base_global: string;
   porcentaje: string; bruto: string; adelantos: string; neto: string;
   adelantos_pendientes: number;
+  facturas: {
+    expediente_id: string; comprobante: string; fecha: string;
+    agente_retencion: boolean; base: string; porcentaje: string;
+    comision: string; arrastre: boolean;
+  }[];
 }
 interface CotizacionJonatan {
   modo_base: string; base: string; gente_lima: string; javier: string;
@@ -110,6 +115,7 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const [desdePago, setDesdePago] = useState(new Date().toISOString().slice(0, 7) + "-01");
   const [hastaPago, setHastaPago] = useState(new Date().toISOString().slice(0, 10));
   const [cotizacion, setCotizacion] = useState<CotizacionUsuario | null>(null);
+  const [facturasSeleccionadas, setFacturasSeleccionadas] = useState<string[]>([]);
   const [cotizacionJonatan, setCotizacionJonatan] = useState<CotizacionJonatan | null>(null);
   const [baseJonatan, setBaseJonatan] = useState("");
   const [usarTotalJonatan, setUsarTotalJonatan] = useState(false);
@@ -180,6 +186,7 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
         "/api/v1/responsable/pagos/cotizar", "POST", parametrosPago,
       );
       setCotizacion(resultado);
+      setFacturasSeleccionadas(resultado.facturas.map((factura) => factura.expediente_id));
       if (esJonatan) {
         const especial = await enviarJson<CotizacionJonatan>(
           "/api/v1/responsable/pagos/formulas/simular-jonatan", "POST", {
@@ -195,7 +202,9 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
   const programarPago = async () => {
     setErrorPago("");
     try {
-      await enviarJson("/api/v1/responsable/pagos/programar", "POST", parametrosPago);
+      await enviarJson("/api/v1/responsable/pagos/programar", "POST", {
+        ...parametrosPago, expediente_ids: facturasSeleccionadas,
+      });
       recargarEquipo(); liquidaciones.recargar(); saldosPendientes.recargar(); adelantosPendientes.recargar();
       setSaldosSeleccionados([]); setAdelantosSeleccionados([]); setCotizacion(null); setMensaje("Liquidación programada.");
     } catch (e) { setErrorPago(String(e)); }
@@ -523,17 +532,45 @@ export default function MiEquipoResponsable({ inicial = "USUARIOS" }: { inicial?
               placeholder="Motivo para dejar adelantos pendientes" />
           </label>
         </>}
-        {cotizacion && <p>
+        {cotizacion && <>
+          <h4>Comisiones por factura — selecciona las que se pagan ahora</h4>
+          <table><thead><tr><th>Pago ahora</th><th>Factura</th><th>Fecha</th><th>Retención</th><th>Base</th><th>Comisión</th></tr></thead>
+            <tbody>{cotizacion.facturas.map((factura) => <tr key={factura.expediente_id}>
+              <td><input aria-label={`Pagar ${factura.comprobante} este mes`} type="checkbox"
+                checked={facturasSeleccionadas.includes(factura.expediente_id)}
+                onChange={(evento) => setFacturasSeleccionadas((actual) => evento.target.checked
+                  ? [...actual, factura.expediente_id]
+                  : actual.filter((id) => id !== factura.expediente_id))} /></td>
+              <td>{factura.comprobante}{factura.arrastre ? " · pendiente anterior" : ""}</td>
+              <td>{factura.fecha}</td>
+              <td>{factura.agente_retencion ? "Con agente" : "Sin agente"} · {factura.porcentaje}%</td>
+              <td>{formatearMonto(moneda, factura.base)}</td>
+              <td>{formatearMonto(moneda, factura.comision)}</td>
+            </tr>)}</tbody>
+          </table>
+          {(() => {
+            const seleccion = cotizacion.facturas.filter((factura) => facturasSeleccionadas.includes(factura.expediente_id));
+            const pendiente = cotizacion.facturas.filter((factura) => !facturasSeleccionadas.includes(factura.expediente_id));
+            const comisionAhora = seleccion.reduce((total, factura) => total + Number(factura.comision), 0);
+            const comisionPendiente = pendiente.reduce((total, factura) => total + Number(factura.comision), 0);
+            const netoAhora = comisionAhora + Number(cotizacion.saldos_agregados) - Number(cotizacion.adelantos);
+            return <p>Comisión de facturas seleccionadas: <strong>{formatearMonto(moneda, String(comisionAhora))}</strong>
+              {" · "}Pago neto a programar: <strong>{formatearMonto(moneda, String(netoAhora))}</strong>
+              {" · "}Comisión que queda para el siguiente cálculo: <strong>{formatearMonto(moneda, String(comisionPendiente))}</strong></p>;
+          })()}
+          <p>
           Periodo: {desdePago} al {hastaPago} · Producción: {formatearMonto(moneda, cotizacion.produccion)}
           {" · "}Saldos seleccionados: {formatearMonto(moneda, cotizacion.saldos_agregados)}
           {" · "}Base global: {formatearMonto(moneda, cotizacion.base_global)}
           {" · "}Porcentaje: {cotizacion.porcentaje}%
           {" · "}Bruto: {formatearMonto(moneda, cotizacion.bruto)}
           {" · "}Adelantos: {formatearMonto(moneda, cotizacion.adelantos)}
-          {" · "}<strong>Neto: {formatearMonto(moneda, cotizacion.neto)}</strong>
-          {!esJonatan && <button type="button" onClick={() => void programarPago()}>Programar</button>}
+          {" · "}<strong>Neto de la cotización completa: {formatearMonto(moneda, cotizacion.neto)}</strong>
+          {!esJonatan && <button type="button" disabled={facturasSeleccionadas.length === 0 && Number(cotizacion.saldos_agregados) === 0}
+            onClick={() => void programarPago()}>Programar pago seleccionado</button>}
           {esJonatan && <span className="tenue">La fórmula especial queda en simulación; el pago estándar está deshabilitado para no enviar el total a un solo Usuario.</span>}
-        </p>}
+          </p>
+        </>}
         <h4>Confirmar pagos programados</h4>
         <div className="filtros">
           <label>Fecha <input type="date" value={fechaConfirmacion}
