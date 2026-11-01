@@ -141,6 +141,12 @@ def get_contexto_operativo(
         )
         or (request.method == "GET" and request.url.path == "/api/v1/pagos-responsables")
         or (request.method == "GET" and request.url.path == "/api/v1/expedientes/resumen-empresas")
+        or (
+            request.method == "PATCH"
+            and request.url.path.startswith("/api/v1/expedientes/")
+            and request.url.path.endswith("/guia-no-aplica")
+            and len(request.url.path.split("/")) == 6
+        )
         or (request.method == "GET" and request.url.path == "/api/v1/gestores")
         or (
             request.method == "GET"
