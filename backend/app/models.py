@@ -858,7 +858,9 @@ class DevengoComisionUsuarioERP(ConId, ConTenant, ConCreacion, Base):
     """Comisión calculada una vez por factura y pendiente hasta asignarla a un pago."""
 
     __tablename__ = "devengos_comision_usuario_erp"
-    __table_args__ = (UniqueConstraint("tenant_id", "expediente_id"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "expediente_id", name="uq_devengo_comision_expediente"),
+    )
 
     usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
     expediente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("expedientes.id"), index=True)
