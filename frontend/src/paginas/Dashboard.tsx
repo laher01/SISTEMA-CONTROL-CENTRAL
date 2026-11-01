@@ -274,14 +274,18 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
                       <th>Moneda</th>
                       <th className="num">Bancarizable</th>
                       <th className="num">No bancarizable</th>
+                      <th className="num">Con agente de retención</th>
+                      <th className="num">Sin agente de retención</th>
                     </tr>
                   </thead>
                   <tbody>
                     {datos.montos.map((m) => (
                       <tr key={m.moneda}>
                         <td>{m.moneda}</td>
-                        <td className="num">{formatearMonto(m.moneda, m.bancarizable)}</td>
-                        <td className="num">{formatearMonto(m.moneda, m.no_bancarizable)}</td>
+                        <td className="num">{formatearMonto(m.moneda, m.bancarizable)} · {m.cantidad_bancarizable}</td>
+                        <td className="num">{formatearMonto(m.moneda, m.no_bancarizable)} · {m.cantidad_no_bancarizable}</td>
+                        <td className="num">{formatearMonto(m.moneda, m.con_agente_retencion)} · {m.cantidad_con_agente_retencion}</td>
+                        <td className="num">{formatearMonto(m.moneda, m.sin_agente_retencion)} · {m.cantidad_sin_agente_retencion}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -33,10 +33,16 @@ def test_documentos_filtra_mes_emision_y_no_mes_de_carga(
     resumen = client.get("/api/v1/documentos/resumen", params={"mes": "2026-09"})
     assert resumen.status_code == 200, resumen.text
     assert resumen.json()["total_documentos"] >= 1
+    clasificaciones = resumen.json()["distribucion"]
+    assert sum(fila["cantidad"] for fila in clasificaciones) == resumen.json()["total_expedientes"]
+    assert sum(float(fila["monto"]) for fila in clasificaciones) == float(
+        resumen.json()["total_pen"]
+    )
 
     resumen_vacio = client.get("/api/v1/documentos/resumen", params={"mes": "2026-10"})
     assert resumen_vacio.status_code == 200, resumen_vacio.text
     assert resumen_vacio.json()["total_documentos"] == 0
+    assert resumen_vacio.json()["distribucion"] == []
 
     invalido = client.get("/api/v1/documentos", params={"mes": "2026-13"})
     assert invalido.status_code == 422

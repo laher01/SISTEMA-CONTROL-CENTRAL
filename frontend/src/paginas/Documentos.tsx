@@ -4,6 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { conParametros, eliminar, enviarJson, obtener, urlArchivo, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
 import { Estado, Paginacion } from "../componentes";
 import FiltroJerarquia from "../componentes/FiltroJerarquia";
+import ResumenClasificacion, { type FilaClasificacion } from "../componentes/ResumenClasificacion";
 import { formatearMonto } from "../formato";
 import {
   ETIQUETA_ESTADO_DOCUMENTO,
@@ -74,6 +75,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
     total_expedientes: number;
     total_pen: string;
     total_usd: string;
+    distribucion: FilaClasificacion[];
   }>(conParametros("/api/v1/documentos/resumen", {
     estado,
     responsable_id: responsableId,
@@ -87,6 +89,8 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
     tipo_documento: tipo,
     emisor_ruc: emisor.length === 11 ? emisor : undefined,
     receptor_ruc: receptor.length === 11 ? receptor : undefined,
+    empresa_emisora: emisor.length === 11 ? undefined : emisor,
+    empresa_receptora: receptor.length === 11 ? undefined : receptor,
     fecha_desde: desde,
     fecha_hasta: hasta,
   }));
@@ -494,6 +498,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
       <section className="panel-configuracion">
         <strong>Total del filtro completo (todas las páginas)</strong>
         <p>{resumen?.total_documentos ?? "…"} documentos · {resumen?.total_expedientes ?? "…"} expedientes distintos · {formatearMonto("PEN", resumen?.total_pen ?? "0")} · {formatearMonto("USD", resumen?.total_usd ?? "0")}</p>
+        {resumen?.distribucion && <ResumenClasificacion filas={resumen.distribucion} />}
       </section>
       <Estado cargando={cargando} error={error} vacio={datos?.length === 0}>
         <div className="tabla-responsive">

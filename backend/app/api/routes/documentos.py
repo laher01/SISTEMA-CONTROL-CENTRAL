@@ -945,6 +945,7 @@ def listar_documentos(
 @router.get("/resumen")
 def resumen_documentos(
     session: SessionDep,
+    settings: SettingsDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
     estado: EstadoDocumento | None = None,
@@ -964,7 +965,7 @@ def resumen_documentos(
     fecha_emision: date | None = None,
     mes: Annotated[str | None, Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")] = None,
     serie_correlativo: Annotated[str | None, Query(min_length=1, max_length=60)] = None,
-) -> dict[str, int | Decimal]:
+) -> dict[str, object]:
     consulta = select(Documento.id, Documento.expediente_id).where(
         Documento.tenant_id == tenant_id, Documento.deleted_at.is_(None)
     )
@@ -1173,6 +1174,33 @@ def resumen_documentos(
         .join(expedientes_unicos, Expediente.id == expedientes_unicos.c.expediente_id)
         .where(Expediente.tenant_id == tenant_id, Expediente.deleted_at.is_(None))
     ).one()
+    distribucion = session.execute(
+        select(
+            Empresa.agente_retencion,
+            Expediente.moneda,
+            case(
+                (
+                    Expediente.moneda == "PEN",
+                    Expediente.importe_total >= settings.umbral_bancarizacion_pen,
+                ),
+                (
+                    Expediente.moneda == "USD",
+                    Expediente.importe_total >= settings.umbral_bancarizacion_usd,
+                ),
+                else_=False,
+            ).label("bancarizable"),
+            func.count(Expediente.id),
+            func.coalesce(func.sum(Expediente.importe_total), 0),
+        )
+        .join(expedientes_unicos, Expediente.id == expedientes_unicos.c.expediente_id)
+        .join(Empresa, (Empresa.id == Expediente.receptor_id) & (Empresa.tenant_id == tenant_id))
+        .where(
+            Expediente.tenant_id == tenant_id,
+            Expediente.deleted_at.is_(None),
+            Empresa.deleted_at.is_(None),
+        )
+        .group_by(Empresa.agente_retencion, Expediente.moneda, "bancarizable")
+    ).all()
     return {
         "total_documentos": int(cantidad),
         "total_expedientes": int(total[0]),
@@ -1180,6 +1208,16 @@ def resumen_documentos(
         "total_pen_autorizado": Decimal(total[3]),
         "total_usd": Decimal(total[2]),
         "total_usd_autorizado": Decimal(total[4]),
+        "distribucion": [
+            {
+                "agente_retencion": bool(agente),
+                "moneda": moneda,
+                "bancarizable": bool(bancarizable),
+                "cantidad": int(cantidad),
+                "monto": Decimal(monto),
+            }
+            for agente, moneda, bancarizable, cantidad, monto in distribucion
+        ],
     }
 
 

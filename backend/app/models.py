@@ -854,6 +854,28 @@ class PagoERP(ConId, ConTenant, ConCreacion, Base):
     observacion_adelantos: Mapped[str | None] = mapped_column(String(500))
 
 
+class DevengoComisionUsuarioERP(ConId, ConTenant, ConCreacion, Base):
+    """Comisión calculada una vez por factura y pendiente hasta asignarla a un pago."""
+
+    __tablename__ = "devengos_comision_usuario_erp"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "expediente_id", name="uq_devengo_comision_expediente"),
+    )
+
+    usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
+    expediente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("expedientes.id"), index=True)
+    fecha_emision: Mapped[date] = mapped_column(Date, index=True)
+    moneda: Mapped[str] = mapped_column(String(3), index=True)
+    agente_retencion: Mapped[bool] = mapped_column(default=False, server_default="false")
+    base_factura: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    porcentaje: Mapped[Decimal] = mapped_column(Numeric(7, 4))
+    monto_comision: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    pago_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("pagos_erp.id", ondelete="SET NULL"), index=True
+    )
+    creado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
+
+
 class PagoGestor(ConId, ConTenant, ConCreacion, Base):
     __tablename__ = "pagos_gestores"
     __table_args__ = (
