@@ -33,7 +33,12 @@ def upgrade() -> None:
         sa.Column("porcentaje", sa.Numeric(7, 4), nullable=False),
         sa.Column("monto_comision", sa.Numeric(14, 2), nullable=False),
         sa.Column("pago_id", sa.Uuid(), sa.ForeignKey("pagos_erp.id"), nullable=True),
-        sa.Column("creado_por_cuenta_id", sa.Uuid(), sa.ForeignKey("cuentas_acceso.id"), nullable=False),
+        sa.Column(
+            "creado_por_cuenta_id",
+            sa.Uuid(),
+            sa.ForeignKey("cuentas_acceso.id"),
+            nullable=False,
+        ),
         sa.UniqueConstraint("tenant_id", "expediente_id", name="uq_devengo_comision_expediente"),
     )
     op.create_index(
