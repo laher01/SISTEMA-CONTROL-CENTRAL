@@ -642,9 +642,7 @@ class SaldoCompraERP(ConId, ConTenant, ConCreacion, Base):
     moneda: Mapped[str] = mapped_column(String(3))
     monto: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     detalle: Mapped[str] = mapped_column(String(500))
-    pago_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("pagos_erp.id", ondelete="SET NULL"), index=True
-    )
+    pago_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pagos_erp.id"), index=True)
     creado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
 
 
