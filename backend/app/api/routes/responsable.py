@@ -304,7 +304,7 @@ def _facturas_cotizables(
                 DevengoComisionUsuarioERP.usuario_id == datos.usuario_id,
                 DevengoComisionUsuarioERP.moneda == datos.moneda,
             )
-            .with_for_update()
+            .with_for_update(of=DevengoComisionUsuarioERP)
         )
     )
     devengo_por_expediente = {
