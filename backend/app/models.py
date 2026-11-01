@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 11830)
+Total output lines: 1036
+
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -474,149 +477,7 @@ class CorreccionIA(ConId, ConTenant, ConCreacion, Base):
     motivo: Mapped[str | None] = mapped_column(String(500))
 
 
-class AsignacionEmpresaGestor(ConId, ConTenant, ConCreacion, Base):
-    """Titularidad operativa formal, única por empresa dentro de cada tenant."""
-
-    __tablename__ = "asignaciones_empresas_gestores"
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "empresa_id", name="uq_asignacion_empresa_tenant"),
-    )
-
-    empresa_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("empresas.id"), index=True)
-    gestor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("gestores.id"), index=True)
-    usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"))
-    responsable_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"))
-    creado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
-    activo: Mapped[bool] = mapped_column(default=True, server_default="true")
-    updated_at: Mapped[datetime] = mapped_column(
-        default=ahora, onupdate=ahora, server_default=func.now()
-    )
-
-
-class SolicitudCargaEmisor(ConId, ConTenant, ConCreacion, Base):
-    """Autorización puntual previa a incorporación fiscal y contable."""
-
-    __tablename__ = "solicitudes_carga_emisor"
-    __tablename__ = "solicitudes_carga_emisor"
-    __table_args__ = (Index("ix_solicitudes_emisor_pendientes", "tenant_id", "estado"),)
-
-    ruc_emisor: Mapped[str] = mapped_column(String(11), index=True)
-    empresa_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("empresas.id"))
-    solicitante_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
-    usuario_solicitante_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"))
-    gestor_solicitante_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"))
-    gestor_propietario_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"))
-    responsable_propietario_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"))
-    sha256_archivo: Mapped[str] = mapped_column(String(64))
-    ruta_temporal: Mapped[str | None] = mapped_column(String(500))
-    estado: Mapped[str] = mapped_column(String(20), default="PENDIENTE", server_default="PENDIENTE")
-    decidido_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("cuentas_acceso.id")
-    )
-    decidido_at: Mapped[datetime | None]
-    observacion: Mapped[str | None] = mapped_column(String(500))
-
-
-class AlertaManual(ConId, ConTenant, ConCreacion, Base):
-    __tablename__ = "alertas_manuales"
-
-    expediente_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("expedientes.id"), index=True
-    )
-    creado_por_codigo: Mapped[str] = mapped_column(String(100))
-    creado_por_rol: Mapped[str] = mapped_column(String(20))
-    destinatario_usuario_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("miembros.id"), index=True
-    )
-    destinatario_gestor_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("gestores.id"), index=True
-    )
-    para_administracion: Mapped[bool] = mapped_column(default=True, server_default="true")
-    asunto: Mapped[str] = mapped_column(String(200))
-    mensaje: Mapped[str] = mapped_column(String(1000))
-    resuelta: Mapped[bool] = mapped_column(default=False, server_default="false", index=True)
-    resuelta_at: Mapped[datetime | None]
-
-
-class ConfiguracionAcceso(ConId, ConTenant, ConCreacion, Base):
-    __tablename__ = "configuracion_acceso"
-    __table_args__ = (UniqueConstraint("tenant_id"),)
-
-    registro_publico: Mapped[bool] = mapped_column(default=False, server_default="false")
-    requiere_aprobacion: Mapped[bool] = mapped_column(default=True, server_default="true")
-    solo_correos_autorizados: Mapped[bool] = mapped_column(default=True, server_default="true")
-    requiere_email_verificado: Mapped[bool] = mapped_column(default=False, server_default="false")
-    proveedor_email_configurado: Mapped[bool] = mapped_column(default=False, server_default="false")
-    acceso_cloudflare_activo: Mapped[bool] = mapped_column(default=True, server_default="true")
-    duracion_sesion_horas: Mapped[int] = mapped_column(Integer, default=12, server_default="12")
-    intentos_fallidos_max: Mapped[int] = mapped_column(Integer, default=5, server_default="5")
-    bloqueo_minutos: Mapped[int] = mapped_column(Integer, default=15, server_default="15")
-    clave_min_longitud: Mapped[int] = mapped_column(Integer, default=10, server_default="10")
-    clave_requiere_letra: Mapped[bool] = mapped_column(default=True, server_default="true")
-    clave_requiere_numero: Mapped[bool] = mapped_column(default=True, server_default="true")
-    updated_at: Mapped[datetime] = mapped_column(
-        default=ahora, onupdate=ahora, server_default=func.now()
-    )
-
-
-class CorreoAutorizado(ConId, ConTenant, ConCreacion, Base):
-    __tablename__ = "correos_autorizados"
-    __table_args__ = (UniqueConstraint("tenant_id", "email"),)
-
-    email: Mapped[str] = mapped_column(String(320), index=True)
-    rol_sugerido: Mapped[str | None] = mapped_column(String(20))
-    activo: Mapped[bool] = mapped_column(default=True, server_default="true")
-
-
-class SolicitudAcceso(ConId, ConTenant, ConCreacion, Base):
-    __tablename__ = "solicitudes_acceso"
-    __table_args__ = (UniqueConstraint("tenant_id", "email"),)
-
-    email: Mapped[str] = mapped_column(String(320), index=True)
-    nombre: Mapped[str] = mapped_column(String(200))
-    codigo_solicitado: Mapped[str] = mapped_column(String(50))
-    estado: Mapped[str] = mapped_column(String(30), default="PENDIENTE", index=True)
-    rol_asignado: Mapped[str | None] = mapped_column(String(20))
-    resuelta_at: Mapped[datetime | None]
-
-
-class PermisoConfigurado(ConId, ConTenant, ConCreacion, Base):
-    __tablename__ = "permisos_configurados"
-    __table_args__ = (UniqueConstraint("tenant_id", "rol", "permiso"),)
-
-    rol: Mapped[str] = mapped_column(String(20), index=True)
-    permiso: Mapped[str] = mapped_column(String(80), index=True)
-    habilitado: Mapped[bool] = mapped_column(default=False, server_default="false")
-
-
-class PlanLiquidacion(ConId, ConTenant, ConCreacion, Base):
-    __tablename__ = "planes_liquidacion"
-
-    usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
-    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("cuentas_acceso.id"), index=True
-    )
-    nombre: Mapped[str] = mapped_column(String(120))
-    porcentaje: Mapped[Decimal] = mapped_column(Numeric(7, 4))
-    vigencia_desde: Mapped[date] = mapped_column(Date)
-    vigencia_hasta: Mapped[date | None] = mapped_column(Date)
-    activo: Mapped[bool] = mapped_column(default=True, server_default="true")
-
-
-class CuentaPagoERP(ConId, ConTenant, ConCreacion, Base):
-    __tablename__ = "cuentas_pago_erp"
-
-    usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("miembros.id"), index=True)
-    creado_por_cuenta_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("cuentas_acceso.id"), index=True
-    )
-    titular: Mapped[str] = mapped_column(String(200))
-    banco: Mapped[str] = mapped_column(String(120))
-    tipo_cuenta: Mapped[str] = mapped_column(String(50))
-    moneda: Mapped[str] = mapped_column(String(3))
-    numero_cuenta: Mapped[str | None] = mapped_column(String(80))
-    cci: Mapped[str | None] = mapped_column(String(40))
-    porcentaje_distribucion: Mapped[Decimal] = mapped_column(Numeric(7, 4), default=Decimal("100"))
+class Asignacio…1830 tokens truncated…ped_column(Numeric(7, 4), default=Decimal("100"))
     activa: Mapped[bool] = mapped_column(default=False, server_default="false")
 
 
@@ -642,7 +503,9 @@ class SaldoCompraERP(ConId, ConTenant, ConCreacion, Base):
     moneda: Mapped[str] = mapped_column(String(3))
     monto: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     detalle: Mapped[str] = mapped_column(String(500))
-    pago_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pagos_erp.id"), index=True)
+    pago_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("pagos_erp.id", ondelete="SET NULL"), index=True
+    )
     creado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
 
 
