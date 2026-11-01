@@ -3,6 +3,7 @@ import io
 import uuid
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 from threading import Lock
 from typing import Annotated, Any, Literal
 
@@ -13,6 +14,8 @@ from pypdf import PdfReader
 from sqlalchemy import and_, case, delete, false, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, selectinload
+from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import Headers
 
 from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado
@@ -89,7 +92,9 @@ from app.services.permisos import (
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 from app.services.relaciones_documentales import sugerir_relaciones
 from app.services.separador_pdf import analizar_paquete, extraer_fragmento
+from app.services.separador_vouchers_imagen import detectar_vouchers, recortar_voucher
 from app.services.ubl import UblInvalido, parece_xml, parse_ubl
+from app.services.vinculos_documentales import vincular as vincular_relacion
 from app.storage import AlmacenLocal
 
 router = APIRouter(prefix="/documentos", tags=["documentos"])
@@ -371,11 +376,12 @@ async def subir_sublote_imagenes(
     auth: OperativeAuthDep,
     archivos: Annotated[list[UploadFile], File()],
 ) -> dict[str, object]:
-    """Procesa hasta diez imágenes secuencialmente reutilizando permisos y deduplicación.
+    """Procesa imágenes individualmente; detecta y conserva vouchers compuestos.
 
     Cada archivo es independiente: un duplicado o un fallo no cancela los
     documentos que ya fueron registrados correctamente en el mismo sublote.
-    El endpoint no agrupa páginas en una factura; eso exige revisión del usuario.
+    Cuando una foto contiene comprobantes con límites claros conserva el
+    original y registra cada recorte como un documento hijo pendiente de vínculo.
     """
     if auth.rol != "GESTOR":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Gestor puede cargar documentos")
@@ -408,7 +414,15 @@ async def subir_sublote_imagenes(
                 {"indice": indice, "estado": "error", "detalle": "Imagen no reconocida"}
             )
             continue
+        contenido = await archivo.read(settings.max_upload_mb * 1024 * 1024 + 1)
+        if len(contenido) > settings.max_upload_mb * 1024 * 1024:
+            resultados.append(
+                {"indice": indice, "estado": "error", "detalle": "Archivo demasiado grande"}
+            )
+            continue
+        segmentacion = await run_in_threadpool(detectar_vouchers, contenido)
         try:
+            await archivo.seek(0)
             documento = await subir_documento(
                 session=session,
                 settings=settings,
@@ -417,10 +431,117 @@ async def subir_sublote_imagenes(
                 tenant_id=tenant_id,
                 auth=auth,
                 archivo=archivo,
-                tipo_documento=None,
+                tipo_documento=(
+                    TipoDocumento.FOTO if segmentacion.estado in {"REVISION", "SEPARAR"} else None
+                ),
                 expediente_id=None,
             )
-            resultados.append({"indice": indice, "estado": "ok", "documento_id": str(documento.id)})
+            if segmentacion.estado == "REVISION":
+                documento.tipo_documento = TipoDocumento.FOTO
+                datos_originales = dict(documento.datos_extraidos or {})
+                datos_originales["segmentacion_imagen"] = {
+                    "estado": "PENDIENTE_REVISION",
+                    "motivo": segmentacion.motivo,
+                    "original_conservado": True,
+                }
+                documento.datos_extraidos = datos_originales
+                session.commit()
+                resultados.append(
+                    {
+                        "indice": indice,
+                        "estado": "ok",
+                        "documento_id": str(documento.id),
+                        "segmentacion": "REVISION",
+                        "aviso": segmentacion.motivo,
+                    }
+                )
+                continue
+            if segmentacion.estado != "SEPARAR":
+                resultados.append(
+                    {
+                        "indice": indice,
+                        "estado": "ok",
+                        "documento_id": str(documento.id),
+                        "segmentacion": "UNA_IMAGEN",
+                    }
+                )
+                continue
+
+            documento.tipo_documento = TipoDocumento.FOTO
+            datos_originales = dict(documento.datos_extraidos or {})
+            datos_originales["segmentacion_imagen"] = {
+                "estado": "DIVIDIDA",
+                "cantidad_recortes": len(segmentacion.cajas),
+                "confianza": segmentacion.confianza,
+                "original_conservado": True,
+            }
+            documento.datos_extraidos = datos_originales
+            session.commit()
+            comprobantes: list[dict[str, object]] = []
+            nombre_base = Path(archivo.filename or "voucher").stem[:430]
+            for numero, caja in enumerate(segmentacion.cajas, 1):
+                contenido_recorte = await run_in_threadpool(recortar_voucher, contenido, caja)
+                nombre_recorte = f"{nombre_base}__voucher_{numero:02d}.jpg"
+                recorte_upload = UploadFile(
+                    file=io.BytesIO(contenido_recorte),
+                    filename=nombre_recorte,
+                    size=len(contenido_recorte),
+                    headers=Headers({"content-type": "image/jpeg"}),
+                )
+                try:
+                    hijo = await subir_documento(
+                        session=session,
+                        settings=settings,
+                        almacen=almacen,
+                        hoy=hoy,
+                        tenant_id=tenant_id,
+                        auth=auth,
+                        archivo=recorte_upload,
+                        tipo_documento=None,
+                        expediente_id=None,
+                    )
+                    datos_hijo = dict(hijo.datos_extraidos or {})
+                    datos_hijo["origen_recorte"] = {
+                        "documento_original_id": str(documento.id),
+                        "numero_recorte": numero,
+                        "caja_original": list(caja),
+                        "confianza_segmentacion": segmentacion.confianza,
+                    }
+                    hijo.datos_extraidos = datos_hijo
+                    vincular_relacion(
+                        session,
+                        tenant_id,
+                        documento.id,
+                        hijo.id,
+                        tipo="RECORTE_IMAGEN",
+                        evidencia=(
+                            f"Recorte {numero} de {len(segmentacion.cajas)}; caja {caja}; "
+                            f"confianza {segmentacion.confianza}"
+                        )[:500],
+                    )
+                    session.commit()
+                    comprobantes.append(
+                        {"numero": numero, "estado": "ok", "documento_id": str(hijo.id)}
+                    )
+                except HTTPException as exc:
+                    session.rollback()
+                    comprobantes.append(
+                        {"numero": numero, "estado": "error", "detalle": exc.detail}
+                    )
+            resultados.append(
+                {
+                    "indice": indice,
+                    "estado": "ok",
+                    "documento_id": str(documento.id),
+                    "segmentacion": "SEPARADA",
+                    "confianza": segmentacion.confianza,
+                    "comprobantes": comprobantes,
+                    "cantidad_recortes": len(segmentacion.cajas),
+                    "generados": sum(item["estado"] == "ok" for item in comprobantes),
+                    "errores_recorte": sum(item["estado"] == "error" for item in comprobantes),
+                    "aviso": "El original se conserva; revise y vincule cada recorte por separado.",
+                }
+            )
         except HTTPException as exc:
             session.rollback()
             detalle = exc.detail

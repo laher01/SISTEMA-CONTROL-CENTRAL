@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pypdfium2 as pdfium
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
@@ -165,8 +166,8 @@ def _procesar_imagen(contenido: bytes, extension: str, limite: int) -> Resultado
         )
     idioma = _idioma_disponible(ejecutable)
     with tempfile.TemporaryDirectory(prefix="fact-central-ocr-") as temporal:
-        entrada = Path(temporal) / f"entrada{extension}"
-        entrada.write_bytes(contenido)
+        entrada = Path(temporal) / "entrada.png"
+        _preparar_imagen_ocr(contenido, entrada, extension)
         texto, confianza = _ejecutar_tesseract(ejecutable, entrada, idioma, limite)
     return ResultadoProcesamiento(
         texto=texto,
@@ -177,6 +178,29 @@ def _procesar_imagen(contenido: bytes, extension: str, limite: int) -> Resultado
         idioma=idioma,
         sugerencia=sugerir_tipo(texto),
     )
+
+
+def _preparar_imagen_ocr(contenido: bytes, destino: Path, extension: str) -> None:
+    try:
+        with Image.open(io.BytesIO(contenido)) as original:
+            if original.width * original.height > 40_000_000:
+                raise DocumentoNoProcesable("La imagen excede el máximo de píxeles admitido")
+            imagen = ImageOps.exif_transpose(original).convert("L")
+    except (OSError, ValueError):
+        # Deja que Tesseract reporte el formato inválido; también conserva el
+        # comportamiento previo para motores OCR sustituidos durante pruebas.
+        destino.write_bytes(contenido)
+        return
+    imagen = ImageOps.autocontrast(imagen, cutoff=1)
+    imagen = ImageEnhance.Contrast(imagen).enhance(1.35)
+    imagen = imagen.filter(ImageFilter.UnsharpMask(radius=1, percent=130, threshold=2))
+    escala = min(2.0, 1_800 / max(1, imagen.width)) if imagen.width < 1_000 else 1.0
+    if escala > 1:
+        imagen = imagen.resize(
+            (round(imagen.width * escala), round(imagen.height * escala)),
+            Image.Resampling.LANCZOS,
+        )
+    imagen.save(destino, format="PNG", optimize=True)
 
 
 def _ejecutar_tesseract(
@@ -255,7 +279,23 @@ def sugerir_tipo(texto: str) -> SugerenciaClasificacion | None:
         (TipoDocumento.FACT, ("FACTURA ELECTRONICA", "FACTURA DE VENTA")),
         (TipoDocumento.OC, ("ORDEN DE COMPRA",)),
         (TipoDocumento.COT, ("COTIZACION",)),
-        (TipoDocumento.VCHR, ("CONSTANCIA DE PAGO", "TRANSFERENCIA", "OPERACION EXITOSA")),
+        (
+            TipoDocumento.VCHR,
+            (
+                "CONSTANCIA DE PAGO",
+                "TRANSFERENCIA",
+                "OPERACION EXITOSA",
+                "DEPOSITO EN CUENTA",
+                "DEPOSITO EN EFECTIVO",
+                "DEPOSITO CUENTA",
+                "ABONO EN CUENTA",
+                "IMPORTE DEPOSITADO",
+                "DEPOSTIO",
+                "DEPUSTTO",
+                "DEPOSIIO",
+                "DEPOSIT",
+            ),
+        ),
     )
     for tipo, indicadores in reglas:
         encontrados = tuple(indicador for indicador in indicadores if indicador in normalizado)

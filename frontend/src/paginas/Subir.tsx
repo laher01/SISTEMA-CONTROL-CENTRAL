@@ -11,7 +11,7 @@ const CONCURRENCIA = 1;
 
 type Resultado =
   | { estado: "en_cola" | "subiendo" }
-  | { estado: "ok"; documento: Documento }
+  | { estado: "ok"; documento: Documento; recortes?: Documento[]; aviso?: string }
   | { estado: "duplicado"; mensaje: string; expedienteId?: string }
   | { estado: "error"; mensaje: string };
 
@@ -109,6 +109,9 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
           indice: number;
           estado: "ok" | "duplicado" | "error";
           documento_id?: string;
+          segmentacion?: "SEPARADA" | "REVISION" | "UNA_IMAGEN";
+          aviso?: string;
+          comprobantes?: Array<{ numero: number; estado: "ok" | "error"; documento_id?: string }>;
           detalle?: unknown;
         }>;
       }>("/api/v1/documentos/lote-imagenes", formulario);
@@ -119,7 +122,22 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
             const documento = await obtener<Documento>(
               `/api/v1/documentos/${respuesta.documento_id}`,
             );
-            actualizar(fila.clave, { estado: "ok", documento });
+            const comprobantes = respuesta.comprobantes ?? [];
+            const idsRecortes = comprobantes
+              .filter((item) => item.estado === "ok" && item.documento_id)
+              .map((item) => item.documento_id as string);
+            const recortes = await Promise.all(idsRecortes.map((id) =>
+              obtener<Documento>(`/api/v1/documentos/${id}`),
+            ));
+            const aviso = respuesta.aviso ?? (comprobantes.some((item) => item.estado === "error")
+              ? "El original se conservó; uno o más recortes requieren revisión."
+              : undefined);
+            actualizar(fila.clave, {
+              estado: "ok",
+              documento,
+              recortes: recortes.length ? recortes : undefined,
+              aviso,
+            });
           } catch {
             actualizar(fila.clave, {
               estado: "error",
@@ -306,11 +324,15 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
   const totales = filas.reduce(
     (acumulado, fila) => {
       if (fila.resultado.estado !== "ok") return acumulado;
-      const documento = fila.resultado.documento;
-      if (!documento.importe_total || !documento.moneda) return acumulado;
-      const valor = Number(documento.importe_total);
-      if (documento.moneda === "USD") acumulado.usd += valor;
-      else acumulado.pen += valor;
+      const documentos = fila.resultado.recortes?.length
+        ? fila.resultado.recortes
+        : [fila.resultado.documento];
+      for (const documento of documentos) {
+        if (!documento.importe_total || !documento.moneda) continue;
+        const valor = Number(documento.importe_total);
+        if (documento.moneda === "USD") acumulado.usd += valor;
+        else acumulado.pen += valor;
+      }
       return acumulado;
     },
     { pen: 0, usd: 0 },
@@ -505,7 +527,7 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
           aria-label="Seleccionar varios documentos escaneados"
           onChange={(e) => { agregar(e.target.files); e.target.value = ""; }}
         />
-        <p className="tenue">La cámara se abre en dispositivos compatibles. Cada archivo se conserva como evidencia independiente; la unión de páginas, recorte automático y corrección de perspectiva son mejoras posteriores.</p>
+        <p className="tenue">La cámara se abre en dispositivos compatibles. Si una foto contiene varios vouchers con límites claros, cada uno se recorta y queda como documento independiente; la foto original se conserva. Los límites dudosos pasan a revisión.</p>
       </section>
 
       {filas.length > 0 && (
@@ -548,15 +570,20 @@ export default function Subir({ sesion }: { sesion: SesionActual }) {
 
 function FilaCarga({ fila }: { fila: Fila }) {
   const { resultado } = fila;
-  const documento = resultado.estado === "ok" ? resultado.documento : undefined;
+  const documento = resultado.estado === "ok" && !resultado.recortes?.length
+    ? resultado.documento
+    : undefined;
   return (
     <tr>
       <td>{fila.archivo.name}</td>
       <td className={`resultado-${resultado.estado}`}>
         {resultado.estado === "en_cola" && "En cola"}
         {resultado.estado === "subiendo" && "Subiendo…"}
-        {resultado.estado === "ok" &&
-          (documento?.expediente_id ? "Procesado y relacionado" : "Subido · requiere revisión")}
+        {resultado.estado === "ok" && resultado.recortes?.length
+          ? `${resultado.recortes.length} voucher(s) separados · original conservado`
+          : resultado.estado === "ok" && resultado.aviso
+            ? resultado.aviso
+            : resultado.estado === "ok" && (documento?.expediente_id ? "Procesado y relacionado" : "Subido · requiere revisión")}
         {(resultado.estado === "duplicado" || resultado.estado === "error") && resultado.mensaje}
         {resultado.estado === "duplicado" && (
           <button type="button" className="secundario" onClick={() => void navigator.clipboard.writeText(resultado.mensaje)}>
@@ -589,7 +616,19 @@ function FilaCarga({ fila }: { fila: Fila }) {
           : ""}
       </td>
       <td>
-        {resultado.estado === "duplicado" && resultado.expedienteId ? (
+        {resultado.estado === "ok" && resultado.recortes?.length ? (
+          <>
+            <a href={`/api/v1/documentos/${resultado.documento.id}/archivo`} target="_blank" rel="noreferrer">Ver foto original</a>
+            {resultado.recortes.map((recorte, indice) => (
+              <span className="bloque" key={recorte.id}>
+                <Link to={recorte.tipo_documento === "VCHR" ? `/pagos-documentales/${recorte.id}` : "/pendientes"}>
+                  Abrir voucher {indice + 1}{recorte.tipo_documento ? ` · ${ETIQUETA_TIPO_DOCUMENTO[recorte.tipo_documento]}` : " · revisar tipo"}
+                </Link>
+              </span>
+            ))}
+            {resultado.aviso && <small className="bloque tenue">{resultado.aviso}</small>}
+          </>
+        ) : resultado.estado === "duplicado" && resultado.expedienteId ? (
           <Link to={`/expedientes/${resultado.expedienteId}`}>Ver factura registrada</Link>
         ) : documento?.expediente_id ? (
           <Link to={`/expedientes/${documento.expediente_id}`}>Ver expediente</Link>

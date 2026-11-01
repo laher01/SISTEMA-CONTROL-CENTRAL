@@ -12,12 +12,31 @@ class RelacionInvalida(ValueError):
     pass
 
 
-TIPOS_PERMITIDOS = {
+TIPOS_PERMITIDOS: dict[str, tuple[set[str | None], set[str | None]]] = {
     "FACTURA_GRE": ({"FACT"}, {"GRR", "GRT"}),
     "GRE_TRANSPORTISTA": ({"GRR"}, {"GRT"}),
     "COTIZACION_OC": ({"COT"}, {"OC"}),
     "OC_FACTURA": ({"OC"}, {"FACT"}),
     "VOUCHER_FACTURA": ({"VCHR"}, {"FACT"}),
+    "RECORTE_IMAGEN": (
+        {"FOTO"},
+        {
+            None,
+            "FACT",
+            "RHE",
+            "GRR",
+            "GRT",
+            "VCHR",
+            "RET",
+            "EMAIL",
+            "WSP",
+            "COT",
+            "OC",
+            "REQ",
+            "FOTO",
+            "OTRO",
+        },
+    ),
 }
 
 

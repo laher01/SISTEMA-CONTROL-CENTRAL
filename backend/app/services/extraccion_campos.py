@@ -73,6 +73,12 @@ OPERACION = re.compile(
     r"(?:OPERACI[ÓO]N|TRANSACCI[ÓO]N)\s*[:#-]?\s*([A-Z0-9-]{4,30})",
     re.IGNORECASE,
 )
+REFERENCIA_CON_IMPORTE = re.compile(
+    r"\b([A-Z0-9]{4})\s*[-–—]\s*(\d{1,32})\b[^\n]{0,80}?"
+    r"(?:S/\.?|PEN|US\$|USD|IMPORTE|MONTO)\s*[:=]?\s*"
+    r"([0-9][0-9., ]{0,16})",
+    re.IGNORECASE,
+)
 
 ETIQUETAS_EMISOR = (
     "RAZÓN SOCIAL EMISOR",
@@ -281,6 +287,34 @@ def extraer_campos(
     for nombre, (valor, evidencia) in extraer_transferencia_bcp(texto).items():
         campos[nombre] = CampoExtraido(valor, min(0.96, 0.94 * factor), evidencia).a_dict(fuente)
 
+    _extraer_datos_bancarios(texto, campos, fuente, factor)
+    if "tipo_operacion" in campos:
+        if "fecha_emision" in campos:
+            campos["fecha_operacion"] = campos["fecha_emision"].copy()
+        if "hora_operacion" not in campos:
+            hora = re.search(
+                r"(?im)\b(?:HORA|A LAS)\s*[:\-]?\s*(\d{1,2}:\d{2}(?::\d{2})?)\b",
+                texto,
+            )
+            if hora:
+                _poner_campo(
+                    campos,
+                    "hora_operacion",
+                    hora.group(1),
+                    min(0.9, factor * 0.84),
+                    hora.group(0),
+                    fuente,
+                )
+    asignaciones = _extraer_asignaciones_voucher(texto, fuente, factor)
+    if asignaciones:
+        campos["asignaciones_facturas"] = {
+            "valor": asignaciones,
+            "confianza": min(0.85, 0.8 * factor),
+            "fuente": fuente,
+            "evidencia": "Referencias de factura con importe en la misma línea",
+            "requiere_confirmacion": True,
+        }
+
     if not campos and not candidatos:
         return None
     resultado: dict[str, object] = {
@@ -298,6 +332,91 @@ def extraer_campos(
         resultado["alertas"] = ["TIPO_COMPROBANTE_CONFLICTIVO"]
         resultado["requiere_revision"] = True
     return resultado
+
+
+def _extraer_datos_bancarios(
+    texto: str,
+    campos: dict[str, dict[str, object]],
+    fuente: str,
+    factor: float,
+) -> None:
+    """Añade sugerencias de depósito/transferencia sin inferir pagos por importes."""
+    normal = _sin_tildes(texto).upper()
+    if "banco" not in campos:
+        for banco in ("BCP", "BBVA", "INTERBANK", "SCOTIABANK", "BANBIF", "PICHINCHA"):
+            if re.search(rf"\b{re.escape(banco)}\b", normal):
+                _poner_campo(campos, "banco", banco, min(0.96, factor * 0.92), banco, fuente)
+                break
+    if "tipo_operacion" not in campos:
+        if "TRANSFERENCIA" in normal:
+            _poner_campo(
+                campos,
+                "tipo_operacion",
+                "TRANSFERENCIA",
+                min(0.94, factor * 0.9),
+                _contexto(texto, "TRANSFERENCIA"),
+                fuente,
+            )
+        elif "DEPOSITO" in normal or "ABONO EN VENTANILLA" in normal:
+            tipo = "DEPOSITO_VENTANILLA" if "VENTANILLA" in normal else "DEPOSITO"
+            _poner_campo(
+                campos,
+                "tipo_operacion",
+                tipo,
+                min(0.94, factor * 0.9),
+                _contexto(texto, "DEPOSITO"),
+                fuente,
+            )
+
+    patrones = {
+        "beneficiario": r"(?:BENEFICIARIO|DESTINATARIO|ENVIADO\s+A)\s*[:\-]?\s*([^\n]{2,120})",
+        "cuenta_beneficiario": (
+            r"(?:CUENTA\s+(?:DE\s+)?DESTINO|N[ÚU]MERO\s+DE\s+CUENTA|N[°º]\s*CUENTA)"
+            r"\s*[:#\-]?\s*([\w*Xx\- ]{4,40})"
+        ),
+        "cuenta_remitente": (
+            r"(?:CUENTA\s+(?:DE\s+)?ORIGEN|CUENTA\s+EMISORA)"
+            r"\s*[:#\-]?\s*([\w*Xx\- ]{4,40})"
+        ),
+        "remitente": r"(?:ORDENANTE|REMITENTE|TITULAR\s+DE\s+ORIGEN)\s*[:\-]?\s*([^\n]{2,120})",
+        "agencia": r"(?:AGENCIA|SUCURSAL)\s*(?:N[°º.]?\s*)?[:#\-]?\s*([^\n]{1,80})",
+    }
+    for nombre, patron in patrones.items():
+        if nombre in campos:
+            continue
+        coincidencia = re.search(patron, texto, re.IGNORECASE)
+        if coincidencia:
+            valor = coincidencia.group(1).strip(" :#-\t")
+            if valor:
+                _poner_campo(
+                    campos, nombre, valor, min(0.9, factor * 0.82), coincidencia.group(0), fuente
+                )
+
+
+def _extraer_asignaciones_voucher(
+    texto: str, fuente: str, factor: float
+) -> list[dict[str, object]]:
+    """Solo propone referencias con importe etiquetado en la misma línea."""
+    resultados: list[dict[str, object]] = []
+    vistas: set[tuple[str, str]] = set()
+    for coincidencia in REFERENCIA_CON_IMPORTE.finditer(texto):
+        importe = _normalizar_importe(coincidencia.group(3))
+        referencia = (coincidencia.group(1).upper(), str(int(coincidencia.group(2))))
+        if importe is None or importe <= 0 or referencia in vistas:
+            continue
+        vistas.add(referencia)
+        resultados.append(
+            {
+                "serie": coincidencia.group(1).upper(),
+                "correlativo": coincidencia.group(2),
+                "importe_asignado": format(importe, ".2f"),
+                "confianza": round(min(0.82, factor * 0.78), 4),
+                "fuente": fuente,
+                "evidencia": coincidencia.group(0).strip()[:160],
+                "requiere_confirmacion": True,
+            }
+        )
+    return resultados
 
 
 def _aplicar_parser_especializado(

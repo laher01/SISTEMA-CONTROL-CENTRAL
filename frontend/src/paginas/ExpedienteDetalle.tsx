@@ -19,6 +19,10 @@ export default function ExpedienteDetalle({ sesion }: { sesion: { rol: string } 
   const { datos, error, cargando, recargar } = useDatos<Detalle>(`/api/v1/expedientes/${id}`);
   const { datos: capacidades } = useDatos<{ puede_retirar: boolean; puede_eliminar_definitivamente: boolean }>("/api/v1/documentos/capacidades");
   const { datos: solicitudes, recargar: recargarSolicitudes } = useDatos<SolicitudMISD[]>("/api/v1/misd/solicitudes");
+  const puedeConsultarPagosDocumentales = ["ADMINISTRADOR", "USUARIO", "GESTOR"].includes(sesion.rol);
+  const { datos: pagosDocumentales } = useDatos<{ id: string; documento_id: string; numero_operacion: string | null; importe: string | null; moneda: string | null }[]>(
+    puedeConsultarPagosDocumentales ? `/api/v1/pagos-documentales/por-expediente/${id}` : null,
+  );
   const [ocupado, setOcupado] = useState(false);
   const [mensajeAccion, setMensajeAccion] = useState("");
   const [errorAccion, setErrorAccion] = useState("");
@@ -127,6 +131,19 @@ export default function ExpedienteDetalle({ sesion }: { sesion: { rol: string } 
               : "FACT " + numeroExpediente(datos.tipo_comprobante, datos.serie, datos.correlativo_original ?? datos.correlativo)}{" "}
             <Semaforo estado={datos.estado} />
           </h2>
+          {pagosDocumentales?.length ? (
+            <section className="tarjeta">
+              <h3>Pagos documentales vinculados</h3>
+              {pagosDocumentales.map((pago) => (
+                <p key={pago.id}>
+                  <Link to={`/pagos-documentales/${pago.documento_id}?expediente=${datos.id}`}>
+                    Abrir voucher{pago.numero_operacion ? ` · operación ${pago.numero_operacion}` : ""}
+                  </Link>
+                  {pago.importe ? ` · ${formatearMonto(pago.moneda as "PEN" | "USD", pago.importe)}` : ""}
+                </p>
+              ))}
+            </section>
+          ) : null}
           {sesion.rol === "RESPONSABLE" && capacidades?.puede_retirar && (
             <section className="panel-configuracion" aria-label="Solicitud MISD de eliminación">
               <h3>Eliminación por aprobación MISD</h3>

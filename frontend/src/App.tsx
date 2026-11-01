@@ -24,6 +24,7 @@ import PaginaLegal from "./paginas/PaginasPublicas";
 import Organizacion from "./paginas/Organizacion";
 import MiEquipoResponsable from "./paginas/MiEquipoResponsable";
 import Pagos from "./paginas/Pagos";
+import PagoDocumental from "./paginas/PagoDocumental";
 import PagoGestores from "./paginas/PagoGestores";
 import Pendientes from "./paginas/Pendientes";
 import Produccion from "./paginas/Produccion";
@@ -242,6 +243,7 @@ export default function App() {
           <Route path="/expedientes" element={<Expedientes sesion={sesion} />} />
           <Route path="/expedientes/:id" element={<ExpedienteDetalle sesion={sesion} />} />
           <Route path="/pendientes" element={<Pendientes />} />
+          <Route path="/pagos-documentales/:documentoId" element={<PagoDocumental />} />
           <Route path="/aprobaciones-misd" element={sesion.rol === "ADMINISTRADOR" || sesion.rol === "RESPONSABLE" ? <AprobacionesMISD rol={sesion.rol} /> : <Navigate to="/expedientes" replace />} />
           <Route path="/alertas" element={<Alertas sesion={sesion} />} />
           <Route path="/empresas" element={<Empresas sesion={sesion} />} />
