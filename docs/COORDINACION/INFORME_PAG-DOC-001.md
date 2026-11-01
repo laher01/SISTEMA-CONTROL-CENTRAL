@@ -3,7 +3,7 @@
 **Alcance:** voucher documental distribuido entre varias facturas, pagos parciales, extracción OCR con evidencia y vista agrupada.
 
 **Rama:** `feat/voucher-pago-agrupado-20261031`  
-**Estado:** implementado y validado en rama aislada; no integrado ni desplegado.
+**Estado:** integrado en `main` mediante PR #428 y desplegado en `staging`; commit `606012c94ce01f672a85d642f9153bdc32538caf`.
 
 ## Implementado
 
@@ -24,14 +24,14 @@
 - Ruff: sin problemas en los archivos modificados.
 - mypy: sin problemas en los cuatro módulos revisados.
 - Frontend: ESLint, compilación de producción y `13` pruebas Vitest aprobadas.
-- Migraciones: `0045` es la única cabeza; `git diff --check` sin errores.
+- Migraciones: `0045` es la única cabeza; CI aplicó la migración en PostgreSQL descartable.
+- PR #428: backend, migración, frontend, integración de roles y navegador aprobaron; 630 pruebas backend y 10 omitidas en la validación local.
+- Despliegue: workflow `deploy-staging` #505 finalizó exitosamente; preflight de respaldo/restauración aprobado; la VPS confirmó SHA `606012c94ce01f672a85d642f9153bdc32538caf`, contenedores healthy y `/health` respondió correctamente.
 - La compilación frontend conserva la advertencia existente de bundle JavaScript mayor de 500 kB. La suite backend reporta advertencias conocidas de Starlette/SQLAlchemy/Pydantic.
 
-## Pendiente antes de proponer integración
+## Seguimiento posterior
 
-1. **Aplicación de migración con la base objetivo:** la cadena tiene una sola cabeza y las pruebas pasan, pero falta aplicar la migración en una copia de la base de integración antes de proponerla para merge.
-2. **Integración:** `Pendientes.tsx` se superpone con cambios ya abiertos en PR #388; resolver el solapamiento al preparar la integración. Esta rama no crea PR, no hace merge ni despliega.
+- PR #388 permanece en borrador y comparte archivos de rutas documentales y la pantalla Pendientes. No se incluyó ni fusionó su trabajo; coordinar su eventual actualización contra `main` ya actualizado.
+- Las lecturas OCR y la conciliación continúan requiriendo confirmación humana. No asignar ni dar por pagada una factura solo por coincidencia de importes.
+- El despliegue realizado fue a `staging`; no se hizo un despliegue separado a producción.
 
-## Criterio para retomar
-
-Aplicar la migración en la base de integración y resolver el solapamiento con PR #388. Mantener revisión manual de OCR y conciliación; no dar por pagada ninguna factura hasta confirmar referencia y distribución.
