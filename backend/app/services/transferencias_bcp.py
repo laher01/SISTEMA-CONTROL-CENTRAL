@@ -28,7 +28,10 @@ def extraer_transferencia_bcp(texto: str) -> dict[str, tuple[str, str]]:
     )
     if "BCP" not in normal or "TRANSFERENCIA EXITOSA" not in normal:
         return {}
-    campos: dict[str, tuple[str, str]] = {"banco": ("BCP", "BCP transferencia exitosa")}
+    campos: dict[str, tuple[str, str]] = {
+        "banco": ("BCP", "BCP transferencia exitosa"),
+        "tipo_operacion": ("TRANSFERENCIA", "TRANSFERENCIA EXITOSA"),
+    }
     operacion = re.search(
         r"(?is)N[ÚU]MERO\s+DE\s+OPERACI[ÓO]N\s*[:#]?\s*(\d{6,20})\b",
         texto,
@@ -56,7 +59,33 @@ def extraer_transferencia_bcp(texto: str) -> dict[str, tuple[str, str]]:
             campos["fecha_emision"] = (fecha_valida.isoformat(), fecha.group(0))
         except ValueError:
             pass
+    hora = re.search(r"(?im)\b(?:HORA|A LAS)\s*[:\-]?\s*(\d{1,2}:\d{2}(?::\d{2})?)\b", texto)
+    if hora:
+        campos["hora_operacion"] = (hora.group(1), hora.group(0))
     beneficiario = re.search(r"(?im)^\s*Enviado\s+a\s*:?\s*([^\n]+)", texto)
     if beneficiario and beneficiario.group(1).strip():
         campos["beneficiario"] = (beneficiario.group(1).strip(), beneficiario.group(0))
+    remitente = re.search(
+        r"(?im)^\s*(?:Desde|Cuenta de origen|Cuenta origen|Titular de origen)\s*:?\s*([^\n]+)",
+        texto,
+    )
+    if remitente and remitente.group(1).strip():
+        campos["remitente"] = (remitente.group(1).strip(), remitente.group(0))
+    cuenta_destino = re.search(
+        r"(?im)^\s*(?:Cuenta de destino|Cuenta destino|N[úu]mero de cuenta destino|"
+        r"N[°º]\s*cuenta destino)\s*:?\s*([\w*Xx\- ]{4,40})",
+        texto,
+    )
+    if cuenta_destino:
+        campos["cuenta_beneficiario"] = (cuenta_destino.group(1).strip(), cuenta_destino.group(0))
+    cuenta_origen = re.search(
+        r"(?im)^\s*(?:Cuenta de origen|Cuenta origen|N[úu]mero de cuenta origen)"
+        r"\s*:?\s*([\w*Xx\- ]{4,40})",
+        texto,
+    )
+    if cuenta_origen:
+        campos["cuenta_remitente"] = (cuenta_origen.group(1).strip(), cuenta_origen.group(0))
+    agencia = re.search(r"(?im)^\s*(?:Agencia|Sucursal)\s*:?\s*([^\n]{1,80})", texto)
+    if agencia:
+        campos["agencia"] = (agencia.group(1).strip(), agencia.group(0))
     return campos

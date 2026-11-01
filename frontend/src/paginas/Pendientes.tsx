@@ -340,6 +340,7 @@ function FilaPendiente({
         {puedeRetirar && <button className="peligro" onClick={retirar} disabled={eliminando}>
           {eliminando ? "Eliminando…" : "Eliminar"}
         </button>}
+        {documento.tipo_documento === "VCHR" && <Link className="boton secundario" to={`/pagos-documentales/${documento.id}`}>Pago agrupado</Link>}
         {errorEliminar && <small role="alert" className="error bloque">{errorEliminar}</small>}
       </td>
     </tr>

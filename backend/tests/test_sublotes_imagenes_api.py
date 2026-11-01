@@ -14,9 +14,13 @@ from app.api.routes import documentos
 class SesionFalsa:
     def __init__(self) -> None:
         self.reversiones = 0
+        self.confirmaciones = 0
 
     def rollback(self) -> None:
         self.reversiones += 1
+
+    def commit(self) -> None:
+        self.confirmaciones += 1
 
 
 def imagen_png() -> UploadFile:
@@ -58,7 +62,7 @@ def test_sublote_continua_tras_duplicado(monkeypatch: pytest.MonkeyPatch) -> Non
         llamados += 1
         if llamados == 1:
             raise HTTPException(409, {"duplicado": True, "mensaje": "Ya registrado"})
-        return SimpleNamespace(id=uuid.uuid4())
+        return SimpleNamespace(id=uuid.uuid4(), datos_extraidos=None, tipo_documento=None)
 
     monkeypatch.setattr(documentos, "subir_documento", subir_simulado)
     sesion = SesionFalsa()
@@ -109,7 +113,7 @@ def test_diez_imagenes_se_procesan_en_orden(monkeypatch: pytest.MonkeyPatch) -> 
     async def subir_simulado(**kwargs):
         nonlocal llamados
         llamados += 1
-        return SimpleNamespace(id=uuid.uuid4())
+        return SimpleNamespace(id=uuid.uuid4(), datos_extraidos=None, tipo_documento=None)
 
     monkeypatch.setattr(documentos, "subir_documento", subir_simulado)
     resultado = ejecutar([imagen_png() for _ in range(10)], SesionFalsa())
@@ -128,7 +132,7 @@ def test_sublote_conserva_tenant_y_auth_en_cada_imagen(
 
     async def recibir(**kwargs):
         vistos.append((kwargs["tenant_id"], kwargs["auth"]))
-        return SimpleNamespace(id=uuid.uuid4())
+        return SimpleNamespace(id=uuid.uuid4(), datos_extraidos=None, tipo_documento=None)
 
     monkeypatch.setattr(documentos, "subir_documento", recibir)
     resultado = asyncio.run(
@@ -146,6 +150,56 @@ def test_sublote_conserva_tenant_y_auth_en_cada_imagen(
     assert vistos == [(tenant, auth), (tenant, auth)]
 
 
+def test_foto_compuesta_conserva_original_y_crea_documentos_hijos(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.separador_vouchers_imagen import SegmentacionVouchers
+
+    parent_id = uuid.uuid4()
+    children = [uuid.uuid4(), uuid.uuid4()]
+    docs_falsos = [
+        SimpleNamespace(id=parent_id, datos_extraidos={}, tipo_documento=None),
+        *(
+            SimpleNamespace(id=child_id, datos_extraidos={}, tipo_documento="VCHR")
+            for child_id in children
+        ),
+    ]
+    llamadas: list[dict[str, object]] = []
+    relaciones: list[tuple[object, ...]] = []
+
+    async def subir_simulado(**kwargs):
+        llamadas.append(kwargs)
+        return docs_falsos[len(llamadas) - 1]
+
+    monkeypatch.setattr(
+        documentos,
+        "detectar_vouchers",
+        lambda contenido: SegmentacionVouchers(
+            "SEPARAR", ((0, 0, 10, 10), (10, 0, 20, 10)), 0.91
+        ),
+    )
+    monkeypatch.setattr(documentos, "recortar_voucher", lambda contenido, caja: b"recorte")
+    monkeypatch.setattr(documentos, "subir_documento", subir_simulado)
+    monkeypatch.setattr(
+        documentos,
+        "vincular_relacion",
+        lambda *args, **kwargs: relaciones.append(args + (kwargs["tipo"],)),
+    )
+
+    resultado = ejecutar([imagen_png()], SesionFalsa())
+    fila = resultado["resultados"][0]
+
+    assert fila["segmentacion"] == "SEPARADA"
+    assert fila["documento_id"] == str(parent_id)
+    assert [item["documento_id"] for item in fila["comprobantes"]] == [
+        str(child_id) for child_id in children
+    ]
+    assert len(llamadas) == 3
+    assert llamadas[0]["tipo_documento"].value == "FOTO"
+    assert llamadas[1]["tipo_documento"] is None
+    assert all(relacion[-1] == "RECORTE_IMAGEN" for relacion in relaciones)
+
+
 def test_archivo_excesivo_no_interrumpe_restantes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -156,7 +210,7 @@ def test_archivo_excesivo_no_interrumpe_restantes(
         llamados += 1
         if llamados == 1:
             raise HTTPException(413, "Archivo demasiado grande")
-        return SimpleNamespace(id=uuid.uuid4())
+        return SimpleNamespace(id=uuid.uuid4(), datos_extraidos=None, tipo_documento=None)
 
     monkeypatch.setattr(documentos, "subir_documento", recibir)
     sesion = SesionFalsa()

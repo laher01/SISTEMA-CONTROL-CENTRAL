@@ -355,6 +355,51 @@ class RelacionDocumento(ConId, ConTenant, ConCreacion, Base):
     )
 
 
+class PagoDocumental(ConId, ConTenant, ConCreacion, Base):
+    """Un movimiento bancario sustentado por un voucher documental."""
+
+    __tablename__ = "pagos_documentales"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "documento_id", name="uq_pago_documental_documento"),
+        UniqueConstraint("tenant_id", "huella_operacion", name="uq_pago_documental_operacion"),
+        Index("ix_pagos_documentales_tenant_estado", "tenant_id", "estado"),
+    )
+
+    documento_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documentos.id"), index=True)
+    huella_operacion: Mapped[str | None] = mapped_column(String(64))
+    banco: Mapped[str | None] = mapped_column(String(80))
+    tipo_operacion: Mapped[str] = mapped_column(String(30), default="OTRO")
+    fecha_hora: Mapped[datetime | None]
+    numero_operacion: Mapped[str | None] = mapped_column(String(40))
+    beneficiario: Mapped[str | None] = mapped_column(String(300))
+    cuenta_beneficiario: Mapped[str | None] = mapped_column(String(80))
+    agencia: Mapped[str | None] = mapped_column(String(80))
+    moneda: Mapped[str | None] = mapped_column(String(3))
+    importe: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    remitente: Mapped[str | None] = mapped_column(String(300))
+    cuenta_remitente: Mapped[str | None] = mapped_column(String(80))
+    estado: Mapped[str] = mapped_column(String(30), default="PENDIENTE_REVISION", index=True)
+    conciliado: Mapped[bool] = mapped_column(default=False, server_default="false")
+
+
+class AsignacionPagoDocumental(ConId, ConTenant, ConCreacion, Base):
+    """Distribuye un pago bancario entre expedientes fiscales sin fusionarlos."""
+
+    __tablename__ = "asignaciones_pagos_documentales"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "pago_id", "expediente_id", name="uq_asignacion_pago_expediente"
+        ),
+    )
+
+    pago_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pagos_documentales.id"), index=True)
+    expediente_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("expedientes.id"), index=True)
+    importe_asignado: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    evidencia: Mapped[str] = mapped_column(String(500))
+    confianza: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))
+    referencia_confirmada: Mapped[bool] = mapped_column(default=False, server_default="false")
+
+
 class ReferenciaGRE(ConId, ConTenant, ConCreacion, Base):
     """Expediente provisional identificado por GRE, pendiente de factura.
 
