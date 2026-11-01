@@ -432,9 +432,7 @@ async def subir_sublote_imagenes(
                 auth=auth,
                 archivo=archivo,
                 tipo_documento=(
-                    TipoDocumento.FOTO
-                    if segmentacion.estado in {"REVISION", "SEPARAR"}
-                    else None
+                    TipoDocumento.FOTO if segmentacion.estado in {"REVISION", "SEPARAR"} else None
                 ),
                 expediente_id=None,
             )

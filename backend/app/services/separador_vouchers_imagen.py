@@ -74,9 +74,7 @@ def detectar_vouchers(contenido: bytes) -> SegmentacionVouchers:
                         "REVISION",
                         motivo="El fondo no permite confirmar si hay uno o varios vouchers",
                     )
-                return SegmentacionVouchers(
-                    "UNA_IMAGEN", (caja_unica,), round(confianza_unica, 4)
-                )
+                return SegmentacionVouchers("UNA_IMAGEN", (caja_unica,), round(confianza_unica, 4))
             if not 2 <= len(hojas) <= 30:
                 return SegmentacionVouchers(
                     "REVISION",
@@ -320,9 +318,7 @@ def _componentes(mascara: Image.Image) -> list[_Componente]:
             dato[2] = max(dato[2], x1)
             dato[3] = max(dato[3], y + 1)
             dato[4] += x1 - x0
-    return [
-        _Componente((dato[0], dato[1], dato[2], dato[3]), dato[4]) for dato in limites.values()
-    ]
+    return [_Componente((dato[0], dato[1], dato[2], dato[3]), dato[4]) for dato in limites.values()]
 
 
 def _dividir_componente(
@@ -355,8 +351,7 @@ def _dividir_componente(
                     )
                 if len(resultado) >= 2:
                     return [
-                        (caja_hija, min(confianza, conf_hija))
-                        for caja_hija, conf_hija in resultado
+                        (caja_hija, min(confianza, conf_hija)) for caja_hija, conf_hija in resultado
                     ]
     ajustada = _caja_ajustada(mascara, caja)
     if ajustada is None:
@@ -459,7 +454,7 @@ def _unir(padres: list[int], primero: int, segundo: int) -> None:
 
 
 def _quitar_duplicados(
-    hojas: list[tuple[tuple[int, int, int, int], float]]
+    hojas: list[tuple[tuple[int, int, int, int], float]],
 ) -> list[tuple[tuple[int, int, int, int], float]]:
     resultado: list[tuple[tuple[int, int, int, int], float]] = []
     for caja, confianza in sorted(hojas, key=lambda elemento: elemento[0]):
@@ -467,9 +462,7 @@ def _quitar_duplicados(
         duplicada = False
         for indice, (otra, confianza_otra) in enumerate(resultado):
             ox0, oy0, ox1, oy1 = otra
-            interseccion = max(0, min(x1, ox1) - max(x0, ox0)) * max(
-                0, min(y1, oy1) - max(y0, oy0)
-            )
+            interseccion = max(0, min(x1, ox1) - max(x0, ox0)) * max(0, min(y1, oy1) - max(y0, oy0))
             menor = min((x1 - x0) * (y1 - y0), (ox1 - ox0) * (oy1 - oy0))
             if menor and interseccion / menor > 0.8:
                 resultado[indice] = (otra, max(confianza, confianza_otra))

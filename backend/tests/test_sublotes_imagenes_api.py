@@ -174,9 +174,7 @@ def test_foto_compuesta_conserva_original_y_crea_documentos_hijos(
     monkeypatch.setattr(
         documentos,
         "detectar_vouchers",
-        lambda contenido: SegmentacionVouchers(
-            "SEPARAR", ((0, 0, 10, 10), (10, 0, 20, 10)), 0.91
-        ),
+        lambda contenido: SegmentacionVouchers("SEPARAR", ((0, 0, 10, 10), (10, 0, 20, 10)), 0.91),
     )
     monkeypatch.setattr(documentos, "recortar_voucher", lambda contenido, caja: b"recorte")
     monkeypatch.setattr(documentos, "subir_documento", subir_simulado)

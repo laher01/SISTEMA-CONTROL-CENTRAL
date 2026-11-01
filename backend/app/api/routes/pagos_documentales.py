@@ -232,11 +232,13 @@ def crear_pago_documental(
             )
         pares.add(asignacion.expediente_id)
         expediente = session.scalar(
-            select(Expediente).where(
+            select(Expediente)
+            .where(
                 Expediente.id == asignacion.expediente_id,
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
-            ).with_for_update()
+            )
+            .with_for_update()
         )
         if expediente is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Una de las facturas no está disponible")
@@ -354,10 +356,12 @@ def actualizar_asignaciones_pago(
 ) -> dict[str, object]:
     _validar_permiso_modulo(session, tenant_id, auth)
     pago = session.scalar(
-        select(PagoDocumental).where(
+        select(PagoDocumental)
+        .where(
             PagoDocumental.id == pago_id,
             PagoDocumental.tenant_id == tenant_id,
-        ).with_for_update()
+        )
+        .with_for_update()
     )
     if pago is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pago no encontrado")
@@ -382,11 +386,13 @@ def actualizar_asignaciones_pago(
             )
         pares.add(asignacion.expediente_id)
         expediente = session.scalar(
-            select(Expediente).where(
+            select(Expediente)
+            .where(
                 Expediente.id == asignacion.expediente_id,
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
-            ).with_for_update()
+            )
+            .with_for_update()
         )
         if expediente is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Una de las facturas no está disponible")
@@ -496,10 +502,12 @@ def conciliar_pago_documental(
 ) -> dict[str, object]:
     _validar_permiso_modulo(session, tenant_id, auth)
     pago = session.scalar(
-        select(PagoDocumental).where(
+        select(PagoDocumental)
+        .where(
             PagoDocumental.id == pago_id,
             PagoDocumental.tenant_id == tenant_id,
-        ).with_for_update()
+        )
+        .with_for_update()
     )
     if pago is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pago no encontrado")
