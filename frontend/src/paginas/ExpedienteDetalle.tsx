@@ -326,10 +326,11 @@ function ArchivoPreview({ documento }: { documento: Documento }) {
 
   const click = () => {
     if (temporizador.current) clearTimeout(temporizador.current);
-    temporizador.current = setTimeout(() => setModalAbierto(true), 240);
+    temporizador.current = setTimeout(() => setModalAbierto(true), 500);
   };
   const dobleClick = () => {
     if (temporizador.current) clearTimeout(temporizador.current);
+    setModalAbierto(false);
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
