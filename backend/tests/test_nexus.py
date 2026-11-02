@@ -5,13 +5,18 @@ from app.services import nexus as nexus_service
 from tests.xml import EMISOR, factura
 
 
-def _subir(client: TestClient, numero: str, importe: str = "1500.00") -> dict[str, object]:
+def _subir(
+    client: TestClient,
+    numero: str,
+    importe: str = "1500.00",
+    fecha: str = "2026-10-01",
+) -> dict[str, object]:
     respuesta = client.post(
         "/api/v1/documentos",
         files={
             "archivo": (
                 numero + ".xml",
-                factura(numero=numero, importe=importe, fecha="2026-10-01"),
+                factura(numero=numero, importe=importe, fecha=fecha),
             )
         },
     )
@@ -36,9 +41,10 @@ def test_nexus_revisa_expediente_actual(client: TestClient) -> None:
     assert "debajo de S/ 2,000" in datos["respuesta"]
 
 
-def test_nexus_calcula_compras_del_mes(client: TestClient) -> None:
-    _subir(client, "F001-00000902", "100.00")
-    _subir(client, "F001-00000903", "200.00")
+def test_nexus_calcula_compras_del_mes(client: TestClient, settings: Settings) -> None:
+    fecha_actual = settings.hoy().isoformat()
+    _subir(client, "F001-00000902", "100.00", fecha_actual)
+    _subir(client, "F001-00000903", "200.00", fecha_actual)
 
     respuesta = client.post(
         "/api/v1/nexus/chat",
