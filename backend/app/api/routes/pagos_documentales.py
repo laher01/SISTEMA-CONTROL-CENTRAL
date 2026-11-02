@@ -136,14 +136,19 @@ def _pago_out(
             Documento.tenant_id == pago.tenant_id,
         )
     )
+    tipo_ocr = _valor_confirmado_o_sugerido(documento, "tipo_operacion") if documento else None
+    numero_ocr = _valor_confirmado_o_sugerido(documento, "numero_operacion") if documento else None
+    tipo_operacion = pago.tipo_operacion
+    if not tipo_operacion or tipo_operacion == "OTRO":
+        tipo_operacion = tipo_ocr or tipo_operacion or "OTRO"
     return {
         "id": pago.id,
         "documento_id": pago.documento_id,
         "documento_nombre": documento.nombre_original if documento else None,
         "banco": pago.banco,
-        "tipo_operacion": pago.tipo_operacion,
+        "tipo_operacion": tipo_operacion,
         "fecha_hora": pago.fecha_hora,
-        "numero_operacion": pago.numero_operacion,
+        "numero_operacion": pago.numero_operacion or numero_ocr,
         "beneficiario": pago.beneficiario,
         "cuenta_beneficiario": pago.cuenta_beneficiario,
         "agencia": pago.agencia,

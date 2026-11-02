@@ -8,6 +8,7 @@ import ResumenClasificacion, { type FilaClasificacion } from "../componentes/Res
 import { ETIQUETA_ESTADO, formatearFecha, formatearMonto, numeroExpediente } from "../formato";
 import {
   ESTADOS_EXPEDIENTE,
+  type ComprobantePagoExpediente,
   type Expediente,
   type ExpedienteDetalle,
   type SesionActual,
@@ -23,6 +24,24 @@ type GreProvisional = {
   estado: string;
   monto_contabilizable: string;
 };
+
+function etiquetaTipoOperacion(tipo: string): string {
+  const normalizado = tipo.trim().toUpperCase();
+  if (normalizado.includes("TRANSFER")) return "Transferencia";
+  if (normalizado.includes("DEPOS")) return "Depósito";
+  if (!normalizado || normalizado === "OTRO") return "Pendiente de lectura";
+  return normalizado.replaceAll("_", " ");
+}
+
+function detalleLecturaPago(pago: ComprobantePagoExpediente): string {
+  const partes = [pago.tipo_operacion_evidencia, pago.numero_operacion_evidencia].filter(Boolean);
+  const confianzas = [pago.tipo_operacion_confianza, pago.numero_operacion_confianza]
+    .filter((valor): valor is string => Boolean(valor))
+    .map((valor) => `${Math.round(Number(valor) * 100)}%`);
+  return [partes.join(" · "), confianzas.length ? `Confianza OCR: ${confianzas.join(" / ")}` : ""]
+    .filter(Boolean)
+    .join(" — ");
+}
 
 export default function Expedientes({ sesion }: { sesion: SesionActual }) {
   const [parametros, setParametros] = useSearchParams();
@@ -424,6 +443,9 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
               <th>Emisor</th>
               <th>Receptor</th>
               <th>N° Doc</th>
+              <th>TIP-COMP-PGO</th>
+              <th>DTS-COMP-PGO</th>
+              <th>Vínculo de pago</th>
               <th className="num">Importe</th>
               <th>Descarga</th>
         {(capacidades?.puede_retirar ?? false) && <th>Acciones</th>}
@@ -463,6 +485,46 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
                   {(!e.receptor.autorizada || e.pendiente_aprobacion) && <strong className="bloque" style={{ color: "#b91c1c" }}>NO VÁLIDO — CLIENTE NO AUTORIZADO · NO CONTABILIZA</strong>}
                 </td>
                 <td className="num">{e.documentos_count}</td>
+                <td>
+                  {e.comprobantes_pago.length ? e.comprobantes_pago.map((pago) => (
+                    <Link
+                      className="bloque"
+                      key={pago.pago_id}
+                      title={detalleLecturaPago(pago)}
+                      to={`/pagos-documentales/${pago.documento_id}?expediente=${e.id}`}
+                    >
+                      {etiquetaTipoOperacion(pago.tipo_operacion)}
+                      {` · ${formatearMonto(e.moneda, pago.importe_asignado)} asignado`}
+                    </Link>
+                  )) : <span className="tenue">—</span>}
+                </td>
+                <td>
+                  {e.comprobantes_pago.length ? e.comprobantes_pago.map((pago) => (
+                    <Link
+                      className="bloque"
+                      key={pago.pago_id}
+                      title={detalleLecturaPago(pago)}
+                      to={`/pagos-documentales/${pago.documento_id}?expediente=${e.id}`}
+                    >
+                      {pago.numero_operacion || "Sin número leído"}
+                    </Link>
+                  )) : <span className="tenue">—</span>}
+                </td>
+                <td>
+                  {e.comprobantes_pago.length ? e.comprobantes_pago.map((pago) => (
+                    <span
+                      className="bloque"
+                      key={pago.pago_id}
+                      title={pago.estado_vinculo === "COMPARTIDO"
+                        ? `Este comprobante está distribuido entre ${pago.facturas_vinculadas} facturas.`
+                        : "Este comprobante está asignado a una factura."}
+                    >
+                      {pago.estado_vinculo === "COMPARTIDO"
+                        ? `Compartido · ${pago.facturas_vinculadas} facturas`
+                        : "Individual"}
+                    </span>
+                  )) : <span className="tenue">Sin pago vinculado</span>}
+                </td>
                 <td className="num">{formatearMonto(e.moneda, e.importe_total)}</td>
                 <td>
                   <a href={urlPdfExpediente(e.id)} download={`expediente-${e.serie}-${e.correlativo}.pdf`}>

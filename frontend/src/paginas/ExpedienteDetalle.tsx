@@ -26,18 +26,35 @@ export default function ExpedienteDetalle({ sesion }: { sesion: { rol: string } 
   const { datos: capacidades } = useDatos<{ puede_retirar: boolean; puede_eliminar_definitivamente: boolean }>("/api/v1/documentos/capacidades");
   const { datos: solicitudes, recargar: recargarSolicitudes } = useDatos<SolicitudMISD[]>("/api/v1/misd/solicitudes");
   const puedeConsultarPagosDocumentales = ["ADMINISTRADOR", "USUARIO", "GESTOR"].includes(sesion.rol);
-  const { datos: pagosDocumentales } = useDatos<{ id: string; documento_id: string; numero_operacion: string | null; importe: string | null; moneda: string | null }[]>(
+  const { datos: pagosDocumentales, recargar: recargarPagos } = useDatos<{ id: string; documento_id: string; tipo_operacion: string; numero_operacion: string | null; importe: string | null; moneda: string | null }[]>(
     puedeConsultarPagosDocumentales ? `/api/v1/pagos-documentales/por-expediente/${id}` : null,
   );
   const [ocupado, setOcupado] = useState(false);
   const [mensajeAccion, setMensajeAccion] = useState("");
   const [errorAccion, setErrorAccion] = useState("");
+  const [releyendoPago, setReleyendoPago] = useState<string | null>(null);
   const solicitudActual = solicitudes?.find((solicitud) => solicitud.expediente_id === id);
 
   const moverEnLista = (siguiente: number) => {
     if (!puedeNavegarLista || siguiente < 0 || siguiente >= listaIds.length) return;
     contexto.set("pos", String(siguiente));
     navegar(`/expedientes/${listaIds[siguiente]}?${contexto.toString()}`);
+  };
+
+  const releerComprobantePago = async (documentoId: string) => {
+    if (ocupado || releyendoPago) return;
+    setReleyendoPago(documentoId);
+    setErrorAccion("");
+    setMensajeAccion("");
+    try {
+      await enviarJson(`/api/v1/documentos/${documentoId}/procesar`, "POST");
+      await recargarPagos();
+      setMensajeAccion("Lectura OCR del comprobante actualizada. La asignación y el importe no se modificaron.");
+    } catch (e) {
+      setErrorAccion(e instanceof Error ? e.message : String(e));
+    } finally {
+      setReleyendoPago(null);
+    }
   };
 
   const actualizarGuiaNoAplica = async (confirmado: boolean) => {
@@ -180,9 +197,20 @@ export default function ExpedienteDetalle({ sesion }: { sesion: { rol: string } 
               {pagosDocumentales.map((pago) => (
                 <p key={pago.id}>
                   <Link to={`/pagos-documentales/${pago.documento_id}?expediente=${datos.id}`}>
-                    Abrir voucher{pago.numero_operacion ? ` · operación ${pago.numero_operacion}` : ""}
+                    Abrir comprobante · {pago.tipo_operacion || "tipo sin leer"}
+                    {pago.numero_operacion ? ` · operación ${pago.numero_operacion}` : " · sin número leído"}
                   </Link>
                   {pago.importe ? ` · ${formatearMonto(pago.moneda as "PEN" | "USD", pago.importe)}` : ""}
+                  {(!pago.numero_operacion || !pago.tipo_operacion || pago.tipo_operacion === "OTRO") && (
+                    <button
+                      type="button"
+                      className="secundario"
+                      disabled={Boolean(releyendoPago)}
+                      onClick={() => void releerComprobantePago(pago.documento_id)}
+                    >
+                      {releyendoPago === pago.documento_id ? "Releyendo…" : "Releer datos OCR"}
+                    </button>
+                  )}
                 </p>
               ))}
             </section>
