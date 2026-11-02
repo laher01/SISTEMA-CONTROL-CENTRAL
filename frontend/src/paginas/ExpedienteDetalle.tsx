@@ -305,7 +305,14 @@ export default function ExpedienteDetalle({ sesion }: { sesion: { rol: string } 
           )}
 
           <h3>Documentos</h3>
-          <TablaDocumentos documentos={datos.documentos} puedeEliminar={capacidades?.puede_eliminar_definitivamente ?? false} ocupado={ocupado} alEliminar={(documento) => void eliminarDocumento(documento)} />
+          <TablaDocumentos
+            documentos={datos.documentos}
+            expedienteId={datos.id}
+            puedeVincularPagos={puedeConsultarPagosDocumentales}
+            puedeEliminar={capacidades?.puede_eliminar_definitivamente ?? false}
+            ocupado={ocupado}
+            alEliminar={(documento) => void eliminarDocumento(documento)}
+          />
           {sesion.rol === "GESTOR" && (
             <AgregarDocumento expedienteId={datos.id} sugerido={datos.faltantes[0]} alSubir={recargar} />
           )}
@@ -315,7 +322,7 @@ export default function ExpedienteDetalle({ sesion }: { sesion: { rol: string } 
   );
 }
 
-function TablaDocumentos({ documentos, puedeEliminar, ocupado, alEliminar }: { documentos: Documento[]; puedeEliminar: boolean; ocupado: boolean; alEliminar: (documento: Documento) => void }) {
+export function TablaDocumentos({ documentos, expedienteId, puedeVincularPagos, puedeEliminar, ocupado, alEliminar }: { documentos: Documento[]; expedienteId: string; puedeVincularPagos: boolean; puedeEliminar: boolean; ocupado: boolean; alEliminar: (documento: Documento) => void }) {
   if (documentos.length === 0) return <p className="tenue">Sin documentos.</p>;
   return (
     <table>
@@ -325,7 +332,7 @@ function TablaDocumentos({ documentos, puedeEliminar, ocupado, alEliminar }: { d
           <th>Archivo</th>
           <th>Tamaño</th>
           <th>Subido</th>
-          {puedeEliminar && <th>Acciones</th>}
+          {(puedeVincularPagos || puedeEliminar) && <th>Acciones</th>}
         </tr>
       </thead>
       <tbody>
@@ -337,7 +344,14 @@ function TablaDocumentos({ documentos, puedeEliminar, ocupado, alEliminar }: { d
             </td>
             <td>{formatearTamano(d.tamano_bytes)}</td>
             <td>{formatearFecha(d.created_at)}</td>
-            {puedeEliminar && <td><button type="button" className="peligro" disabled={ocupado} onClick={() => alEliminar(d)}>Eliminar documento</button></td>}
+            {(puedeVincularPagos || puedeEliminar) && <td>
+              {puedeVincularPagos && d.tipo_documento === "VCHR" && (
+                <Link className="boton secundario" to={`/pagos-documentales/${d.id}?expediente=${expedienteId}`}>
+                  Vincular a pago agrupado
+                </Link>
+              )}
+              {puedeEliminar && <button type="button" className="peligro" disabled={ocupado} onClick={() => alEliminar(d)}>Eliminar documento</button>}
+            </td>}
           </tr>
         ))}
       </tbody>
