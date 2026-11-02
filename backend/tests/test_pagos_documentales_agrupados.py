@@ -4,7 +4,7 @@ from decimal import Decimal
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models import Documento
+from app.models import Documento, PagoDocumental
 from app.services.expedientes import obtener_tenant
 from app.services.extraccion_campos import extraer_campos
 from tests.xml import factura
@@ -162,6 +162,24 @@ def test_un_voucher_se_distribuye_a_cuatro_facturas_y_se_confirma_humanamente(
     assert desde_factura.json()[0]["id"] == pago_id
     assert desde_factura.json()[0]["destacado_expediente_id"] == expedientes[0]
 
+    pago_registrado = session.get(PagoDocumental, uuid.UUID(pago_id))
+    assert pago_registrado is not None
+    pago_registrado.tipo_operacion = "OTRO"
+    pago_registrado.numero_operacion = None
+    session.commit()
+    lista = client.get("/api/v1/expedientes", params={"limit": 500})
+    assert lista.status_code == 200, lista.text
+    filas_por_id = {fila["id"]: fila for fila in lista.json()}
+    for expediente_id in expedientes:
+        comprobante = filas_por_id[expediente_id]["comprobantes_pago"][0]
+        assert comprobante["tipo_operacion"] == "DEPOSITO_VENTANILLA"
+        assert comprobante["numero_operacion"] == f"OP-{voucher['id'][:8]}"
+        assert comprobante["estado_vinculo"] == "COMPARTIDO"
+        assert comprobante["facturas_vinculadas"] == 4
+    pagina = client.get("/api/v1/expedientes", params={"limit": 1})
+    assert pagina.status_code == 200, pagina.text
+    assert pagina.json()[0]["comprobantes_pago"][0]["facturas_vinculadas"] == 4
+
 
 def test_pago_puede_asignarse_a_mas_de_cuatro_facturas_y_factura_recibir_pagos_parciales(
     client: TestClient, session: Session
@@ -220,6 +238,14 @@ def test_pago_puede_asignarse_a_mas_de_cuatro_facturas_y_factura_recibir_pagos_p
     pagos_factura = client.get(f"/api/v1/pagos-documentales/por-expediente/{expedientes[0]}")
     assert pagos_factura.status_code == 200
     assert len(pagos_factura.json()) == 2
+    lista = client.get("/api/v1/expedientes", params={"limit": 500})
+    assert lista.status_code == 200, lista.text
+    factura_con_pagos = next(fila for fila in lista.json() if fila["id"] == expedientes[0])
+    assert len(factura_con_pagos["comprobantes_pago"]) == 2
+    assert {fila["estado_vinculo"] for fila in factura_con_pagos["comprobantes_pago"]} == {
+        "COMPARTIDO",
+        "INDIVIDUAL",
+    }
 
 
 def test_monto_total_se_trata_como_decimal_sin_float() -> None:

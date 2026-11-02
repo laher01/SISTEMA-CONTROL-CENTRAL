@@ -244,6 +244,20 @@ class ExpedienteIn(BaseModel):
     gestor_id: uuid.UUID | None = None
 
 
+class ComprobantePagoExpedienteOut(BaseModel):
+    pago_id: uuid.UUID
+    documento_id: uuid.UUID
+    tipo_operacion: str
+    numero_operacion: str | None = None
+    estado_vinculo: Literal["INDIVIDUAL", "COMPARTIDO"]
+    facturas_vinculadas: int
+    importe_asignado: Decimal
+    tipo_operacion_evidencia: str | None = None
+    numero_operacion_evidencia: str | None = None
+    tipo_operacion_confianza: Decimal | None = None
+    numero_operacion_confianza: Decimal | None = None
+
+
 class ExpedienteOut(Orm):
     id: uuid.UUID
     receptor: EmpresaOut
@@ -258,6 +272,7 @@ class ExpedienteOut(Orm):
     requiere_guia: bool
     guia_no_aplica_confirmada: bool = False
     documentos_count: int = 0
+    comprobantes_pago: list[ComprobantePagoExpedienteOut] = Field(default_factory=list)
     gestor_id: uuid.UUID | None
     usuario_id: uuid.UUID | None
     responsable_nombre: str | None = None

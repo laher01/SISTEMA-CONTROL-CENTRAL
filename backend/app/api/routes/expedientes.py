@@ -25,6 +25,7 @@ from app.enums import EstadoExpediente, RolMiembro
 from app.models import (
     Alerta,
     AlertaManual,
+    AsignacionPagoDocumental,
     Auditoria,
     ChatMensaje,
     CorreccionIA,
@@ -34,6 +35,7 @@ from app.models import (
     Expediente,
     Gestor,
     Miembro,
+    PagoDocumental,
     PagoERP,
     ReferenciaGRE,
     RelacionDocumento,
@@ -41,6 +43,7 @@ from app.models import (
     SolicitudRetiroMISD,
 )
 from app.schemas import (
+    ComprobantePagoExpedienteOut,
     ExpedienteDetalle,
     ExpedienteIn,
     ExpedienteOut,
@@ -75,6 +78,40 @@ NUMERO_RE = re.compile(r"^([a-z0-9]{4})-0*(\d+)$")
 NUMERO_RHE_RE = re.compile(r"^rhe-([a-z0-9]{4})-0*(\d+)$")
 
 router = APIRouter(prefix="/expedientes", tags=["expedientes"])
+
+
+def _campo_ocr_pago(
+    documento: Documento, nombre: str
+) -> tuple[str | None, str | None, Decimal | None]:
+    """Lee un campo del OCR guardado sin cambiar ni confirmar datos del pago."""
+    datos = documento.datos_extraidos or {}
+    procesamiento = datos.get("procesamiento_documental")
+    estructurada = (
+        procesamiento.get("extraccion_estructurada") if isinstance(procesamiento, dict) else None
+    )
+    confirmada = datos.get("extraccion_confirmada")
+    fuentes = [confirmada.get("campos") if isinstance(confirmada, dict) else None]
+    fuentes.append(estructurada.get("campos") if isinstance(estructurada, dict) else None)
+    for campos in fuentes:
+        if not isinstance(campos, dict):
+            continue
+        campo = campos.get(nombre)
+        if isinstance(campo, dict):
+            valor = campo.get("valor")
+            evidencia = campo.get("evidencia")
+            confianza = campo.get("confianza")
+            try:
+                confianza_decimal = Decimal(str(confianza)) if confianza is not None else None
+            except (ValueError, ArithmeticError):
+                confianza_decimal = None
+            return (
+                str(valor)[:300] if valor is not None else None,
+                str(evidencia)[:500] if evidencia is not None else None,
+                confianza_decimal,
+            )
+        if campo is not None:
+            return str(campo)[:300], None, None
+    return None, None, None
 
 
 @router.get("/previsualizar-vacios")
@@ -433,6 +470,7 @@ def listar(
     ids = [fila.id for fila in filas]
     primeras_cargas: dict[uuid.UUID | None, datetime] = {}
     conteo_documentos: dict[uuid.UUID, int] = {}
+    comprobantes_pago: dict[uuid.UUID, list[ComprobantePagoExpedienteOut]] = {}
     if ids:
         datos_documentos = session.execute(
             select(
@@ -451,12 +489,77 @@ def listar(
         conteo_documentos = {
             expediente_id: cantidad for expediente_id, _, cantidad in datos_documentos
         }
+        filas_pago = session.execute(
+            select(AsignacionPagoDocumental, PagoDocumental, Documento)
+            .join(
+                PagoDocumental,
+                (PagoDocumental.id == AsignacionPagoDocumental.pago_id)
+                & (PagoDocumental.tenant_id == tenant_id),
+            )
+            .join(
+                Documento,
+                (Documento.id == PagoDocumental.documento_id) & (Documento.tenant_id == tenant_id),
+            )
+            .where(
+                AsignacionPagoDocumental.tenant_id == tenant_id,
+                AsignacionPagoDocumental.expediente_id.in_(ids),
+                Documento.deleted_at.is_(None),
+            )
+            .order_by(PagoDocumental.created_at.desc(), PagoDocumental.id)
+        ).all()
+        pagos_ids = {pago.id for _, pago, _ in filas_pago}
+        facturas_por_pago: dict[uuid.UUID, int] = {}
+        if pagos_ids:
+            conteos_pago = session.execute(
+                select(
+                    AsignacionPagoDocumental.pago_id,
+                    func.count(func.distinct(AsignacionPagoDocumental.expediente_id)),
+                )
+                .join(
+                    Expediente,
+                    (Expediente.id == AsignacionPagoDocumental.expediente_id)
+                    & (Expediente.tenant_id == tenant_id),
+                )
+                .where(
+                    AsignacionPagoDocumental.tenant_id == tenant_id,
+                    AsignacionPagoDocumental.pago_id.in_(pagos_ids),
+                    Expediente.deleted_at.is_(None),
+                )
+                .group_by(AsignacionPagoDocumental.pago_id)
+            ).all()
+            facturas_por_pago = {pago_id: int(cantidad) for pago_id, cantidad in conteos_pago}
+        for asignacion, pago, documento in filas_pago:
+            tipo_ocr, evidencia_tipo, confianza_tipo = _campo_ocr_pago(documento, "tipo_operacion")
+            numero_ocr, evidencia_numero, confianza_numero = _campo_ocr_pago(
+                documento, "numero_operacion"
+            )
+            tipo = pago.tipo_operacion
+            if not tipo or tipo == "OTRO":
+                tipo = tipo_ocr or tipo or "OTRO"
+            numero_operacion = pago.numero_operacion or numero_ocr
+            facturas_vinculadas = facturas_por_pago.get(pago.id, 0)
+            comprobantes_pago.setdefault(asignacion.expediente_id, []).append(
+                ComprobantePagoExpedienteOut(
+                    pago_id=pago.id,
+                    documento_id=pago.documento_id,
+                    tipo_operacion=tipo,
+                    numero_operacion=numero_operacion,
+                    estado_vinculo="COMPARTIDO" if facturas_vinculadas > 1 else "INDIVIDUAL",
+                    facturas_vinculadas=facturas_vinculadas,
+                    importe_asignado=asignacion.importe_asignado,
+                    tipo_operacion_evidencia=evidencia_tipo,
+                    numero_operacion_evidencia=evidencia_numero,
+                    tipo_operacion_confianza=confianza_tipo,
+                    numero_operacion_confianza=confianza_numero,
+                )
+            )
     return [
         ExpedienteOut.model_validate(fila).model_copy(
             update={
                 **jerarquias[fila.id],
                 "fecha_carga": primeras_cargas.get(fila.id),
                 "documentos_count": conteo_documentos.get(fila.id, 0),
+                "comprobantes_pago": comprobantes_pago.get(fila.id, []),
                 "puede_eliminar": (
                     permiso_habilitado(session, tenant_id, auth.rol, PERMISO_ELIMINAR_REGISTROS)
                     and (

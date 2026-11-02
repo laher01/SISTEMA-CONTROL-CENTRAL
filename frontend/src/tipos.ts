@@ -143,6 +143,7 @@ export interface Expediente {
   requiere_guia: boolean;
   guia_no_aplica_confirmada: boolean;
   documentos_count: number;
+  comprobantes_pago: ComprobantePagoExpediente[];
   gestor_id: string | null;
   usuario_id: string | null;
   responsable_nombre?: string | null;
@@ -156,6 +157,20 @@ export interface Expediente {
   puede_eliminar?: boolean;
   fecha_carga?: string | null;
   created_at: string;
+}
+
+export interface ComprobantePagoExpediente {
+  pago_id: string;
+  documento_id: string;
+  tipo_operacion: string;
+  numero_operacion: string | null;
+  estado_vinculo: "INDIVIDUAL" | "COMPARTIDO";
+  facturas_vinculadas: number;
+  importe_asignado: string;
+  tipo_operacion_evidencia: string | null;
+  numero_operacion_evidencia: string | null;
+  tipo_operacion_confianza: string | null;
+  numero_operacion_confianza: string | null;
 }
 
 export interface ExpedienteDetalle extends Expediente {
