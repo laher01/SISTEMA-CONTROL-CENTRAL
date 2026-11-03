@@ -482,7 +482,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
                 <td>
                   <strong>{e.receptor.razon_social}</strong>
                   <small className="bloque tenue">RUC {e.receptor.ruc}</small>
-                  {(!e.receptor.autorizada || e.pendiente_aprobacion) && <strong className="bloque" style={{ color: "#b91c1c" }}>NO VÁLIDO — CLIENTE NO AUTORIZADO · NO CONTABILIZA</strong>}
+                  {e.pendiente_aprobacion && <strong className="bloque" style={{ color: "#b91c1c" }}>NO VÁLIDO — CLIENTE NO AUTORIZADO AL INGRESAR · NO CONTABILIZA</strong>}
                 </td>
                 <td className="num">{e.documentos_count}</td>
                 <td>

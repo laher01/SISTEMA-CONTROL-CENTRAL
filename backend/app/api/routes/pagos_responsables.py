@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 15016)
+Total output lines: 1571
+
 """Comisiones auditables y pagos exclusivamente a Responsables por Gerencia."""
 
 import uuid
@@ -246,7 +249,7 @@ def _calculo(
             usuario.responsable_id.is_not(None),
             Empresa.tenant_id == tenant_id,
             Empresa.deleted_at.is_(None),
-            Empresa.autorizada.is_(True),
+            Expediente.pendiente_aprobacion.is_(False),
         )
     )
     if responsable_id is not None:
@@ -377,9 +380,7 @@ def resumen(
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
                 expediente_tiene_documentos_activos(),
-                Expediente.receptor.has(
-                    Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
-                ),
+                Expediente.pendiente_aprobacion.is_(False),
                 Expediente.gerente_id.is_(None),
                 Expediente.fecha_emision.between(desde, hasta),
                 Expediente.moneda == moneda,
@@ -424,9 +425,7 @@ def resumen(
                     Expediente.tenant_id == tenant_id,
                     Expediente.deleted_at.is_(None),
                     expediente_tiene_documentos_activos(),
-                    Expediente.receptor.has(
-                        Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
-                    ),
+                    Expediente.pendiente_aprobacion.is_(False),
                     Expediente.gerente_id.is_(None),
                     Expediente.fecha_emision.between(desde, hasta),
                     Expediente.moneda == moneda,
@@ -582,9 +581,7 @@ def resumen_equipo_responsable(
                 Expediente.fecha_emision.between(desde, hasta),
                 Expediente.moneda == moneda,
                 gerente_proveedor.c.gerente_id.in_(elegidos),
-                Expediente.receptor.has(
-                    Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
-                ),
+                Expediente.pendiente_aprobacion.is_(False),
                 Miembro.tenant_id == tenant_id,
                 Miembro.rol == RolMiembro.USUARIO,
                 Miembro.responsable_id == auth.miembro_id,
@@ -636,7 +633,7 @@ def resumen_equipo_responsable(
                 Miembro.nombre,
                 receptor_pendiente.ruc,
                 receptor_pendiente.razon_social,
-                receptor_pendiente.autorizada,
+                Expediente.pendiente_aprobacion.is_(False).label("autorizada"),
                 gerente_pendiente.c.gerente_id,
                 conteo_candidatos.c.cantidad,
             )
@@ -645,313 +642,7 @@ def resumen_equipo_responsable(
             .outerjoin(gerente_pendiente, gerente_pendiente.c.expediente_id == Expediente.id)
             .outerjoin(
                 conteo_candidatos,
-                conteo_candidatos.c.expediente_id == Expediente.id,
-            )
-            .where(
-                Expediente.tenant_id == tenant_id,
-                Expediente.deleted_at.is_(None),
-                expediente_tiene_documentos_activos(),
-                or_(
-                    gerente_pendiente.c.gerente_id.is_(None),
-                    and_(
-                        gerente_pendiente.c.gerente_id.in_(elegidos),
-                        receptor_pendiente.autorizada.is_(False),
-                    ),
-                ),
-                Expediente.fecha_emision.between(desde, hasta),
-                Expediente.moneda == moneda,
-                Miembro.tenant_id == tenant_id,
-                Miembro.rol == RolMiembro.USUARIO,
-                Miembro.responsable_id == auth.miembro_id,
-                Miembro.deleted_at.is_(None),
-                receptor_pendiente.tenant_id == tenant_id,
-                receptor_pendiente.deleted_at.is_(None),
-            )
-            .order_by(Expediente.fecha_emision, Expediente.serie, Expediente.correlativo)
-        )
-    )
-    ids_pendientes = [fila.id for fila in pendientes_crudos]
-    gerentes_por_expediente: dict[uuid.UUID, list[str]] = {}
-    if ids_pendientes:
-        gerente_candidato = aliased(Miembro)
-        for expediente_id, codigo in session.execute(
-            select(candidatos.c.expediente_id, gerente_candidato.codigo)
-            .join(gerente_candidato, gerente_candidato.id == candidatos.c.gerente_id)
-            .where(candidatos.c.expediente_id.in_(ids_pendientes))
-        ):
-            gerentes_por_expediente.setdefault(expediente_id, []).append(codigo)
-    pendientes_atribucion = []
-    for fila in pendientes_crudos:
-        # Los vínculos resueltos con otro gerente no pertenecen a la selección.
-        if fila.gerente_id is not None and fila.gerente_id not in elegidos:
-            continue
-        motivo = (
-            "RECEPTOR_NO_AUTORIZADO"
-            if not fila.autorizada
-            else "GERENCIA_AMBIGUA"
-            if (fila.cantidad or 0) > 1
-            else "GERENCIA_SIN_VINCULO"
-        )
-        pendientes_atribucion.append(
-            {
-                "id": fila.id,
-                "tipo_comprobante": fila.tipo_comprobante,
-                "serie": fila.serie,
-                "correlativo": fila.correlativo,
-                "fecha_emision": fila.fecha_emision,
-                "importe_total": fila.importe_total,
-                "codigo": fila.codigo,
-                "nombre": fila.nombre,
-                "ruc": fila.ruc,
-                "razon_social": fila.razon_social,
-                "autorizada": fila.autorizada,
-                "motivo": motivo,
-                "gerentes_candidatos": gerentes_por_expediente.get(fila.id, []),
-            }
-        )
-    total_pendiente = _redondear(
-        sum((Decimal(fila["importe_total"]) for fila in pendientes_atribucion), Decimal("0"))
-    )
-
-    gerente_usuario = _gerencia_resuelta(tenant_id)
-    resumen_usuarios = list(
-        session.execute(
-            select(
-                gerente_usuario.c.gerente_id,
-                Miembro.id,
-                Miembro.codigo,
-                Miembro.nombre,
-                Empresa.agente_retencion,
-                Miembro.porcentaje_con_agente,
-                Miembro.porcentaje_sin_agente,
-                func.count(Expediente.id),
-                func.sum(Expediente.importe_total),
-            )
-            .join(Miembro, Miembro.id == Expediente.usuario_id)
-            .join(gerente_usuario, gerente_usuario.c.expediente_id == Expediente.id)
-            .join(Empresa, Empresa.id == Expediente.receptor_id)
-            .where(
-                Expediente.tenant_id == tenant_id,
-                Expediente.deleted_at.is_(None),
-                expediente_tiene_documentos_activos(),
-                Expediente.fecha_emision.between(desde, hasta),
-                Expediente.moneda == moneda,
-                gerente_usuario.c.gerente_id.in_(elegidos),
-                Empresa.autorizada.is_(True),
-                Empresa.deleted_at.is_(None),
-                Miembro.tenant_id == tenant_id,
-                Miembro.rol == RolMiembro.USUARIO,
-                Miembro.responsable_id == auth.miembro_id,
-                Miembro.deleted_at.is_(None),
-            )
-            .group_by(
-                gerente_usuario.c.gerente_id,
-                Miembro.id,
-                Miembro.codigo,
-                Miembro.nombre,
-                Empresa.agente_retencion,
-                Miembro.porcentaje_con_agente,
-                Miembro.porcentaje_sin_agente,
-            )
-        )
-    )
-    usuarios_agrupados: dict[tuple[uuid.UUID, uuid.UUID], dict[str, object]] = {}
-    for (
-        gid,
-        uid,
-        codigo,
-        nombre,
-        agente,
-        tasa_agente,
-        tasa_sin,
-        cantidad,
-        total,
-    ) in resumen_usuarios:
-        if gid not in by_id:
-            continue
-        tasa_aplicable = tasa_agente if agente else tasa_sin
-        tasa = Decimal(tasa_aplicable) if tasa_aplicable is not None else None
-        importe = Decimal(total or 0)
-        llave = (gid, uid)
-        agregado = usuarios_agrupados.setdefault(
-            llave,
-            {
-                "gerente_id": str(gid),
-                "gerente_codigo": by_id[gid].codigo,
-                "gerente_nombre": by_id[gid].nombre,
-                "usuario_id": str(uid),
-                "usuario_codigo": codigo,
-                "usuario_nombre": nombre,
-                "documentos": 0,
-                "produccion_decimal": Decimal("0"),
-                "comision_decimal": Decimal("0"),
-                "tasa_completa": True,
-            },
-        )
-        agregado["documentos"] = int(str(agregado["documentos"])) + int(cantidad)
-        agregado["produccion_decimal"] = Decimal(str(agregado["produccion_decimal"])) + importe
-        if tasa is None:
-            agregado["tasa_completa"] = False
-        else:
-            agregado["comision_decimal"] = Decimal(str(agregado["comision_decimal"])) + _redondear(
-                importe * tasa / Decimal("100")
-            )
-    usuarios = []
-    for agregado in usuarios_agrupados.values():
-        produccion = Decimal(str(agregado.pop("produccion_decimal")))
-        comision = Decimal(str(agregado.pop("comision_decimal")))
-        tasa_completa = bool(agregado.pop("tasa_completa"))
-        porcentaje = (
-            _redondear(comision / produccion * Decimal("100"))
-            if tasa_completa and produccion
-            else None
-        )
-        usuarios.append(
-            {
-                **agregado,
-                "produccion": str(_redondear(produccion)),
-                "porcentaje_usuario": str(porcentaje) if porcentaje is not None else None,
-                "comision_referencial_usuario": (
-                    str(_redondear(comision)) if tasa_completa else None
-                ),
-            }
-        )
-    return {
-        "desde": desde.isoformat(),
-        "hasta": hasta.isoformat(),
-        "moneda": moneda,
-        "gerentes": gerentes,
-        "clientes": clientes,
-        "proveedores": proveedores,
-        "usuarios": usuarios,
-        "pendientes_revision": {
-            "cantidad": len(pendientes_atribucion),
-            "produccion": str(total_pendiente),
-            "expedientes": [
-                {
-                    "expediente_id": str(fila["id"]),
-                    "comprobante": (
-                        f"{fila['tipo_comprobante']} {fila['serie']}-{fila['correlativo']}"
-                    ),
-                    "fecha": fila["fecha_emision"].isoformat(),
-                    "usuario_codigo": fila["codigo"],
-                    "usuario_nombre": fila["nombre"],
-                    "cliente_ruc": fila["ruc"],
-                    "cliente_nombre": fila["razon_social"],
-                    "produccion": str(_redondear(Decimal(fila["importe_total"]))),
-                    "motivo": fila["motivo"],
-                    "gerentes_candidatos": fila["gerentes_candidatos"],
-                }
-                for fila in pendientes_atribucion
-            ],
-        },
-    }
-
-
-class SolicitudCobroIn(BaseModel):
-    gerente_id: uuid.UUID
-    desde: date
-    hasta: date
-    moneda: str = Field(pattern="^(PEN|USD)$")
-    observacion: str | None = Field(default=None, max_length=500)
-
-
-@router.post("/solicitudes-cobro", status_code=status.HTTP_201_CREATED)
-def solicitar_cobro_a_gerente(
-    datos: SolicitudCobroIn,
-    session: SessionDep,
-    tenant_id: TenantDep,
-    auth: OperativeAuthDep,
-) -> dict[str, str]:
-    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
-    gerente = next(
-        (
-            g
-            for g in _gerentes_de_responsable(session, tenant_id, auth.miembro_id)
-            if g.id == datos.gerente_id
-        ),
-        None,
-    )
-    if gerente is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Gerente no vinculado")
-    resultado = _calculo(
-        session, tenant_id, datos.desde, datos.hasta, datos.moneda, auth.miembro_id, gerente.id
-    )
-    filas = resultado["filas"]
-    assert isinstance(filas, list)
-    if not filas:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "Sin producción autorizada en el periodo",
-        )
-    duplicada = session.scalar(
-        select(SolicitudCobroResponsableERP.id).where(
-            SolicitudCobroResponsableERP.tenant_id == tenant_id,
-            SolicitudCobroResponsableERP.responsable_id == auth.miembro_id,
-            SolicitudCobroResponsableERP.gerente_id == gerente.id,
-            SolicitudCobroResponsableERP.periodo_desde == datos.desde,
-            SolicitudCobroResponsableERP.periodo_hasta == datos.hasta,
-            SolicitudCobroResponsableERP.moneda == datos.moneda,
-            SolicitudCobroResponsableERP.estado == "SOLICITADA",
-        )
-    )
-    if duplicada is not None:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "Ya existe una solicitud pendiente para ese Gerente y periodo",
-        )
-    solicitud = SolicitudCobroResponsableERP(
-        tenant_id=tenant_id,
-        gerente_id=gerente.id,
-        responsable_id=auth.miembro_id,
-        periodo_desde=datos.desde,
-        periodo_hasta=datos.hasta,
-        moneda=datos.moneda,
-        produccion_total=Decimal(str(resultado["total_produccion"])),
-        comision_total=Decimal(str(resultado["total_comisiones"])),
-        detalle={"filas": filas},
-        estado="SOLICITADA",
-        observacion=datos.observacion,
-        creado_por_cuenta_id=auth.cuenta_id,
-    )
-    session.add(solicitud)
-    cuentas_gerente = session.scalars(
-        select(CuentaAcceso).where(
-            CuentaAcceso.tenant_id == tenant_id,
-            CuentaAcceso.miembro_id == gerente.id,
-            CuentaAcceso.activo.is_(True),
-            CuentaAcceso.deleted_at.is_(None),
-        )
-    )
-    for cuenta in cuentas_gerente:
-        session.add(
-            ChatMensaje(
-                tenant_id=tenant_id,
-                remitente_cuenta_id=auth.cuenta_id,
-                destinatario_cuenta_id=cuenta.id,
-                texto=(
-                    f"Solicitud de cobro de {auth.codigo}: {datos.desde} al {datos.hasta}. "
-                    f"Producción {datos.moneda} {resultado['total_produccion']}; "
-                    f"comisión solicitada {datos.moneda} {resultado['total_comisiones']}."
-                ),
-            )
-        )
-    session.flush()
-    auditoria.registrar(
-        session,
-        tenant_id,
-        "COBRO_RESPONSABLE_SOLICITADO",
-        "solicitud_cobro_responsable",
-        solicitud.id,
-        {
-            "gerente_id": str(gerente.id),
-            "periodo_desde": datos.desde.isoformat(),
-            "periodo_hasta": datos.hasta.isoformat(),
-            "moneda": datos.moneda,
-            "produccion": str(solicitud.produccion_total),
-            "comision": str(solicitud.comision_total),
-            "actor": auth.codigo,
+                conteo…3016 tokens truncated…or": auth.codigo,
         },
     )
     session.commit()
@@ -1043,9 +734,7 @@ def incorporar_historicos(
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
                 expediente_tiene_documentos_activos(),
-                Expediente.receptor.has(
-                    Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
-                ),
+                Expediente.pendiente_aprobacion.is_(False),
                 Expediente.gerente_id.is_(None),
                 Expediente.fecha_emision.between(datos.desde, datos.hasta),
                 Expediente.moneda == datos.moneda,
