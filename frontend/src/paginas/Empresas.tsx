@@ -6,7 +6,6 @@ import { Estado } from "../componentes";
 import type {
   ClasificacionProveedor,
   Empresa,
-  TipoRelacionEmpresa,
   SesionActual,
 } from "../tipos";
 
@@ -27,13 +26,8 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
   const [operando, setOperando] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [errorCambio, setErrorCambio] = useState("");
-  const [editandoId, setEditandoId] = useState<string | null>(null);
-  const [rucEditado, setRucEditado] = useState("");
+  const [editandoRazonId, setEditandoRazonId] = useState<string | null>(null);
   const [razonEditada, setRazonEditada] = useState("");
-  const [relacionEditada, setRelacionEditada] =
-    useState<TipoRelacionEmpresa>("SIN_CLASIFICAR");
-  const [clasificacionEditada, setClasificacionEditada] =
-    useState<ClasificacionProveedor | "">("");
 
   const proveedores =
     datos?.filter(
@@ -97,48 +91,50 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
     }
   };
 
-  const iniciarEdicion = (empresa: Empresa) => {
-    setEditandoId(empresa.id);
-    setRucEditado(empresa.ruc);
+  const iniciarEdicionRazon = (empresa: Empresa) => {
+    setEditandoRazonId(empresa.id);
     setRazonEditada(empresa.razon_social);
-    setRelacionEditada(empresa.tipo_relacion);
-    setClasificacionEditada(empresa.clasificacion_proveedor ?? "");
     setErrorCambio("");
   };
 
-  const cancelarEdicion = () => {
-    setEditandoId(null);
-    setRucEditado("");
+  const cancelarEdicionRazon = () => {
+    setEditandoRazonId(null);
     setRazonEditada("");
-    setRelacionEditada("SIN_CLASIFICAR");
-    setClasificacionEditada("");
   };
 
-  const guardarEdicion = async (empresa: Empresa) => {
+  const guardarRazonSocial = async (empresa: Empresa) => {
     setErrorCambio("");
-    const ruc = rucEditado.trim();
     const razon = razonEditada.trim();
 
-    if (!/^\d{11}$/.test(ruc)) {
-      setErrorCambio("El RUC debe tener exactamente 11 dígitos.");
-      return;
-    }
     if (!razon) {
       setErrorCambio("La razón social no puede quedar vacía.");
       return;
     }
 
-    const proveedor =
-      relacionEditada === "PROVEEDOR" || relacionEditada === "AMBOS";
-
     try {
       await enviarJson<Empresa>(`/api/v1/empresas/${empresa.id}`, "PATCH", {
-        ruc,
         razon_social: razon,
-        tipo_relacion: relacionEditada,
-        clasificacion_proveedor: proveedor ? clasificacionEditada || null : null,
       });
-      cancelarEdicion();
+      cancelarEdicionRazon();
+      recargar();
+    } catch (e) {
+      setErrorCambio(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const clasificarProveedor = async (
+    empresa: Empresa,
+    clasificacion: ClasificacionProveedor,
+  ) => {
+    setErrorCambio("");
+    try {
+      await enviarJson<Empresa>(`/api/v1/empresas/${empresa.id}`, "PATCH", {
+        tipo_relacion:
+          empresa.tipo_relacion === "SIN_CLASIFICAR"
+            ? "PROVEEDOR"
+            : empresa.tipo_relacion,
+        clasificacion_proveedor: clasificacion,
+      });
       recargar();
     } catch (e) {
       setErrorCambio(e instanceof Error ? e.message : String(e));
@@ -166,7 +162,7 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
           className={pestana === "PROVEEDORES" ? "activo" : undefined}
           onClick={() => {
             setPestana("PROVEEDORES");
-            cancelarEdicion();
+            cancelarEdicionRazon();
           }}
         >
           Proveedores ({proveedores.length})
@@ -175,7 +171,7 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
           className={pestana === "CLIENTES" ? "activo" : undefined}
           onClick={() => {
             setPestana("CLIENTES");
-            cancelarEdicion();
+            cancelarEdicionRazon();
           }}
         >
           Clientes ({clientes.length})
@@ -184,7 +180,7 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
 
       <div className="acciones">
         <button type="button" className={pestana === "SIN_CLASIFICAR" ? "activo" : undefined}
-          onClick={() => { setPestana("SIN_CLASIFICAR"); setSeleccion([]); cancelarEdicion(); }}>
+          onClick={() => { setPestana("SIN_CLASIFICAR"); setSeleccion([]); cancelarEdicionRazon(); }}>
           Sin clasificar ({(datos ?? []).filter((e) => e.tipo_relacion === "SIN_CLASIFICAR" ||
             ((e.tipo_relacion === "PROVEEDOR" || e.tipo_relacion === "AMBOS") && !e.clasificacion_proveedor)).length})
         </button>
@@ -205,7 +201,7 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
       {sinClasificar.length > 0 && (
         <p className="tenue">
           Hay {sinClasificar.length} empresa(s) sin clasificar. Puedes asignarles su relación desde
-          Editar cuando aparezcan vinculadas a un documento.
+          esta lista; al asignarles Tipo A o Tipo B se registrarán como proveedores.
         </p>
       )}
 
@@ -222,17 +218,13 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
               <th>Razón social</th>
               <th>Usuario</th>
               {esProveedor && <th>Tipo proveedor</th>}
-              <th>Editar</th>
               <th>Autorizada</th>
               <th>Agente de retención</th>
             </tr>
           </thead>
           <tbody>
             {empresasVisibles.map((empresa) => {
-              const editando = editandoId === empresa.id;
-              const proveedorActual =
-                (editando ? relacionEditada : empresa.tipo_relacion) === "PROVEEDOR" ||
-                (editando ? relacionEditada : empresa.tipo_relacion) === "AMBOS";
+              const editandoRazon = editandoRazonId === empresa.id;
 
               return (
                 <tr key={empresa.id}>
@@ -240,30 +232,38 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
                     disabled={!pendientes.some((e) => e.id === empresa.id)}
                     checked={seleccion.includes(empresa.id)}
                     onChange={(ev) => setSeleccion((prev) => ev.target.checked ? [...prev, empresa.id] : prev.filter((id) => id !== empresa.id))}/></td>
+                  <td>{empresa.ruc}</td>
                   <td>
-                    {editando ? (
-                      <input
-                        value={rucEditado}
-                        onChange={(ev) => setRucEditado(ev.target.value.replace(/\D/g, ""))}
-                        maxLength={11}
-                        inputMode="numeric"
-                        aria-label={`Editar RUC ${empresa.ruc}`}
-                      />
-                    ) : (
-                      empresa.ruc
-                    )}
-                  </td>
-                  <td>
-                    {editando ? (
-                      <input
-                        value={razonEditada}
-                        onChange={(ev) => setRazonEditada(ev.target.value)}
-                        maxLength={300}
-                        aria-label={`Editar razón social ${empresa.ruc}`}
-                      />
+                    {editandoRazon ? (
+                      <div className="acciones empresas-razon-social-edicion">
+                        <input
+                          value={razonEditada}
+                          onChange={(ev) => setRazonEditada(ev.target.value)}
+                          maxLength={300}
+                          aria-label={`Editar razón social ${empresa.ruc}`}
+                          autoFocus
+                        />
+                        <button type="button" onClick={() => void guardarRazonSocial(empresa)}>
+                          Guardar
+                        </button>
+                        <button type="button" onClick={cancelarEdicionRazon}>
+                          Cancelar
+                        </button>
+                      </div>
                     ) : (
                       <>
-                        {empresa.razon_social}
+                        {puedeClasificar ? (
+                          <button
+                            type="button"
+                            className="empresas-razon-social-enlace"
+                            aria-label={`Editar razón social ${empresa.ruc}`}
+                            onClick={() => iniciarEdicionRazon(empresa)}
+                          >
+                            {empresa.razon_social}
+                          </button>
+                        ) : (
+                          empresa.razon_social
+                        )}
                         {!empresa.clasificacion_proveedor && (empresa.tipo_relacion === "PROVEEDOR" || empresa.tipo_relacion === "AMBOS" || empresa.tipo_relacion === "SIN_CLASIFICAR") && <span className="etiqueta">Sin clasificar</span>}
                         {empresa.tipo_relacion === "AMBOS" && (
                           <span className="etiqueta">Proveedor y cliente</span>
@@ -275,53 +275,23 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
 
                   {esProveedor && (
                     <td>
-                      {editando ? (
-                        <select
-                          value={clasificacionEditada}
-                          disabled={!proveedorActual}
-                          onChange={(ev) =>
-                            setClasificacionEditada(
-                              ev.target.value as ClasificacionProveedor | "",
-                            )
-                          }
-                        >
-                          <option value="">Sin tipo</option>
-                          <option value="A">Tipo A</option>
-                          <option value="B">Tipo B</option>
-                        </select>
-                      ) : empresa.clasificacion_proveedor ? (
-                        `Tipo ${empresa.clasificacion_proveedor}`
-                      ) : (
-                        "Sin tipo"
-                      )}
+                      <fieldset className="empresas-tipo-proveedor" disabled={!puedeClasificar || operando}>
+                        <legend className="solo-lectores">Tipo de proveedor para {empresa.ruc}</legend>
+                        {(["A", "B"] as const).map((tipo) => (
+                          <label key={tipo}>
+                            <input
+                              type="radio"
+                              name={`tipo-proveedor-${empresa.id}`}
+                              value={tipo}
+                              checked={empresa.clasificacion_proveedor === tipo}
+                              onChange={() => void clasificarProveedor(empresa, tipo)}
+                            />
+                            <span>Tipo {tipo}</span>
+                          </label>
+                        ))}
+                      </fieldset>
                     </td>
                   )}
-
-                  <td>
-                    {editando ? (
-                      <div className="acciones">
-                        <select
-                          value={relacionEditada}
-                          onChange={(ev) => {
-                            const valor = ev.target.value as TipoRelacionEmpresa;
-                            setRelacionEditada(valor);
-                            if (valor === "CLIENTE" || valor === "SIN_CLASIFICAR") {
-                              setClasificacionEditada("");
-                            }
-                          }}
-                        >
-                          <option value="PROVEEDOR">Proveedor</option>
-                          <option value="CLIENTE">Cliente</option>
-                          <option value="AMBOS">Proveedor y cliente</option>
-                          <option value="SIN_CLASIFICAR">Sin clasificar</option>
-                        </select>
-                        <button onClick={() => void guardarEdicion(empresa)}>Guardar</button>
-                        <button onClick={cancelarEdicion}>Cancelar</button>
-                      </div>
-                    ) : puedeClasificar ? (
-                      <button onClick={() => iniciarEdicion(empresa)}>Editar</button>
-                    ) : "Solo Administración"}
-                  </td>
                   <td>
                     <input
                       type="checkbox"
