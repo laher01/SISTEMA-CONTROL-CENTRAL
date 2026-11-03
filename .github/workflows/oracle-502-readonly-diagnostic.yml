@@ -1,0 +1,145 @@
+name: oracle-502-readonly-diagnostic
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/oracle-502-readonly-diagnostic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oracle-502-readonly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate YAML structure and strict remote allowlist
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import sys
+          import json
+
+          path = Path(".github/workflows/oracle-502-readonly-diagnostic.yml")
+          text = path.read_text()
+          workflow = json.loads(subprocess.check_output(['ruby', '-ryaml', '-rjson', '-e', 'puts JSON.generate(YAML.load_file(ARGV[0]))', str(path)], text=True))
+          assert workflow["permissions"] == {"contents": "read"}
+          jobs = workflow["jobs"]
+          assert set(jobs) == {"verify-policy", "inspect-oracle"}
+          remote = jobs["inspect-oracle"]
+          assert remote["if"] == "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'"
+          assert remote["needs"] == "verify-policy"
+          assert remote["environment"] == "staging"
+          assert remote["timeout-minutes"] <= 8
+          steps = remote["steps"]
+          assert len(steps) == 2
+          assert 'test "$VPS_HOST" = "132.145.233.172"' in steps[0]["run"]
+          assert 'test "$VPS_USER" = "ubuntu"' in steps[0]["run"]
+          assert 'test "$VPS_DEPLOY_PATH" = "/home/ubuntu/fact-central"' in steps[0]["run"]
+          assert "StrictHostKeyChecking=yes" in steps[1]["run"]
+          assert "BatchMode=yes" in steps[1]["run"]
+          assert "secrets." not in steps[1]["run"]
+          assert set(steps[1]["env"]) == {"VPS_HOST","VPS_USER","VPS_SSH_PRIVATE_KEY","VPS_SSH_KNOWN_HOSTS"}
+          script = steps[1]["run"].split("<<'REMOTE'", 1)[1].rsplit("\n          REMOTE", 1)[0]
+          prohibited = ("eval ", "source ", "sudo ", "docker run", "docker compose up", "docker compose down",
+                        "restart", "kill ", "rm ", "mv ", "cp ", "touch ", "tee ", "sed -i",
+                        "git pull", "git checkout", "git reset", "pg_restore", "pg_dump",
+                        "psql ", "alembic upgrade", "systemctl ", "curl -X ", "wget --post")
+          for term in prohibited:
+              assert term not in script, f"prohibited remote token: {term}"
+          assert "logs --no-color --tail=40" in script
+          assert "NO_SERVICE_CHANGES=TRUE" in script
+          print("STRUCTURAL_WORKFLOW_POLICY=PASS")
+          PY
+  inspect-oracle:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: verify-policy
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 8
+    steps:
+      - name: Verify authorized destination and available secrets
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test "$VPS_HOST" = "132.145.233.172"
+          test "$VPS_USER" = "ubuntu"
+          test "$VPS_DEPLOY_PATH" = "/home/ubuntu/fact-central"
+          for name in VPS_SSH_PRIVATE_KEY VPS_SSH_KNOWN_HOSTS; do
+            test -n "${!name:-}"
+          done
+          echo 'ORACLE_DESTINATION=VERIFIED'
+      - name: Inspect host and container reachability (read only)
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -uo pipefail
+          cd /home/ubuntu/fact-central || exit 1
+          test -r deploy/.env.production || exit 1
+          compose=(docker compose --env-file deploy/.env.production -f deploy/docker-compose.production.yml)
+          echo "DEPLOYED_SHA=$(git rev-parse HEAD)"
+          for service in backend frontend tunnel db; do
+            if "${compose[@]}" ps --status running --services | grep -Fxq "$service"; then
+              echo "SERVICE_${service}=RUNNING"
+            else
+              echo "SERVICE_${service}=NOT_RUNNING"
+            fi
+          done
+          probe() {
+            local label="$1"
+            shift
+            local code
+            code="$("$@" 2>/dev/null)"
+            local rc=$?
+            case "$code" in
+              200|401|403|404|500|502|503|504) ;;
+              *) code="OTHER";;
+            esac
+            echo "${label}_HTTP=${code} EXIT=${rc}"
+          }
+          probe VPS_FRONTEND_HEALTH curl -sS --max-time 8 -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/health
+          probe VPS_FRONTEND_DOCUMENTOS curl -sS --max-time 8 -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/v1/documentos
+          # Check upstream connectivity from frontend without printing headers or body.
+          if "${compose[@]}" exec -T frontend wget -q --timeout=8 -O /dev/null http://backend:8000/health </dev/null >/dev/null 2>&1; then
+            echo 'FRONTEND_TO_BACKEND=REACHABLE'
+          else
+            echo 'FRONTEND_TO_BACKEND=FAILED'
+          fi
+          if "${compose[@]}" exec -T backend uv run python -c "import urllib.request; r=urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=5); assert r.status == 200" </dev/null >/dev/null 2>&1; then
+            echo 'BACKEND_LOOPBACK_HEALTH=OK'
+          else
+            echo 'BACKEND_LOOPBACK_HEALTH=FAILED'
+          fi
+          for service in frontend backend tunnel; do
+            # Summary counts only: no raw logs (may contain PII or session data).
+            count=$("${compose[@]}" logs --no-color --tail=40 "$service" 2>/dev/null | grep -Eic 'connect\(\) failed|connection refused|no live upstream|bad gateway|error|unhealthy' || true)
+            echo "LOG_ERROR_MATCHES_${service}=${count}"
+          done
+          echo 'TUNNEL_CONFIG=NOT_READ_OR_EMITTED'
+          echo 'NO_SERVICE_CHANGES=TRUE'
+          REMOTE
