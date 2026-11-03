@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 15495)
-Total output lines: 1652
-
 import io
 from datetime import date
 from decimal import Decimal
@@ -606,7 +603,387 @@ def test_eliminar_documento_borra_registro_y_archivo_fisico(
     auth_prueba.como_admin()
     documento_id = documento["id"]
 
-    respuesta = client.dele…3495 tokens truncated…das_no_se_reactivan_por_ingesta_automatica(
+    respuesta = client.delete(f"/api/v1/documentos/{documento_id}")
+    assert respuesta.status_code == 200
+    assert respuesta.json() == {"estado": "completado"}
+
+    assert client.get(f"/api/v1/documentos/{documento_id}").status_code == 404
+    listado = client.get("/api/v1/documentos")
+    assert listado.status_code == 200
+    assert all(d["id"] != documento_id for d in listado.json())
+    original = (
+        settings.storage_dir
+        / str(auth_prueba.contexto.tenant_id)
+        / documento["sha256"][:2]
+        / documento["sha256"]
+    )
+    assert not original.exists()
+
+
+def test_reingreso_tras_eliminacion_crea_documento_nuevo(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.routes import documentos as rutas_documentos
+
+    forzados: list[bool] = []
+
+    def procesar_simulado(*args: object, **kwargs: object) -> None:
+        forzados.append(kwargs.get("forzar_cache") is True)
+
+    monkeypatch.setattr(rutas_documentos, "_procesar_y_aplicar", procesar_simulado)
+    contenido = b"%PDF-1.7 documento para reingreso"
+    primero = subir(client, "reingreso.pdf", contenido)
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+    auth_prueba.como_admin()
+    eliminado = client.delete(f"/api/v1/documentos/{primero['id']}")
+    assert eliminado.status_code == 200, eliminado.text
+
+    auth_prueba.como_usuario(usuario_id)
+    segundo = subir(client, "reingreso.pdf", contenido)
+    assert segundo["id"] != primero["id"]
+    # El caché OCR asociado al archivo se limpia al eliminarlo; la nueva carga
+    # no reutiliza extracción anterior, aunque no necesita forzar el modo.
+    assert forzados == [False, False]
+
+
+def test_reingreso_de_factura_eliminada_crea_documento_nuevo_en_expediente_activo(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+) -> None:
+    contenido = factura(numero="F001-00009986")
+    original = subir(client, "factura-reingreso.xml", contenido)
+    usuario_id = auth_prueba.contexto.usuario_id
+    assert usuario_id is not None
+    auth_prueba.como_admin()
+    assert client.delete(f"/api/v1/documentos/{original['id']}").status_code == 200
+
+    auth_prueba.como_usuario(usuario_id)
+    nuevo = subir(client, "factura-reingreso.xml", contenido)
+    assert nuevo["id"] != original["id"]
+    assert nuevo["expediente_id"] != original["expediente_id"]
+    assert client.get(f"/api/v1/expedientes/{original['expediente_id']}").status_code == 404
+
+
+def test_eliminacion_concurrente_no_deja_huella_ni_falla_parcial(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    engine: Engine,
+    session: Session,
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    if engine.dialect.name != "postgresql":
+        pytest.skip("La prueba exige bloqueos de fila PostgreSQL")
+    documento = subir(client, "eliminar-concurrente.pdf", b"%PDF-1.7 borrado concurrente")
+    auth_prueba.como_admin()
+    barrera = Barrier(2)
+
+    def eliminar_simultaneamente() -> int:
+        barrera.wait(timeout=15)
+        return client.delete(f"/api/v1/documentos/{documento['id']}").status_code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(eliminar_simultaneamente) for _ in range(2)]
+        estados = sorted(future.result(timeout=30) for future in futures)
+
+    assert estados == [200, 404]
+    assert session.query(Auditoria).filter(Auditoria.accion == "DOCUMENTO_ELIMINADO").count() == 0
+
+
+def test_reprocesamiento_masivo_repara_razones_sociales(
+    client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings.tenant_ruc = RECEPTOR
+    settings.procesamiento_automatico = False
+    documento = subir(client, "factura-anterior.pdf", pdf_vacio())
+    settings.procesamiento_automatico = True
+    texto = """FACTURA ELECTRÓNICA F003-00000888
+    PROVEEDOR: PESQUERA DEL PACIFICO S.A.C. RUC EMISOR: 20600000003
+    CLIENTE: NEXOMAR NEGOCIOS E.I.R.L. RUC: 20100000001
+    Fecha de emisión: 19/09/2026 Moneda: SOLES TOTAL S/ 1,250.00"""
+    monkeypatch.setattr(
+        documentos_routes,
+        "procesar",
+        lambda *_: ResultadoProcesamiento(
+            texto=texto,
+            metodo="TEXTO_PDF",
+            motor="prueba",
+            paginas=1,
+            confianza=1.0,
+            sugerencia=sugerir_tipo(texto),
+        ),
+    )
+
+    respuesta = client.post(
+        "/api/v1/documentos/procesar-pendientes",
+        params={"limit": 100, "forzar": True, "sin_expediente": True},
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json()["relacionados"] == 1
+
+    actualizado = client.get(f"/api/v1/documentos/{documento['id']}").json()
+    assert actualizado["estado"] == "RELACIONADO"
+    detalle = expediente(client, actualizado["expediente_id"])
+    assert detalle["emisor"]["razon_social"] == "PESQUERA DEL PACIFICO S.A.C."
+    assert detalle["receptor"]["razon_social"] == "NEXOMAR NEGOCIOS E.I.R.L."
+
+
+def test_recalcular_corrige_expedientes_historicos_menores_al_umbral(
+    client: TestClient,
+    engine: Engine,
+    auth_prueba: AuthPrueba,
+) -> None:
+    from uuid import UUID
+
+    documento = subir(client, "historica.xml", factura(importe="950.00"))
+    expediente_id = documento["expediente_id"]
+    autorizar_receptor(client, auth_prueba)
+
+    with sessionmaker(engine, expire_on_commit=False)() as session:
+        historico = session.get(Expediente, UUID(str(expediente_id)))
+        assert historico is not None
+        historico.requiere_guia = True
+        historico.estado = "NARANJA"
+        session.commit()
+
+    auth_prueba.como_admin()
+    respuesta = client.post("/api/v1/expedientes/recalcular")
+    assert respuesta.status_code == 200, respuesta.text
+
+    detalle = expediente(client, expediente_id)
+    assert detalle["requiere_guia"] is False
+    assert detalle["faltantes"] == []
+    assert detalle["estado"] == "VERDE"
+
+
+def test_rhe_pdf_crea_expediente_automaticamente_con_partes(
+    client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings.tenant_ruc = RECEPTOR
+    texto = f"""RECIBO POR HONORARIOS ELECTRÓNICO
+    JUAN PEREZ LOPEZ
+    RUC: 10456789012
+    E001-00000038
+    RECIBÍ DE: CLIENTE SAC
+    IDENTIFICADO CON RUC NÚMERO: {RECEPTOR}
+    FECHA DE EMISIÓN: 02/10/2026
+    TOTAL POR HONORARIOS: S/ 350.00"""
+    monkeypatch.setattr(
+        documentos_routes,
+        "procesar",
+        lambda *_: ResultadoProcesamiento(
+            texto=texto,
+            metodo="TEXTO_PDF",
+            motor="prueba",
+            paginas=1,
+            confianza=1.0,
+            sugerencia=sugerir_tipo(texto),
+        ),
+    )
+
+    documento = subir(client, "rhe.pdf", pdf_vacio())
+
+    assert documento["estado"] == "RELACIONADO"
+    assert documento["tipo_documento"] == "RHE"
+    assert documento["expediente_id"] is not None
+    detalle = expediente(client, documento["expediente_id"])
+    assert detalle["tipo_comprobante"] == "RHE"
+    assert detalle["requiere_guia"] is False
+    assert detalle["emisor"]["ruc"] == "10456789012"
+    assert detalle["emisor"]["razon_social"] == "JUAN PEREZ LOPEZ"
+    assert detalle["receptor"]["ruc"] == RECEPTOR
+    assert detalle["receptor"]["razon_social"] == "CLIENTE SAC"
+
+
+def test_listado_documentos_incluye_partes_del_expediente(client: TestClient) -> None:
+    documento = subir(client, "factura.xml", factura())
+    respuesta = client.get("/api/v1/documentos", params={"tipo_documento": "FACT"})
+    assert respuesta.status_code == 200
+    fila = next(d for d in respuesta.json() if d["id"] == documento["id"])
+    assert fila["emisor"]["ruc"] == "20500000002"
+    assert fila["emisor"]["razon_social"] == "PROVEEDOR SAC"
+    assert fila["receptor"]["ruc"] == RECEPTOR
+    assert fila["receptor"]["razon_social"] == "CLIENTE SAC"
+
+
+def test_reprocesar_partes_repara_empresas_de_documento_relacionado(
+    client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings.tenant_ruc = RECEPTOR
+    texto_inicial = """FACTURA ELECTRÓNICA F009-00000021
+    RUC EMISOR: 20611111111 CLIENTE RUC: 20100000001
+    Fecha de emisión: 20/09/2026 Moneda: SOLES TOTAL S/ 700.00"""
+    monkeypatch.setattr(
+        documentos_routes,
+        "procesar",
+        lambda *_: ResultadoProcesamiento(
+            texto=texto_inicial,
+            metodo="TEXTO_PDF",
+            motor="prueba",
+            paginas=1,
+            confianza=1.0,
+            sugerencia=sugerir_tipo(texto_inicial),
+        ),
+    )
+    documento = subir(client, "factura-sin-nombres.pdf", pdf_vacio())
+    assert documento["estado"] == "RELACIONADO"
+
+    texto_actualizado = """FACTURA ELECTRÓNICA F009-00000021
+    PROVEEDOR: PESQUERA ACTUALIZADA S.A.C. RUC EMISOR: 20611111111
+    CLIENTE: CLIENTE ACTUALIZADO S.A.C. RUC: 20100000001
+    Fecha de emisión: 20/09/2026 Moneda: SOLES TOTAL S/ 700.00"""
+    monkeypatch.setattr(
+        documentos_routes,
+        "procesar",
+        lambda *_: ResultadoProcesamiento(
+            texto=texto_actualizado,
+            metodo="TEXTO_PDF",
+            motor="prueba",
+            paginas=1,
+            confianza=1.0,
+            sugerencia=sugerir_tipo(texto_actualizado),
+        ),
+    )
+
+    respuesta = client.post(
+        "/api/v1/documentos/procesar-pendientes",
+        params={"limit": 100, "forzar": True, "completar_partes": True},
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    detalle = expediente(client, documento["expediente_id"])
+    assert detalle["emisor"]["razon_social"] == "PESQUERA ACTUALIZADA S.A.C."
+    assert detalle["receptor"]["razon_social"] == "CLIENTE ACTUALIZADO S.A.C."
+
+
+def test_dashboard_desglose_agrupa_y_filtra(client: TestClient) -> None:
+    subir(
+        client,
+        "septiembre.xml",
+        factura(numero="F001-00001001", fecha="2026-09-10", importe="1200.00"),
+    )
+    subir(
+        client,
+        "octubre.xml",
+        factura(
+            numero="F002-00001002",
+            fecha="2026-10-02",
+            importe="800.00",
+            emisor="20600000003",
+        ),
+    )
+
+    por_mes = client.get(
+        "/api/v1/dashboard/desglose",
+        params={"agrupar_por": "mes", "orden": "asc"},
+    )
+    assert por_mes.status_code == 200, por_mes.text
+    assert [fila["clave"] for fila in por_mes.json()["filas"]] == ["2026-09", "2026-10"]
+
+    por_emisor = client.get(
+        "/api/v1/dashboard/desglose",
+        params={"agrupar_por": "emisor", "orden": "desc"},
+    )
+    assert por_emisor.status_code == 200, por_emisor.text
+    assert {fila["ruc"] for fila in por_emisor.json()["filas"]} == {
+        "20500000002",
+        "20600000003",
+    }
+
+    empresa = next(fila for fila in por_emisor.json()["filas"] if fila["ruc"] == "20600000003")
+    assert empresa["expedientes"] == 1
+    assert empresa["total_pen"] == "800.00"
+
+    octubre = client.get(
+        "/api/v1/dashboard/desglose",
+        params={
+            "agrupar_por": "dia",
+            "fecha_desde": "2026-10-01",
+            "fecha_hasta": "2026-10-31",
+        },
+    )
+    assert octubre.status_code == 200, octubre.text
+    assert len(octubre.json()["filas"]) == 1
+    assert octubre.json()["filas"][0]["clave"] == "2026-10-02"
+
+
+def test_rhe_crea_expedientes_propios_y_suma_montos(
+    client: TestClient,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings.tenant_ruc = None
+    textos = iter(
+        [
+            """RECIBO POR HONORARIOS ELECTRÓNICO E001-33
+AYALA AREVALO ELVIS EDUARDO R.U.C. 10753246920
+Recibí de FRUTTI DEL PAESE E.I.R.L.
+Identificado con RUC Número 20611909234
+Fecha de emisión 17 de Agosto del 2026
+Total por Honorarios : 1,500.00
+Retención (8 %) IR : (0.00)
+Total Neto Recibido : 1,500.00 SOLES""",
+            """RECIBO POR HONORARIOS ELECTRÓNICO E001-34
+AYALA AREVALO ELVIS EDUARDO R.U.C. 10753246920
+Recibí de INVERSIONES YATAMURI E.I.R.L.
+Identificado con RUC Número 20492560601
+Fecha de emisión 18 de Agosto del 2026
+Total por Honorarios : 1,500.00
+Retención (8 %) IR : (0.00)
+Total Neto Recibido : 1,500.00 SOLES""",
+            """RECIBO POR HONORARIOS ELECTRÓNICO E001-35
+AYALA AREVALO ELVIS EDUARDO R.U.C. 10753246920
+Recibí de MAIK FISHING SOCIEDAD ANONIMA CERRADA
+Identificado con RUC Número 20609762030
+Fecha de emisión 19 de Agosto del 2026
+Total por Honorarios : 1,500.00
+Retención (8 %) IR : (0.00)
+Total Neto Recibido : 1,500.00 SOLES""",
+        ]
+    )
+
+    def procesar_rhe(*_: object) -> ResultadoProcesamiento:
+        texto = next(textos)
+        return ResultadoProcesamiento(
+            texto=texto,
+            metodo="TEXTO_PDF",
+            motor="prueba",
+            paginas=1,
+            confianza=1.0,
+            sugerencia=sugerir_tipo(texto),
+        )
+
+    monkeypatch.setattr(documentos_routes, "procesar", procesar_rhe)
+
+    documentos = [
+        subir(client, "rhe-35.pdf", pdf_vacio() + b"35"),
+        subir(client, "rhe-34.pdf", pdf_vacio() + b"34"),
+        subir(client, "rhe-33.pdf", pdf_vacio() + b"33"),
+    ]
+
+    assert all(doc["tipo_documento"] == "RHE" for doc in documentos)
+    assert all(doc["estado"] == "RELACIONADO" for doc in documentos)
+    expedientes_ids = {doc["expediente_id"] for doc in documentos}
+    assert None not in expedientes_ids
+    assert len(expedientes_ids) == 3
+
+    detalles = [expediente(client, expediente_id) for expediente_id in expedientes_ids]
+    assert {detalle["correlativo"] for detalle in detalles} == {"33", "34", "35"}
+    assert all(detalle["requiere_guia"] is False for detalle in detalles)
+
+    resumen = client.get("/api/v1/dashboard/resumen")
+    assert resumen.status_code == 200, resumen.text
+    datos = resumen.json()
+    assert datos["expedientes_total"] == 3
+    montos = {m["moneda"]: m for m in datos["montos"]}
+    total_pen = Decimal(montos["PEN"]["bancarizable"]) + Decimal(montos["PEN"]["no_bancarizable"])
+    assert total_pen == Decimal("4500.00")
+
+
+def test_empresas_eliminadas_no_se_reactivan_por_ingesta_automatica(
     client: TestClient,
     auth_prueba: AuthPrueba,
 ) -> None:
