@@ -16,6 +16,15 @@ from app.tenant_host import validar_sesion_host
 SessionDep = Annotated[Session, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
+# La carga documental operativa pertenece exclusivamente al Gestor.
+RUTAS_CARGA_SOLO_GESTOR = frozenset(
+    {
+        "/api/v1/documentos",
+        "/api/v1/documentos/paquete",
+        "/api/v1/documentos/lote-imagenes",
+    }
+)
+
 
 def get_hoy(settings: SettingsDep) -> date:
     return settings.hoy()
@@ -51,6 +60,15 @@ def get_contexto_operativo(
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "Debe cambiar la clave temporal antes de continuar",
+        )
+    if (
+        request.method == "POST"
+        and request.url.path in RUTAS_CARGA_SOLO_GESTOR
+        and contexto.rol != "GESTOR"
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Solo Gestores pueden cargar documentos al sistema",
         )
     if contexto.rol == "SUPERADMIN" and not (
         request.url.path == "/api/v1/configuracion/administraciones"
