@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { enviarJson, useDatos } from "../api";
@@ -11,6 +11,31 @@ import type {
 
 type Campo = "autorizada" | "agente_retencion";
 type PestanaEmpresa = "PROVEEDORES" | "CLIENTES";
+type OrdenEmpresas = "ruc" | "razon_social" | "usuario" | "tipo" | "autorizada";
+
+export function ordenarEmpresas(
+  empresas: Empresa[],
+  orden: OrdenEmpresas,
+  direccion: "asc" | "desc",
+): Empresa[] {
+  const compararTexto = (a: string, b: string) =>
+    a.localeCompare(b, "es", { numeric: true, sensitivity: "base" });
+  return [...empresas].sort((a, b) => {
+    let comparacion = 0;
+    if (orden === "ruc") comparacion = compararTexto(a.ruc, b.ruc);
+    if (orden === "razon_social") comparacion = compararTexto(a.razon_social, b.razon_social);
+    if (orden === "usuario") comparacion = compararTexto(
+      (a.usuarios ?? []).map((u) => `${u.codigo} ${u.nombre}`).join(" "),
+      (b.usuarios ?? []).map((u) => `${u.codigo} ${u.nombre}`).join(" "),
+    );
+    if (orden === "tipo") comparacion = compararTexto(
+      a.clasificacion_proveedor ?? "",
+      b.clasificacion_proveedor ?? "",
+    );
+    if (orden === "autorizada") comparacion = Number(a.autorizada) - Number(b.autorizada);
+    return (direccion === "asc" ? 1 : -1) * comparacion || compararTexto(a.ruc, b.ruc);
+  });
+}
 
 export default function Empresas({ sesion }: { sesion: SesionActual }) {
   const puedeClasificar = sesion.rol === "SUPERADMIN" || sesion.rol === "ADMINISTRADOR";
@@ -28,6 +53,8 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
   const [errorCambio, setErrorCambio] = useState("");
   const [editandoRazonId, setEditandoRazonId] = useState<string | null>(null);
   const [razonEditada, setRazonEditada] = useState("");
+  const [orden, setOrden] = useState<OrdenEmpresas>("ruc");
+  const [direccionOrden, setDireccionOrden] = useState<"asc" | "desc">("asc");
 
   const proveedores =
     datos?.filter(
@@ -47,6 +74,26 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
   const esProveedor = pestana !== "CLIENTES";
   const pendientes = empresasVisibles.filter((e) => e.tipo_relacion === "SIN_CLASIFICAR" ||
     ((e.tipo_relacion === "PROVEEDOR" || e.tipo_relacion === "AMBOS") && !e.clasificacion_proveedor));
+  const empresasOrdenadas = useMemo(
+    () => ordenarEmpresas(empresasVisibles, orden, direccionOrden),
+    [empresasVisibles, orden, direccionOrden],
+  );
+
+  const ordenarPor = (campo: OrdenEmpresas) => {
+    if (orden === campo) setDireccionOrden((actual) => actual === "asc" ? "desc" : "asc");
+    else {
+      setOrden(campo);
+      setDireccionOrden("asc");
+    }
+  };
+
+  const encabezadoOrdenable = (texto: string, campo: OrdenEmpresas) => (
+    <th aria-sort={orden === campo ? (direccionOrden === "asc" ? "ascending" : "descending") : "none"}>
+      <button type="button" className="empresas-ordenar" onClick={() => ordenarPor(campo)}>
+        {texto}{orden === campo ? (direccionOrden === "asc" ? " ↑" : " ↓") : " ↕"}
+      </button>
+    </th>
+  );
 
   const notificar = async () => {
     if (!seleccion.length) return;
@@ -85,6 +132,13 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
     setErrorCambio("");
     try {
       await enviarJson(`/api/v1/empresas/${empresa.id}`, "PATCH", { [campo]: valor });
+      if (campo === "autorizada") {
+        setMensaje(
+          valor
+            ? "Autorización activada para los expedientes que ingresen desde ahora."
+            : "Autorización desactivada para los expedientes que ingresen desde ahora; los expedientes anteriores conservan su estado.",
+        );
+      }
       recargar();
     } catch (e) {
       setErrorCambio(e instanceof Error ? e.message : String(e));
@@ -156,6 +210,7 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
         aparecerá en las dos pestañas. La clasificación Tipo A / Tipo B aplica únicamente a
         proveedores.
       </p>
+      <p className="tenue">El estado de autorización rige para expedientes nuevos; los anteriores conservan su estado registrado.</p>
 
       <div className="acciones">
         <button
@@ -214,16 +269,16 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
               <th><input type="checkbox" aria-label="Seleccionar pendientes visibles"
                 checked={pendientes.length > 0 && pendientes.every((e) => seleccion.includes(e.id))}
                 onChange={(ev) => setSeleccion(ev.target.checked ? pendientes.map((e) => e.id) : [])}/></th>
-              <th>RUC</th>
-              <th>Razón social</th>
-              <th>Usuario</th>
-              {esProveedor && <th>Tipo proveedor</th>}
-              <th>Autorizada</th>
+              {encabezadoOrdenable("RUC", "ruc")}
+              {encabezadoOrdenable("Razón social", "razon_social")}
+              {encabezadoOrdenable("Usuario", "usuario")}
+              {esProveedor && encabezadoOrdenable("Tipo proveedor", "tipo")}
+              {encabezadoOrdenable("Autorizada", "autorizada")}
               <th>Agente de retención</th>
             </tr>
           </thead>
           <tbody>
-            {empresasVisibles.map((empresa) => {
+            {empresasOrdenadas.map((empresa) => {
               const editandoRazon = editandoRazonId === empresa.id;
 
               return (
@@ -300,6 +355,9 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
                       disabled={!puedeAutorizar}
                       onChange={(ev) => cambiar(empresa, "autorizada", ev.target.checked)}
                     />
+                    <span className={empresa.autorizada ? "estado-autorizacion-activa" : "estado-autorizacion-desactivada"}>
+                      {empresa.autorizada ? "Autorizada" : "Desactivada"}
+                    </span>
                   </td>
                   <td>
                     <input

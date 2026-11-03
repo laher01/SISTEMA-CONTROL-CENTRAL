@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
-from app.models import Empresa, Expediente, Gestor, PagoGestor
+from app.models import Expediente, Gestor, PagoGestor
 from app.services import auditoria
 from app.services.bloqueo_financiero_misd import bloquear_tenant_financiero
 from app.services.expedientes import expediente_tiene_documentos_activos
@@ -65,9 +65,7 @@ def _calcular(
                 Expediente.gestor_id == gestor.id,
                 Expediente.deleted_at.is_(None),
                 expediente_tiene_documentos_activos(),
-                Expediente.receptor.has(
-                    Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
-                ),
+                Expediente.pendiente_aprobacion.is_(False),
                 Expediente.moneda == datos.moneda,
                 Expediente.fecha_emision >= datos.desde,
                 Expediente.fecha_emision <= datos.hasta,

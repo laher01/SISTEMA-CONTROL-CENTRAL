@@ -35,7 +35,7 @@ def resumen(session: SessionDep, tenant_id: TenantDep, auth: OperativeAuthDep) -
             Expediente.tenant_id == tenant_id,
             Expediente.deleted_at.is_(None),
             expediente_tiene_documentos_activos(),
-            Expediente.receptor.has(Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)),
+            Expediente.pendiente_aprobacion.is_(False),
         )
         .where(*_scope(auth))
         .group_by(
@@ -91,13 +91,13 @@ def compras(
             emisor.razon_social,
             receptor.ruc,
             receptor.razon_social,
-            receptor.autorizada,
+            Expediente.pendiente_aprobacion,
             Expediente.moneda,
             func.count(Expediente.id),
             func.coalesce(
                 func.sum(
                     case(
-                        (receptor.autorizada.is_(True), Expediente.importe_total),
+                        (Expediente.pendiente_aprobacion.is_(False), Expediente.importe_total),
                         else_=0,
                     )
                 ),
@@ -121,7 +121,7 @@ def compras(
             emisor.razon_social,
             receptor.ruc,
             receptor.razon_social,
-            receptor.autorizada,
+            Expediente.pendiente_aprobacion,
             Expediente.moneda,
         )
         .order_by(Miembro.codigo, Gestor.codigo, emisor.razon_social, receptor.razon_social)
@@ -134,7 +134,7 @@ def compras(
             emisor_razon_social=emisor_nombre,
             receptor_ruc=receptor_ruc,
             receptor_razon_social=receptor_nombre,
-            cliente_autorizado=cliente_autorizado,
+            cliente_autorizado=not cliente_autorizado,
             moneda=moneda,
             expedientes=expedientes,
             importe_total=Decimal(importe_total),

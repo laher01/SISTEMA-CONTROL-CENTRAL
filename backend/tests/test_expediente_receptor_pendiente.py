@@ -104,7 +104,7 @@ def test_usuario_no_puede_autorizar_empresa(client: TestClient) -> None:
     assert resultado.status_code == 403, resultado.text
 
 
-def test_autorizacion_receptor_recalcula_expediente_y_revocacion(
+def test_cambios_de_autorizacion_no_reescriben_expedientes_historicos(
     client: TestClient, auth_prueba: object, engine: Engine
 ) -> None:
     archivo = client.post(
@@ -144,7 +144,7 @@ def test_autorizacion_receptor_recalcula_expediente_y_revocacion(
         assert aprobado.json()["autorizada"] is True
         activo = client.get(f"/api/v1/expedientes/{expediente_id}")
         assert activo.status_code == 200, activo.text
-        assert activo.json()["pendiente_aprobacion"] is False
+        assert activo.json()["pendiente_aprobacion"] is True
 
         revocado = client.patch(f"/api/v1/empresas/{receptor_id}", json={"autorizada": False})
         assert revocado.status_code == 200, revocado.text

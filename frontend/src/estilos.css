@@ -219,6 +219,32 @@ input[type="checkbox"] {
   min-width: 16rem;
 }
 
+.empresas-ordenar {
+  padding: 0.15rem 0.25rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.estado-autorizacion-activa,
+.estado-autorizacion-desactivada {
+  display: inline-block;
+  margin-left: 0.4rem;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.estado-autorizacion-activa {
+  color: #166534;
+}
+
+.estado-autorizacion-desactivada {
+  color: #9a3412;
+}
+
 .empresas-tipo-proveedor {
   display: flex;
   gap: 0.5rem;

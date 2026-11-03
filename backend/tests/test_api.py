@@ -132,9 +132,9 @@ def test_expediente_completo_queda_verde(client: TestClient, auth_prueba: AuthPr
     autorizar_receptor(client, auth_prueba)
     detalle = expediente(client, expediente_id)
     assert detalle["estado"] == "VERDE"
-    assert detalle["pendiente_aprobacion"] is False
+    assert detalle["pendiente_aprobacion"] is True
     assert detalle["faltantes"] == []
-    assert alertas_abiertas(detalle) == set()
+    assert alertas_abiertas(detalle) == {"RECEPTOR_NO_AUTORIZADO"}
 
 
 def test_agente_retencion_sin_constancia_queda_amarillo(
@@ -148,7 +148,7 @@ def test_agente_retencion_sin_constancia_queda_amarillo(
 
     detalle = expediente(client, expediente_id)
     assert detalle["estado"] == "AMARILLO"
-    assert alertas_abiertas(detalle) == {"RETENCION_PENDIENTE"}
+    assert alertas_abiertas(detalle) == {"RETENCION_PENDIENTE", "RECEPTOR_NO_AUTORIZADO"}
 
     subir(client, "ret.pdf", b"%PDF ret", tipo_documento="RET", expediente_id=expediente_id)
     assert expediente(client, expediente_id)["estado"] == "VERDE"
@@ -170,6 +170,7 @@ def test_expediente_vencido_queda_rojo(
     assert alertas_abiertas(detalle) == {
         "BANCARIZACION_SIN_VOUCHER",
         "EXPEDIENTE_VENCIDO",
+        "RECEPTOR_NO_AUTORIZADO",
     }
 
 

@@ -436,6 +436,9 @@ def crear_expediente(
         fecha_emision=fecha_emision,
         moneda=moneda,
         importe_total=importe_total,
+        pendiente_aprobacion=(
+            not empresa_receptora.autorizada or empresa_receptora.deleted_at is not None
+        ),
         requiere_guia=(
             requiere_guia
             and tipo_comprobante == TipoComprobante.FACT
@@ -504,6 +507,7 @@ def _expediente_para_comprobante(
             fecha_emision=comprobante.fecha_emision,
             moneda=comprobante.moneda,
             importe_total=comprobante.importe_total,
+            pendiente_aprobacion=not receptor.autorizada or receptor.deleted_at is not None,
             requiere_guia=requiere_bancarizacion(
                 comprobante.moneda, comprobante.importe_total, settings
             ),

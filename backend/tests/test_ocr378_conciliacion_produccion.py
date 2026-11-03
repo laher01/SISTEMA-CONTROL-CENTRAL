@@ -65,11 +65,9 @@ def test_resumen_autorizado_y_produccion_comisiones_con_pendiente(
     }
     produccion = client.get("/api/v1/comisiones/produccion-receptores", params=parametros)
     assert produccion.status_code == 200, produccion.text
-    # Comportamiento VIGENTE: este endpoint suma expedientes por receptor autorizado,
-    # sin filtrar el campo pendiente_aprobacion del expediente.
-    # La diferencia con el resumen autorizado se documenta, no se altera.
+    # Los cálculos usan el estado autorizado capturado al ingresar cada expediente.
     assert len(produccion.json()) == 1
-    assert Decimal(produccion.json()[0]["produccion"]) == Decimal("425.00")
+    assert Decimal(produccion.json()[0]["produccion"]) == Decimal("300.00")
 
     expedientes[1].pendiente_aprobacion = False
     completar_facturas_de_prueba(session)

@@ -510,6 +510,7 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
             importe_total=Decimal("250.00"),
             usuario_id=usuario.id,
             gerente_id=gerente.id,
+            pendiente_aprobacion=True,
         )
     )
     cuenta_responsable = CuentaAcceso(

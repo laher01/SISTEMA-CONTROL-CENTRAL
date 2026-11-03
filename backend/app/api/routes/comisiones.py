@@ -115,7 +115,7 @@ def produccion_por_receptor(
         Expediente.fecha_emision <= hasta,
         Expediente.moneda == moneda,
         Empresa.tenant_id == tenant_id,
-        Empresa.autorizada.is_(True),
+        Expediente.pendiente_aprobacion.is_(False),
         Empresa.deleted_at.is_(None),
     ]
     if gestor_id is not None:
@@ -191,7 +191,7 @@ def simular(
         Expediente.tenant_id == tenant_id,
         Expediente.deleted_at.is_(None),
         expediente_tiene_documentos_activos(),
-        Expediente.receptor.has(Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)),
+        Expediente.pendiente_aprobacion.is_(False),
         Expediente.usuario_id == datos.usuario_id,
         Expediente.fecha_emision >= datos.desde,
         Expediente.fecha_emision <= datos.hasta,

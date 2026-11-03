@@ -80,13 +80,20 @@ def test_gestor_pertenece_a_usuario_y_propaga_propiedad(
     produccion = client.get("/api/v1/produccion/resumen")
     assert produccion.status_code == 200, produccion.text
     filas = produccion.json()["filas"]
+    assert filas == []  # La aprobación no reescribe el expediente que ya ingresó.
+
+    nueva = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("futura.xml", factura("F001-00000124"))},
+    )
+    assert nueva.status_code == 201, nueva.text
+    filas = client.get("/api/v1/produccion/resumen").json()["filas"]
     assert len(filas) == 1
     assert filas[0]["usuario_codigo"] == "WILL01"
     assert filas[0]["gestor_codigo"] == "GES01"
     assert filas[0]["expedientes"] == 1
 
-    # La revocación administrativa debe retirar inmediatamente el expediente
-    # de la producción reconocida, sin eliminar el documento original.
+    # La desactivación conserva el expediente autorizado anterior y aplica a los nuevos.
     auth_prueba.como_admin()
     revocacion = client.patch(
         f"/api/v1/empresas/{receptor[0]['id']}",
@@ -101,7 +108,14 @@ def test_gestor_pertenece_a_usuario_y_propaga_propiedad(
     )
     produccion_revocada = client.get("/api/v1/produccion/resumen")
     assert produccion_revocada.status_code == 200, produccion_revocada.text
-    assert produccion_revocada.json()["filas"] == []
+    assert len(produccion_revocada.json()["filas"]) == 1
+
+    posterior = client.post(
+        "/api/v1/documentos",
+        files={"archivo": ("posterior.xml", factura("F001-00000125"))},
+    )
+    assert posterior.status_code == 201, posterior.text
+    assert len(client.get("/api/v1/produccion/resumen").json()["filas"]) == 1
 
     expediente_conservado = client.get(f"/api/v1/expedientes/{documento['expediente_id']}")
     assert expediente_conservado.status_code == 200, expediente_conservado.text

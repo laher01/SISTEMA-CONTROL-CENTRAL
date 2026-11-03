@@ -246,7 +246,7 @@ def _calculo(
             usuario.responsable_id.is_not(None),
             Empresa.tenant_id == tenant_id,
             Empresa.deleted_at.is_(None),
-            Empresa.autorizada.is_(True),
+            Expediente.pendiente_aprobacion.is_(False),
         )
     )
     if responsable_id is not None:
@@ -377,9 +377,7 @@ def resumen(
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
                 expediente_tiene_documentos_activos(),
-                Expediente.receptor.has(
-                    Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
-                ),
+                Expediente.pendiente_aprobacion.is_(False),
                 Expediente.gerente_id.is_(None),
                 Expediente.fecha_emision.between(desde, hasta),
                 Expediente.moneda == moneda,
@@ -424,9 +422,7 @@ def resumen(
                     Expediente.tenant_id == tenant_id,
                     Expediente.deleted_at.is_(None),
                     expediente_tiene_documentos_activos(),
-                    Expediente.receptor.has(
-                        Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
-                    ),
+                    Expediente.pendiente_aprobacion.is_(False),
                     Expediente.gerente_id.is_(None),
                     Expediente.fecha_emision.between(desde, hasta),
                     Expediente.moneda == moneda,
@@ -582,9 +578,7 @@ def resumen_equipo_responsable(
                 Expediente.fecha_emision.between(desde, hasta),
                 Expediente.moneda == moneda,
                 gerente_proveedor.c.gerente_id.in_(elegidos),
-                Expediente.receptor.has(
-                    Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
-                ),
+                Expediente.pendiente_aprobacion.is_(False),
                 Miembro.tenant_id == tenant_id,
                 Miembro.rol == RolMiembro.USUARIO,
                 Miembro.responsable_id == auth.miembro_id,
@@ -636,7 +630,7 @@ def resumen_equipo_responsable(
                 Miembro.nombre,
                 receptor_pendiente.ruc,
                 receptor_pendiente.razon_social,
-                receptor_pendiente.autorizada,
+                Expediente.pendiente_aprobacion.is_(False).label("autorizada"),
                 gerente_pendiente.c.gerente_id,
                 conteo_candidatos.c.cantidad,
             )
@@ -655,7 +649,7 @@ def resumen_equipo_responsable(
                     gerente_pendiente.c.gerente_id.is_(None),
                     and_(
                         gerente_pendiente.c.gerente_id.in_(elegidos),
-                        receptor_pendiente.autorizada.is_(False),
+                        Expediente.pendiente_aprobacion.is_(True),
                     ),
                 ),
                 Expediente.fecha_emision.between(desde, hasta),
@@ -737,7 +731,7 @@ def resumen_equipo_responsable(
                 Expediente.fecha_emision.between(desde, hasta),
                 Expediente.moneda == moneda,
                 gerente_usuario.c.gerente_id.in_(elegidos),
-                Empresa.autorizada.is_(True),
+                Expediente.pendiente_aprobacion.is_(False),
                 Empresa.deleted_at.is_(None),
                 Miembro.tenant_id == tenant_id,
                 Miembro.rol == RolMiembro.USUARIO,
@@ -1043,9 +1037,7 @@ def incorporar_historicos(
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
                 expediente_tiene_documentos_activos(),
-                Expediente.receptor.has(
-                    Empresa.autorizada.is_(True) & Empresa.deleted_at.is_(None)
-                ),
+                Expediente.pendiente_aprobacion.is_(False),
                 Expediente.gerente_id.is_(None),
                 Expediente.fecha_emision.between(datos.desde, datos.hasta),
                 Expediente.moneda == datos.moneda,

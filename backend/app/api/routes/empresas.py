@@ -368,7 +368,12 @@ def actualizar(
         empresa.id,
         {"anterior": anterior, "nuevo": cambios, "actor": auth.codigo},
     )
-    recalcular_expedientes(session, tenant_id, hoy, settings, receptor_id=empresa.id)
+    # La autorización es vigente hacia adelante. Cada expediente conserva su
+    # estado de aprobación capturado al ingresar; cambiar la empresa no reescribe
+    # estados, alertas ni cálculos históricos.
+    campos_cambiados = datos.model_fields_set
+    if "autorizada" not in campos_cambiados or campos_cambiados - {"autorizada"}:
+        recalcular_expedientes(session, tenant_id, hoy, settings, receptor_id=empresa.id)
     try:
         session.commit()
     except IntegrityError as exc:
