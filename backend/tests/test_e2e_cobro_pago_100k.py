@@ -96,9 +96,7 @@ def test_flujo_e2e_documentos_cobro_a_gerentes_y_pago_a_usuario(
         )
         for index, gerente in enumerate(gerentes, start=1)
     ]
-    session.add_all(
-        [responsable, *gerentes, *clientes, cuenta_responsable, *cuentas_gerentes]
-    )
+    session.add_all([responsable, *gerentes, *clientes, cuenta_responsable, *cuentas_gerentes])
     session.flush()
 
     for gerente in gerentes:
@@ -156,9 +154,7 @@ def test_flujo_e2e_documentos_cobro_a_gerentes_y_pago_a_usuario(
         )
     )
     assert len(expedientes) == 10
-    total_produccion = sum(
-        (Decimal(e.importe_total) for e in expedientes), Decimal("0")
-    )
+    total_produccion = sum((Decimal(e.importe_total) for e in expedientes), Decimal("0"))
     assert total_produccion == Decimal("100000.00")
     assert all(
         any(documento.deleted_at is None for documento in expediente.documentos)
@@ -219,9 +215,7 @@ def test_flujo_e2e_documentos_cobro_a_gerentes_y_pago_a_usuario(
             json={"responsable_id": str(responsable.id), **periodo},
         )
         assert programado.status_code == 201, programado.text
-        assert Decimal(programado.json()["comision_total"]) == Decimal(
-            solicitud.json()["comision"]
-        )
+        assert Decimal(programado.json()["comision_total"]) == Decimal(solicitud.json()["comision"])
         pago_gerente_id = programado.json()["id"]
         confirmado = client.post(
             f"/api/v1/pagos-responsables/{pago_gerente_id}/confirmar",
@@ -252,17 +246,13 @@ def test_flujo_e2e_documentos_cobro_a_gerentes_y_pago_a_usuario(
         **periodo,
         "expediente_ids": expediente_ids,
     }
-    cotizacion = client.post(
-        "/api/v1/responsable/pagos/cotizar", json=pago_usuario_datos
-    )
+    cotizacion = client.post("/api/v1/responsable/pagos/cotizar", json=pago_usuario_datos)
     assert cotizacion.status_code == 200, cotizacion.text
     assert cotizacion.json()["produccion"] == "100000.00"
     assert cotizacion.json()["bruto"] == "1500.00"
     assert cotizacion.json()["neto"] == "1500.00"
 
-    pago_usuario = client.post(
-        "/api/v1/responsable/pagos/programar", json=pago_usuario_datos
-    )
+    pago_usuario = client.post("/api/v1/responsable/pagos/programar", json=pago_usuario_datos)
     assert pago_usuario.status_code == 201, pago_usuario.text
     assert pago_usuario.json()["saldo"] == "1500.00"
     confirmado_usuario = client.post(
@@ -280,16 +270,12 @@ def test_flujo_e2e_documentos_cobro_a_gerentes_y_pago_a_usuario(
     pagos_gerentes_db = [
         session.get(PagoResponsableERP, UUID(pago_id)) for pago_id in pagos_gerentes
     ]
-    assert all(
-        pago is not None and pago.estado == "PAGADO" for pago in pagos_gerentes_db
-    )
+    assert all(pago is not None and pago.estado == "PAGADO" for pago in pagos_gerentes_db)
     assert (
         session.scalar(
             select(Documento.id).where(
                 Documento.tenant_id == tenant_id,
-                Documento.expediente_id.in_(
-                    [expediente.id for expediente in expedientes]
-                ),
+                Documento.expediente_id.in_([expediente.id for expediente in expedientes]),
                 Documento.deleted_at.is_(None),
             )
         )
