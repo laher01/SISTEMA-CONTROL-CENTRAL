@@ -1,8 +1,8 @@
 """End-to-end synthetic test for document ingestion, manager collections, and user payout."""
 
 from dataclasses import replace
-from datetime import date
 from decimal import Decimal
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -65,7 +65,7 @@ def test_flujo_e2e_documentos_cobro_a_gerentes_y_pago_a_usuario(
     clientes = [
         Empresa(
             tenant_id=tenant_id,
-            ruc=f"2011111111{index}",
+            ruc=f"201111111{index:02d}",
             razon_social=f"CLIENTE E2E {index}",
             autorizada=True,
             tipo_relacion="CLIENTE",
@@ -121,7 +121,6 @@ def test_flujo_e2e_documentos_cobro_a_gerentes_y_pago_a_usuario(
 
     # Ingest actual synthetic UBL invoices through the same upload API as the application.
     invoice_number = 1000
-    expediente_ids: list[str] = []
     for gerente_index, production in enumerate(expected_by_manager):
         invoice_count = int(production / Decimal("10000.00"))
         for _ in range(invoice_count):
@@ -217,7 +216,9 @@ def test_flujo_e2e_documentos_cobro_a_gerentes_y_pago_a_usuario(
             json={"responsable_id": str(responsable.id), **periodo},
         )
         assert programado.status_code == 201, programado.text
-        assert Decimal(programado.json()["comision_total"]) == Decimal(solicitud.json()["comision"])
+        assert Decimal(programado.json()["comision_total"]) == Decimal(
+            solicitud.json()["comision"]
+        )
         pago_gerente_id = programado.json()["id"]
         confirmado = client.post(
             f"/api/v1/pagos-responsables/{pago_gerente_id}/confirmar",
@@ -269,12 +270,19 @@ def test_flujo_e2e_documentos_cobro_a_gerentes_y_pago_a_usuario(
     assert confirmado_usuario.status_code == 200, confirmado_usuario.text
 
     session.expire_all()
-    assert session.get(PagoERP, pago_usuario.json()["id"]).estado == "PAGADO"
-    assert all(session.get(PagoResponsableERP, pago_id).estado == "PAGADO" for pago_id in pagos_gerentes)
-    assert session.scalar(
-        select(Documento.id).where(
-            Documento.tenant_id == tenant_id,
-            Documento.expediente_id.in_([expediente.id for expediente in expedientes]),
-            Documento.deleted_at.is_(None),
+    pago_usuario_db = session.get(PagoERP, UUID(pago_usuario.json()["id"]))
+    assert pago_usuario_db is not None and pago_usuario_db.estado == "PAGADO"
+    pagos_gerentes_db = [
+        session.get(PagoResponsableERP, UUID(pago_id)) for pago_id in pagos_gerentes
+    ]
+    assert all(pago is not None and pago.estado == "PAGADO" for pago in pagos_gerentes_db)
+    assert (
+        session.scalar(
+            select(Documento.id).where(
+                Documento.tenant_id == tenant_id,
+                Documento.expediente_id.in_([expediente.id for expediente in expedientes]),
+                Documento.deleted_at.is_(None),
+            )
         )
-    ) is not None
+        is not None
+    )
