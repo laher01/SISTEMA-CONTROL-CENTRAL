@@ -73,7 +73,6 @@ def test_flujo_e2e_documentos_cobro_a_gerentes_y_pago_a_usuario(
         )
         for index in (1, 2)
     ]
-    usuario.responsable_id = responsable.id
     usuario.porcentaje_con_agente = Decimal("2.0")
     usuario.porcentaje_sin_agente = Decimal("1.5")
 
@@ -98,6 +97,7 @@ def test_flujo_e2e_documentos_cobro_a_gerentes_y_pago_a_usuario(
     ]
     session.add_all([responsable, *gerentes, *clientes, cuenta_responsable, *cuentas_gerentes])
     session.flush()
+    usuario.responsable_id = responsable.id
 
     for gerente in gerentes:
         session.add(
