@@ -154,9 +154,8 @@ def test_flujo_e2e_documentos_cobro_a_gerentes_y_pago_a_usuario(
         )
     )
     assert len(expedientes) == 10
-    assert sum((Decimal(e.importe_total) for e in expedientes), Decimal("0")) == Decimal(
-        "100000.00"
-    )
+    total_produccion = sum((Decimal(e.importe_total) for e in expedientes), Decimal("0"))
+    assert total_produccion == Decimal("100000.00")
     assert all(
         any(documento.deleted_at is None for documento in expediente.documentos)
         for expediente in expedientes
