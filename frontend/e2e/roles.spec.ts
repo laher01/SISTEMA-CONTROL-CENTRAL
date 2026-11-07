@@ -64,3 +64,61 @@ test("ADMINISTRADOR: inicio de sesión y controles de su tenant", async ({ page 
   await page.getByRole("button", { name: "Configuración de acceso" }).click();
   await expect(page.getByText(/Exclusivo del ADMINISTRADOR del tenant/)).toBeVisible();
 });
+
+
+for (const rol of ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"]) {
+  test(`${rol}: meses legibles y gráficos siguen filtros, orden y vista móvil`, async ({ page }) => {
+    await page.route("**/api/v1/**", async (route) => {
+      const url = new URL(route.request().url());
+      const mes = url.searchParams.get("mes");
+      const cantidad = mes === "2026-12" ? 0 : mes ? 3 : 5;
+      const monto = String(cantidad * 100);
+      const json = (body: unknown) => route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
+      if (url.pathname === "/api/v1/auth/me") return json({
+        rol, codigo: "PRUEBA01", nombre: "Cuenta de prueba", cambio_clave_obligatorio: false,
+        jerarquia: [], es_administracion_demo: false,
+      });
+      if (url.pathname === "/api/v1/dashboard/opciones") return json({ responsables: [], usuarios: [], gestores: [], emisores: [], receptores: [] });
+      if (url.pathname === "/api/v1/dashboard/resumen") return json({
+        expedientes_total: cantidad, por_estado: { VERDE: cantidad, AMARILLO: 0, NARANJA: 0, ROJO: 0 },
+        pendientes_aprobacion: 0, documentos_pendientes: {}, alertas_abiertas: {},
+        montos: [{ moneda: "PEN", bancarizable: monto, no_bancarizable: "0", con_agente_retencion: "0", sin_agente_retencion: monto,
+          cantidad_bancarizable: cantidad, cantidad_no_bancarizable: 0, cantidad_con_agente_retencion: 0, cantidad_sin_agente_retencion: cantidad }],
+      });
+      if (url.pathname === "/api/v1/dashboard/desglose") {
+        const septiembre = { clave: "2026-09", etiqueta: "09/2026", ruc: null, expedientes: 3, total_pen: "300", total_usd: "0" };
+        const agosto = { clave: "2026-08", etiqueta: "08/2026", ruc: null, expedientes: 2, total_pen: "200", total_usd: "0" };
+        const filas = cantidad === 0 ? [] : mes ? [septiembre] : url.searchParams.get("orden") === "asc" ? [agosto, septiembre] : [septiembre, agosto];
+        return json({ agrupar_por: url.searchParams.get("agrupar_por"), filas });
+      }
+      return route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ detail: "Fuera del alcance de esta prueba aislada" }) });
+    });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto("/");
+    await page.getByLabel("Agrupar por", { exact: true }).selectOption("mes");
+    const cantidades = page.getByRole("region", { name: "Gráfico de vista ordenada", exact: true });
+    const montos = page.getByRole("region", { name: "Gráfico de montos", exact: true });
+    await expect(cantidades.getByRole("listitem").first()).toContainText("Septiembre/2026");
+    await page.getByLabel("Orden", { exact: true }).selectOption("asc");
+    await expect(cantidades.getByRole("listitem").first()).toContainText("Agosto/2026");
+    await page.getByLabel("Año del mes", { exact: true }).fill("2026");
+    await page.getByLabel("Mes de emisión", { exact: true }).selectOption("09");
+    await expect(page.getByLabel("Mes de emisión", { exact: true }).locator("option:checked")).toHaveText("Septiembre/2026");
+    await expect(cantidades.getByRole("listitem")).toHaveCount(1);
+    await expect(cantidades).toContainText("Septiembre/2026");
+    await expect(montos).toContainText("S/ 300.00");
+    const escritorio = await cantidades.boundingBox();
+    const junto = await montos.boundingBox();
+    expect(junto!.x).toBeGreaterThan(escritorio!.x);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const movil = await cantidades.boundingBox();
+    const debajo = await montos.boundingBox();
+    expect(debajo!.y).toBeGreaterThan(movil!.y);
+    await page.getByLabel("Mes de emisión", { exact: true }).selectOption("12");
+    await expect(cantidades).toContainText("Sin datos para los filtros seleccionados.");
+    await expect(montos).toContainText("S/ 0.00");
+    await page.getByRole("button", { name: "Limpiar filtros", exact: true }).click();
+    await expect(cantidades.getByRole("listitem")).toHaveCount(2);
+    await expect(montos).toContainText("S/ 500.00");
+  });
+}
