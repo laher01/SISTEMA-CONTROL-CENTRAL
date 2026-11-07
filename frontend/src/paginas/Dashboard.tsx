@@ -116,6 +116,7 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
                 <label>
                   Agrupar por
                   <select
+                    aria-label="Agrupar por"
                     value={agruparPor}
                     onChange={(e) => setAgruparPor(e.target.value as AgrupacionDashboard)}
                   >
@@ -132,7 +133,7 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
                 </label>
                 <label>
                   Orden
-                  <select value={orden} onChange={(e) => setOrden(e.target.value as "asc" | "desc")}>
+                  <select aria-label="Orden" value={orden} onChange={(e) => setOrden(e.target.value as "asc" | "desc")}>
                     <option value="desc">Mayor / más reciente</option>
                     <option value="asc">Menor / más antiguo</option>
                   </select>
@@ -193,7 +194,7 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
                 </label>
                 <label>
                   Mes de emisión
-                  <select disabled={!/^[1-9]\d{3}$/.test(anioMes)} value={mes ? mes.slice(5) : ""} onChange={(e) => setMes(e.target.value ? `${anioMes}-${e.target.value}` : "")}>
+                  <select aria-label="Mes de emisión" disabled={!/^[1-9]\d{3}$/.test(anioMes)} value={mes ? mes.slice(5) : ""} onChange={(e) => setMes(e.target.value ? `${anioMes}-${e.target.value}` : "")}>
                     <option value="">Todos los meses</option>
                     {MESES_DASHBOARD.map((nombre, indice) => (
                       <option key={nombre} value={String(indice + 1).padStart(2, "0")}>{nombre}/{anioMes}</option>
