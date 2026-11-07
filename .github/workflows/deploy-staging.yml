@@ -3,6 +3,7 @@ name: deploy-staging
 on:
   pull_request:
     paths:
+      - 'frontend/**'
       - '.github/workflows/deploy-staging.yml'
       - 'tests/integration/recovery_docker_isolated.sh'
   workflow_dispatch:

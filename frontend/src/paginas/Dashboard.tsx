@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 
 import { useDatos } from "../api";
 import { agrupacionInicial, controlesDashboard } from "../dashboardRoles";
+import { GraficoMontos, GraficoVistaOrdenada } from "../componentes/GraficosDashboard";
+import { etiquetaFilaDashboard, MESES_DASHBOARD } from "../dashboardGraficos";
 import { Estado } from "../componentes";
 import { ETIQUETA_ALERTA, ETIQUETA_ESTADO, formatearMonto } from "../formato";
 import {
@@ -23,6 +25,7 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
   const [usuarioId, setUsuarioId] = useState("");
   const [gestorId, setGestorId] = useState("");
   const [mes, setMes] = useState("");
+  const [anioMes, setAnioMes] = useState(String(new Date().getFullYear()));
   const [emisorId, setEmisorId] = useState("");
   const [receptorId, setReceptorId] = useState("");
   const [tipoEmpresa, setTipoEmpresa] = useState<"" | "A" | "B">("");
@@ -68,6 +71,7 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
     setUsuarioId("");
     setGestorId("");
     setMes("");
+    setAnioMes(String(new Date().getFullYear()));
     setEmisorId("");
     setReceptorId("");
     setTipoEmpresa("");
@@ -112,6 +116,7 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
                 <label>
                   Agrupar por
                   <select
+                    aria-label="Agrupar por"
                     value={agruparPor}
                     onChange={(e) => setAgruparPor(e.target.value as AgrupacionDashboard)}
                   >
@@ -128,7 +133,7 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
                 </label>
                 <label>
                   Orden
-                  <select value={orden} onChange={(e) => setOrden(e.target.value as "asc" | "desc")}>
+                  <select aria-label="Orden" value={orden} onChange={(e) => setOrden(e.target.value as "asc" | "desc")}>
                     <option value="desc">Mayor / más reciente</option>
                     <option value="asc">Menor / más antiguo</option>
                   </select>
@@ -189,7 +194,22 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
                 </label>
                 <label>
                   Mes de emisión
-                  <input type="month" value={mes} onChange={(e) => setMes(e.target.value)} />
+                  <select aria-label="Mes de emisión" disabled={!/^[1-9]\d{3}$/.test(anioMes)} value={mes ? mes.slice(5) : ""} onChange={(e) => setMes(e.target.value ? `${anioMes}-${e.target.value}` : "")}>
+                    <option value="">Todos los meses</option>
+                    {MESES_DASHBOARD.map((nombre, indice) => (
+                      <option key={nombre} value={String(indice + 1).padStart(2, "0")}>{nombre}/{anioMes}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Año del mes
+                  <input type="number" min="1000" max="9999" step="1" value={anioMes}
+                    onChange={(e) => {
+                      const anio = e.target.value;
+                      setAnioMes(anio);
+                      if (/^[1-9]\d{3}$/.test(anio)) setMes(mes ? `${anio}-${mes.slice(5)}` : "");
+                      else setMes("");
+                    }} />
                 </label>
                 <label>
                   Desde
@@ -229,7 +249,7 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
                     <tbody>
                       {desglose.filas.map((fila) => (
                         <tr key={fila.clave}>
-                          <td>{fila.etiqueta}</td>
+                          <td>{etiquetaFilaDashboard(fila, agruparPor)}</td>
                           <td>{fila.ruc ?? "—"}</td>
                           <td className="num">{fila.expedientes}</td>
                           <td className="num">{formatearMonto("PEN", fila.total_pen)}</td>
@@ -249,6 +269,13 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
                 )}
               </Estado>
             </section>
+
+            <div className="dashboard-graficos">
+              <Estado cargando={cargandoDesglose} error={errorDesglose} vacio={false}>
+                {desglose && <GraficoVistaOrdenada filas={desglose.filas} agrupacion={desglose.agrupar_por} />}
+              </Estado>
+              <GraficoMontos montos={datos.montos} />
+            </div>
 
             <div className="columnas">
               <section>
