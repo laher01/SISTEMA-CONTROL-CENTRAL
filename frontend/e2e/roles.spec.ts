@@ -109,11 +109,13 @@ for (const rol of ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USU
     await expect(montos).toContainText("S/ 300.00");
     const escritorio = await cantidades.boundingBox();
     const junto = await montos.boundingBox();
-    expect(junto!.x).toBeGreaterThan(escritorio!.x);
+    if (!junto || !escritorio) throw new Error("Gráficos no renderizados en escritorio");
+    expect(junto.x).toBeGreaterThan(escritorio.x);
     await page.setViewportSize({ width: 390, height: 844 });
     const movil = await cantidades.boundingBox();
     const debajo = await montos.boundingBox();
-    expect(debajo!.y).toBeGreaterThan(movil!.y);
+    if (!debajo || !movil) throw new Error("Gráficos no renderizados en móvil");
+    expect(debajo.y).toBeGreaterThan(movil.y);
     await page.getByLabel("Mes de emisión", { exact: true }).selectOption("12");
     await expect(cantidades).toContainText("Sin datos para los filtros seleccionados.");
     await expect(montos).toContainText("S/ 0.00");
