@@ -8,7 +8,7 @@ import type { DashboardDesgloseFila, DashboardResumen, SesionActual } from "./ti
 
 const mocks = vi.hoisted(() => ({ useDatos: vi.fn() }));
 vi.mock("./api", () => ({ useDatos: mocks.useDatos }));
-const filas: DashboardDesgloseFila[] = [
+const filas: [DashboardDesgloseFila, DashboardDesgloseFila] = [
   { clave: "2026-09", etiqueta: "09/2026", ruc: null, expedientes: 55, total_pen: "91406", total_usd: "0" },
   { clave: "2026-08", etiqueta: "08/2026", ruc: null, expedientes: 62, total_pen: "101160", total_usd: "0" },
 ];
