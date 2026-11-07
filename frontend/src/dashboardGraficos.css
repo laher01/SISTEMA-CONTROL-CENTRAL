@@ -1,0 +1,16 @@
+/* Gráficos del dashboard: datos de los mismos filtros y sin dependencias externas. */
+.dashboard-graficos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; margin: 1.5rem 0; align-items: start; }
+.dashboard-grafico { min-width: 0; padding: 1rem; border: 1px solid #d7e2ee; border-radius: .5rem; background: #fff; }
+.dashboard-grafico h3 { margin-top: 0; }
+.dashboard-grafico-ayuda { color: #526276; font-size: .85rem; line-height: 1.5; }
+.dashboard-barras { max-height: 30rem; overflow-y: auto; }
+.dashboard-barras-lista { list-style: none; padding: 0; margin: 0; }
+.dashboard-barra { margin: .85rem 0; }
+.dashboard-barra-datos { display: flex; justify-content: space-between; gap: 1rem; font-size: .9rem; }
+.dashboard-barra-datos span { overflow-wrap: anywhere; }
+.dashboard-barra-datos strong { white-space: nowrap; }
+.dashboard-barra-pista { height: .65rem; margin-top: .4rem; border-radius: .3rem; background: #edf2f7; overflow: hidden; }
+.dashboard-barra-pista > span { display: block; height: 100%; background: #245d93; border-radius: inherit; }
+.dashboard-barra-pista > .dashboard-barra-negativa { background: #b33b45; }
+.dashboard-grafico-moneda + .dashboard-grafico-moneda { border-top: 1px solid #d7e2ee; margin-top: 1rem; }
+@media (max-width: 760px) { .dashboard-graficos { grid-template-columns: 1fr; } }
