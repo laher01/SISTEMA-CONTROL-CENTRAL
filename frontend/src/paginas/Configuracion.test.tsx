@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Configuracion from "./Configuracion";
 import type { SesionActual } from "../tipos";
@@ -17,6 +17,8 @@ function htmlPara(rol: SesionActual["rol"]): string {
 }
 
 describe("configuración separada por rol", () => {
+  beforeEach(() => vi.stubGlobal("window", { location: { search: "" } }));
+  afterEach(() => vi.unstubAllGlobals());
   it("muestra a SUPERADMIN solo el menú de administraciones SaaS", () => {
     const html = htmlPara("SUPERADMIN");
     expect(html).toContain("Consola SaaS");
