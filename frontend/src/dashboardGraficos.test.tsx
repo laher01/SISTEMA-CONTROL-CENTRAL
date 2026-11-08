@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
-import { alturaBarra, etiquetaFilaDashboard, MESES_DASHBOARD } from "./dashboardGraficos";
-import { GraficoMontos, GraficoVistaOrdenada } from "./componentes/GraficosDashboard";
+import { alturaBarra, etiquetaFilaDashboard, MESES_DASHBOARD, sectoresCirculares } from "./dashboardGraficos";
+import { GraficoMontos, GraficoVistaOrdenada, VistasGraficosDashboard } from "./componentes/GraficosDashboard";
 import Dashboard from "./paginas/Dashboard";
 import type { DashboardDesgloseFila, DashboardResumen, SesionActual } from "./tipos";
 
@@ -63,5 +63,61 @@ describe("Gráficos y meses del dashboard", () => {
     expect(html.indexOf("dashboard-graficos")).toBeGreaterThan(html.indexOf("Alertas abiertas"));
     expect(html.indexOf("dashboard-graficos")).toBeGreaterThan(html.lastIndexOf("</table>"));
     expect(html).toContain("Enero/");
+  });
+});
+
+
+describe("Tres vistas de los mismos datos", () => {
+  it("ofrece exactamente tres pestañas y enlaza el panel activo", () => {
+    const html = renderToStaticMarkup(<VistasGraficosDashboard vista="circular" alCambiar={() => {}}><p>Datos filtrados</p></VistasGraficosDashboard>);
+    expect(html.match(/role="tab"/g)).toHaveLength(3);
+    expect(html.match(/aria-selected="true"/g)).toHaveLength(1);
+    expect(html).toContain("Circular 3D");
+    expect(html).toContain("Barras verticales");
+    expect(html).toContain("Líneas");
+    expect(html).toContain('role="tabpanel"');
+    expect(html).toContain("Datos filtrados");
+  });
+  it("calcula proporciones sin perder los valores cero", () => {
+    const resultado = sectoresCirculares([0, 25, 75]);
+    expect(resultado.total).toBe(100);
+    expect(resultado.sectores.map((x) => x.porcentaje)).toEqual([0, 25, 75]);
+    expect(resultado.sectores[2]?.fin).toBe(100);
+  });
+  it.each([[0, 0], [-10, 20], [Infinity, 1]])("no inventa proporciones ante ceros, negativos o valores inválidos (%j)", (...valores) => {
+    const resultado = sectoresCirculares(valores);
+    expect(resultado.total).toBe(0);
+    expect(resultado.fondo).not.toMatch(/NaN|Infinity/);
+  });
+  it.each(["circular", "lineas"] as const)("%s conserva etiquetas, orden y valores del conjunto original", (vista) => {
+    const html = renderToStaticMarkup(<GraficoVistaOrdenada filas={filas} agrupacion="mes" vista={vista} />);
+    expect(html).toContain("Septiembre/2026");
+    expect(html).toContain("Agosto/2026");
+    expect(html).toContain(">55</strong>");
+    expect(html).toContain(">62</strong>");
+    const leyenda = html.slice(html.indexOf('<ul class="dashboard-leyenda">'));
+    expect(leyenda.indexOf("Septiembre/2026")).toBeLessThan(leyenda.indexOf("Agosto/2026"));
+    expect(html).not.toMatch(/NaN|Infinity/);
+  });
+  it("divide los círculos monetarios por clasificación y moneda", () => {
+    const html = renderToStaticMarkup(<GraficoMontos montos={montos} vista="circular" />);
+    for (const moneda of ["PEN", "USD"]) {
+      expect(html).toContain(`aria-label="Bancarización en ${moneda}"`);
+      expect(html).toContain(`aria-label="Retención en ${moneda}"`);
+    }
+    expect(html).toContain("25%");
+    expect(html).toContain("75%");
+    expect(html).toContain("S/ 200.00");
+    expect(html).toContain("US$ 10.00");
+  });
+  it("conserva negativos en líneas y explica la limitación circular", () => {
+    const negativo = [{ ...filas[0], expedientes: -10 }];
+    const circular = renderToStaticMarkup(<GraficoVistaOrdenada filas={negativo} agrupacion="mes" vista="circular" />);
+    expect(circular).toContain("valores con signo");
+    expect(circular).toContain(">-10</strong>");
+    const lineas = renderToStaticMarkup(<GraficoVistaOrdenada filas={negativo} agrupacion="mes" vista="lineas" />);
+    expect(lineas).toContain("polyline");
+    expect(lineas).toContain(">-10</strong>");
+    expect(lineas).not.toMatch(/NaN|Infinity/);
   });
 });

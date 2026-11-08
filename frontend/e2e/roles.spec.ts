@@ -123,6 +123,22 @@ for (const rol of ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USU
     const junto = await montos.boundingBox();
     if (!junto || !escritorio) throw new Error("Gráficos no renderizados en escritorio");
     expect(junto.x).toBeGreaterThan(escritorio.x);
+    await expect(page.getByRole("tablist", { name: "Tipo de gráfico" }).getByRole("tab")).toHaveCount(3);
+    await page.getByRole("tab", { name: "Circular 3D", exact: true }).click();
+    await expect(page.getByRole("tab", { name: "Circular 3D", exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(cantidades.getByRole("img", { name: /circular 3D/ })).toBeVisible();
+    await expect(cantidades).toContainText("Septiembre/2026");
+    await expect(montos.getByRole("group", { name: "Bancarización en PEN", exact: true })).toContainText("S/ 300.00");
+    await expect(montos.getByRole("group", { name: "Retención en PEN", exact: true })).toContainText("S/ 300.00");
+    await page.getByRole("tab", { name: "Circular 3D", exact: true }).press("ArrowRight");
+    await expect(page.getByRole("tab", { name: "Líneas", exact: true })).toBeFocused();
+    await expect(cantidades.getByRole("img", { name: /líneas/ })).toBeVisible();
+    await expect(montos).toContainText("S/ 300.00");
+    await page.getByRole("tab", { name: "Líneas", exact: true }).press("Home");
+    await expect(page.getByRole("tab", { name: "Barras verticales", exact: true })).toBeFocused();
+    await expect(cantidades.locator(".dashboard-barra-pista > span")).toHaveCount(1);
+    await page.getByRole("tab", { name: "Barras verticales", exact: true }).press("End");
+    await expect(page.getByRole("tab", { name: "Líneas", exact: true })).toHaveAttribute("aria-selected", "true");
     await page.setViewportSize({ width: 390, height: 844 });
     const movil = await cantidades.boundingBox();
     const debajo = await montos.boundingBox();
@@ -130,9 +146,11 @@ for (const rol of ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USU
     expect(debajo.y).toBeGreaterThan(movil.y);
     await page.getByLabel("Mes de emisión", { exact: true }).selectOption("12");
     await expect(cantidades).toContainText("Sin datos para los filtros seleccionados.");
+    await expect(page.getByRole("tab", { name: "Líneas", exact: true })).toHaveAttribute("aria-selected", "true");
     await expect(montos).toContainText("S/ 0.00");
     await page.getByRole("button", { name: "Limpiar filtros", exact: true }).click();
     await expect(cantidades.getByRole("listitem")).toHaveCount(2);
     await expect(montos).toContainText("S/ 500.00");
+    await expect(page.getByRole("tab", { name: "Líneas", exact: true })).toHaveAttribute("aria-selected", "true");
   });
 }
