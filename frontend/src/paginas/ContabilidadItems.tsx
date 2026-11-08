@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { conParametros, useDatos } from "../api";
 
-type FacturaItem = { expediente_id: string; documento_id: string; comprobante: string; fecha_emision: string; moneda: string; descripcion_original: string; cantidad: string; unidad: string; importe: string; };
+type FacturaItem = { expediente_id: string; documento_id: string; comprobante: string; fecha_emision: string; moneda: string; emisor_id: string; receptor_id: string; emisor_ruc: string; emisor_nombre: string; receptor_ruc: string; receptor_nombre: string; descripcion_original: string; cantidad: string; unidad: string; importe: string; };
+type VistaFacturas = "general" | "proveedor" | "cliente";
 
 type FilaItem = {
   producto_id: string;
@@ -29,24 +30,27 @@ export default function ContabilidadItems() {
   const [buscar, setBuscar] = useState("");
   const [categoria, setCategoria] = useState("");
   const [productoSeleccionado, setProductoSeleccionado] = useState<string | null>(null);
+  const [vistaFacturas, setVistaFacturas] = useState<VistaFacturas>("general");
+  const [offsetFacturas, setOffsetFacturas] = useState(0);
+  const limiteFacturas = 100;
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
-  const [emisorId, setEmisorId] = useState("");
-  const [receptorId, setReceptorId] = useState("");
+  const [emisorBuscar, setEmisorBuscar] = useState("");
+  const [receptorBuscar, setReceptorBuscar] = useState("");
   const [errorFiltros, setErrorFiltros] = useState("");
   const [errorDescarga, setErrorDescarga] = useState("");
   const [descargando, setDescargando] = useState(false);
-  const [filtros, setFiltros] = useState({ desde: "", hasta: "", emisor_id: "", receptor_id: "", buscar: "", categoria: "" });
+  const [filtros, setFiltros] = useState({ desde: "", hasta: "", emisor_buscar: "", receptor_buscar: "", buscar: "", categoria: "" });
   const ruta = conParametros("/api/v1/contabilidad-items", {
     desde: filtros.desde,
     hasta: filtros.hasta,
-    emisor_id: filtros.emisor_id,
-    receptor_id: filtros.receptor_id,
+    emisor_buscar: filtros.emisor_buscar,
+    receptor_buscar: filtros.receptor_buscar,
     buscar: filtros.buscar,
     categoria: filtros.categoria,
   });
   const { datos, error, cargando, recargar } = useDatos<FilaItem[]>(ruta);
-  const rutaFacturas = productoSeleccionado ? conParametros(`/api/v1/contabilidad-items/productos/${productoSeleccionado}/facturas`, { desde: filtros.desde, hasta: filtros.hasta, emisor_id: filtros.emisor_id, receptor_id: filtros.receptor_id }) : null;
+  const rutaFacturas = productoSeleccionado ? conParametros(`/api/v1/contabilidad-items/productos/${productoSeleccionado}/facturas`, { desde: filtros.desde, hasta: filtros.hasta, emisor_buscar: filtros.emisor_buscar, receptor_buscar: filtros.receptor_buscar, limite: String(limiteFacturas), offset: String(offsetFacturas) }) : null;
   const { datos: facturas, error: errorFacturas, cargando: cargandoFacturas } = useDatos<FacturaItem[]>(rutaFacturas);
   const conciliacion = useDatos<Conciliacion[]>(conParametros("/api/v1/contabilidad-items/conciliacion", filtros));
 
@@ -59,14 +63,9 @@ export default function ContabilidadItems() {
       </p>
       <form onSubmit={(evento) => {
         evento.preventDefault();
-        const uuidValido = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        if ([emisorId, receptorId].some((id) => id.trim() !== "" && !uuidValido.test(id.trim()))) {
-          setErrorFiltros("Los identificadores de emisor y receptor deben tener formato UUID.");
-          return;
-        }
         setErrorFiltros("");
         setProductoSeleccionado(null);
-        setFiltros({ desde, hasta, emisor_id: emisorId.trim(), receptor_id: receptorId.trim(), buscar: buscar.trim(), categoria: categoria.trim() });
+        setFiltros({ desde, hasta, emisor_buscar: emisorBuscar.trim(), receptor_buscar: receptorBuscar.trim(), buscar: buscar.trim(), categoria: categoria.trim() });
         recargar();
       }}>
         <label htmlFor="items-buscar">Buscar producto o servicio</label>
@@ -77,10 +76,10 @@ export default function ContabilidadItems() {
         <input id="items-desde" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
         <label htmlFor="items-hasta">Hasta</label>
         <input id="items-hasta" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
-        <label htmlFor="items-emisor">ID del emisor (opcional)</label>
-        <input id="items-emisor" type="text" placeholder="UUID de empresa emisora" value={emisorId} onChange={(e) => setEmisorId(e.target.value)} />
-        <label htmlFor="items-receptor">ID del receptor (opcional)</label>
-        <input id="items-receptor" type="text" placeholder="UUID de empresa receptora" value={receptorId} onChange={(e) => setReceptorId(e.target.value)} />
+        <label htmlFor="items-emisor">Emisor (opcional)</label>
+        <input id="items-emisor" type="search" maxLength={150} placeholder="RUC, razón social o UUID" value={emisorBuscar} onChange={(e) => setEmisorBuscar(e.target.value)} />
+        <label htmlFor="items-receptor">Receptor (opcional)</label>
+        <input id="items-receptor" type="search" maxLength={150} placeholder="RUC, razón social o UUID" value={receptorBuscar} onChange={(e) => setReceptorBuscar(e.target.value)} />
         <button type="submit">Consultar</button>
       </form>
       {errorFiltros && <p role="alert">{errorFiltros}</p>}
@@ -161,7 +160,7 @@ export default function ContabilidadItems() {
                   <td>{fila.cantidad}</td>
                   <td>{fila.moneda}</td>
                   <td>{fila.importe || "Sin importe"}</td>
-                  <td><button type="button" onClick={() => setProductoSeleccionado(fila.producto_id)}>Ver facturas</button></td>
+                  <td><button type="button" onClick={() => { setVistaFacturas("general"); setOffsetFacturas(0); setProductoSeleccionado(fila.producto_id); }}>Ver facturas</button></td>
                 </tr>
               ))}
             </tbody>
@@ -169,25 +168,104 @@ export default function ContabilidadItems() {
         </div>
       )}
       {productoSeleccionado && (
-        <section aria-label="Facturas vinculadas al ítem">
-          <h3>Facturas que contienen el producto seleccionado</h3>
-          <button type="button" onClick={() => setProductoSeleccionado(null)}>Cerrar detalle</button>
-          {cargandoFacturas && <p>Consultando facturas…</p>}
-          {errorFacturas && <p role="alert">{errorFacturas}</p>}
-          {facturas?.length === 0 && <p>No hay facturas visibles para los filtros aplicados.</p>}
-          {facturas && facturas.length > 0 && <div style={{ overflowX: "auto" }}>
-            <table>
-              <thead><tr><th>Factura</th><th>Fecha</th><th>Descripción original</th><th>Cantidad</th><th>Importe</th><th>Expediente</th></tr></thead>
-              <tbody>{facturas.map((factura) => (
-                <tr key={factura.documento_id + ":" + factura.comprobante + ":" + factura.descripcion_original}>
-                  <td>{factura.comprobante}</td><td>{factura.fecha_emision}</td><td>{factura.descripcion_original}</td>
-                  <td>{factura.cantidad} {factura.unidad}</td><td>{factura.importe} {factura.moneda}</td>
-                  <td><a href={`/expedientes/${factura.expediente_id}`}>Abrir expediente</a></td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>}
-        </section>
+        <div
+          role="presentation"
+          onMouseDown={(evento) => {
+            if (evento.target === evento.currentTarget) setProductoSeleccionado(null);
+          }}
+          style={{ position: "fixed", inset: 0, zIndex: 1000, padding: 16, background: "rgba(15, 23, 42, 0.58)", display: "grid", placeItems: "center" }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="items-modal-titulo"
+            style={{ width: "min(1120px, 96vw)", maxHeight: "88vh", overflow: "auto", padding: 20, borderRadius: 12, background: "var(--surface, #fff)", color: "var(--text, #172033)", boxShadow: "0 20px 60px rgba(0,0,0,.3)" }}
+          >
+            <header style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 16 }}>
+              <div>
+                <h3 id="items-modal-titulo">Facturas asociadas: {datos?.find((fila) => fila.producto_id === productoSeleccionado)?.descripcion ?? "Ítem"}</h3>
+                <p>Consulta el detalle general o agrúpalo por proveedor o cliente.</p>
+              </div>
+              <button type="button" aria-label="Cerrar facturas del ítem" onClick={() => setProductoSeleccionado(null)}>Cerrar</button>
+            </header>
+            <div role="tablist" aria-label="Vistas de facturas asociadas" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+              {([
+                ["general", "General"],
+                ["proveedor", "Por proveedor"],
+                ["cliente", "Por cliente"],
+              ] as const).map(([vista, etiqueta]) => (
+                <button
+                  key={vista}
+                  type="button"
+                  role="tab"
+                  aria-selected={vistaFacturas === vista}
+                  onClick={() => setVistaFacturas(vista)}
+                >
+                  {etiqueta}
+                </button>
+              ))}
+            </div>
+            {cargandoFacturas && <p>Consultando facturas…</p>}
+            {errorFacturas && <p role="alert">No se pudieron consultar las facturas: {errorFacturas}</p>}
+            {!cargandoFacturas && !errorFacturas && facturas?.length === 0 && (
+              <p>No hay facturas visibles para este ítem y los filtros aplicados.</p>
+            )}
+            {facturas && facturas.length > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBlock: 12 }}>
+                <span>Líneas {offsetFacturas + 1}–{offsetFacturas + facturas.length}; página de {limiteFacturas} líneas.</span>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button type="button" disabled={offsetFacturas === 0 || cargandoFacturas} onClick={() => setOffsetFacturas(Math.max(0, offsetFacturas - limiteFacturas))}>Anterior</button>
+                  <button type="button" disabled={facturas.length < limiteFacturas || cargandoFacturas} onClick={() => setOffsetFacturas(offsetFacturas + limiteFacturas)}>Siguiente</button>
+                </div>
+              </div>
+            )}
+            {facturas && facturas.length > 0 && (() => {
+              const tabla = (filas: FacturaItem[]) => (
+                <div style={{ overflowX: "auto" }}>
+                  <table>
+                    <thead><tr><th>Factura</th><th>Fecha</th><th>Proveedor (emisor)</th><th>Cliente (receptor)</th><th>Descripción original</th><th>Cantidad</th><th>Importe</th><th>Expediente</th></tr></thead>
+                    <tbody>{filas.map((factura) => (
+                      <tr key={factura.documento_id + ":" + factura.comprobante + ":" + factura.descripcion_original}>
+                        <td>{factura.comprobante}</td>
+                        <td>{factura.fecha_emision}</td>
+                        <td>{factura.emisor_nombre || "Sin identificar"}{factura.emisor_ruc ? ` · RUC ${factura.emisor_ruc}` : ""}</td>
+                        <td>{factura.receptor_nombre || "Sin identificar"}{factura.receptor_ruc ? ` · RUC ${factura.receptor_ruc}` : ""}</td>
+                        <td>{factura.descripcion_original}</td>
+                        <td>{factura.cantidad} {factura.unidad}</td>
+                        <td>{factura.importe} {factura.moneda}</td>
+                        <td><a href={`/expedientes/${factura.expediente_id}`}>Abrir expediente</a></td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              );
+              if (vistaFacturas === "general") return tabla(facturas);
+              const grupos = new Map<string, FacturaItem[]>();
+              for (const factura of facturas) {
+                const esProveedor = vistaFacturas === "proveedor";
+                const idEmpresa = esProveedor ? factura.emisor_id : factura.receptor_id;
+                const nombre = esProveedor
+                  ? factura.emisor_nombre || factura.emisor_ruc || "Proveedor sin identificar"
+                  : factura.receptor_nombre || factura.receptor_ruc || "Cliente sin identificar";
+                const clave = idEmpresa || nombre;
+                grupos.set(clave, [...(grupos.get(clave) ?? []), factura]);
+              }
+              return Array.from(grupos.entries()).map(([idEmpresa, filas]) => {
+                const primera = filas[0];
+                if (!primera) return null;
+                const nombre = vistaFacturas === "proveedor"
+                  ? primera.emisor_nombre || primera.emisor_ruc || "Proveedor sin identificar"
+                  : primera.receptor_nombre || primera.receptor_ruc || "Cliente sin identificar";
+                return (
+                  <section key={idEmpresa} aria-label={nombre} style={{ marginBlock: 16 }}>
+                    <h4>{nombre}{vistaFacturas === "proveedor" ? (primera.emisor_ruc ? ` · RUC ${primera.emisor_ruc}` : "") : (primera.receptor_ruc ? ` · RUC ${primera.receptor_ruc}` : "")} · {new Set(filas.map((factura) => factura.documento_id)).size} facturas, {filas.length} líneas</h4>
+                    {tabla(filas)}
+                  </section>
+                );
+              });
+            })()}
+          </section>
+        </div>
       )}
     </section>
   );

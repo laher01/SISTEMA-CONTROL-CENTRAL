@@ -10,12 +10,14 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from sqlalchemy import case, func, or_, select, true
+from sqlalchemy import and_, case, func, or_, select, true
+from sqlalchemy.orm import aliased
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.api.deps import OperativeAuthDep, SessionDep
 from app.item_models import AuditoriaFacturaItem, LineaComprobanteItem, ProductoItem
-from app.models import Documento, Expediente, Miembro
+from app.models import Documento, Empresa, Expediente, Miembro
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.contabilidad_items_auditoria import registrar_decision, resolver_propuesta
 from app.services.expedientes import expediente_tiene_documentos_activos
@@ -44,6 +46,37 @@ def _alcance(auth: OperativeAuthDep) -> ColumnElement[bool]:
     raise HTTPException(403, "Rol sin acceso al módulo")
 
 
+def _filtro_empresa(
+    empresa_id: InstrumentedAttribute[uuid.UUID],
+    tenant_id: uuid.UUID,
+    termino: str | None,
+) -> ColumnElement[bool] | None:
+    """Busca empresa por RUC, razón social o UUID dentro del tenant actual."""
+    if not termino or not termino.strip():
+        return None
+    texto = termino.strip()
+    coincidencias = or_(
+        Empresa.ruc.ilike(f"%{texto}%"),
+        Empresa.razon_social.ilike(f"%{texto}%"),
+    )
+    try:
+        empresa_uuid = uuid.UUID(texto)
+    except ValueError:
+        pass
+    else:
+        coincidencias = or_(coincidencias, Empresa.id == empresa_uuid)
+    return (
+        select(Empresa.id)
+        .where(
+            Empresa.id == empresa_id,
+            Empresa.tenant_id == tenant_id,
+            Empresa.deleted_at.is_(None),
+            coincidencias,
+        )
+        .exists()
+    )
+
+
 @router.get("")
 def resumen(
     session: SessionDep,
@@ -52,6 +85,8 @@ def resumen(
     hasta: date | None = None,
     emisor_id: uuid.UUID | None = None,
     receptor_id: uuid.UUID | None = None,
+    emisor_buscar: Annotated[str | None, Query(max_length=150)] = None,
+    receptor_buscar: Annotated[str | None, Query(max_length=150)] = None,
     limite: int = Query(100, ge=1, le=500),
     buscar: Annotated[str | None, Query(max_length=150)] = None,
     categoria: Annotated[str | None, Query(max_length=80)] = None,
@@ -124,6 +159,12 @@ def resumen(
         stmt = stmt.where(Expediente.emisor_id == emisor_id)
     if receptor_id:
         stmt = stmt.where(Expediente.receptor_id == receptor_id)
+    filtro_emisor = _filtro_empresa(Expediente.emisor_id, auth.tenant_id, emisor_buscar)
+    filtro_receptor = _filtro_empresa(Expediente.receptor_id, auth.tenant_id, receptor_buscar)
+    if filtro_emisor is not None:
+        stmt = stmt.where(filtro_emisor)
+    if filtro_receptor is not None:
+        stmt = stmt.where(filtro_receptor)
     stmt = (
         stmt.group_by(
             ProductoItem.id,
@@ -158,7 +199,10 @@ def facturas_por_producto(
     hasta: date | None = None,
     emisor_id: uuid.UUID | None = None,
     receptor_id: uuid.UUID | None = None,
+    emisor_buscar: Annotated[str | None, Query(max_length=150)] = None,
+    receptor_buscar: Annotated[str | None, Query(max_length=150)] = None,
     limite: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0, le=1_000_000),
 ) -> list[dict[str, str]]:
     """Documentos originales que contienen el producto; solo ámbito autorizado."""
     if desde is not None and hasta is not None and desde > hasta:
@@ -182,6 +226,8 @@ def facturas_por_producto(
         .limit(1)
         .scalar_subquery()
     )
+    empresa_emisora = aliased(Empresa)
+    empresa_receptora = aliased(Empresa)
     consulta = (
         select(
             Expediente.id.label("expediente_id"),
@@ -192,6 +238,10 @@ def facturas_por_producto(
             Expediente.moneda,
             Expediente.emisor_id,
             Expediente.receptor_id,
+            empresa_emisora.ruc.label("emisor_ruc"),
+            empresa_emisora.razon_social.label("emisor_nombre"),
+            empresa_receptora.ruc.label("receptor_ruc"),
+            empresa_receptora.razon_social.label("receptor_nombre"),
             LineaComprobanteItem.numero_linea,
             LineaComprobanteItem.descripcion_original,
             LineaComprobanteItem.unidad,
@@ -200,6 +250,22 @@ def facturas_por_producto(
         )
         .join(Documento, Documento.id == LineaComprobanteItem.documento_id)
         .join(Expediente, Expediente.id == Documento.expediente_id)
+        .outerjoin(
+            empresa_emisora,
+            and_(
+                empresa_emisora.id == Expediente.emisor_id,
+                empresa_emisora.tenant_id == auth.tenant_id,
+                empresa_emisora.deleted_at.is_(None),
+            ),
+        )
+        .outerjoin(
+            empresa_receptora,
+            and_(
+                empresa_receptora.id == Expediente.receptor_id,
+                empresa_receptora.tenant_id == auth.tenant_id,
+                empresa_receptora.deleted_at.is_(None),
+            ),
+        )
         .where(
             LineaComprobanteItem.producto_id == producto_id,
             LineaComprobanteItem.tenant_id == auth.tenant_id,
@@ -230,11 +296,21 @@ def facturas_por_producto(
         consulta = consulta.where(Expediente.emisor_id == emisor_id)
     if receptor_id is not None:
         consulta = consulta.where(Expediente.receptor_id == receptor_id)
-    consulta = consulta.order_by(
-        Expediente.fecha_emision.desc(),
-        Expediente.id,
-        LineaComprobanteItem.numero_linea,
-    ).limit(limite)
+    filtro_emisor = _filtro_empresa(Expediente.emisor_id, auth.tenant_id, emisor_buscar)
+    filtro_receptor = _filtro_empresa(Expediente.receptor_id, auth.tenant_id, receptor_buscar)
+    if filtro_emisor is not None:
+        consulta = consulta.where(filtro_emisor)
+    if filtro_receptor is not None:
+        consulta = consulta.where(filtro_receptor)
+    consulta = (
+        consulta.order_by(
+            Expediente.fecha_emision.desc(),
+            Expediente.id,
+            LineaComprobanteItem.numero_linea,
+        )
+        .offset(offset)
+        .limit(limite)
+    )
     return [
         {
             "expediente_id": str(fila.expediente_id),
@@ -244,6 +320,10 @@ def facturas_por_producto(
             "moneda": fila.moneda,
             "emisor_id": str(fila.emisor_id),
             "receptor_id": str(fila.receptor_id),
+            "emisor_ruc": fila.emisor_ruc or "",
+            "emisor_nombre": fila.emisor_nombre or "",
+            "receptor_ruc": fila.receptor_ruc or "",
+            "receptor_nombre": fila.receptor_nombre or "",
             "numero_linea": str(fila.numero_linea),
             "descripcion_original": fila.descripcion_original,
             "unidad": fila.unidad,
@@ -262,6 +342,8 @@ def conciliacion(
     hasta: date | None = None,
     emisor_id: uuid.UUID | None = None,
     receptor_id: uuid.UUID | None = None,
+    emisor_buscar: Annotated[str | None, Query(max_length=150)] = None,
+    receptor_buscar: Annotated[str | None, Query(max_length=150)] = None,
 ) -> list[dict[str, str | int]]:
     """Control de importes de expedientes, sin duplicar por documentos o líneas."""
     if desde is not None and hasta is not None and desde > hasta:
@@ -315,6 +397,12 @@ def conciliacion(
         consulta = consulta.where(Expediente.emisor_id == emisor_id)
     if receptor_id is not None:
         consulta = consulta.where(Expediente.receptor_id == receptor_id)
+    filtro_emisor = _filtro_empresa(Expediente.emisor_id, auth.tenant_id, emisor_buscar)
+    filtro_receptor = _filtro_empresa(Expediente.receptor_id, auth.tenant_id, receptor_buscar)
+    if filtro_emisor is not None:
+        consulta = consulta.where(filtro_emisor)
+    if filtro_receptor is not None:
+        consulta = consulta.where(filtro_receptor)
     return [
         {
             "moneda": fila.moneda,
@@ -447,6 +535,8 @@ def exportar_csv(
     hasta: date | None = None,
     emisor_id: uuid.UUID | None = None,
     receptor_id: uuid.UUID | None = None,
+    emisor_buscar: Annotated[str | None, Query(max_length=150)] = None,
+    receptor_buscar: Annotated[str | None, Query(max_length=150)] = None,
     buscar: Annotated[str | None, Query(max_length=150)] = None,
     categoria: Annotated[str | None, Query(max_length=80)] = None,
 ) -> Response:
@@ -458,6 +548,8 @@ def exportar_csv(
         hasta=hasta,
         emisor_id=emisor_id,
         receptor_id=receptor_id,
+        emisor_buscar=emisor_buscar,
+        receptor_buscar=receptor_buscar,
         limite=501,
         buscar=buscar,
         categoria=categoria,
