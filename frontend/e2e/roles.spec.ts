@@ -107,6 +107,17 @@ for (const rol of ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USU
     await expect(cantidades.getByRole("listitem")).toHaveCount(1);
     await expect(cantidades).toContainText("Septiembre/2026");
     await expect(montos).toContainText("S/ 300.00");
+    // Los gráficos deben estar después de todas las tablas, incluso en escritorio.
+    const graficosDespuesDeDatos = await page.locator(".dashboard-graficos").evaluate((graficos) => {
+      const tablas = Array.from(document.querySelectorAll("main table"));
+      return tablas.length === 3 && tablas.every((tabla) => Boolean(tabla.compareDocumentPosition(graficos) & Node.DOCUMENT_POSITION_FOLLOWING));
+    });
+    expect(graficosDespuesDeDatos).toBe(true);
+    const barra = cantidades.locator(".dashboard-barra-pista > span").first();
+    const forma = await barra.boundingBox();
+    if (!forma) throw new Error("Barra no renderizada");
+    expect(forma.height).toBeGreaterThan(forma.width);
+    await expect(barra).toHaveAttribute("style", /height: 100%/);
     const escritorio = await cantidades.boundingBox();
     const junto = await montos.boundingBox();
     if (!junto || !escritorio) throw new Error("Gráficos no renderizados en escritorio");

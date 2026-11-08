@@ -110,9 +110,9 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
               </Link>
             </section>
 
-            <section>
+            <section className="dashboard-vista">
               <h3>Vista ordenada</h3>
-              <div className="filtros">
+              <div className="filtros dashboard-filtros">
                 <label>
                   Agrupar por
                   <select
@@ -236,7 +236,7 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
                 vacio={!desglose || desglose.filas.length === 0}
               >
                 {desglose && desglose.filas.length > 0 && (
-                  <table>
+                  <div className="dashboard-tabla-scroll"><table>
                     <thead>
                       <tr>
                         <th>{etiquetaAgrupacion(agruparPor)}</th>
@@ -265,22 +265,15 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
                         <th className="num">{formatearMonto("USD", desglose.filas.reduce((sum, fila) => sum + Number(fila.total_usd), 0))}</th>
                       </tr>
                     </tfoot>
-                  </table>
+                  </table></div>
                 )}
               </Estado>
             </section>
 
-            <div className="dashboard-graficos">
-              <Estado cargando={cargandoDesglose} error={errorDesglose} vacio={false}>
-                {desglose && <GraficoVistaOrdenada filas={desglose.filas} agrupacion={desglose.agrupar_por} />}
-              </Estado>
-              <GraficoMontos montos={datos.montos} />
-            </div>
-
-            <div className="columnas">
+            <div className="columnas dashboard-datos">
               <section>
                 <h3>Alertas abiertas</h3>
-                <table>
+                <div className="dashboard-tabla-scroll"><table>
                   <tbody>
                     {TIPOS_ALERTA.map((tipo) => (
                       <tr key={tipo}>
@@ -291,11 +284,11 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </table></div>
               </section>
               <section>
                 <h3>Montos</h3>
-                <table>
+                <div className="dashboard-tabla-scroll"><table>
                   <thead>
                     <tr>
                       <th>Moneda</th>
@@ -316,9 +309,16 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </table></div>
               </section>
             </div>
+            <div className="dashboard-graficos">
+              <Estado cargando={cargandoDesglose} error={errorDesglose} vacio={false}>
+                {desglose && <GraficoVistaOrdenada filas={desglose.filas} agrupacion={desglose.agrupar_por} />}
+              </Estado>
+              <GraficoMontos montos={datos.montos} />
+            </div>
+
           </>
         )}
       </Estado>

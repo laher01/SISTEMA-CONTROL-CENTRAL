@@ -1,5 +1,5 @@
 import "../dashboardGraficos.css";
-import { anchoBarra, etiquetaFilaDashboard } from "../dashboardGraficos";
+import { alturaBarra, etiquetaFilaDashboard } from "../dashboardGraficos";
 import { formatearMonto } from "../formato";
 import type { AgrupacionDashboard, DashboardDesgloseFila, DashboardResumen } from "../tipos";
 
@@ -13,13 +13,12 @@ function Barras({ barras, titulo }: { barras: Barra[]; titulo: string }) {
         <ul className="dashboard-barras-lista">
           {barras.map((barra) => (
             <li key={barra.clave} className="dashboard-barra">
-              <div className="dashboard-barra-datos">
-                <span>{barra.etiqueta}</span><strong>{barra.texto}</strong>
-              </div>
+              <strong className="dashboard-barra-valor">{barra.texto}</strong>
               <div className="dashboard-barra-pista" aria-hidden="true">
                 <span className={barra.valor < 0 ? "dashboard-barra-negativa" : undefined}
-                  style={{ width: anchoBarra(barra.valor, maximo) }} />
+                  style={{ height: alturaBarra(barra.valor, maximo) }} />
               </div>
+              <span className="dashboard-barra-etiqueta">{barra.etiqueta}</span>
             </li>
           ))}
         </ul>
