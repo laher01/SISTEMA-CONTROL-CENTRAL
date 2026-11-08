@@ -1,0 +1,65 @@
+name: audit-vps-readonly
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: factcentral-oracle-readonly-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: VPS Oracle — inventario de solo lectura
+    runs-on: ubuntu-latest
+    environment: audit-vps-readonly
+    timeout-minutes: 5
+    steps:
+      - name: Comprobar credenciales exclusivas de auditoría
+        shell: bash
+        env:
+          AUDIT_SSH_KEY: ${{ secrets.AUDIT_VPS_SSH_PRIVATE_KEY }}
+          AUDIT_KNOWN_HOSTS: ${{ secrets.AUDIT_VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$AUDIT_SSH_KEY" || { echo "::error::Falta AUDIT_VPS_SSH_PRIVATE_KEY"; exit 1; }
+          test -n "$AUDIT_KNOWN_HOSTS" || { echo "::error::Falta AUDIT_VPS_SSH_KNOWN_HOSTS"; exit 1; }
+          printf '%s\n' "$AUDIT_KNOWN_HOSTS" | ssh-keygen -lf - >/dev/null
+
+      - name: Configurar SSH aislado
+        shell: bash
+        env:
+          AUDIT_SSH_KEY: ${{ secrets.AUDIT_VPS_SSH_PRIVATE_KEY }}
+          AUDIT_KNOWN_HOSTS: ${{ secrets.AUDIT_VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/factcentral-audit"
+          printf '%s\n' "$AUDIT_SSH_KEY" > "$RUNNER_TEMP/factcentral-audit/id_ed25519"
+          printf '%s\n' "$AUDIT_KNOWN_HOSTS" > "$RUNNER_TEMP/factcentral-audit/known_hosts"
+          chmod 600 "$RUNNER_TEMP/factcentral-audit/id_ed25519" "$RUNNER_TEMP/factcentral-audit/known_hosts"
+          ssh-keygen -y -f "$RUNNER_TEMP/factcentral-audit/id_ed25519" >/dev/null
+
+      - name: Ejecutar comando fijo sin privilegios
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -F /dev/null \
+            -i "$RUNNER_TEMP/factcentral-audit/id_ed25519" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/factcentral-audit/known_hosts" \
+            -o ConnectTimeout=15 \
+            -o ConnectionAttempts=1 \
+            -o ForwardAgent=no \
+            -o ClearAllForwardings=yes \
+            -o RequestTTY=no \
+            factaudit@132.145.233.172 audit-vps-readonly-v1
+
+      - name: Limpiar identidad SSH efímera
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/factcentral-audit"
