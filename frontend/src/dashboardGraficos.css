@@ -33,3 +33,27 @@
   .dashboard-graficos { grid-template-columns: minmax(0, 1fr); }
   .filtros.dashboard-filtros { grid-template-columns: minmax(0, 1fr); }
 }
+
+.dashboard-vistas { margin-top: 1.5rem; }
+.dashboard-pestanas { display: flex; flex-wrap: wrap; gap: .5rem; padding-bottom: .75rem; border-bottom: 1px solid #d7e2ee; }
+.dashboard-pestanas [role="tab"] { border: 1px solid #bacbde; border-radius: .4rem; padding: .6rem 1rem; background: #fff; color: #245d93; cursor: pointer; }
+.dashboard-pestanas [role="tab"][aria-selected="true"] { background: #245d93; color: #fff; border-color: #245d93; }
+.dashboard-pestanas [role="tab"]:focus-visible { outline: 3px solid #e4a500; outline-offset: 3px; }
+.dashboard-vistas .dashboard-graficos { margin-top: 1rem; }
+.dashboard-circular-perspectiva { perspective: 700px; padding: .75rem 1rem 2rem; }
+.dashboard-circular-disco { width: min(100%, 220px); aspect-ratio: 1; margin: auto; border-radius: 50%; transform: rotateX(30deg); box-shadow: 0 10px 0 #243c57, 0 15px 12px #10243a25; }
+.dashboard-leyenda { list-style: none; padding: 0; margin: .75rem 0 0; max-height: 24rem; overflow-y: auto; }
+.dashboard-leyenda li { display: flex; align-items: baseline; flex-wrap: wrap; gap: .4rem .6rem; padding: .4rem 0; border-bottom: 1px solid #d7e2ee; font-size: .85rem; overflow-wrap: anywhere; }
+.dashboard-leyenda li > strong { margin-left: auto; white-space: nowrap; }
+.dashboard-leyenda-color { display: inline-block; flex: 0 0 .75rem; height: .75rem; border-radius: .2rem; }
+.dashboard-circulares-montos { display: grid; gap: 1rem; }
+.dashboard-circulares-montos h5 { font-size: .95rem; margin-bottom: .4rem; }
+.dashboard-lineas-scroll { overflow-x: auto; }
+.dashboard-lineas { display: block; color: #526276; font-size: 11px; }
+.dashboard-lineas text { fill: currentColor; }
+.dashboard-lineas-guia { stroke: #d7e2ee; stroke-width: 1; }
+.dashboard-lineas-trazo { fill: none; stroke: #245d93; stroke-width: 3; stroke-linejoin: round; }
+.dashboard-lineas-punto { fill: #245d93; stroke: #fff; stroke-width: 1.5; }
+:root[data-fc-tema="oscuro"] .dashboard-pestanas [role="tab"] { background: #172331; color: #b8d9ff; border-color: #415368; }
+:root[data-fc-tema="oscuro"] .dashboard-pestanas [role="tab"][aria-selected="true"] { background: #245d93; color: #fff; }
+:root[data-fc-tema="oscuro"] .dashboard-lineas { color: #b8c7d8; }

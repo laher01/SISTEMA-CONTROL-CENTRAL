@@ -3,8 +3,8 @@ import { Link } from "react-router-dom";
 
 import { useDatos } from "../api";
 import { agrupacionInicial, controlesDashboard } from "../dashboardRoles";
-import { GraficoMontos, GraficoVistaOrdenada } from "../componentes/GraficosDashboard";
-import { etiquetaFilaDashboard, MESES_DASHBOARD } from "../dashboardGraficos";
+import { GraficoMontos, GraficoVistaOrdenada, VistasGraficosDashboard } from "../componentes/GraficosDashboard";
+import { etiquetaFilaDashboard, MESES_DASHBOARD, type VistaGrafico } from "../dashboardGraficos";
 import { Estado } from "../componentes";
 import { ETIQUETA_ALERTA, ETIQUETA_ESTADO, formatearMonto } from "../formato";
 import {
@@ -20,6 +20,7 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
   const { responsable: esAdministracion, usuario: mostrarUsuario, gestor: mostrarGestor } = controlesDashboard(sesion.rol);
 
   const [agruparPor, setAgruparPor] = useState<AgrupacionDashboard>(agrupacionInicial(sesion.rol));
+  const [vistaGrafico, setVistaGrafico] = useState<VistaGrafico>("barras");
   const [orden, setOrden] = useState<"asc" | "desc">("desc");
   const [responsableId, setResponsableId] = useState("");
   const [usuarioId, setUsuarioId] = useState("");
@@ -312,12 +313,12 @@ export default function Dashboard({ sesion }: { sesion: SesionActual }) {
                 </table></div>
               </section>
             </div>
-            <div className="dashboard-graficos">
+            <VistasGraficosDashboard vista={vistaGrafico} alCambiar={setVistaGrafico}>
               <Estado cargando={cargandoDesglose} error={errorDesglose} vacio={false}>
-                {desglose && <GraficoVistaOrdenada filas={desglose.filas} agrupacion={desglose.agrupar_por} />}
+                {desglose && <GraficoVistaOrdenada filas={desglose.filas} agrupacion={desglose.agrupar_por} vista={vistaGrafico} />}
               </Estado>
-              <GraficoMontos montos={datos.montos} />
-            </div>
+              <GraficoMontos montos={datos.montos} vista={vistaGrafico} />
+            </VistasGraficosDashboard>
 
           </>
         )}
