@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
-import { anchoBarra, etiquetaFilaDashboard, MESES_DASHBOARD } from "./dashboardGraficos";
+import { alturaBarra, etiquetaFilaDashboard, MESES_DASHBOARD } from "./dashboardGraficos";
 import { GraficoMontos, GraficoVistaOrdenada } from "./componentes/GraficosDashboard";
 import Dashboard from "./paginas/Dashboard";
 import type { DashboardDesgloseFila, DashboardResumen, SesionActual } from "./tipos";
@@ -31,6 +31,8 @@ describe("Gráficos y meses del dashboard", () => {
     expect(html).toContain(">55</strong>");
     expect(html).toContain(">62</strong>");
     expect(html).not.toContain("09/2026");
+    expect(html).toContain("height:100%");
+    expect(html).not.toContain("width:");
   });
   it("separa escalas por moneda sin sumar clasificaciones solapadas", () => {
     const html = renderToStaticMarkup(<GraficoMontos montos={montos} />);
@@ -38,13 +40,13 @@ describe("Gráficos y meses del dashboard", () => {
     expect(html).toContain('aria-label="Montos en USD"');
     expect(html).toContain("S/ 200.00");
     expect(html).toContain("US$ 10.00");
-    expect(html.match(/width:100%/g)).toHaveLength(3);
+    expect(html.match(/height:100%/g)).toHaveLength(3);
   });
   it("presenta estados vacíos y no genera barras inválidas", () => {
     expect(renderToStaticMarkup(<GraficoVistaOrdenada filas={[]} agrupacion="mes" />)).toContain("Sin datos para los filtros seleccionados.");
-    expect(anchoBarra(0, 0)).toBe("0%");
-    expect(anchoBarra(Infinity, 5)).toBe("0%");
-    expect(anchoBarra(-5, 10)).toBe("50%");
+    expect(alturaBarra(0, 0)).toBe("0%");
+    expect(alturaBarra(Infinity, 5)).toBe("0%");
+    expect(alturaBarra(-5, 10)).toBe("50%");
   });
   it.each(["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"] as const)("%s recibe los gráficos comunes y etiquetas de mes", (rol) => {
     mocks.useDatos.mockImplementation((ruta: string) => ({
@@ -58,6 +60,8 @@ describe("Gráficos y meses del dashboard", () => {
     expect(html).toContain('aria-label="Gráfico de vista ordenada"');
     expect(html).toContain('aria-label="Gráfico de montos"');
     expect(html).toContain("Mes de emisión");
+    expect(html.indexOf("dashboard-graficos")).toBeGreaterThan(html.indexOf("Alertas abiertas"));
+    expect(html.indexOf("dashboard-graficos")).toBeGreaterThan(html.lastIndexOf("</table>"));
     expect(html).toContain("Enero/");
   });
 });

@@ -12,7 +12,7 @@ export function etiquetaFilaDashboard(fila: DashboardDesgloseFila, agrupacion: A
   return `${MESES_DASHBOARD[Number(coincidencia[2]) - 1]}/${coincidencia[1]}`;
 }
 
-export function anchoBarra(valor: number, maximo: number): string {
+export function alturaBarra(valor: number, maximo: number): string {
   if (!Number.isFinite(valor) || !Number.isFinite(maximo) || maximo <= 0) return "0%";
   return `${Math.min(100, Math.max(0, Math.abs(valor) / maximo * 100))}%`;
 }
