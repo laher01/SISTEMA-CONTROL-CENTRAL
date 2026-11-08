@@ -87,7 +87,7 @@ function Lineas({ barras, titulo }: { barras: Barra[]; titulo: string }) {
       <div className="dashboard-lineas-scroll">
         <svg className="dashboard-lineas" width={ancho} height="240" viewBox={`0 0 ${ancho} 240`}
           role="img" aria-label={`${titulo} · líneas`}>
-          <title>{titulo}: comparación según el orden actual de los grupos</title>
+          <title>{`${titulo}: comparación según el orden actual de los grupos`}</title>
           {[0, .5, 1].map((fraccion) => {
             const valor = minimo + rango * fraccion;
             return <g key={fraccion}>
@@ -100,7 +100,7 @@ function Lineas({ barras, titulo }: { barras: Barra[]; titulo: string }) {
           {barras.map((barra, indice) => (
             <g key={barra.clave}>
               <circle cx={x(indice)} cy={y(valores[indice] ?? 0)} r="4" className="dashboard-lineas-punto">
-                <title>{barra.etiqueta}: {barra.texto}</title>
+                <title>{`${barra.etiqueta}: ${barra.texto}`}</title>
               </circle>
               <text x={x(indice)} y="213" textAnchor="middle">{barra.etiqueta.length > 13 ? `${barra.etiqueta.slice(0, 12)}…` : barra.etiqueta}</text>
             </g>

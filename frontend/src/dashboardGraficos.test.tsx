@@ -95,7 +95,8 @@ describe("Tres vistas de los mismos datos", () => {
     expect(html).toContain("Agosto/2026");
     expect(html).toContain(">55</strong>");
     expect(html).toContain(">62</strong>");
-    expect(html.indexOf("Septiembre/2026")).toBeLessThan(html.indexOf("Agosto/2026"));
+    const leyenda = html.slice(html.indexOf('<ul class="dashboard-leyenda">'));
+    expect(leyenda.indexOf("Septiembre/2026")).toBeLessThan(leyenda.indexOf("Agosto/2026"));
     expect(html).not.toMatch(/NaN|Infinity/);
   });
   it("divide los círculos monetarios por clasificación y moneda", () => {
