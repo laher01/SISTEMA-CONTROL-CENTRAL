@@ -12,6 +12,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, case, func, or_, select, true
 from sqlalchemy.orm import aliased
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.api.deps import OperativeAuthDep, SessionDep
@@ -46,7 +47,7 @@ def _alcance(auth: OperativeAuthDep) -> ColumnElement[bool]:
 
 
 def _filtro_empresa(
-    empresa_id: ColumnElement[uuid.UUID],
+    empresa_id: InstrumentedAttribute[uuid.UUID],
     tenant_id: uuid.UUID,
     termino: str | None,
 ) -> ColumnElement[bool] | None:
