@@ -15,7 +15,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.api.deps import OperativeAuthDep, SessionDep
 from app.item_models import AuditoriaFacturaItem, LineaComprobanteItem, ProductoItem
-from app.models import Documento, Expediente, Miembro
+from app.models import Documento, Empresa, Expediente, Miembro
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.contabilidad_items_auditoria import registrar_decision, resolver_propuesta
 from app.services.expedientes import expediente_tiene_documentos_activos
@@ -44,6 +44,37 @@ def _alcance(auth: OperativeAuthDep) -> ColumnElement[bool]:
     raise HTTPException(403, "Rol sin acceso al módulo")
 
 
+def _filtro_empresa(
+    empresa_id: ColumnElement[uuid.UUID],
+    tenant_id: uuid.UUID,
+    termino: str | None,
+) -> ColumnElement[bool] | None:
+    """Busca empresa por RUC, razón social o UUID dentro del tenant actual."""
+    if not termino or not termino.strip():
+        return None
+    texto = termino.strip()
+    coincidencias = or_(
+        Empresa.ruc.ilike(f"%{texto}%"),
+        Empresa.razon_social.ilike(f"%{texto}%"),
+    )
+    try:
+        empresa_uuid = uuid.UUID(texto)
+    except ValueError:
+        pass
+    else:
+        coincidencias = or_(coincidencias, Empresa.id == empresa_uuid)
+    return (
+        select(Empresa.id)
+        .where(
+            Empresa.id == empresa_id,
+            Empresa.tenant_id == tenant_id,
+            Empresa.deleted_at.is_(None),
+            coincidencias,
+        )
+        .exists()
+    )
+
+
 @router.get("")
 def resumen(
     session: SessionDep,
@@ -52,6 +83,8 @@ def resumen(
     hasta: date | None = None,
     emisor_id: uuid.UUID | None = None,
     receptor_id: uuid.UUID | None = None,
+    emisor_buscar: Annotated[str | None, Query(max_length=150)] = None,
+    receptor_buscar: Annotated[str | None, Query(max_length=150)] = None,
     limite: int = Query(100, ge=1, le=500),
     buscar: Annotated[str | None, Query(max_length=150)] = None,
     categoria: Annotated[str | None, Query(max_length=80)] = None,
@@ -124,6 +157,12 @@ def resumen(
         stmt = stmt.where(Expediente.emisor_id == emisor_id)
     if receptor_id:
         stmt = stmt.where(Expediente.receptor_id == receptor_id)
+    filtro_emisor = _filtro_empresa(Expediente.emisor_id, auth.tenant_id, emisor_buscar)
+    filtro_receptor = _filtro_empresa(Expediente.receptor_id, auth.tenant_id, receptor_buscar)
+    if filtro_emisor is not None:
+        stmt = stmt.where(filtro_emisor)
+    if filtro_receptor is not None:
+        stmt = stmt.where(filtro_receptor)
     stmt = (
         stmt.group_by(
             ProductoItem.id,
@@ -158,6 +197,8 @@ def facturas_por_producto(
     hasta: date | None = None,
     emisor_id: uuid.UUID | None = None,
     receptor_id: uuid.UUID | None = None,
+    emisor_buscar: Annotated[str | None, Query(max_length=150)] = None,
+    receptor_buscar: Annotated[str | None, Query(max_length=150)] = None,
     limite: int = Query(100, ge=1, le=500),
 ) -> list[dict[str, str]]:
     """Documentos originales que contienen el producto; solo ámbito autorizado."""
@@ -230,6 +271,12 @@ def facturas_por_producto(
         consulta = consulta.where(Expediente.emisor_id == emisor_id)
     if receptor_id is not None:
         consulta = consulta.where(Expediente.receptor_id == receptor_id)
+    filtro_emisor = _filtro_empresa(Expediente.emisor_id, auth.tenant_id, emisor_buscar)
+    filtro_receptor = _filtro_empresa(Expediente.receptor_id, auth.tenant_id, receptor_buscar)
+    if filtro_emisor is not None:
+        consulta = consulta.where(filtro_emisor)
+    if filtro_receptor is not None:
+        consulta = consulta.where(filtro_receptor)
     consulta = consulta.order_by(
         Expediente.fecha_emision.desc(),
         Expediente.id,
@@ -262,6 +309,8 @@ def conciliacion(
     hasta: date | None = None,
     emisor_id: uuid.UUID | None = None,
     receptor_id: uuid.UUID | None = None,
+    emisor_buscar: Annotated[str | None, Query(max_length=150)] = None,
+    receptor_buscar: Annotated[str | None, Query(max_length=150)] = None,
 ) -> list[dict[str, str | int]]:
     """Control de importes de expedientes, sin duplicar por documentos o líneas."""
     if desde is not None and hasta is not None and desde > hasta:
@@ -315,6 +364,12 @@ def conciliacion(
         consulta = consulta.where(Expediente.emisor_id == emisor_id)
     if receptor_id is not None:
         consulta = consulta.where(Expediente.receptor_id == receptor_id)
+    filtro_emisor = _filtro_empresa(Expediente.emisor_id, auth.tenant_id, emisor_buscar)
+    filtro_receptor = _filtro_empresa(Expediente.receptor_id, auth.tenant_id, receptor_buscar)
+    if filtro_emisor is not None:
+        consulta = consulta.where(filtro_emisor)
+    if filtro_receptor is not None:
+        consulta = consulta.where(filtro_receptor)
     return [
         {
             "moneda": fila.moneda,
@@ -447,6 +502,8 @@ def exportar_csv(
     hasta: date | None = None,
     emisor_id: uuid.UUID | None = None,
     receptor_id: uuid.UUID | None = None,
+    emisor_buscar: Annotated[str | None, Query(max_length=150)] = None,
+    receptor_buscar: Annotated[str | None, Query(max_length=150)] = None,
     buscar: Annotated[str | None, Query(max_length=150)] = None,
     categoria: Annotated[str | None, Query(max_length=80)] = None,
 ) -> Response:
@@ -458,6 +515,8 @@ def exportar_csv(
         hasta=hasta,
         emisor_id=emisor_id,
         receptor_id=receptor_id,
+        emisor_buscar=emisor_buscar,
+        receptor_buscar=receptor_buscar,
         limite=501,
         buscar=buscar,
         categoria=categoria,
