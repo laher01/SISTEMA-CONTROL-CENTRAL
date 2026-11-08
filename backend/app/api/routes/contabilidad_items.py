@@ -10,7 +10,8 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from sqlalchemy import case, func, or_, select, true
+from sqlalchemy import and_, case, func, or_, select, true
+from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.api.deps import OperativeAuthDep, SessionDep
@@ -200,6 +201,7 @@ def facturas_por_producto(
     emisor_buscar: Annotated[str | None, Query(max_length=150)] = None,
     receptor_buscar: Annotated[str | None, Query(max_length=150)] = None,
     limite: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0, le=1_000_000),
 ) -> list[dict[str, str]]:
     """Documentos originales que contienen el producto; solo ámbito autorizado."""
     if desde is not None and hasta is not None and desde > hasta:
@@ -223,6 +225,8 @@ def facturas_por_producto(
         .limit(1)
         .scalar_subquery()
     )
+    empresa_emisora = aliased(Empresa)
+    empresa_receptora = aliased(Empresa)
     consulta = (
         select(
             Expediente.id.label("expediente_id"),
@@ -233,6 +237,10 @@ def facturas_por_producto(
             Expediente.moneda,
             Expediente.emisor_id,
             Expediente.receptor_id,
+            empresa_emisora.ruc.label("emisor_ruc"),
+            empresa_emisora.razon_social.label("emisor_nombre"),
+            empresa_receptora.ruc.label("receptor_ruc"),
+            empresa_receptora.razon_social.label("receptor_nombre"),
             LineaComprobanteItem.numero_linea,
             LineaComprobanteItem.descripcion_original,
             LineaComprobanteItem.unidad,
@@ -241,6 +249,22 @@ def facturas_por_producto(
         )
         .join(Documento, Documento.id == LineaComprobanteItem.documento_id)
         .join(Expediente, Expediente.id == Documento.expediente_id)
+        .outerjoin(
+            empresa_emisora,
+            and_(
+                empresa_emisora.id == Expediente.emisor_id,
+                empresa_emisora.tenant_id == auth.tenant_id,
+                empresa_emisora.deleted_at.is_(None),
+            ),
+        )
+        .outerjoin(
+            empresa_receptora,
+            and_(
+                empresa_receptora.id == Expediente.receptor_id,
+                empresa_receptora.tenant_id == auth.tenant_id,
+                empresa_receptora.deleted_at.is_(None),
+            ),
+        )
         .where(
             LineaComprobanteItem.producto_id == producto_id,
             LineaComprobanteItem.tenant_id == auth.tenant_id,
@@ -281,7 +305,7 @@ def facturas_por_producto(
         Expediente.fecha_emision.desc(),
         Expediente.id,
         LineaComprobanteItem.numero_linea,
-    ).limit(limite)
+    ).offset(offset).limit(limite)
     return [
         {
             "expediente_id": str(fila.expediente_id),
@@ -291,6 +315,10 @@ def facturas_por_producto(
             "moneda": fila.moneda,
             "emisor_id": str(fila.emisor_id),
             "receptor_id": str(fila.receptor_id),
+            "emisor_ruc": fila.emisor_ruc or "",
+            "emisor_nombre": fila.emisor_nombre or "",
+            "receptor_ruc": fila.receptor_ruc or "",
+            "receptor_nombre": fila.receptor_nombre or "",
             "numero_linea": str(fila.numero_linea),
             "descripcion_original": fila.descripcion_original,
             "unidad": fila.unidad,
