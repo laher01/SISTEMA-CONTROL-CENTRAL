@@ -84,6 +84,9 @@ def test_catalogo_y_categorias_solo_administrador_y_aislados_por_tenant(
     assert producto.clasificacion_confirmada is True
 
     _documento_xml(session, settings, auth_prueba.contexto.tenant_id)
+    # La API abre una sesión PostgreSQL independiente; publicar el fixture antes
+    # de solicitar el trabajo para que el documento forme parte del lote.
+    session.commit()
     trabajo_activo = client.post("/api/v1/contabilidad-items/reescaneo/trabajos")
     assert trabajo_activo.status_code == 201
     duplicado_activo = client.post("/api/v1/contabilidad-items/reescaneo/trabajos")
@@ -210,6 +213,8 @@ def test_reescaneo_ubl_agrega_lineas_una_vez_y_es_idempotente(
 ) -> None:
     auth_prueba.como_admin()
     _documento_xml(session, settings, auth_prueba.contexto.tenant_id)
+    # No depender de StaticPool/SQLite: CI usa sesiones PostgreSQL separadas.
+    session.commit()
     for lineas_esperadas in (1, 0):
         trabajo = client.post("/api/v1/contabilidad-items/reescaneo/trabajos")
         assert trabajo.status_code == 201, trabajo.text
