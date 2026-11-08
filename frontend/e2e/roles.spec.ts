@@ -95,6 +95,7 @@ for (const rol of ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USU
     });
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto("/");
+    await expect(page.locator(".dashboard-filtros")).toHaveCSS("display", "grid");
     await page.getByLabel("Agrupar por", { exact: true }).selectOption("mes");
     const cantidades = page.getByRole("region", { name: "Gráfico de vista ordenada", exact: true });
     const montos = page.getByRole("region", { name: "Gráfico de montos", exact: true });
