@@ -301,11 +301,15 @@ def facturas_por_producto(
         consulta = consulta.where(filtro_emisor)
     if filtro_receptor is not None:
         consulta = consulta.where(filtro_receptor)
-    consulta = consulta.order_by(
-        Expediente.fecha_emision.desc(),
-        Expediente.id,
-        LineaComprobanteItem.numero_linea,
-    ).offset(offset).limit(limite)
+    consulta = (
+        consulta.order_by(
+            Expediente.fecha_emision.desc(),
+            Expediente.id,
+            LineaComprobanteItem.numero_linea,
+        )
+        .offset(offset)
+        .limit(limite)
+    )
     return [
         {
             "expediente_id": str(fila.expediente_id),
