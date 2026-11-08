@@ -212,7 +212,7 @@ export default function ContabilidadItems() {
             )}
             {facturas && facturas.length > 0 && (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBlock: 12 }}>
-                <span>Facturas {offsetFacturas + 1}–{offsetFacturas + facturas.length}; página de {limiteFacturas} registros.</span>
+                <span>Líneas {offsetFacturas + 1}–{offsetFacturas + facturas.length}; página de {limiteFacturas} líneas.</span>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button type="button" disabled={offsetFacturas === 0 || cargandoFacturas} onClick={() => setOffsetFacturas(Math.max(0, offsetFacturas - limiteFacturas))}>Anterior</button>
                   <button type="button" disabled={facturas.length < limiteFacturas || cargandoFacturas} onClick={() => setOffsetFacturas(offsetFacturas + limiteFacturas)}>Siguiente</button>
@@ -228,8 +228,8 @@ export default function ContabilidadItems() {
                       <tr key={factura.documento_id + ":" + factura.comprobante + ":" + factura.descripcion_original}>
                         <td>{factura.comprobante}</td>
                         <td>{factura.fecha_emision}</td>
-                        <td>{factura.emisor_nombre || factura.emisor_ruc || "Sin identificar"}</td>
-                        <td>{factura.receptor_nombre || factura.receptor_ruc || "Sin identificar"}</td>
+                        <td>{factura.emisor_nombre || "Sin identificar"}{factura.emisor_ruc ? ` · RUC ${factura.emisor_ruc}` : ""}</td>
+                        <td>{factura.receptor_nombre || "Sin identificar"}{factura.receptor_ruc ? ` · RUC ${factura.receptor_ruc}` : ""}</td>
                         <td>{factura.descripcion_original}</td>
                         <td>{factura.cantidad} {factura.unidad}</td>
                         <td>{factura.importe} {factura.moneda}</td>
@@ -257,7 +257,7 @@ export default function ContabilidadItems() {
                   : primera.receptor_nombre || primera.receptor_ruc || "Cliente sin identificar";
                 return (
                   <section key={idEmpresa} aria-label={nombre} style={{ marginBlock: 16 }}>
-                    <h4>{nombre} · {filas.length} líneas</h4>
+                    <h4>{nombre}{vistaFacturas === "proveedor" ? (primera.emisor_ruc ? ` · RUC ${primera.emisor_ruc}` : "") : (primera.receptor_ruc ? ` · RUC ${primera.receptor_ruc}` : "")} · {new Set(filas.map((factura) => factura.documento_id)).size} facturas, {filas.length} líneas</h4>
                     {tabla(filas)}
                   </section>
                 );
