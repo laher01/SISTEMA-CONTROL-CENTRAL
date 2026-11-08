@@ -50,7 +50,7 @@ export default function ContabilidadItems() {
     categoria: filtros.categoria,
   });
   const { datos, error, cargando, recargar } = useDatos<FilaItem[]>(ruta);
-  const rutaFacturas = productoSeleccionado ? conParametros(`/api/v1/contabilidad-items/productos/${productoSeleccionado}/facturas`, { desde: filtros.desde, hasta: filtros.hasta, emisor_buscar: filtros.emisor_buscar, receptor_buscar: filtros.receptor_buscar, limite: limiteFacturas, offset: offsetFacturas }) : null;
+  const rutaFacturas = productoSeleccionado ? conParametros(`/api/v1/contabilidad-items/productos/${productoSeleccionado}/facturas`, { desde: filtros.desde, hasta: filtros.hasta, emisor_buscar: filtros.emisor_buscar, receptor_buscar: filtros.receptor_buscar, limite: String(limiteFacturas), offset: String(offsetFacturas) }) : null;
   const { datos: facturas, error: errorFacturas, cargando: cargandoFacturas } = useDatos<FacturaItem[]>(rutaFacturas);
   const conciliacion = useDatos<Conciliacion[]>(conParametros("/api/v1/contabilidad-items/conciliacion", filtros));
 
@@ -252,6 +252,7 @@ export default function ContabilidadItems() {
               }
               return Array.from(grupos.entries()).map(([idEmpresa, filas]) => {
                 const primera = filas[0];
+                if (!primera) return null;
                 const nombre = vistaFacturas === "proveedor"
                   ? primera.emisor_nombre || primera.emisor_ruc || "Proveedor sin identificar"
                   : primera.receptor_nombre || primera.receptor_ruc || "Cliente sin identificar";
