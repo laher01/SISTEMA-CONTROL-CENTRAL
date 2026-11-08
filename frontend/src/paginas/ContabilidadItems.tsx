@@ -31,22 +31,22 @@ export default function ContabilidadItems() {
   const [productoSeleccionado, setProductoSeleccionado] = useState<string | null>(null);
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
-  const [emisorId, setEmisorId] = useState("");
-  const [receptorId, setReceptorId] = useState("");
+  const [emisorBuscar, setEmisorBuscar] = useState("");
+  const [receptorBuscar, setReceptorBuscar] = useState("");
   const [errorFiltros, setErrorFiltros] = useState("");
   const [errorDescarga, setErrorDescarga] = useState("");
   const [descargando, setDescargando] = useState(false);
-  const [filtros, setFiltros] = useState({ desde: "", hasta: "", emisor_id: "", receptor_id: "", buscar: "", categoria: "" });
+  const [filtros, setFiltros] = useState({ desde: "", hasta: "", emisor_buscar: "", receptor_buscar: "", buscar: "", categoria: "" });
   const ruta = conParametros("/api/v1/contabilidad-items", {
     desde: filtros.desde,
     hasta: filtros.hasta,
-    emisor_id: filtros.emisor_id,
-    receptor_id: filtros.receptor_id,
+    emisor_buscar: filtros.emisor_buscar,
+    receptor_buscar: filtros.receptor_buscar,
     buscar: filtros.buscar,
     categoria: filtros.categoria,
   });
   const { datos, error, cargando, recargar } = useDatos<FilaItem[]>(ruta);
-  const rutaFacturas = productoSeleccionado ? conParametros(`/api/v1/contabilidad-items/productos/${productoSeleccionado}/facturas`, { desde: filtros.desde, hasta: filtros.hasta, emisor_id: filtros.emisor_id, receptor_id: filtros.receptor_id }) : null;
+  const rutaFacturas = productoSeleccionado ? conParametros(`/api/v1/contabilidad-items/productos/${productoSeleccionado}/facturas`, { desde: filtros.desde, hasta: filtros.hasta, emisor_buscar: filtros.emisor_buscar, receptor_buscar: filtros.receptor_buscar }) : null;
   const { datos: facturas, error: errorFacturas, cargando: cargandoFacturas } = useDatos<FacturaItem[]>(rutaFacturas);
   const conciliacion = useDatos<Conciliacion[]>(conParametros("/api/v1/contabilidad-items/conciliacion", filtros));
 
@@ -59,14 +59,9 @@ export default function ContabilidadItems() {
       </p>
       <form onSubmit={(evento) => {
         evento.preventDefault();
-        const uuidValido = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        if ([emisorId, receptorId].some((id) => id.trim() !== "" && !uuidValido.test(id.trim()))) {
-          setErrorFiltros("Los identificadores de emisor y receptor deben tener formato UUID.");
-          return;
-        }
         setErrorFiltros("");
         setProductoSeleccionado(null);
-        setFiltros({ desde, hasta, emisor_id: emisorId.trim(), receptor_id: receptorId.trim(), buscar: buscar.trim(), categoria: categoria.trim() });
+        setFiltros({ desde, hasta, emisor_buscar: emisorBuscar.trim(), receptor_buscar: receptorBuscar.trim(), buscar: buscar.trim(), categoria: categoria.trim() });
         recargar();
       }}>
         <label htmlFor="items-buscar">Buscar producto o servicio</label>
@@ -77,10 +72,10 @@ export default function ContabilidadItems() {
         <input id="items-desde" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
         <label htmlFor="items-hasta">Hasta</label>
         <input id="items-hasta" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
-        <label htmlFor="items-emisor">ID del emisor (opcional)</label>
-        <input id="items-emisor" type="text" placeholder="UUID de empresa emisora" value={emisorId} onChange={(e) => setEmisorId(e.target.value)} />
-        <label htmlFor="items-receptor">ID del receptor (opcional)</label>
-        <input id="items-receptor" type="text" placeholder="UUID de empresa receptora" value={receptorId} onChange={(e) => setReceptorId(e.target.value)} />
+        <label htmlFor="items-emisor">Emisor (opcional)</label>
+        <input id="items-emisor" type="search" maxLength={150} placeholder="RUC, razón social o UUID" value={emisorBuscar} onChange={(e) => setEmisorBuscar(e.target.value)} />
+        <label htmlFor="items-receptor">Receptor (opcional)</label>
+        <input id="items-receptor" type="search" maxLength={150} placeholder="RUC, razón social o UUID" value={receptorBuscar} onChange={(e) => setReceptorBuscar(e.target.value)} />
         <button type="submit">Consultar</button>
       </form>
       {errorFiltros && <p role="alert">{errorFiltros}</p>}
