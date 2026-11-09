@@ -56,7 +56,7 @@ const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = 
   { a: "/contabilidad-items", texto: "Contabilidad de Ítems", icono: "▦", roles: ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"] },
   { a: "/contabilidad-items/categorias", texto: "Categorías", icono: "↳", roles: ["ADMINISTRADOR"] },
   { a: "/contabilidad-items/catalogo", texto: "Ítems", icono: "↳", roles: ["ADMINISTRADOR"] },
-  { a: "/contabilidad-items/reescanear", texto: "Reescanear", icono: "↳", roles: ["ADMINISTRADOR"] },
+  { a: "/contabilidad-items/reescanear", texto: "Reescanear", icono: "↳", roles: ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"] },
   { a: "/mi-equipo", texto: "Mis Usuarios", icono: "♙", roles: ["RESPONSABLE"] },
   { a: "/mi-equipo/pedidos", texto: "Pedidos", icono: "▤", roles: ["RESPONSABLE"] },
   { a: "/mi-equipo/cobros", texto: "Cobros y clientes", icono: "◈", roles: ["RESPONSABLE"] },
@@ -247,7 +247,7 @@ export default function App() {
           <Route path="/contabilidad-items" element={<ContabilidadItems />} />
           <Route path="/contabilidad-items/categorias" element={sesion.rol === "ADMINISTRADOR" ? <CategoriasItems /> : <Navigate to="/contabilidad-items" replace />} />
           <Route path="/contabilidad-items/catalogo" element={sesion.rol === "ADMINISTRADOR" ? <CatalogoItems /> : <Navigate to="/contabilidad-items" replace />} />
-          <Route path="/contabilidad-items/reescanear" element={sesion.rol === "ADMINISTRADOR" ? <ReescanearItems /> : <Navigate to="/contabilidad-items" replace />} />
+          <Route path="/contabilidad-items/reescanear" element={["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"].includes(sesion.rol) ? <ReescanearItems rol={sesion.rol} /> : <Navigate to="/contabilidad-items" replace />} />
           <Route path="/documentos" element={sesion.rol === "SECRETARIA" && activaciones?.documentos === false ? <Navigate to="/expedientes" replace /> : <Documentos sesion={sesion} />} />
           <Route path="/expedientes" element={<Expedientes sesion={sesion} />} />
           <Route path="/expedientes/:id" element={<ExpedienteDetalle sesion={sesion} />} />

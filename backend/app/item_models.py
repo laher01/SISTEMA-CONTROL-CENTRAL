@@ -25,7 +25,7 @@ class ProductoItem(ConId, ConTenant, ConCreacion, Base):
     __table_args__ = (UniqueConstraint("tenant_id", "clave_catalogo"),)
 
     clave_catalogo: Mapped[str] = mapped_column(String(300))
-    descripcion: Mapped[str] = mapped_column(String(500))
+    descripcion: Mapped[str] = mapped_column(String(2000))
     categoria: Mapped[str] = mapped_column(String(80), default="POR_CATEGORIZAR")
     unidad_base: Mapped[str | None] = mapped_column(String(40))
     clasificacion_confirmada: Mapped[bool] = mapped_column(default=False)
@@ -57,10 +57,17 @@ class TrabajoReescaneoItems(ConId, ConTenant, ConCreacion, Base):
     )
 
     solicitado_por_cuenta_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cuentas_acceso.id"))
+    solicitado_por_rol: Mapped[str] = mapped_column(String(20), default="ADMINISTRADOR")
+    solicitado_por_miembro_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"))
+    solicitado_por_usuario_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("miembros.id"))
+    solicitado_por_gestor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"))
+    solicitado_por_codigo: Mapped[str] = mapped_column(String(50), default="")
     estado: Mapped[str] = mapped_column(
         String(32), default="EN_PROCESO", server_default="EN_PROCESO"
     )
     cursor_documento_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("documentos.id"))
+    documento_actual_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("documentos.id"))
+    documento_actual_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     total_documentos: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     procesados: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     lineas_nuevas: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
@@ -76,7 +83,7 @@ class LineaComprobanteItem(ConId, ConTenant, ConCreacion, Base):
     documento_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documentos.id"), index=True)
     producto_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("productos_items.id"), index=True)
     numero_linea: Mapped[int] = mapped_column(Integer)
-    descripcion_original: Mapped[str] = mapped_column(String(1000))
+    descripcion_original: Mapped[str] = mapped_column(String(2000))
     cantidad: Mapped[Decimal] = mapped_column(Numeric(18, 4))
     unidad: Mapped[str] = mapped_column(String(40))
     importe_linea: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))

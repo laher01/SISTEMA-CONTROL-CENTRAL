@@ -102,12 +102,22 @@ def get_contexto_operativo(
                 "/api/v1/contabilidad-items",
                 "/api/v1/contabilidad-items/conciliacion",
                 "/api/v1/contabilidad-items/exportar-csv",
+                "/api/v1/contabilidad-items/categorias",
             }
             or (
                 request.method == "GET"
                 and len(request.url.path.split("/")) == 7
                 and request.url.path.startswith("/api/v1/contabilidad-items/productos/")
                 and request.url.path.endswith("/facturas")
+            )
+            or (
+                request.url.path.startswith("/api/v1/contabilidad-items/reescaneo/")
+                and request.method in {"GET", "POST"}
+            )
+            or (
+                request.method == "PATCH"
+                and request.url.path.startswith("/api/v1/contabilidad-items/lineas/")
+                and request.url.path.endswith("/clasificacion")
             )
             or (
                 request.method == "GET"

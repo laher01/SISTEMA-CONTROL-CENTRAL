@@ -1,21 +1,85 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { enviarJson, useDatos } from "../api";
 
-type Preview = { facturas: number; con_lineas: number; sin_lineas: number; por_formato: Record<string, number>; lote_maximo: number; nota: string };
-type Trabajo = { id: string; estado: string; total_documentos: number; procesados: number; lineas_nuevas: number; requieren_revision: number; errores: number; progreso: number; created_at: string; finalizado_at: string | null };
+type Preview = {
+  facturas: number;
+  por_tipo: Record<string, number>;
+  con_lineas: number;
+  sin_lineas: number;
+  por_formato: Record<string, number>;
+  lote_maximo: number;
+  nota: string;
+};
+type Trabajo = {
+  id: string;
+  estado: string;
+  total_documentos: number;
+  procesados: number;
+  lineas_nuevas: number;
+  requieren_revision: number;
+  errores: number;
+  progreso: number;
+  documento_actual_id: string | null;
+  solicitado_por_rol: string;
+  created_at: string;
+  finalizado_at: string | null;
+};
+type FacturaVista = {
+  documento_id: string;
+  tipo_documento: string;
+  comprobante: string;
+  fecha_emision: string | null;
+  emisor: string;
+  ruta_jerarquica: string[];
+};
+type ItemVista = {
+  linea_id: string;
+  producto_id: string;
+  descripcion: string;
+  descripcion_original: string;
+  unidad: string;
+  categoria: string;
+  categoria_sugerida: string;
+  categoria_confirmada: boolean;
+  factura: FacturaVista;
+};
+type Resultado = {
+  trabajo: Trabajo;
+  documento_actual: FacturaVista | null;
+  ultima_factura: FacturaVista | null;
+  items: ItemVista[];
+  limite_items_visibles: number;
+};
+type Categoria = { id: string; nombre: string; activa: boolean };
+type Edicion = { categoria: string; descripcion: string };
 
 const RUTA_PREVIEW = "/api/v1/contabilidad-items/reescaneo/preview";
 const RUTA_TRABAJOS = "/api/v1/contabilidad-items/reescaneo/trabajos";
+const RUTA_LINEAS = "/api/v1/contabilidad-items/lineas";
 
-export default function ReescanearItems() {
+export default function ReescanearItems({ rol }: { rol: string }) {
   const preview = useDatos<Preview>(RUTA_PREVIEW);
   const trabajos = useDatos<Trabajo[]>(RUTA_TRABAJOS);
+  const categorias = useDatos<Categoria[]>("/api/v1/contabilidad-items/categorias");
   const [trabajo, setTrabajo] = useState<Trabajo | null>(null);
   const [trabajando, setTrabajando] = useState(false);
   const [pausar, setPausar] = useState(false);
   const [mensaje, setMensaje] = useState("");
+  const [ediciones, setEdiciones] = useState<Record<string, Edicion>>({});
+  const [guardando, setGuardando] = useState<string | null>(null);
   const pausarRef = useRef(false);
   const activo = trabajo?.estado === "EN_PROCESO" ? trabajo : trabajos.datos?.find((item) => item.estado === "EN_PROCESO");
+  const observado = trabajo ?? activo;
+  const rutaResultado = observado ? `${RUTA_TRABAJOS}/${observado.id}/resultado` : null;
+  const resultado = useDatos<Resultado>(rutaResultado);
+  const recargarResultado = resultado.recargar;
+  const alcanceTenant = rol === "ADMINISTRADOR" || rol === "SECRETARIA";
+
+  useEffect(() => {
+    if (!trabajando || !rutaResultado) return;
+    const intervalo = window.setInterval(() => recargarResultado(), 900);
+    return () => window.clearInterval(intervalo);
+  }, [trabajando, rutaResultado, recargarResultado]);
 
   async function procesarHastaPausa(inicial: Trabajo) {
     if (trabajando) return;
@@ -29,10 +93,12 @@ export default function ReescanearItems() {
       while (actual.estado === "EN_PROCESO") {
         actual = await enviarJson<Trabajo>(`${RUTA_TRABAJOS}/${actual.id}/lote`, "POST", undefined);
         setTrabajo(actual);
+        recargarResultado();
         if (pausarRef.current) break;
       }
       trabajos.recargar();
       preview.recargar();
+      recargarResultado();
       if (actual.estado !== "EN_PROCESO") setMensaje(`Reescaneo ${actual.estado.toLowerCase().replaceAll("_", " ")}.`);
     } catch (fallo) {
       setMensaje(fallo instanceof Error ? fallo.message : String(fallo));
@@ -61,44 +127,111 @@ export default function ReescanearItems() {
   }
 
   async function cancelar() {
-    const seleccionado = trabajo?.estado === "EN_PROCESO" ? trabajo : activo;
-    if (!seleccionado) return;
+    if (!activo) return;
     pausarRef.current = true;
     setPausar(true);
     try {
-      const resultado = await enviarJson<Trabajo>(`${RUTA_TRABAJOS}/${seleccionado.id}/cancelar`, "POST");
-      setTrabajo(resultado);
+      const actualizado = await enviarJson<Trabajo>(`${RUTA_TRABAJOS}/${activo.id}/cancelar`, "POST");
+      setTrabajo(actualizado);
       trabajos.recargar();
-      setMensaje("Trabajo cancelado. El progreso ya guardado se conserva.");
+      setMensaje("Trabajo cancelado. Se conserva el avance guardado.");
     } catch (fallo) {
       setMensaje(fallo instanceof Error ? fallo.message : String(fallo));
     }
   }
 
+  function valorEdicion(item: ItemVista): Edicion {
+    return ediciones[item.linea_id] ?? {
+      categoria: item.categoria_confirmada ? item.categoria : item.categoria_sugerida,
+      descripcion: item.descripcion,
+    };
+  }
+
+  async function guardarItem(item: ItemVista) {
+    const edicion = valorEdicion(item);
+    setGuardando(item.linea_id);
+    setMensaje("");
+    try {
+      await enviarJson(`${RUTA_LINEAS}/${item.linea_id}/clasificacion`, "PATCH", edicion);
+      setMensaje(`Ítem guardado: ${edicion.descripcion}`);
+      setEdiciones((actual) => Object.fromEntries(
+        Object.entries(actual).filter(([lineaId]) => lineaId !== item.linea_id),
+      ) as Record<string, Edicion>);
+      categorias.recargar();
+      recargarResultado();
+    } catch (fallo) {
+      setMensaje(fallo instanceof Error ? fallo.message : String(fallo));
+    } finally {
+      setGuardando(null);
+    }
+  }
+
+  const vista = resultado.datos;
+  const facturaActiva = vista?.documento_actual;
+  const facturaReciente = vista?.ultima_factura;
+  const trabajoVista = vista?.trabajo ?? observado;
+
   return (
-    <section aria-label="Reescanear ítems de facturas">
+    <section aria-label="Reescanear ítems de comprobantes">
       <h2>Reescanear ítems</h2>
-      <p>El proceso revisa las facturas activas del tenant en tandas pequeñas y conserva líneas, categorías confirmadas, expedientes y originales. Se guarda el avance para continuar si se cierra esta página. Extrae XML UBL y PDF/imágenes cuando existe una regla validada; actualmente, la regla PDF cubre un formato específico. Los demás documentos quedan para revisión manual.</p>
+      <p>El reescaneo revisa facturas y recibos por honorarios del ámbito que tienes autorizado. Guarda cada comprobante por separado; conserva los documentos, los expedientes y las categorías confirmadas manualmente.</p>
       {preview.error && <p role="alert">No se pudo calcular la vista previa: {preview.error}</p>}
-      {preview.cargando && <p>Contando facturas y líneas…</p>}
+      {preview.cargando && <p>Contando comprobantes y líneas…</p>}
       {preview.datos && <>
         <div role="group" aria-label="Alcance del reescaneo">
-          <p><strong>Facturas activas:</strong> {preview.datos.facturas} · <strong>Con líneas:</strong> {preview.datos.con_lineas} · <strong>Sin líneas:</strong> {preview.datos.sin_lineas}</p>
+          <p><strong>Ámbito:</strong> {alcanceTenant ? "Tenant completo" : "Tu cartera según jerarquía"}</p>
+          <p><strong>Comprobantes activos:</strong> {preview.datos.facturas} · <strong>Facturas:</strong> {preview.datos.por_tipo.FACT ?? 0} · <strong>Recibos por honorarios:</strong> {preview.datos.por_tipo.RHE ?? 0}</p>
+          <p><strong>Con líneas:</strong> {preview.datos.con_lineas} · <strong>Sin líneas:</strong> {preview.datos.sin_lineas}</p>
           <p><strong>Por formato:</strong> XML {preview.datos.por_formato.XML ?? 0}, PDF {preview.datos.por_formato.PDF ?? 0}, imágenes {preview.datos.por_formato.IMAGEN ?? 0}, otros {preview.datos.por_formato.OTRO ?? 0}.</p>
           <p>{preview.datos.nota}</p>
         </div>
-        <button type="button" disabled={trabajando || preview.datos.facturas === 0 || Boolean(activo)} onClick={() => void iniciar()}>Iniciar reescaneo de todas las facturas</button>
+        <button type="button" disabled={trabajando || preview.datos.facturas === 0 || Boolean(activo)} onClick={() => void iniciar()}>
+          Iniciar reescaneo de {alcanceTenant ? "todos los comprobantes" : "mis comprobantes autorizados"}
+        </button>
       </>}
       {activo && !trabajando && <button type="button" onClick={() => void procesarHastaPausa(activo)}>Continuar trabajo guardado</button>}
-      {trabajando && <button type="button" onClick={detenerAlFinalDelLote}>Pausar al terminar esta factura</button>}
+      {trabajando && <button type="button" disabled={pausar} onClick={detenerAlFinalDelLote}>Pausar al terminar este comprobante</button>}
       {activo && <button type="button" disabled={trabajando && !pausar} onClick={() => void cancelar()}>Cancelar trabajo</button>}
       {mensaje && <p role="status">{mensaje}</p>}
-      {(trabajo ?? activo) && <section aria-live="polite" aria-label="Progreso del reescaneo">
-        <h3>Progreso: {(trabajo ?? activo)?.progreso}%</h3>
-        <progress max={100} value={(trabajo ?? activo)?.progreso ?? 0} />
-        <p>{(trabajo ?? activo)?.procesados} de {(trabajo ?? activo)?.total_documentos} facturas · {(trabajo ?? activo)?.lineas_nuevas} líneas agregadas · {(trabajo ?? activo)?.requieren_revision} para revisión · {(trabajo ?? activo)?.errores} errores</p>
-        <p>Estado: {(trabajo ?? activo)?.estado}</p>
+
+      {trabajoVista && <section aria-live="polite" aria-label="Progreso del reescaneo">
+        <h3>Progreso: {trabajoVista.progreso}%</h3>
+        <progress max={100} value={trabajoVista.progreso} />
+        <p>{trabajoVista.procesados} de {trabajoVista.total_documentos} comprobantes · {trabajoVista.lineas_nuevas} líneas nuevas · {trabajoVista.requieren_revision} para revisión · {trabajoVista.errores} errores</p>
+        <p>Estado: {trabajoVista.estado}</p>
+        {facturaActiva && <div role="status" aria-label="Comprobante en proceso">
+          <h4>Procesando ahora</h4>
+          <p><strong>{facturaActiva.tipo_documento} {facturaActiva.comprobante}</strong>{facturaActiva.fecha_emision ? ` · ${facturaActiva.fecha_emision}` : ""}{facturaActiva.emisor ? ` · ${facturaActiva.emisor}` : ""}</p>
+          <p>Ruta jerárquica: {facturaActiva.ruta_jerarquica.join(" › ")}</p>
+        </div>}
+        {!facturaActiva && facturaReciente && <div aria-label="Último comprobante procesado">
+          <h4>Último comprobante procesado</h4>
+          <p><strong>{facturaReciente.tipo_documento} {facturaReciente.comprobante}</strong>{facturaReciente.fecha_emision ? ` · ${facturaReciente.fecha_emision}` : ""}{facturaReciente.emisor ? ` · ${facturaReciente.emisor}` : ""}</p>
+          <p>Ruta jerárquica: {facturaReciente.ruta_jerarquica.join(" › ")}</p>
+        </div>}
       </section>}
+
+      {resultado.error && observado && <p role="alert">No se pudo actualizar la factura actual: {resultado.error}</p>}
+      {vista?.items.length ? <section aria-live="polite" aria-label="Ítems encontrados durante el reescaneo">
+        <h3>Ítems encontrados ({vista.items.length}{vista.items.length === vista.limite_items_visibles ? "+" : ""})</h3>
+        <p>La lista se actualiza mientras avanza cada comprobante. Las descripciones originales quedan intactas; aquí puedes ajustar la descripción del catálogo y confirmar o crear una categoría.</p>
+        <div style={{ overflowX: "auto" }}><table>
+          <thead><tr><th>Comprobante / jerarquía</th><th>Descripción</th><th>Categoría sugerida</th><th>Elegir o agregar categoría</th><th>Acción</th></tr></thead>
+          <tbody>{vista.items.map((item) => {
+            const edicion = valorEdicion(item);
+            const opciones = new Set((categorias.datos ?? []).filter((categoria) => categoria.activa).map((categoria) => categoria.nombre));
+            opciones.add(item.categoria_sugerida);
+            return <tr key={item.linea_id}>
+              <td><strong>{item.factura.tipo_documento} {item.factura.comprobante}</strong><br />{item.factura.fecha_emision ?? "Fecha no disponible"}<br /><small>{item.factura.ruta_jerarquica.join(" › ")}</small></td>
+              <td><label><span className="solo-lectores">Descripción del ítem</span><textarea maxLength={2000} rows={3} value={edicion.descripcion} onChange={(evento) => setEdiciones((actual) => ({ ...actual, [item.linea_id]: { ...edicion, descripcion: evento.target.value } }))} /></label><small>Original: {item.descripcion_original}</small></td>
+              <td>{item.categoria_sugerida}{item.categoria_confirmada ? " · confirmada manualmente" : " · sugerencia"}</td>
+              <td><input list={`categorias-${item.linea_id}`} aria-label={`Categoría de ${item.descripcion}`} maxLength={80} value={edicion.categoria} onChange={(evento) => setEdiciones((actual) => ({ ...actual, [item.linea_id]: { ...edicion, categoria: evento.target.value } }))} /><datalist id={`categorias-${item.linea_id}`}>{[...opciones].map((nombre) => <option key={nombre} value={nombre} />)}</datalist><small>Selecciona una existente o escribe una nueva.</small></td>
+              <td><button type="button" disabled={guardando === item.linea_id || !edicion.categoria.trim() || edicion.descripcion.trim().length < 2} onClick={() => void guardarItem(item)}>{guardando === item.linea_id ? "Guardando…" : "Guardar"}</button></td>
+            </tr>;
+          })}</tbody>
+        </table></div>
+      </section> : vista && trabajoVista && trabajoVista.procesados > 0 && <p>No se encontraron líneas extraíbles en los últimos comprobantes procesados; quedaron marcados para revisión.</p>}
+
       {trabajos.error && <p role="alert">No se pudo cargar el historial: {trabajos.error}</p>}
       {trabajos.datos && trabajos.datos.length > 0 && <>
         <h3>Trabajos recientes</h3>

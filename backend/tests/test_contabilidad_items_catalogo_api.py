@@ -1,6 +1,7 @@
 """Permisos, aislamiento y reescaneo persistente de Contabilidad de Ítems."""
 
 import hashlib
+from datetime import date
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -9,7 +10,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.item_models import LineaComprobanteItem, ProductoItem
-from app.models import Documento
+from app.models import Documento, Empresa, Expediente, Miembro
+from app.security import ContextoAcceso
 from app.storage import AlmacenLocal
 from tests.conftest import AuthPrueba
 
@@ -225,3 +227,160 @@ def test_reescaneo_ubl_agrega_lineas_una_vez_y_es_idempotente(
         assert resultado.json()["lineas_nuevas"] == lineas_esperadas
         assert resultado.json()["estado"] == "COMPLETADO"
     assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 1
+
+
+def test_reescaneo_cubre_roles_operativos_y_confirmar_categoria_en_cartera(
+    client: TestClient,
+    session: Session,
+    settings,
+    auth_prueba: AuthPrueba,
+) -> None:
+    tenant_id = auth_prueba.contexto.tenant_id
+    gerente = Miembro(
+        tenant_id=tenant_id,
+        codigo="GER-RESCAN",
+        nombre="Gerente de prueba",
+        rol="GERENTE",
+    )
+    responsable = Miembro(
+        tenant_id=tenant_id,
+        codigo="RESP-RESCAN",
+        nombre="Responsable de prueba",
+        rol="RESPONSABLE",
+    )
+    usuario = session.get(Miembro, auth_prueba.usuario_id)
+    assert usuario is not None
+    session.add_all([gerente, responsable])
+    session.flush()
+    usuario.responsable_id = responsable.id
+    emisor = Empresa(tenant_id=tenant_id, ruc="20600000001", razon_social="Proveedor prueba")
+    receptor = Empresa(tenant_id=tenant_id, ruc="20600000002", razon_social="Cliente prueba")
+    session.add_all([emisor, receptor])
+    session.flush()
+    expediente = Expediente(
+        tenant_id=tenant_id,
+        gerente_id=gerente.id,
+        usuario_id=auth_prueba.usuario_id,
+        gestor_id=auth_prueba.gestor_id,
+        emisor_id=emisor.id,
+        receptor_id=receptor.id,
+        tipo_comprobante="FACT",
+        serie="F001",
+        correlativo="500",
+        fecha_emision=date(2026, 11, 1),
+        moneda="PEN",
+        importe_total=Decimal("10.00"),
+    )
+    session.add(expediente)
+    session.flush()
+    documento = _documento_xml(session, settings, tenant_id)
+    documento.expediente_id = expediente.id
+    session.commit()
+    assert usuario.responsable_id == responsable.id
+
+    roles = [
+        ("ADMINISTRADOR", None, None, None, "ADMIN-TEST"),
+        ("SECRETARIA", None, None, None, "SECRETARIA-TEST"),
+        ("GERENTE", gerente.id, None, None, "GERENTE-TEST"),
+        ("RESPONSABLE", responsable.id, None, None, "RESPONSABLE-TEST"),
+        ("USUARIO", usuario.id, usuario.id, None, "USUARIO-TEST"),
+        ("GESTOR", None, usuario.id, auth_prueba.gestor_id, "GESTOR-TEST"),
+    ]
+    for rol, miembro_id, usuario_id, gestor_id, codigo in roles:
+        auth_prueba.contexto = ContextoAcceso(
+            cuenta_id=auth_prueba.contexto.cuenta_id,
+            tenant_id=tenant_id,
+            rol=rol,
+            miembro_id=miembro_id,
+            gestor_id=gestor_id,
+            usuario_id=usuario_id,
+            codigo=codigo,
+            nombre=codigo,
+            cambio_clave_obligatorio=False,
+        )
+        preview = client.get("/api/v1/contabilidad-items/reescaneo/preview")
+        assert preview.status_code == 200, f"{rol}: {preview.text}"
+        assert preview.json()["por_tipo"]["FACT"] == 1, f"{rol}: {preview.json()}"
+        trabajo = client.post("/api/v1/contabilidad-items/reescaneo/trabajos")
+        assert trabajo.status_code == 201, f"{rol}: {trabajo.text}"
+        trabajo_id = trabajo.json()["id"]
+        lote = client.post(f"/api/v1/contabilidad-items/reescaneo/trabajos/{trabajo_id}/lote")
+        assert lote.status_code == 200, f"{rol}: {lote.text}"
+        resultado = client.get(
+            f"/api/v1/contabilidad-items/reescaneo/trabajos/{trabajo_id}/resultado"
+        )
+        assert resultado.status_code == 200, f"{rol}: {resultado.text}"
+        assert resultado.json()["ultima_factura"]["comprobante"] == "F001-500"
+        assert resultado.json()["items"][0]["categoria_sugerida"] == "POR_CATEGORIZAR"
+
+    linea = session.scalar(select(LineaComprobanteItem))
+    assert linea is not None
+    auth_prueba.contexto = ContextoAcceso(
+        cuenta_id=auth_prueba.contexto.cuenta_id,
+        tenant_id=tenant_id,
+        rol="USUARIO",
+        miembro_id=usuario.id,
+        gestor_id=None,
+        usuario_id=usuario.id,
+        codigo="USUARIO-TEST",
+        nombre="Usuario de prueba",
+        cambio_clave_obligatorio=False,
+    )
+    clasificada = client.patch(
+        f"/api/v1/contabilidad-items/lineas/{linea.id}/clasificacion",
+        json={"categoria": "Artículos de prueba", "descripcion": "Descripción larga autorizada"},
+    )
+    assert clasificada.status_code == 200, clasificada.text
+    assert clasificada.json()["categoria"] == "Artículos de prueba"
+    assert clasificada.json()["descripcion"] == "Descripción larga autorizada"
+    assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 1
+
+
+def test_reescaneo_rhe_extrae_concepto_y_lo_marca_para_revision(
+    client: TestClient,
+    session: Session,
+    settings,
+    auth_prueba: AuthPrueba,
+    monkeypatch,
+) -> None:
+    import app.api.routes.contabilidad_items_catalogo as catalogo_route
+
+    auth_prueba.como_admin()
+    tenant_id = auth_prueba.contexto.tenant_id
+    contenido = b"%PDF-recibo-honorarios"
+    almacen = AlmacenLocal(settings.storage_dir)
+    digest = hashlib.sha256(contenido).hexdigest()
+    ruta = almacen.guardar(tenant_id, digest, contenido)
+    documento = Documento(
+        tenant_id=tenant_id,
+        tipo_documento="RHE",
+        estado="RELACIONADO",
+        sha256=digest,
+        nombre_original="recibo.pdf",
+        mime_type="application/pdf",
+        tamano_bytes=len(contenido),
+        ruta_storage=ruta,
+    )
+    session.add(documento)
+    session.commit()
+    texto = """RECIBO POR HONORARIOS ELECTRÓNICO
+Por concepto de SERVICIO DE ASESORIA Y DOCUMENTACION-PAITA
+Inciso A DEL ARTICULO 33
+Total por honorarios:
+1,500.00
+Retención (8 %) IR:
+0.00
+Total Neto Recibido:
+1,500.00"""
+    monkeypatch.setattr(
+        catalogo_route, "procesar_con_cache", lambda *args, **kwargs: {"texto": texto}
+    )
+    trabajo = client.post("/api/v1/contabilidad-items/reescaneo/trabajos")
+    assert trabajo.status_code == 201, trabajo.text
+    lote = client.post(f"/api/v1/contabilidad-items/reescaneo/trabajos/{trabajo.json()['id']}/lote")
+    assert lote.status_code == 200, lote.text
+    linea = session.scalar(select(LineaComprobanteItem))
+    assert linea is not None
+    assert linea.descripcion_original == "SERVICIO DE ASESORIA Y DOCUMENTACION-PAITA"
+    assert linea.importe_linea == Decimal("1500.00")
+    assert lote.json()["lineas_nuevas"] == 1
