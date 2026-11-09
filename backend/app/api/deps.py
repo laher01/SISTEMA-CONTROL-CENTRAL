@@ -103,6 +103,7 @@ def get_contexto_operativo(
                 "/api/v1/contabilidad-items/conciliacion",
                 "/api/v1/contabilidad-items/exportar-csv",
                 "/api/v1/contabilidad-items/categorias",
+                "/api/v1/contabilidad-items/catalogo",
             }
             or (
                 request.method == "GET"

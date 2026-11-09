@@ -32,6 +32,7 @@ from app.services.cache_ocr import procesar_con_cache
 from app.services.contabilidad_items_rhe import registrar_item_rhe
 from app.services.contabilidad_items_rules import sugerir_categoria, texto_normalizado
 from app.services.contabilidad_items_ubl import registrar_items_pdf_estacion, registrar_items_ubl
+from app.services.expedientes import expediente_tiene_documentos_activos
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 
 router = APIRouter(prefix="/contabilidad-items", tags=["contabilidad-items-catalogo"])
@@ -196,20 +197,37 @@ def listar_catalogo(
     limite: int = Query(100, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> dict[str, object]:
-    _solo_administracion(auth)
+    if auth.rol not in ROLES_REESCANEO:
+        raise HTTPException(403, "Rol sin acceso al catálogo de ítems")
+    lineas_visibles = (
+        select(
+            LineaComprobanteItem.producto_id.label("producto_id"),
+            func.count(LineaComprobanteItem.id).label("lineas_asociadas"),
+        )
+        .join(Documento, Documento.id == LineaComprobanteItem.documento_id)
+        .join(Expediente, Expediente.id == Documento.expediente_id)
+        .where(
+            LineaComprobanteItem.tenant_id == auth.tenant_id,
+            Documento.tenant_id == auth.tenant_id,
+            Documento.deleted_at.is_(None),
+            Expediente.tenant_id == auth.tenant_id,
+            Expediente.deleted_at.is_(None),
+            expediente_tiene_documentos_activos(),
+            _alcance(auth),
+        )
+        .group_by(LineaComprobanteItem.producto_id)
+        .subquery()
+    )
     consulta = (
         select(
             ProductoItem,
-            func.count(LineaComprobanteItem.id).label("lineas_asociadas"),
+            func.coalesce(lineas_visibles.c.lineas_asociadas, 0).label("lineas_asociadas"),
         )
-        .outerjoin(
-            LineaComprobanteItem,
-            (LineaComprobanteItem.producto_id == ProductoItem.id)
-            & (LineaComprobanteItem.tenant_id == auth.tenant_id),
-        )
+        .outerjoin(lineas_visibles, lineas_visibles.c.producto_id == ProductoItem.id)
         .where(ProductoItem.tenant_id == auth.tenant_id)
-        .group_by(ProductoItem.id)
     )
+    if auth.rol not in {"ADMINISTRADOR", "SECRETARIA"}:
+        consulta = consulta.where(lineas_visibles.c.producto_id.is_not(None))
     if not incluir_inactivos:
         consulta = consulta.where(ProductoItem.activo.is_(True))
     if buscar and buscar.strip():
