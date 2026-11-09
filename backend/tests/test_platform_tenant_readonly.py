@@ -1,9 +1,10 @@
 """Lectura global del Tenant sin permitir acceso operativo cruzado."""
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Gestor, Miembro, Tenant
+from app.models import Auditoria, Gestor, Miembro, Tenant
 from tests.conftest import AuthPrueba
 
 
@@ -45,6 +46,20 @@ def test_inspeccion_tenant_solo_superadmin(
     datos = resultado.json()
     assert datos["solo_lectura"] is True
     assert datos["tenant"]["codigo"] == "AIS-002"
+    assert datos["acceso_propietario"] == {
+        "espacio": "AIS-002",
+        "propietario": "Admin aislado",
+        "login": None,
+        "habilitado": False,
+    }
+    evento = session.scalar(
+        select(Auditoria).where(
+            Auditoria.accion == "ADMINISTRACION_INSPECCIONADA",
+            Auditoria.entidad_id == tenant.id,
+        )
+    )
+    assert evento is not None
+    assert evento.tenant_id != tenant.id
     assert {m["codigo"] for m in datos["miembros"]} == {"ADMIN01", "USR01"}
     assert datos["gestores"][0]["codigo"] == "GES01"
     assert "password_hash" not in resultado.text
