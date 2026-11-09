@@ -105,6 +105,12 @@ def get_contexto_operativo(
             }
             or (
                 request.method == "GET"
+                and len(request.url.path.split("/")) == 7
+                and request.url.path.startswith("/api/v1/contabilidad-items/productos/")
+                and request.url.path.endswith("/facturas")
+            )
+            or (
+                request.method == "GET"
                 and request.url.path.startswith("/api/v1/contabilidad-items/expedientes/")
                 and request.url.path.endswith("/detalle")
             )
