@@ -4,17 +4,20 @@ import hashlib
 import re
 import threading
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import PurePosixPath
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import case, exists, func, or_, select
+from sqlalchemy.engine import Row
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import aliased
 from sqlalchemy.sql import Select
 
 from app.api.deps import AlmacenDep, OperativeAuthDep, SessionDep, SettingsDep
+from app.api.routes.contabilidad_items import _alcance
 from app.enums import TipoDocumento
 from app.item_models import (
     CategoriaItem,
@@ -22,10 +25,12 @@ from app.item_models import (
     ProductoItem,
     TrabajoReescaneoItems,
 )
-from app.models import Documento
+from app.models import Documento, Empresa, Expediente, Gestor, Miembro
+from app.security import ContextoAcceso
 from app.services import auditoria
 from app.services.cache_ocr import procesar_con_cache
-from app.services.contabilidad_items_rules import texto_normalizado
+from app.services.contabilidad_items_rhe import registrar_item_rhe
+from app.services.contabilidad_items_rules import sugerir_categoria, texto_normalizado
 from app.services.contabilidad_items_ubl import registrar_items_pdf_estacion, registrar_items_ubl
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 
@@ -33,11 +38,18 @@ router = APIRouter(prefix="/contabilidad-items", tags=["contabilidad-items-catal
 _OCR_LOCK = threading.Lock()
 MAX_REESCANEO_LOTE = 3
 MAX_DOCUMENTO_BYTES = 30 * 1024 * 1024
+ROLES_REESCANEO = {"ADMINISTRADOR", "SECRETARIA", "GERENTE", "RESPONSABLE", "USUARIO", "GESTOR"}
+VENCIMIENTO_PROCESAMIENTO = timedelta(minutes=30)
 
 
 def _solo_administracion(auth: OperativeAuthDep) -> None:
     if auth.rol != "ADMINISTRADOR":
         raise HTTPException(403, "Solo Administración puede modificar el catálogo o reescanear")
+
+
+def _autorizar_reescaneo(auth: OperativeAuthDep) -> None:
+    if auth.rol not in ROLES_REESCANEO:
+        raise HTTPException(403, "Rol sin acceso al reescaneo de ítems")
 
 
 def _normalizar_categoria(nombre: str) -> tuple[str, str]:
@@ -56,7 +68,7 @@ class CategoriaEditar(BaseModel):
 
 
 class ProductoCrear(BaseModel):
-    descripcion: str = Field(min_length=2, max_length=500)
+    descripcion: str = Field(min_length=2, max_length=2000)
     unidad_base: str = Field(min_length=1, max_length=40)
     categoria_id: uuid.UUID
 
@@ -64,6 +76,11 @@ class ProductoCrear(BaseModel):
 class ProductoEditar(BaseModel):
     categoria_id: uuid.UUID | None = None
     activo: bool | None = None
+
+
+class ClasificacionLinea(BaseModel):
+    categoria: str = Field(min_length=2, max_length=80)
+    descripcion: str | None = Field(default=None, min_length=2, max_length=2000)
 
 
 def _categoria_dict(categoria: CategoriaItem) -> dict[str, object]:
@@ -323,12 +340,153 @@ def editar_producto(
     }
 
 
+@router.patch("/lineas/{linea_id}/clasificacion")
+def clasificar_linea_reescaneada(
+    linea_id: uuid.UUID,
+    datos: ClasificacionLinea,
+    session: SessionDep,
+    auth: OperativeAuthDep,
+) -> dict[str, object]:
+    """Corrige metadatos solo cuando la línea está en la cartera autorizada."""
+    _autorizar_reescaneo(auth)
+    linea = session.scalar(
+        select(LineaComprobanteItem)
+        .join(Documento, Documento.id == LineaComprobanteItem.documento_id)
+        .where(
+            LineaComprobanteItem.id == linea_id,
+            LineaComprobanteItem.tenant_id == auth.tenant_id,
+            Documento.id.in_(_facturas_query(auth).with_only_columns(Documento.id)),
+        )
+        .with_for_update()
+    )
+    if linea is None:
+        raise HTTPException(404, "Ítem no encontrado en la cartera autorizada")
+    producto = session.scalar(
+        select(ProductoItem)
+        .where(ProductoItem.id == linea.producto_id, ProductoItem.tenant_id == auth.tenant_id)
+        .with_for_update()
+    )
+    if producto is None:
+        raise HTTPException(404, "Ítem no encontrado")
+    if auth.rol not in {"ADMINISTRADOR", "SECRETARIA"}:
+        visibles = _facturas_query(auth).with_only_columns(Documento.id)
+        fuera_de_cartera = session.scalar(
+            select(func.count())
+            .select_from(LineaComprobanteItem)
+            .join(Documento, Documento.id == LineaComprobanteItem.documento_id)
+            .where(
+                LineaComprobanteItem.tenant_id == auth.tenant_id,
+                LineaComprobanteItem.producto_id == producto.id,
+                Documento.tenant_id == auth.tenant_id,
+                Documento.deleted_at.is_(None),
+                Documento.id.not_in(visibles),
+            )
+        )
+        if fuera_de_cartera:
+            raise HTTPException(
+                403,
+                "Este ítem también aparece en comprobantes fuera de tu cartera; "
+                "solicita el cambio a Administración",
+            )
+    nombre, normalizado = _normalizar_categoria(datos.categoria)
+    if not nombre or not normalizado:
+        raise HTTPException(422, "Escribe una categoría válida")
+    categoria = session.scalar(
+        select(CategoriaItem).where(
+            CategoriaItem.tenant_id == auth.tenant_id,
+            CategoriaItem.nombre_normalizado == normalizado,
+        )
+    )
+    if categoria is None:
+        categoria = CategoriaItem(
+            tenant_id=auth.tenant_id,
+            nombre=nombre,
+            nombre_normalizado=normalizado,
+            creado_por_cuenta_id=auth.cuenta_id,
+        )
+        session.add(categoria)
+        try:
+            session.flush()
+        except IntegrityError as exc:
+            session.rollback()
+            raise HTTPException(409, "La categoría se agregó en paralelo; vuelva a cargar") from exc
+    anterior = producto.categoria
+    producto.categoria = categoria.nombre
+    producto.clasificacion_confirmada = True
+    if datos.descripcion is not None:
+        producto.descripcion = " ".join(datos.descripcion.split())
+    auditoria.registrar(
+        session,
+        auth.tenant_id,
+        "ITEMS_LINEA_CLASIFICADA",
+        "producto_item",
+        producto.id,
+        {
+            "categoria_anterior": anterior,
+            "categoria": producto.categoria,
+            "descripcion_actualizada": datos.descripcion is not None,
+        },
+    )
+    session.commit()
+    return {
+        "linea_id": str(linea.id),
+        "producto_id": str(producto.id),
+        "categoria": producto.categoria,
+        "categoria_confirmada": producto.clasificacion_confirmada,
+        "descripcion": producto.descripcion,
+    }
+
+
 def _facturas_query(auth: OperativeAuthDep) -> Select[tuple[Documento]]:
-    return select(Documento).where(
+    consulta = select(Documento).where(
         Documento.tenant_id == auth.tenant_id,
         Documento.deleted_at.is_(None),
-        Documento.tipo_documento == TipoDocumento.FACT,
+        Documento.tipo_documento.in_([TipoDocumento.FACT, TipoDocumento.RHE]),
     )
+    if auth.rol not in {"ADMINISTRADOR", "SECRETARIA"}:
+        consulta = consulta.join(Expediente, Expediente.id == Documento.expediente_id).where(
+            Expediente.tenant_id == auth.tenant_id,
+            Expediente.deleted_at.is_(None),
+            _alcance(auth),
+        )
+    return consulta
+
+
+def _contexto_trabajo(trabajo: TrabajoReescaneoItems) -> ContextoAcceso:
+    return ContextoAcceso(
+        cuenta_id=trabajo.solicitado_por_cuenta_id,
+        tenant_id=trabajo.tenant_id,
+        rol=trabajo.solicitado_por_rol,
+        miembro_id=trabajo.solicitado_por_miembro_id,
+        gestor_id=trabajo.solicitado_por_gestor_id,
+        usuario_id=trabajo.solicitado_por_usuario_id,
+        codigo=trabajo.solicitado_por_codigo,
+        nombre="",
+        cambio_clave_obligatorio=False,
+    )
+
+
+def _verificar_acceso_trabajo(trabajo: TrabajoReescaneoItems, auth: OperativeAuthDep) -> None:
+    if trabajo.tenant_id != auth.tenant_id:
+        raise HTTPException(404, "Trabajo no encontrado")
+    if auth.rol == "ADMINISTRADOR":
+        return
+    if auth.cuenta_id != trabajo.solicitado_por_cuenta_id:
+        raise HTTPException(404, "Trabajo no encontrado")
+    identidad_actual = (
+        auth.rol,
+        auth.miembro_id,
+        auth.usuario_id,
+        auth.gestor_id,
+    )
+    identidad_solicitante = (
+        trabajo.solicitado_por_rol,
+        trabajo.solicitado_por_miembro_id,
+        trabajo.solicitado_por_usuario_id,
+        trabajo.solicitado_por_gestor_id,
+    )
+    if identidad_actual != identidad_solicitante:
+        raise HTTPException(404, "Trabajo no encontrado")
 
 
 def _formato(documento: Documento) -> str:
@@ -354,6 +512,10 @@ def _estado_trabajo(trabajo: TrabajoReescaneoItems) -> dict[str, object]:
         "lineas_nuevas": trabajo.lineas_nuevas,
         "requieren_revision": trabajo.requieren_revision,
         "errores": trabajo.errores,
+        "documento_actual_id": str(trabajo.documento_actual_id)
+        if trabajo.documento_actual_id
+        else None,
+        "solicitado_por_rol": trabajo.solicitado_por_rol,
         "progreso": (
             round(trabajo.procesados * 100 / trabajo.total_documentos)
             if trabajo.total_documentos
@@ -366,7 +528,7 @@ def _estado_trabajo(trabajo: TrabajoReescaneoItems) -> dict[str, object]:
 
 @router.get("/reescaneo/preview")
 def vista_previa_reescaneo(session: SessionDep, auth: OperativeAuthDep) -> dict[str, object]:
-    _solo_administracion(auth)
+    _autorizar_reescaneo(auth)
     nombre = func.lower(Documento.nombre_original)
     mime = func.lower(Documento.mime_type)
     es_xml = or_(nombre.like("%.xml"), mime.like("%xml%"))
@@ -390,22 +552,23 @@ def vista_previa_reescaneo(session: SessionDep, auth: OperativeAuthDep) -> dict[
         )
     ).label("tiene_lineas")
     resumen = session.execute(
-        select(formato, tiene_lineas, func.count())
+        select(Documento.tipo_documento, formato, tiene_lineas, func.count())
         .where(
-            Documento.tenant_id == auth.tenant_id,
-            Documento.deleted_at.is_(None),
-            Documento.tipo_documento == TipoDocumento.FACT,
+            Documento.id.in_(_facturas_query(auth).with_only_columns(Documento.id)),
         )
-        .group_by(formato, tiene_lineas)
+        .group_by(Documento.tipo_documento, formato, tiene_lineas)
     ).all()
     por_formato = {"XML": 0, "PDF": 0, "IMAGEN": 0, "OTRO": 0}
+    por_tipo = {"FACT": 0, "RHE": 0}
     total = con_lineas = 0
-    for tipo, tiene, cantidad in resumen:
-        por_formato[tipo] += cantidad
+    for tipo_documento, tipo_formato, tiene, cantidad in resumen:
+        por_tipo[str(tipo_documento)] += cantidad
+        por_formato[tipo_formato] += cantidad
         total += cantidad
         con_lineas += cantidad if tiene else 0
     return {
         "facturas": total,
+        "por_tipo": por_tipo,
         "con_lineas": con_lineas,
         "sin_lineas": total - con_lineas,
         "por_formato": por_formato,
@@ -420,19 +583,19 @@ def vista_previa_reescaneo(session: SessionDep, auth: OperativeAuthDep) -> dict[
 
 @router.get("/reescaneo/trabajos")
 def listar_trabajos(session: SessionDep, auth: OperativeAuthDep) -> list[dict[str, object]]:
-    _solo_administracion(auth)
-    trabajos = session.scalars(
-        select(TrabajoReescaneoItems)
-        .where(TrabajoReescaneoItems.tenant_id == auth.tenant_id)
-        .order_by(TrabajoReescaneoItems.created_at.desc())
-        .limit(10)
+    _autorizar_reescaneo(auth)
+    consulta = select(TrabajoReescaneoItems).where(
+        TrabajoReescaneoItems.tenant_id == auth.tenant_id
     )
+    if auth.rol != "ADMINISTRADOR":
+        consulta = consulta.where(TrabajoReescaneoItems.solicitado_por_cuenta_id == auth.cuenta_id)
+    trabajos = session.scalars(consulta.order_by(TrabajoReescaneoItems.created_at.desc()).limit(10))
     return [_estado_trabajo(trabajo) for trabajo in trabajos]
 
 
 @router.post("/reescaneo/trabajos", status_code=201)
 def iniciar_reescaneo(session: SessionDep, auth: OperativeAuthDep) -> dict[str, object]:
-    _solo_administracion(auth)
+    _autorizar_reescaneo(auth)
     activo = session.scalar(
         select(TrabajoReescaneoItems.id).where(
             TrabajoReescaneoItems.tenant_id == auth.tenant_id,
@@ -445,6 +608,11 @@ def iniciar_reescaneo(session: SessionDep, auth: OperativeAuthDep) -> dict[str, 
     trabajo = TrabajoReescaneoItems(
         tenant_id=auth.tenant_id,
         solicitado_por_cuenta_id=auth.cuenta_id,
+        solicitado_por_rol=auth.rol,
+        solicitado_por_miembro_id=auth.miembro_id,
+        solicitado_por_usuario_id=auth.usuario_id,
+        solicitado_por_gestor_id=auth.gestor_id,
+        solicitado_por_codigo=auth.codigo,
         total_documentos=total,
         estado="EN_PROCESO" if total else "COMPLETADO",
         finalizado_at=None if total else datetime.now(UTC),
@@ -471,7 +639,7 @@ def iniciar_reescaneo(session: SessionDep, auth: OperativeAuthDep) -> dict[str, 
 def obtener_trabajo(
     trabajo_id: uuid.UUID, session: SessionDep, auth: OperativeAuthDep
 ) -> dict[str, object]:
-    _solo_administracion(auth)
+    _autorizar_reescaneo(auth)
     trabajo = session.scalar(
         select(TrabajoReescaneoItems).where(
             TrabajoReescaneoItems.id == trabajo_id,
@@ -480,7 +648,227 @@ def obtener_trabajo(
     )
     if trabajo is None:
         raise HTTPException(404, "Trabajo no encontrado")
+    _verificar_acceso_trabajo(trabajo, auth)
     return _estado_trabajo(trabajo)
+
+
+def _consulta_documento_ruta(
+    contexto: ContextoAcceso, documento_id: uuid.UUID
+) -> Select[tuple[Documento, Expediente, str, str, str, str, str]]:
+    gerente = aliased(Miembro)
+    usuario = aliased(Miembro)
+    responsable = aliased(Miembro)
+    gestor = aliased(Gestor)
+    return (
+        select(
+            Documento,
+            Expediente,
+            Empresa.razon_social,
+            gerente.nombre,
+            responsable.nombre,
+            usuario.nombre,
+            gestor.nombre,
+        )
+        .outerjoin(
+            Expediente,
+            (Expediente.id == Documento.expediente_id)
+            & (Expediente.tenant_id == contexto.tenant_id),
+        )
+        .outerjoin(
+            Empresa,
+            (Empresa.id == Expediente.emisor_id) & (Empresa.tenant_id == contexto.tenant_id),
+        )
+        .outerjoin(
+            gerente,
+            (gerente.id == Expediente.gerente_id) & (gerente.tenant_id == contexto.tenant_id),
+        )
+        .outerjoin(
+            usuario,
+            (usuario.id == Expediente.usuario_id) & (usuario.tenant_id == contexto.tenant_id),
+        )
+        .outerjoin(
+            responsable,
+            (responsable.id == usuario.responsable_id)
+            & (responsable.tenant_id == contexto.tenant_id),
+        )
+        .outerjoin(
+            gestor,
+            (gestor.id == func.coalesce(Expediente.gestor_id, Documento.gestor_id))
+            & (gestor.tenant_id == contexto.tenant_id),
+        )
+        .where(
+            Documento.id == documento_id,
+            Documento.id.in_(_facturas_query(contexto).with_only_columns(Documento.id)),
+        )
+    )
+
+
+def _documento_json(
+    fila: Row[
+        tuple[
+            Documento,
+            Expediente,
+            str,
+            str,
+            str,
+            str,
+            str,
+        ]
+    ],
+) -> dict[str, object]:
+    documento, expediente, proveedor, gerente, responsable, usuario, gestor = fila
+    ruta = ["Administrador"]
+    ruta.extend(nombre for nombre in (gerente, responsable, usuario, gestor) if nombre)
+    return {
+        "documento_id": str(documento.id),
+        "tipo_documento": str(documento.tipo_documento or "OTRO"),
+        "comprobante": (
+            f"{expediente.serie}-{expediente.correlativo}"
+            if expediente is not None
+            else documento.nombre_original
+        ),
+        "fecha_emision": expediente.fecha_emision.isoformat() if expediente is not None else None,
+        "emisor": proveedor or "",
+        "ruta_jerarquica": ruta,
+    }
+
+
+@router.get("/reescaneo/trabajos/{trabajo_id}/resultado")
+def resultado_trabajo(
+    trabajo_id: uuid.UUID, session: SessionDep, auth: OperativeAuthDep
+) -> dict[str, object]:
+    _autorizar_reescaneo(auth)
+    trabajo = session.scalar(
+        select(TrabajoReescaneoItems).where(
+            TrabajoReescaneoItems.id == trabajo_id,
+            TrabajoReescaneoItems.tenant_id == auth.tenant_id,
+        )
+    )
+    if trabajo is None:
+        raise HTTPException(404, "Trabajo no encontrado")
+    _verificar_acceso_trabajo(trabajo, auth)
+    contexto = _contexto_trabajo(trabajo)
+    documento_info = None
+    documento_id = trabajo.documento_actual_id or trabajo.cursor_documento_id
+    if documento_id is not None:
+        fila = session.execute(_consulta_documento_ruta(contexto, documento_id)).first()
+        if fila is not None:
+            documento_info = _documento_json(fila)
+    lineas: list[dict[str, object]] = []
+    if trabajo.cursor_documento_id is not None:
+        ids_procesados = (
+            _facturas_query(contexto)
+            .where(
+                Documento.created_at <= trabajo.created_at,
+                Documento.id <= trabajo.cursor_documento_id,
+            )
+            .with_only_columns(Documento.id)
+        )
+        gerente = aliased(Miembro)
+        usuario = aliased(Miembro)
+        responsable = aliased(Miembro)
+        gestor = aliased(Gestor)
+        filas = session.execute(
+            select(
+                LineaComprobanteItem,
+                ProductoItem,
+                Documento,
+                Expediente,
+                Empresa.razon_social,
+                gerente.nombre,
+                responsable.nombre,
+                usuario.nombre,
+                gestor.nombre,
+            )
+            .join(ProductoItem, ProductoItem.id == LineaComprobanteItem.producto_id)
+            .join(Documento, Documento.id == LineaComprobanteItem.documento_id)
+            .outerjoin(
+                Expediente,
+                (Expediente.id == Documento.expediente_id)
+                & (Expediente.tenant_id == auth.tenant_id),
+            )
+            .outerjoin(
+                Empresa,
+                (Empresa.id == Expediente.emisor_id) & (Empresa.tenant_id == auth.tenant_id),
+            )
+            .outerjoin(
+                gerente,
+                (gerente.id == Expediente.gerente_id) & (gerente.tenant_id == auth.tenant_id),
+            )
+            .outerjoin(
+                usuario,
+                (usuario.id == Expediente.usuario_id) & (usuario.tenant_id == auth.tenant_id),
+            )
+            .outerjoin(
+                responsable,
+                (responsable.id == usuario.responsable_id)
+                & (responsable.tenant_id == auth.tenant_id),
+            )
+            .outerjoin(
+                gestor,
+                (gestor.id == func.coalesce(Expediente.gestor_id, Documento.gestor_id))
+                & (gestor.tenant_id == auth.tenant_id),
+            )
+            .where(
+                LineaComprobanteItem.tenant_id == auth.tenant_id,
+                ProductoItem.tenant_id == auth.tenant_id,
+                Documento.tenant_id == auth.tenant_id,
+                Documento.id.in_(ids_procesados),
+                Documento.id != trabajo.documento_actual_id,
+            )
+            .order_by(Documento.id.desc(), LineaComprobanteItem.numero_linea)
+            .limit(100)
+        ).all()
+        for (
+            linea,
+            producto,
+            documento,
+            expediente,
+            emisor,
+            gerente_nombre,
+            resp_nombre,
+            usuario_nombre,
+            gestor_nombre,
+        ) in filas:
+            ruta = ["Administrador"]
+            ruta.extend(
+                nombre
+                for nombre in (gerente_nombre, resp_nombre, usuario_nombre, gestor_nombre)
+                if nombre
+            )
+            lineas.append(
+                {
+                    "linea_id": str(linea.id),
+                    "producto_id": str(producto.id),
+                    "descripcion": producto.descripcion,
+                    "descripcion_original": linea.descripcion_original,
+                    "unidad": linea.unidad,
+                    "categoria": producto.categoria,
+                    "categoria_sugerida": sugerir_categoria(linea.descripcion_original),
+                    "categoria_confirmada": producto.clasificacion_confirmada,
+                    "factura": {
+                        "documento_id": str(documento.id),
+                        "tipo_documento": str(documento.tipo_documento or "OTRO"),
+                        "comprobante": (
+                            f"{expediente.serie}-{expediente.correlativo}"
+                            if expediente is not None
+                            else documento.nombre_original
+                        ),
+                        "fecha_emision": (
+                            expediente.fecha_emision.isoformat() if expediente is not None else None
+                        ),
+                        "emisor": emisor or "",
+                        "ruta_jerarquica": ruta,
+                    },
+                }
+            )
+    return {
+        "trabajo": _estado_trabajo(trabajo),
+        "documento_actual": documento_info if trabajo.documento_actual_id else None,
+        "ultima_factura": documento_info if not trabajo.documento_actual_id else None,
+        "items": lineas,
+        "limite_items_visibles": 100,
+    }
 
 
 @router.post("/reescaneo/trabajos/{trabajo_id}/lote")
@@ -492,7 +880,7 @@ def procesar_lote_reescaneo(
     almacen: AlmacenDep,
     limite: int = Query(1, ge=1, le=MAX_REESCANEO_LOTE),
 ) -> dict[str, object]:
-    _solo_administracion(auth)
+    _autorizar_reescaneo(auth)
     trabajo = session.scalar(
         select(TrabajoReescaneoItems)
         .where(
@@ -503,17 +891,52 @@ def procesar_lote_reescaneo(
     )
     if trabajo is None:
         raise HTTPException(404, "Trabajo no encontrado")
+    _verificar_acceso_trabajo(trabajo, auth)
     if trabajo.estado != "EN_PROCESO":
         return _estado_trabajo(trabajo)
+    inicio_actual = trabajo.documento_actual_started_at
+    if inicio_actual is not None and inicio_actual.tzinfo is None:
+        inicio_actual = inicio_actual.replace(tzinfo=UTC)
+    if (
+        trabajo.documento_actual_id is not None
+        and inicio_actual is not None
+        and inicio_actual > datetime.now(UTC) - VENCIMIENTO_PROCESAMIENTO
+    ):
+        raise HTTPException(409, "La factura actual todavía se está procesando")
     if not _OCR_LOCK.acquire(blocking=False):
         raise HTTPException(409, "El OCR está ocupado; vuelva a intentar en unos segundos")
     try:
-        consulta = _facturas_query(auth)
-        consulta = consulta.where(Documento.created_at <= trabajo.created_at)
-        if trabajo.cursor_documento_id is not None:
+        contexto = _contexto_trabajo(trabajo)
+        consulta = _facturas_query(contexto).where(Documento.created_at <= trabajo.created_at)
+        documento_reintentable = trabajo.documento_actual_id
+        if documento_reintentable is not None:
+            consulta = consulta.where(Documento.id == documento_reintentable)
+        elif trabajo.cursor_documento_id is not None:
             consulta = consulta.where(Documento.id > trabajo.cursor_documento_id)
         documentos = list(session.scalars(consulta.order_by(Documento.id).limit(limite)))
+        if documento_reintentable is not None and not documentos:
+            # El objetivo puede haberse retirado o salido del alcance desde el lote anterior.
+            # Avanzar el cursor como error evita atascar indefinidamente el trabajo del tenant.
+            trabajo.errores += 1
+            trabajo.procesados += 1
+            trabajo.cursor_documento_id = documento_reintentable
+            trabajo.documento_actual_id = None
+            trabajo.documento_actual_started_at = None
+            session.commit()
+            session.refresh(trabajo)
+            consulta_siguiente = _facturas_query(_contexto_trabajo(trabajo)).where(
+                Documento.created_at <= trabajo.created_at,
+                Documento.id > documento_reintentable,
+            )
+            documentos = list(
+                session.scalars(consulta_siguiente.order_by(Documento.id).limit(limite))
+            )
         for documento in documentos:
+            trabajo.documento_actual_id = documento.id
+            trabajo.documento_actual_started_at = datetime.now(UTC)
+            session.commit()
+            nuevos = 0
+            lineas_previas = 0
             try:
                 with session.begin_nested():
                     lineas_previas = (
@@ -569,16 +992,14 @@ def procesar_lote_reescaneo(
                             extraer_texto,
                         )
                         texto = lectura.get("texto")
-                        nuevos = (
-                            registrar_items_pdf_estacion(
-                                session,
-                                auth.tenant_id,
-                                documento.id,
-                                texto,
+                        if isinstance(texto, str) and documento.tipo_documento == TipoDocumento.RHE:
+                            nuevos = registrar_item_rhe(
+                                session, auth.tenant_id, documento.id, texto
                             )
-                            if isinstance(texto, str)
-                            else 0
-                        )
+                        elif isinstance(texto, str):
+                            nuevos = registrar_items_pdf_estacion(
+                                session, auth.tenant_id, documento.id, texto
+                            )
                     else:
                         nuevos = 0
                     if nuevos == 0 and lineas_previas == 0:
@@ -588,8 +1009,34 @@ def procesar_lote_reescaneo(
                 trabajo.errores += 1
             trabajo.procesados += 1
             trabajo.cursor_documento_id = documento.id
+            trabajo.documento_actual_id = None
+            trabajo.documento_actual_started_at = None
             session.flush()
-        if len(documentos) < limite or trabajo.procesados >= trabajo.total_documentos:
+            session.commit()
+            documento_reintentable = None
+            session.refresh(trabajo)
+            if trabajo.estado != "EN_PROCESO":
+                break
+        contexto = _contexto_trabajo(trabajo)
+        consulta_pendientes = _facturas_query(contexto).where(
+            Documento.created_at <= trabajo.created_at
+        )
+        if trabajo.cursor_documento_id is not None:
+            consulta_pendientes = consulta_pendientes.where(
+                Documento.id > trabajo.cursor_documento_id
+            )
+        pendientes = (
+            session.scalar(
+                select(func.count()).select_from(
+                    consulta_pendientes.with_only_columns(Documento.id).subquery()
+                )
+            )
+            or 0
+        )
+        session.refresh(trabajo)
+        if trabajo.estado == "EN_PROCESO" and (
+            not pendientes or trabajo.procesados >= trabajo.total_documentos
+        ):
             trabajo.estado = (
                 "COMPLETADO_CON_OBSERVACIONES"
                 if trabajo.errores or trabajo.requieren_revision
@@ -609,7 +1056,7 @@ def procesar_lote_reescaneo(
                     "errores": trabajo.errores,
                 },
             )
-        session.commit()
+            session.commit()
     finally:
         _OCR_LOCK.release()
     return _estado_trabajo(trabajo)
@@ -619,7 +1066,7 @@ def procesar_lote_reescaneo(
 def cancelar_reescaneo(
     trabajo_id: uuid.UUID, session: SessionDep, auth: OperativeAuthDep
 ) -> dict[str, object]:
-    _solo_administracion(auth)
+    _autorizar_reescaneo(auth)
     trabajo = session.scalar(
         select(TrabajoReescaneoItems)
         .where(
@@ -630,6 +1077,7 @@ def cancelar_reescaneo(
     )
     if trabajo is None:
         raise HTTPException(404, "Trabajo no encontrado")
+    _verificar_acceso_trabajo(trabajo, auth)
     if trabajo.estado == "EN_PROCESO":
         trabajo.estado = "CANCELADO"
         trabajo.finalizado_at = datetime.now(UTC)

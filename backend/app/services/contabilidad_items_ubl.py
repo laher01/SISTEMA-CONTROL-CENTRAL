@@ -62,7 +62,7 @@ def extraer_items_ubl(contenido: bytes) -> list[ItemUBL]:
         salida.append(
             ItemUBL(
                 numero=n,
-                descripcion=nombre[:1000],
+                descripcion=nombre[:2000],
                 cantidad=cantidad,
                 unidad=unidad[:40],
                 importe=importe,
@@ -118,7 +118,7 @@ def registrar_items_ubl(
             producto = ProductoItem(
                 tenant_id=tenant_id,
                 clave_catalogo=clave,
-                descripcion=linea.descripcion[:500],
+                descripcion=linea.descripcion[:2000],
                 categoria=sugerir_categoria(linea.descripcion),
                 clasificacion_confirmada=False,
                 activo=True,

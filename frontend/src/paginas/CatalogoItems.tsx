@@ -58,7 +58,7 @@ export default function CatalogoItems() {
       <p>Agrega productos canónicos por descripción y unidad. No se crean líneas de factura; las líneas fuente permanecen intactas y las asociaciones nuevas solo se incorporan al reescanear si coinciden exactamente.</p>
       <form onSubmit={crear}>
         <label htmlFor="item-descripcion">Descripción del ítem</label>
-        <input id="item-descripcion" value={descripcion} onChange={(evento) => setDescripcion(evento.target.value)} maxLength={500} minLength={2} required />
+        <textarea id="item-descripcion" value={descripcion} onChange={(evento) => setDescripcion(evento.target.value)} maxLength={2000} minLength={2} required rows={4} />
         <label htmlFor="item-unidad">Unidad</label>
         <input id="item-unidad" value={unidad} onChange={(evento) => setUnidad(evento.target.value)} maxLength={40} required placeholder="NIU, KG, GL, CAJA…" />
         <label htmlFor="item-categoria">Categoría</label>
