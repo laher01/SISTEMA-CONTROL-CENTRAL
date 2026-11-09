@@ -57,10 +57,15 @@ def _clave(descripcion: str, unidad: str) -> str:
     return hashlib.sha256(f"{texto_normalizado(descripcion)}|{unidad}".encode()).hexdigest()
 
 
-def test_catalogo_y_categorias_solo_administrador_y_aislados_por_tenant(
+def test_catalogo_lectura_por_roles_y_edicion_solo_administrador_aislada_por_tenant(
     client: TestClient, session: Session, settings, auth_prueba: AuthPrueba
 ) -> None:
     auth_prueba.como_usuario(auth_prueba.usuario_id)
+    categorias_lectura = client.get("/api/v1/contabilidad-items/categorias")
+    catalogo_lectura = client.get("/api/v1/contabilidad-items/catalogo")
+    assert categorias_lectura.status_code == 200
+    assert catalogo_lectura.status_code == 200
+    assert catalogo_lectura.json() == {"total": 0, "items": []}
     denied = client.post("/api/v1/contabilidad-items/categorias", json={"nombre": "Bebidas"})
     assert denied.status_code == 403
 
@@ -308,6 +313,10 @@ def test_reescaneo_cubre_roles_operativos_y_confirmar_categoria_en_cartera(
         preview = client.get("/api/v1/contabilidad-items/reescaneo/preview")
         assert preview.status_code == 200, f"{rol}: {preview.text}"
         assert preview.json()["por_tipo"]["FACT"] == 1, f"{rol}: {preview.json()}"
+        categorias = client.get("/api/v1/contabilidad-items/categorias")
+        catalogo = client.get("/api/v1/contabilidad-items/catalogo")
+        assert categorias.status_code == 200, f"{rol}: {categorias.text}"
+        assert catalogo.status_code == 200, f"{rol}: {catalogo.text}"
         trabajo = client.post("/api/v1/contabilidad-items/reescaneo/trabajos")
         assert trabajo.status_code == 201, f"{rol}: {trabajo.text}"
         trabajo_id = trabajo.json()["id"]

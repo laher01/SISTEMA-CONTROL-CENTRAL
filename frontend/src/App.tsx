@@ -54,8 +54,8 @@ const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = 
   { a: "/crear-usuarios", texto: "Crear Usuarios", icono: "♙", roles: ["RESPONSABLE"] },
   { a: "/mi-cartera", texto: "Mi cartera comercial", icono: "▥", roles: ["GERENTE"] },
   { a: "/contabilidad-items", texto: "Contabilidad de Ítems", icono: "▦", roles: ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"] },
-  { a: "/contabilidad-items/categorias", texto: "Categorías", icono: "↳", roles: ["ADMINISTRADOR"] },
-  { a: "/contabilidad-items/catalogo", texto: "Ítems", icono: "↳", roles: ["ADMINISTRADOR"] },
+  { a: "/contabilidad-items/categorias", texto: "Categorías", icono: "↳", roles: ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"] },
+  { a: "/contabilidad-items/catalogo", texto: "Ítems", icono: "↳", roles: ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"] },
   { a: "/contabilidad-items/reescanear", texto: "Reescanear", icono: "↳", roles: ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"] },
   { a: "/mi-equipo", texto: "Mis Usuarios", icono: "♙", roles: ["RESPONSABLE"] },
   { a: "/mi-equipo/pedidos", texto: "Pedidos", icono: "▤", roles: ["RESPONSABLE"] },
@@ -245,8 +245,8 @@ export default function App() {
           <Route path="/chat" element={<Chat />} />
           <Route path="/secretaria" element={["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA"].includes(sesion.rol) && !(sesion.rol === "SECRETARIA" && activaciones?.control_documental === false) ? <Secretaria sesion={sesion} /> : <Navigate to="/expedientes" replace />} />
           <Route path="/contabilidad-items" element={<ContabilidadItems />} />
-          <Route path="/contabilidad-items/categorias" element={sesion.rol === "ADMINISTRADOR" ? <CategoriasItems /> : <Navigate to="/contabilidad-items" replace />} />
-          <Route path="/contabilidad-items/catalogo" element={sesion.rol === "ADMINISTRADOR" ? <CatalogoItems /> : <Navigate to="/contabilidad-items" replace />} />
+          <Route path="/contabilidad-items/categorias" element={["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"].includes(sesion.rol) ? <CategoriasItems puedeAdministrar={sesion.rol === "ADMINISTRADOR"} /> : <Navigate to="/contabilidad-items" replace />} />
+          <Route path="/contabilidad-items/catalogo" element={["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"].includes(sesion.rol) ? <CatalogoItems puedeAdministrar={sesion.rol === "ADMINISTRADOR"} /> : <Navigate to="/contabilidad-items" replace />} />
           <Route path="/contabilidad-items/reescanear" element={["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"].includes(sesion.rol) ? <ReescanearItems rol={sesion.rol} /> : <Navigate to="/contabilidad-items" replace />} />
           <Route path="/documentos" element={sesion.rol === "SECRETARIA" && activaciones?.documentos === false ? <Navigate to="/expedientes" replace /> : <Documentos sesion={sesion} />} />
           <Route path="/expedientes" element={<Expedientes sesion={sesion} />} />

@@ -5,7 +5,7 @@ type Categoria = { id: string; nombre: string; activa: boolean };
 type Item = { id: string; descripcion: string; unidad_base: string; categoria: string; categoria_confirmada: boolean; activo: boolean; lineas_asociadas: number };
 type Catalogo = { total: number; items: Item[] };
 
-export default function CatalogoItems() {
+export default function CatalogoItems({ puedeAdministrar = false }: { puedeAdministrar?: boolean }) {
   const [buscar, setBuscar] = useState("");
   const [filtro, setFiltro] = useState("");
   const [descripcion, setDescripcion] = useState("");
@@ -55,8 +55,9 @@ export default function CatalogoItems() {
   return (
     <section aria-label="Catálogo de ítems">
       <h2>Ítems</h2>
-      <p>Agrega productos canónicos por descripción y unidad. No se crean líneas de factura; las líneas fuente permanecen intactas y las asociaciones nuevas solo se incorporan al reescanear si coinciden exactamente.</p>
-      <form onSubmit={crear}>
+      <p>Consulta los ítems de tus comprobantes autorizados. No se modifican las líneas fuente ni los totales de facturas.</p>
+      {!puedeAdministrar && <p>Vista de consulta. La administración del catálogo compartido está reservada a Administración.</p>}
+      {puedeAdministrar && <form onSubmit={crear}>
         <label htmlFor="item-descripcion">Descripción del ítem</label>
         <textarea id="item-descripcion" value={descripcion} onChange={(evento) => setDescripcion(evento.target.value)} maxLength={2000} minLength={2} required rows={4} />
         <label htmlFor="item-unidad">Unidad</label>
@@ -67,7 +68,7 @@ export default function CatalogoItems() {
           {(categorias.datos ?? []).filter((categoria) => categoria.activa).map((categoria) => <option key={categoria.id} value={categoria.id}>{categoria.nombre}</option>)}
         </select>
         <button type="submit" disabled={ocupado || !categoriaId}>Agregar ítem</button>
-      </form>
+      </form>}
       {mensaje && <p role="status">{mensaje}</p>}
       {categorias.error && <p role="alert">No se pudieron cargar las categorías: {categorias.error}</p>}
       <form onSubmit={(evento) => { evento.preventDefault(); setFiltro(buscar.trim()); }}>
@@ -80,14 +81,14 @@ export default function CatalogoItems() {
       {catalogo.datos && <>
         <p>{catalogo.datos.total} ítems encontrados. Se muestran hasta 200 por consulta.</p>
         {catalogo.datos.items.length === 0 ? <p>No hay ítems en el catálogo para este filtro.</p> : <div style={{ overflowX: "auto" }}><table>
-          <thead><tr><th>Descripción</th><th>Unidad base</th><th>Categoría</th><th>Líneas asociadas</th><th>Estado</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Descripción</th><th>Unidad base</th><th>Categoría</th><th>Líneas asociadas</th>{puedeAdministrar && <><th>Estado</th><th>Acciones</th></>}</tr></thead>
           <tbody>{catalogo.datos.items.map((item) => <tr key={item.id}>
             <td>{item.descripcion}</td><td>{item.unidad_base || "No indicada"}</td>
-            <td><select aria-label={`Categoría para ${item.descripcion}`} value={(categorias.datos ?? []).find((categoria) => categoria.nombre === item.categoria)?.id ?? ""} disabled={ocupado} onChange={(evento) => { if (evento.target.value) void actualizar(item, { categoria_id: evento.target.value }); }}>
+            <td>{puedeAdministrar ? <><select aria-label={`Categoría para ${item.descripcion}`} value={(categorias.datos ?? []).find((categoria) => categoria.nombre === item.categoria)?.id ?? ""} disabled={ocupado} onChange={(evento) => { if (evento.target.value) void actualizar(item, { categoria_id: evento.target.value }); }}>
               <option value="">{item.categoria}</option>{(categorias.datos ?? []).filter((categoria) => categoria.activa).map((categoria) => <option key={categoria.id} value={categoria.id}>{categoria.nombre}</option>)}
-            </select>{item.categoria_confirmada ? " · Confirmada" : " · Sugerida"}</td>
-            <td>{item.lineas_asociadas}</td><td>{item.activo ? "Activo" : "Inactivo"}</td>
-            <td><button type="button" disabled={ocupado} onClick={() => void actualizar(item, { activo: !item.activo })}>{item.activo ? "Desactivar" : "Activar"}</button></td>
+            </select>{item.categoria_confirmada ? " · Confirmada" : " · Sugerida"}</> : item.categoria}</td>
+            <td>{item.lineas_asociadas}</td>{puedeAdministrar && <><td>{item.activo ? "Activo" : "Inactivo"}</td>
+            <td><button type="button" disabled={ocupado} onClick={() => void actualizar(item, { activo: !item.activo })}>{item.activo ? "Desactivar" : "Activar"}</button></td></>}
           </tr>)}</tbody>
         </table></div>}
       </>}
