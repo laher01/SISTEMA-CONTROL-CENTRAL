@@ -1,9 +1,11 @@
 import io
+import shutil
 from datetime import date
 from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image, ImageDraw, ImageFont
 from pypdf import PdfReader, PdfWriter
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -45,6 +47,24 @@ def test_solo_gestor_puede_cargar_documentos(client: TestClient, auth_prueba: Au
         files={"archivo": ("gestor.pdf", b"%PDF-1.7 gestor")},
     )
     assert respuesta_gestor.status_code == 201, respuesta_gestor.text
+
+
+@pytest.mark.skipif(shutil.which("tesseract") is None, reason="Requiere Tesseract real")
+def test_gestor_carga_imagen_y_recupera_correlativo_con_ocr(client: TestClient) -> None:
+    imagen = Image.new("L", (1100, 280), 255)
+    fuente = ImageFont.load_default(size=48)
+    ImageDraw.Draw(imagen).multiline_text(
+        (40, 40), "FACTURA ELECTRONICA\nF001-12345\nTOTAL S/ 100.00", fill=0, font=fuente
+    )
+    contenido = io.BytesIO()
+    imagen.save(contenido, format="PNG")
+    documento = subir(client, "factura-escaneada.png", contenido.getvalue())
+    respuesta = client.post(f"/api/v1/documentos/{documento['id']}/procesar")
+    assert respuesta.status_code == 200, respuesta.text
+    proceso = respuesta.json()["datos_extraidos"]["procesamiento_documental"]
+    assert proceso["metodo"] == "OCR_IMAGEN"
+    assert proceso["motor"] == "tesseract"
+    assert proceso["extraccion_estructurada"]["campos"]["correlativo"]["valor"] == "12345"
 
 
 def expediente(client: TestClient, expediente_id: object) -> dict[str, object]:
