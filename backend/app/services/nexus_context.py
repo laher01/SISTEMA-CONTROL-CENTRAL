@@ -374,6 +374,13 @@ def _agregar_documentos(
     ]
     if auth.rol == "GESTOR":
         condiciones.append(Documento.gestor_id == auth.gestor_id)
+    elif auth.rol == RolMiembro.GERENTE:
+        # Solo documentos de expedientes dentro de su atribución gerencial.
+        # Los documentos sin expediente quedan excluidos por defecto.
+        condiciones.append(Documento.expediente_id == Expediente.id)
+        condiciones.append(Expediente.tenant_id == auth.tenant_id)
+        condiciones.append(Expediente.deleted_at.is_(None))
+        condiciones.append(alcance_expedientes_gerente(auth))
     else:
         usuarios = _usuarios_visibles(session, auth)
         if usuarios is not None:

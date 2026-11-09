@@ -23,7 +23,11 @@ from app.services.nexus_context import (
     puede_ver_empresa,
     puede_ver_expediente,
 )
-from app.services.nexus_items import consulta_items_solicitada, responder_items
+from app.services.nexus_items import (
+    consulta_items_solicitada,
+    responder_items,
+    seguimiento_proveedor,
+)
 from app.services.nexus_knowledge import recuperar_conocimiento
 
 
@@ -75,6 +79,37 @@ def responder(
             motor="CONVERSACIONAL_LOCAL",
             seccion=contexto.seccion,
         )
+    # Observa exclusivamente resultados autorizados del sistema documental.
+    if contexto.seccion == "DOCUMENTOS" and any(
+        frase in normalizado
+        for frase in (
+            "qué documentos tengo",
+            "que documentos tengo",
+            "cómo van mis documentos",
+            "como van mis documentos",
+            "revisa mis documentos",
+        )
+    ):
+        estados = contexto.datos.get("documentos_por_estado", {})
+        if not isinstance(estados, dict) or not estados:
+            resumen = "No encontré documentos visibles para resumir en esta pantalla."
+        else:
+            resumen = (
+                "Documentos visibles por estado: "
+                + ", ".join(f"{estado}: {cantidad}" for estado, cantidad in sorted(estados.items()))
+                + "."
+            )
+        return NexusChatOut(
+            respuesta=(
+                resumen + " Esta información proviene del sistema documental existente. "
+                "Puedo ayudarte a revisar sus estados; no he reprocesado ni cambiado archivos."
+            ),
+            accion="RESUMEN_DOCUMENTOS",
+            motor="ESPECIALISTA_DOCUMENTOS",
+            seccion=contexto.seccion,
+            datos={"documentos_por_estado": estados},
+        )
+
     # Respuestas de lectura de pantalla no dependen del proveedor LLM.
     if any(
         frase in normalizado
@@ -97,6 +132,12 @@ def responder(
     if consulta_items is not None:
         tipo, busqueda = consulta_items
         salida = responder_items(session, auth, tipo, busqueda)
+        return _enriquecer(salida, contexto, [], "ESPECIALISTA_ITEMS")
+
+    seguimiento = seguimiento_proveedor(texto, historial or [])
+    if seguimiento is not None:
+        producto, proveedor = seguimiento
+        salida = responder_items(session, auth, "producto", producto, proveedor=proveedor)
         return _enriquecer(salida, contexto, [], "ESPECIALISTA_ITEMS")
 
     conocimiento, fuentes_conocimiento = recuperar_conocimiento(
