@@ -197,6 +197,22 @@ def extraer_campos(
         ]
 
     formato = detectar_formato_documental(texto)
+    if formato == "OSE_FACTURALAYA":
+        numero = re.search(
+            r"FACTURA ELECTR[ÓO]NICA[ \t]*:?\s+([FE]\d{3})[ \t]*[-–—][ \t]*(\d+)\b",
+            texto,
+            re.I,
+        )
+        if numero:
+            for indice, nombre in enumerate(("serie", "correlativo"), start=1):
+                _poner_campo(
+                    campos,
+                    nombre,
+                    numero.group(indice).upper(),
+                    0.96 * factor,
+                    numero.group(),
+                    fuente,
+                )
     es_rhe = _es_rhe(texto)
     if es_rhe:
         _extraer_partes_rhe(texto, rucs, campos, fuente, factor)
@@ -248,7 +264,24 @@ def extraer_campos(
     es_cotizacion = bool(re.search(r"COTIZACI[OÓ]N", texto, re.I))
     total_cotizacion = _total_cotizacion(texto) if es_cotizacion else None
     total_match = None
-    if not es_cotizacion:
+    total_facturalaya = (
+        re.search(
+            r"^[ \t]*TOTAL[ \t]*:\s*S/\s*([\d,]+\.\d{2})(?![\d.])",
+            texto,
+            re.I | re.M,
+        )
+        if formato == "OSE_FACTURALAYA"
+        else None
+    )
+    if formato == "MASYDASE_FACTURA":
+        total_match = re.search(
+            r"^TOTAL A PAGAR[ \t]*:[ \t]*(?:S/|US\$)[ \t]*([\d,]+\.\d{2})[ \t]*$",
+            texto,
+            re.IGNORECASE | re.MULTILINE,
+        )
+    elif total_facturalaya:
+        total_match = total_facturalaya
+    elif not es_cotizacion and not _total_ocr_sunat_desalineado(texto, fuente):
         # "SUB TOTAL" es una base imponible, nunca el importe final.
         # Recorremos todas las etiquetas para no quedarnos con esa primera cifra.
         total_match = next(
@@ -288,6 +321,51 @@ def extraer_campos(
         campos[nombre] = CampoExtraido(valor, min(0.96, 0.94 * factor), evidencia).a_dict(fuente)
 
     _extraer_datos_bancarios(texto, campos, fuente, factor)
+    if formato == "MASYDASE_GUIA":
+        campos.pop("remitente", None)
+        emisor = campos.get("razon_social_emisor")
+        if emisor:
+            campos["remitente"] = emisor.copy()
+        referencia_factura = re.search(
+            r"FACTURA ELECTR[ÓO]NICA[^\S\n]*\n[ \t]*(F\d{3}-\d+)",
+            texto,
+            re.IGNORECASE,
+        )
+        if referencia_factura:
+            _poner_campo(
+                campos,
+                "factura_referenciada",
+                referencia_factura.group(1),
+                min(0.95, 0.94 * factor),
+                referencia_factura.group(0),
+                fuente,
+            )
+    if formato == "OSE_FACTURALAYA":
+        guia = re.search(
+            r"GU[IÍ]A DE REMISI[ÓO]N\s+T\d{3}\s*-\s*\d+"
+            r"[\s\S]*?SEÑOR\s*\(ES\):\s*([^:]+?)\s*RUC:\s*(\d{11})",
+            texto,
+            re.I,
+        )
+        if guia and _razon_social_valida(" ".join(guia.group(1).split())):
+            _poner_campo(
+                campos,
+                "razon_social_receptor",
+                " ".join(guia.group(1).split()),
+                0.94 * factor,
+                guia.group(1),
+                fuente,
+            )
+            referencia_guia = re.search(r"DOCS\. REFERENCIA:\s*([FE]\d{3}-\d+)", texto, re.I)
+            if referencia_guia:
+                _poner_campo(
+                    campos,
+                    "factura_referenciada",
+                    referencia_guia.group(1),
+                    0.94 * factor,
+                    referencia_guia.group(),
+                    fuente,
+                )
     if "tipo_operacion" in campos:
         if "fecha_emision" in campos:
             campos["fecha_operacion"] = campos["fecha_emision"].copy()
@@ -430,12 +508,68 @@ def _aplicar_parser_especializado(
     """Completa partes usando estructuras conocidas sin anular la trazabilidad."""
     if formato == "SUNAT_FACTURA":
         _parsear_factura_sunat(texto, rucs, campos, fuente, factor)
+    elif formato in {"MASYDASE_FACTURA", "MASYDASE_GUIA"}:
+        lineas = _lineas_limpias(texto)
+        encabezado = _indice_linea(lineas, r"^(?:FACTURA ELECTRONICA|GUIA DE REMISION REMITENTE)$")
+        if encabezado is not None:
+            bloque = "\n".join(lineas[:encabezado])
+            ruc = re.search(r"^RUC[ \t]*:?[ \t]*(\d{11})$", bloque, re.I | re.M)
+            if ruc:
+                _poner_campo(campos, "ruc_emisor", ruc.group(1), 0.96 * factor, ruc.group(), fuente)
+            emisor = _razon_emisor_encabezado(lineas, encabezado)
+            if emisor:
+                _poner_campo(
+                    campos, "razon_social_emisor", emisor[0], 0.95 * factor, emisor[1], fuente
+                )
+            if formato == "MASYDASE_GUIA":
+                receptor = re.search(
+                    r"^DESTINATARIO\s*\nRAZ[ÓO]N SOCIAL:[ \t]*(.+)\nRUC:[ \t]*(\d{11})$",
+                    texto,
+                    re.I | re.M,
+                )
+                if receptor:
+                    _poner_campo(
+                        campos,
+                        "razon_social_receptor",
+                        receptor.group(1),
+                        0.95 * factor,
+                        receptor.group(),
+                        fuente,
+                    )
+                    _poner_campo(
+                        campos,
+                        "ruc_receptor",
+                        receptor.group(2),
+                        0.95 * factor,
+                        receptor.group(),
+                        fuente,
+                    )
     elif formato == "OSE_FACTURALAYA":
         _parsear_facturalaya(texto, rucs, campos, fuente, factor)
     elif formato == "OSE_FACTUHOST":
         _parsear_factuhost(texto, rucs, campos, fuente, factor)
     elif formato == "OSE_EFACT":
         _parsear_efact(texto, rucs, campos, fuente, factor)
+    if "ESTACION DE SERVICIOS SAN JOSE SAC" in _sin_tildes(texto).upper():
+        partes = re.search(
+            r"(?im)^\s*(ESTACION DE SERVICIOS SAN JOSE SAC)\s*$"
+            r"[\s\S]*?R\.U\.C\.\s+ELECTR[ÓO]NICA\s+(\d{11})\s+FACTURA"
+            r"[\s\S]*?^\s*CLIENTE:[ \t]*([^:]+?)\s+(\d{11})[ \t]+N[°º]",
+            texto,
+        )
+        if partes:
+            for indice, nombre in enumerate(
+                ("razon_social_emisor", "ruc_emisor", "razon_social_receptor", "ruc_receptor"),
+                start=1,
+            ):
+                _poner_campo(
+                    campos,
+                    nombre,
+                    " ".join(partes.group(indice).split()),
+                    0.94 * factor,
+                    partes.group(indice),
+                    fuente,
+                )
 
 
 def _poner_campo(
@@ -574,6 +708,13 @@ def _parsear_factura_sunat(
     )
 
     emisor = _razon_emisor_encabezado(lineas, indice_factura)
+    if fuente == "OCR" and _total_ocr_sunat_desalineado(texto, fuente):
+        for indice, linea in enumerate(lineas[:indice_factura]):
+            if indice and _parece_direccion(linea) and re.search(r"\d", linea):
+                anterior = lineas[indice - 1]
+                if _razon_social_valida(anterior):
+                    emisor = (anterior, anterior)
+                break
     if emisor:
         _poner_campo(
             campos,
@@ -590,6 +731,17 @@ def _parsear_factura_sunat(
         detener=("RUC", "DIRECCION DEL CLIENTE", "TIPO DE MONEDA", "OBSERVACION"),
         max_lineas=4,
     )
+    if not receptor and fuente == "OCR":
+        bloque = re.search(
+            r"(?m)^\d{2}/\d{2}/\d{4}[ \t]*\n"
+            r"([A-ZÁÉÍÓÚÑ. ]+(?:\n[A-ZÁÉÍÓÚÑ. ]+){0,3})\n"
+            r"[ \t•.:]*" + re.escape(ruc_receptor) + r"[ \t]*$",
+            texto,
+        )
+        if bloque:
+            nombre = " ".join(bloque.group(1).split())
+            if _razon_social_valida(nombre):
+                receptor = (nombre, bloque.group())
     if receptor:
         _poner_campo(
             campos,
@@ -788,6 +940,14 @@ def _parsear_efact(
         detener=("RUC", "DIRECCION", "DIRECCIÓN", "CIUDAD", "FECHA"),
         max_lineas=4,
     )
+    if not receptor:
+        bloque = re.search(
+            r"(?im)^CLIENTE:[ \t]*\nDIRECCI[ÓO]N:[ \t]*\nCIUDAD:[ \t]*\n"
+            r"([^\n]+)\n[^\n]+\nFECHA DE EMISI[ÓO]N:[ \t]*\n" + re.escape(ruc_receptor) + r"\b",
+            texto,
+        )
+        if bloque and _razon_social_valida(bloque.group(1)):
+            receptor = (bloque.group(1), bloque.group())
     if receptor:
         _poner_campo(
             campos,
@@ -943,12 +1103,22 @@ def _extraer_partes_rhe(
                 evidencia,
             ).a_dict(fuente)
 
+    receptor = str(campos.get("ruc_receptor", {}).get("valor") or "")
     if receptor:
         nombre_receptor = _razon_social_etiquetada_para_ruc(
             texto,
             receptor,
             ETIQUETAS_RHE_NOMBRE_RECEPTOR,
         )
+        if not nombre_receptor:
+            bloque = re.search(
+                r"(?im)^TOTAL NETO RECIBIDO:\s*\n[ \t]*([^\n]+)\n\s*RUC[ \t]+"
+                + re.escape(receptor)
+                + r"\b",
+                texto,
+            )
+            if bloque and _razon_social_valida(bloque.group(1)):
+                nombre_receptor = (bloque.group(1), bloque.group())
         if nombre_receptor:
             valor, evidencia = nombre_receptor
             campos["razon_social_receptor"] = CampoExtraido(
@@ -1254,6 +1424,11 @@ def _parece_direccion(valor: str) -> bool:
 
 def detectar_formato_documental(texto: str) -> str:
     normalizado = _sin_tildes(texto).upper()
+    if re.search(r"https://[^\s/]+\.MASYDASE\.COM[:/]", normalizado, re.I):
+        if "GUIA DE REMISION REMITENTE" in normalizado:
+            return "MASYDASE_GUIA"
+        if "FACTURA ELECTRONICA" in normalizado:
+            return "MASYDASE_FACTURA"
     if "RECIBO POR HONORARIOS" in normalizado:
         return "RHE_SUNAT"
     if "FACTURALAYA" in normalizado:
@@ -1302,6 +1477,20 @@ def _normalizar_fecha_literal_es(dia: str, mes: str, anio: str) -> str | None:
         return date(int(anio), numero_mes, int(dia)).isoformat()
     except (KeyError, ValueError):
         return None
+
+
+def _total_ocr_sunat_desalineado(texto: str, fuente: str) -> bool:
+    """Detecta la tabla SUNAT que el OCR leyó por columnas separadas."""
+    if fuente != "OCR":
+        return False
+    normalizado = _sin_tildes(texto).upper()
+    return bool(
+        "GENERADA EN EL SISTEMA DE SUNAT" in normalizado
+        and re.search(
+            r"MONTO DE[ .:\n]+REDONDEO\s+IMPORTE TOTAL[ .:]*\n",
+            normalizado,
+        )
+    )
 
 
 def _normalizar_importe(valor: str) -> Decimal | None:

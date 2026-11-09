@@ -1,5 +1,6 @@
 import csv
 import io
+import re
 import shutil
 import subprocess
 import tempfile
@@ -85,9 +86,10 @@ def _procesar_pdf(contenido: bytes, limite: int, max_paginas_ocr: int) -> Result
         partes = [(pagina.extract_text() or "").strip() for pagina in lector.pages]
     except (PdfReadError, OSError, ValueError) as exc:
         raise DocumentoNoProcesable("El PDF está dañado o no tiene una estructura válida") from exc
-    texto = _limitar("\n\n".join(parte for parte in partes if parte), limite)
-    if not texto:
-        return _procesar_pdf_escaneado(contenido, limite, max_paginas_ocr)
+    partes = [parte if _texto_pdf_util(parte) else "" for parte in partes]
+    if not partes or not all(partes):
+        return _procesar_pdf_escaneado(contenido, limite, max_paginas_ocr, partes)
+    texto = _limitar("\n\n".join(partes), limite)
     return ResultadoProcesamiento(
         texto=texto,
         metodo="TEXTO_PDF",
@@ -99,13 +101,19 @@ def _procesar_pdf(contenido: bytes, limite: int, max_paginas_ocr: int) -> Result
     )
 
 
+def _texto_pdf_util(texto: str) -> bool:
+    # Algunas fuentes devuelven identificadores de glifos en lugar de caracteres.
+    glifos = sum(len(m.group()) for m in re.finditer(r"/(?:i255|[0-9]{1,3})\b", texto))
+    return bool(texto) and glifos * 2 <= len(texto)
+
+
 def _procesar_pdf_escaneado(
-    contenido: bytes, limite: int, max_paginas_ocr: int
+    contenido: bytes, limite: int, max_paginas_ocr: int, partes: list[str]
 ) -> ResultadoProcesamiento:
     ejecutable = shutil.which("tesseract")
     if ejecutable is None:
         return ResultadoProcesamiento(
-            texto="",
+            texto=_limitar("\n\n".join(parte for parte in partes if parte), limite),
             metodo="TEXTO_PDF",
             motor="pypdf",
             paginas=_cantidad_paginas(contenido),
@@ -117,16 +125,21 @@ def _procesar_pdf_escaneado(
     except Exception as exc:
         raise DocumentoNoProcesable("No se pudo rasterizar el PDF escaneado") from exc
     paginas = len(documento)
-    if paginas > max_paginas_ocr:
+    pendientes = sum(not parte for parte in partes)
+    if pendientes > max_paginas_ocr:
         documento.close()
         raise DocumentoNoProcesable(
-            f"El PDF tiene {paginas} páginas; el máximo OCR permitido es {max_paginas_ocr}"
+            f"El PDF requiere OCR en {pendientes} páginas; el máximo es {max_paginas_ocr}"
         )
     textos: list[str] = []
     confianzas: list[float] = []
+    paginas_ocr_leidas = 0
     try:
         with tempfile.TemporaryDirectory(prefix="fact-central-pdf-ocr-") as temporal:
             for indice in range(paginas):
+                if partes[indice]:
+                    textos.append(f"--- Página {indice + 1} ---\n{partes[indice]}")
+                    continue
                 pagina = documento[indice]
                 bitmap = pagina.render(scale=3)
                 imagen = bitmap.to_pil()
@@ -140,6 +153,7 @@ def _procesar_pdf_escaneado(
                 texto, confianza = _ejecutar_tesseract(ejecutable, entrada, idioma, limite)
                 if texto:
                     textos.append(f"--- Página {indice + 1} ---\n{texto}")
+                    paginas_ocr_leidas += 1
                 if confianza is not None:
                     confianzas.append(confianza)
     finally:
@@ -149,11 +163,11 @@ def _procesar_pdf_escaneado(
     return ResultadoProcesamiento(
         texto=texto_final,
         metodo="OCR_PDF",
-        motor="pdfium+tesseract",
+        motor="pypdf+pdfium+tesseract" if any(partes) else "pdfium+tesseract",
         paginas=paginas,
         confianza=confianza_final,
         idioma=idioma,
-        requiere_ocr=False,
+        requiere_ocr=paginas_ocr_leidas < pendientes,
         sugerencia=sugerir_tipo(texto_final),
     )
 
@@ -176,6 +190,7 @@ def _procesar_imagen(contenido: bytes, extension: str, limite: int) -> Resultado
         paginas=1,
         confianza=confianza,
         idioma=idioma,
+        requiere_ocr=not texto,
         sugerencia=sugerir_tipo(texto),
     )
 

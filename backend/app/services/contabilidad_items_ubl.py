@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.item_models import LineaComprobanteItem, ProductoItem
 from app.models import Documento, Tenant
 from app.services.contabilidad_items_rules import sugerir_categoria, texto_normalizado
+from app.services.extraccion_campos import detectar_formato_documental
 from app.services.ubl import INVOICE, NS
 
 
@@ -78,6 +79,12 @@ def registrar_items_ubl(
     contenido: bytes,
 ) -> int:
     """No duplica líneas al reprocesar; no mezcla productos con variantes diferentes."""
+    return _registrar_lineas(session, tenant_id, documento_id, extraer_items_ubl(contenido))
+
+
+def _registrar_lineas(
+    session: Session, tenant_id: uuid.UUID, documento_id: uuid.UUID, items: list[ItemUBL]
+) -> int:
     # Serializa escrituras por tenant y bloquea ingestión de documentos ajenos o retirados.
     tenant_valido = session.scalar(
         select(Tenant.id).where(Tenant.id == tenant_id).with_for_update()
@@ -93,7 +100,6 @@ def registrar_items_ubl(
     )
     if documento_valido is None:
         raise ValueError("Documento no encontrado en el tenant autorizado")
-    items = extraer_items_ubl(contenido)
     registrados = 0
     for linea in items:
         ya_registrada = session.scalar(
@@ -144,10 +150,13 @@ def registrar_items_ubl(
 def registrar_items_pdf_estacion(
     session: Session, tenant_id: uuid.UUID, documento_id: uuid.UUID, texto: str
 ) -> int:
-    """Registra solamente líneas inequívocas de diésel de factura SCORPIO.
+    """Registra líneas verificables de facturas Masydase y Escorpio.
 
     No infiere importes, no sustituye UBL y evita duplicados ante reprocesamientos.
     """
+    if detectar_formato_documental(texto) == "MASYDASE_FACTURA":
+        items = extraer_items_pdf_masydase(texto)
+        return _registrar_lineas(session, tenant_id, documento_id, items) if items else 0
     normal = " ".join(texto.split())
     if not re.search(r"\bFACTURA\b", normal, re.I) or "FACTURACION.JADAL.PE" not in normal.upper():
         return 0
@@ -211,3 +220,40 @@ def registrar_items_pdf_estacion(
         )
     )
     return 1
+
+
+def extraer_items_pdf_masydase(texto: str) -> list[ItemUBL]:
+    tabla = re.search(
+        r"^CANT\. UNIDAD DESCRIPCI[ÓO]N MODELO LOTE SERIE P\.UNIT DTO\. TOTAL\s*\n"
+        r"([\s\S]+?)^(?:OP\. |IGV:|TOTAL A PAGAR:)",
+        texto,
+        re.I | re.M,
+    )
+    total = re.search(r"^TOTAL A PAGAR:\s*S/\s*([\d,]+\.\d{2})", texto, re.I | re.M)
+    if not tabla or not total:
+        return []
+    filas = re.split(r"(?m)(?=^\d+(?:\.\d+)?\s+[A-Z]{2,4}\s+)", tabla.group(1).strip())
+    items: list[ItemUBL] = []
+    suma = Decimal(0)
+    for fila in filter(str.strip, filas):
+        campos = re.fullmatch(
+            r"(\d+(?:\.\d+)?) ([A-Z]{2,4}) (.+?) "
+            r"(\d[\d,]*\.\d+) 0(?:\.0+)? (\d[\d,]*\.\d{2})",
+            " ".join(fila.split()),
+        )
+        if not campos:
+            return []
+        cantidad, unidad, descripcion, precio, importe = campos.groups()
+        cantidad_decimal = Decimal(cantidad)
+        importe_decimal = Decimal(importe.replace(",", ""))
+        if cantidad_decimal <= 0 or abs(
+            cantidad_decimal * Decimal(precio.replace(",", "")) - importe_decimal
+        ) > Decimal("0.01"):
+            return []
+        items.append(
+            ItemUBL(len(items) + 1, descripcion, cantidad_decimal, unidad, importe_decimal)
+        )
+        suma += importe_decimal
+    if suma != Decimal(total.group(1).replace(",", "")):
+        return []
+    return items

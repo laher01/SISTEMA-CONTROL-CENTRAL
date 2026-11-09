@@ -2,7 +2,7 @@ import io
 import subprocess
 
 import pytest
-from pypdf import PdfWriter
+from pypdf import PageObject, PdfWriter
 
 from app.enums import TipoDocumento
 from app.services import procesamiento_documental as pd
@@ -48,6 +48,79 @@ def test_pdf_escaneado_se_procesa_por_pagina(monkeypatch: pytest.MonkeyPatch) ->
 def test_pdf_invalido_se_rechaza() -> None:
     with pytest.raises(pd.DocumentoNoProcesable, match="dañado"):
         pd.procesar(b"%PDF-esto no es un pdf", 10_000)
+
+
+def test_pdf_con_glifos_codificados_solicita_ocr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(PageObject, "extract_text", lambda *_: "/0 /1 /i255 /13 /14 " * 30)
+    monkeypatch.setattr(pd.shutil, "which", lambda _: "/usr/bin/tesseract")
+    monkeypatch.setattr(pd, "_idioma_disponible", lambda _: "spa")
+    monkeypatch.setattr(
+        pd, "_ejecutar_tesseract", lambda *_: ("FACTURA ELECTRONICA E001-123", 0.94)
+    )
+
+    resultado = pd.procesar(pdf_vacio(), 10_000)
+
+    assert resultado.metodo == "OCR_PDF"
+    assert "E001-123" in resultado.texto
+
+
+def test_pdf_mixto_solo_rasteriza_pagina_sin_texto(monkeypatch: pytest.MonkeyPatch) -> None:
+    capas = iter(["FACTURA ELECTRONICA E001-123", ""])
+    monkeypatch.setattr(PageObject, "extract_text", lambda *_: next(capas))
+    monkeypatch.setattr(pd.shutil, "which", lambda _: "/usr/bin/tesseract")
+    monkeypatch.setattr(pd, "_idioma_disponible", lambda _: "spa")
+    paginas = []
+
+    def ocr(_, entrada, *_args):
+        paginas.append(entrada.name)
+        return "TOTAL 100.00", 0.9
+
+    monkeypatch.setattr(pd, "_ejecutar_tesseract", ocr)
+    resultado = pd.procesar(pdf_vacio(2), 10_000, max_paginas_ocr=1)
+    assert paginas == ["pagina-2.png"]
+    assert resultado.motor == "pypdf+pdfium+tesseract"
+    assert "E001-123" in resultado.texto
+    assert "TOTAL 100.00" in resultado.texto
+
+
+def test_masydase_separa_cantidad_del_total_fiscal() -> None:
+    texto = """Para consultar: https://ejemplo.masydase.com:4343/buscar
+PROVEEDOR DE PRUEBA E.I.R.L.
+AV. PRINCIPAL 123
+RUC: 20123456789
+FACTURA ELECTRÓNICA
+F001-00000010
+FECHA DE EMISIÓN: 2026-01-18
+CLIENTE: CLIENTE DE PRUEBA S.A.C.
+RUC: 20987654321
+CANT. UNIDAD DESCRIPCIÓN MODELO LOTE SERIE P.UNIT DTO. TOTAL
+7 NIU ARTÍCULO DE PRUEBA 155.00 0 1,085.00
+TOTAL A PAGAR: S/ 1,085.00"""
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    campos = resultado["campos"]
+    assert campos["ruc_emisor"]["valor"] == "20123456789"
+    assert campos["correlativo"]["valor"] == "00000010"
+    assert campos["importe_total"]["valor"] == "1085.00"
+
+
+def test_total_sunat_ocr_desalineado_queda_pendiente() -> None:
+    texto = """FACTURA ELECTRÓNICA
+E001-123
+Monto de
+redondeo
+Importe Total:
+S/ 1,483.05
+S/ 266.95
+S/ 1,750.00
+Esta es una representación impresa generada en el Sistema de SUNAT."""
+    resultado = extraer_campos(texto, "OCR_PDF", 0.95)
+    assert resultado is not None
+    campos = resultado["campos"]
+    assert campos["correlativo"]["valor"] == "123"
+    assert "importe_total" not in campos
 
 
 def test_sugerencia_es_evidencia_y_no_clasificacion_automatica() -> None:

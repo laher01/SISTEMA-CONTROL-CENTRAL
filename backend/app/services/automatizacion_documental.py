@@ -108,6 +108,8 @@ def aplicar_automaticamente(
     documento: Documento,
     procesamiento: dict[str, object],
 ) -> ResultadoAutomatizacion:
+    if procesamiento.get("requiere_ocr") is True:
+        return _revision(documento, ["Hay páginas pendientes de lectura por OCR"])
     extraccion = procesamiento.get("extraccion_estructurada")
     if isinstance(extraccion, dict):
         alertas = extraccion.get("alertas")
