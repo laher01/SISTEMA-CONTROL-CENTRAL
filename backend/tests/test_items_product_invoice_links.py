@@ -1,5 +1,6 @@
 """Items: authenticated invoice drilldown, search, tenant isolation (synthetic DB)."""
 
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import UUID
@@ -7,7 +8,7 @@ from uuid import UUID
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.models import Documento, Empresa, Expediente, Tenant
+from app.models import Documento, Empresa, Expediente, Gestor, Miembro, Tenant
 from app.services.contabilidad_items_ubl import registrar_items_ubl
 from tests.conftest import AuthPrueba
 
@@ -129,3 +130,131 @@ def test_search_and_linked_invoices_are_tenant_scoped(
     inactive = client.get(f"/api/v1/contabilidad-items/productos/{product_id}/facturas")
     assert inactive.status_code == 200
     assert inactive.json() == []
+
+
+def test_all_operational_roles_can_open_item_invoices_with_their_own_scope(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    contexto = auth_prueba.contexto
+    tenant_id = contexto.tenant_id
+    usuario_propio = session.get(Miembro, auth_prueba.usuario_id)
+    assert usuario_propio is not None
+    responsable_propio = Miembro(
+        tenant_id=tenant_id,
+        codigo="RESP-ITEMS-PROPIO",
+        nombre="Responsable propio",
+        rol="RESPONSABLE",
+    )
+    responsable_ajeno = Miembro(
+        tenant_id=tenant_id,
+        codigo="RESP-ITEMS-AJENO",
+        nombre="Responsable ajeno",
+        rol="RESPONSABLE",
+    )
+    gerente_propio = Miembro(
+        tenant_id=tenant_id,
+        codigo="GER-ITEMS-PROPIO",
+        nombre="Gerente propio",
+        rol="GERENTE",
+    )
+    gerente_ajeno = Miembro(
+        tenant_id=tenant_id,
+        codigo="GER-ITEMS-AJENO",
+        nombre="Gerente ajeno",
+        rol="GERENTE",
+    )
+    session.add_all([responsable_propio, responsable_ajeno, gerente_propio, gerente_ajeno])
+    session.flush()
+    usuario_propio.responsable_id = responsable_propio.id
+    usuario_ajeno = Miembro(
+        tenant_id=tenant_id,
+        codigo="USU-ITEMS-AJENO",
+        nombre="Usuario ajeno",
+        rol="USUARIO",
+        responsable_id=responsable_ajeno.id,
+    )
+    gestor_propio = session.get(Gestor, auth_prueba.gestor_id)
+    assert gestor_propio is not None
+    session.add(usuario_ajeno)
+    session.flush()
+    gestor_ajeno = Gestor(
+        tenant_id=tenant_id,
+        codigo="GST-ITEMS-AJENO",
+        nombre="Gestor ajeno",
+        usuario_id=usuario_ajeno.id,
+    )
+    session.add(gestor_ajeno)
+    session.flush()
+
+    emisor = Empresa(tenant_id=tenant_id, ruc="20100000001", razon_social="Emisor de prueba")
+    receptor = Empresa(tenant_id=tenant_id, ruc="20200000001", razon_social="Receptor de prueba")
+    session.add_all([emisor, receptor])
+    session.flush()
+    expedientes: list[Expediente] = []
+    for correlativo, usuario, gerente, gestor in (
+        ("1", usuario_propio, gerente_propio, gestor_propio),
+        ("2", usuario_ajeno, gerente_ajeno, gestor_ajeno),
+    ):
+        expediente = Expediente(
+            tenant_id=tenant_id,
+            emisor_id=emisor.id,
+            receptor_id=receptor.id,
+            tipo_comprobante="FACT",
+            serie="F001",
+            correlativo=correlativo,
+            fecha_emision=date(2026, 11, 1),
+            moneda="PEN",
+            importe_total=Decimal("60"),
+            usuario_id=usuario.id,
+            gerente_id=gerente.id,
+            gestor_id=gestor.id,
+        )
+        session.add(expediente)
+        session.flush()
+        documento = Documento(
+            tenant_id=tenant_id,
+            expediente_id=expediente.id,
+            tipo_documento="FACT",
+            estado="RELACIONADO",
+            sha256=correlativo * 64,
+            nombre_original=f"factura-{correlativo}.xml",
+            mime_type="text/xml",
+            tamano_bytes=len(XML),
+            ruta_storage=f"test/{correlativo}.xml",
+        )
+        session.add(documento)
+        session.flush()
+        assert registrar_items_ubl(session, tenant_id, documento.id, XML) == 1
+        expedientes.append(expediente)
+    session.commit()
+
+    auth_prueba.como_admin()
+    resumen = client.get("/api/v1/contabilidad-items", params={"buscar": "pota"})
+    assert resumen.status_code == 200, resumen.text
+    product_id = resumen.json()[0]["producto_id"]
+
+    base = auth_prueba.contexto
+    roles_y_cantidad = (
+        ("ADMINISTRADOR", 2),
+        ("SECRETARIA", 2),
+        ("GERENTE", 1),
+        ("RESPONSABLE", 1),
+        ("USUARIO", 1),
+        ("GESTOR", 1),
+    )
+    for rol, cantidad_esperada in roles_y_cantidad:
+        auth_prueba.contexto = replace(
+            base,
+            rol=rol,
+            miembro_id=responsable_propio.id if rol == "RESPONSABLE" else gerente_propio.id,
+            usuario_id=usuario_propio.id if rol in {"USUARIO", "GESTOR"} else None,
+            gestor_id=gestor_propio.id if rol == "GESTOR" else None,
+        )
+        resumen_rol = client.get("/api/v1/contabilidad-items", params={"buscar": "pota"})
+        assert resumen_rol.status_code == 200, f"{rol}: {resumen_rol.text}"
+        facturas = client.get(f"/api/v1/contabilidad-items/productos/{product_id}/facturas")
+        assert facturas.status_code == 200, f"{rol}: {facturas.text}"
+        assert len(facturas.json()) == cantidad_esperada, rol
+        assert {fila["comprobante"] for fila in facturas.json()} == (
+            {"F001-1", "F001-2"} if cantidad_esperada == 2 else {"F001-1"}
+        )
