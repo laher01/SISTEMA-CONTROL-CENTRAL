@@ -469,7 +469,23 @@ def _contexto_trabajo(trabajo: TrabajoReescaneoItems) -> ContextoAcceso:
 def _verificar_acceso_trabajo(trabajo: TrabajoReescaneoItems, auth: OperativeAuthDep) -> None:
     if trabajo.tenant_id != auth.tenant_id:
         raise HTTPException(404, "Trabajo no encontrado")
-    if auth.cuenta_id != trabajo.solicitado_por_cuenta_id and auth.rol != "ADMINISTRADOR":
+    if auth.rol == "ADMINISTRADOR":
+        return
+    if auth.cuenta_id != trabajo.solicitado_por_cuenta_id:
+        raise HTTPException(404, "Trabajo no encontrado")
+    identidad_actual = (
+        auth.rol,
+        auth.miembro_id,
+        auth.usuario_id,
+        auth.gestor_id,
+    )
+    identidad_solicitante = (
+        trabajo.solicitado_por_rol,
+        trabajo.solicitado_por_miembro_id,
+        trabajo.solicitado_por_usuario_id,
+        trabajo.solicitado_por_gestor_id,
+    )
+    if identidad_actual != identidad_solicitante:
         raise HTTPException(404, "Trabajo no encontrado")
 
 
@@ -898,6 +914,23 @@ def procesar_lote_reescaneo(
         elif trabajo.cursor_documento_id is not None:
             consulta = consulta.where(Documento.id > trabajo.cursor_documento_id)
         documentos = list(session.scalars(consulta.order_by(Documento.id).limit(limite)))
+        if documento_reintentable is not None and not documentos:
+            # El objetivo puede haberse retirado o salido del alcance desde el lote anterior.
+            # Avanzar el cursor como error evita atascar indefinidamente el trabajo del tenant.
+            trabajo.errores += 1
+            trabajo.procesados += 1
+            trabajo.cursor_documento_id = documento_reintentable
+            trabajo.documento_actual_id = None
+            trabajo.documento_actual_started_at = None
+            session.commit()
+            session.refresh(trabajo)
+            consulta_siguiente = _facturas_query(_contexto_trabajo(trabajo)).where(
+                Documento.created_at <= trabajo.created_at,
+                Documento.id > documento_reintentable,
+            )
+            documentos = list(
+                session.scalars(consulta_siguiente.order_by(Documento.id).limit(limite))
+            )
         for documento in documentos:
             trabajo.documento_actual_id = documento.id
             trabajo.documento_actual_started_at = datetime.now(UTC)

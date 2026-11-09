@@ -1,7 +1,7 @@
 """Permisos, aislamiento y reescaneo persistente de Contabilidad de Ítems."""
 
 import hashlib
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.item_models import LineaComprobanteItem, ProductoItem
+from app.item_models import LineaComprobanteItem, ProductoItem, TrabajoReescaneoItems
 from app.models import Documento, Empresa, Expediente, Miembro
 from app.security import ContextoAcceso
 from app.storage import AlmacenLocal
@@ -23,12 +23,18 @@ xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
 <cac:Item><cbc:Name>Producto de prueba</cbc:Name></cac:Item></cac:InvoiceLine></Invoice>"""
 
 
-def _documento_xml(session: Session, settings, tenant_id) -> Documento:
-    contenido = XML
+def _documento_xml(
+    session: Session,
+    settings,
+    tenant_id,
+    documento_id: UUID | None = None,
+    contenido: bytes = XML,
+) -> Documento:
     almacen = AlmacenLocal(settings.storage_dir)
     digest = hashlib.sha256(contenido).hexdigest()
     ruta = almacen.guardar(tenant_id, digest, contenido)
     documento = Documento(
+        id=documento_id,
         tenant_id=tenant_id,
         tipo_documento="FACT",
         estado="PENDIENTE_RELACION",
@@ -286,6 +292,7 @@ def test_reescaneo_cubre_roles_operativos_y_confirmar_categoria_en_cartera(
         ("USUARIO", usuario.id, usuario.id, None, "USUARIO-TEST"),
         ("GESTOR", None, usuario.id, auth_prueba.gestor_id, "GESTOR-TEST"),
     ]
+    trabajo_administrador_id = None
     for rol, miembro_id, usuario_id, gestor_id, codigo in roles:
         auth_prueba.contexto = ContextoAcceso(
             cuenta_id=auth_prueba.contexto.cuenta_id,
@@ -304,6 +311,8 @@ def test_reescaneo_cubre_roles_operativos_y_confirmar_categoria_en_cartera(
         trabajo = client.post("/api/v1/contabilidad-items/reescaneo/trabajos")
         assert trabajo.status_code == 201, f"{rol}: {trabajo.text}"
         trabajo_id = trabajo.json()["id"]
+        if rol == "ADMINISTRADOR":
+            trabajo_administrador_id = trabajo_id
         lote = client.post(f"/api/v1/contabilidad-items/reescaneo/trabajos/{trabajo_id}/lote")
         assert lote.status_code == 200, f"{rol}: {lote.text}"
         resultado = client.get(
@@ -326,6 +335,19 @@ def test_reescaneo_cubre_roles_operativos_y_confirmar_categoria_en_cartera(
         nombre="Usuario de prueba",
         cambio_clave_obligatorio=False,
     )
+    assert trabajo_administrador_id is not None
+    assert (
+        client.get(
+            f"/api/v1/contabilidad-items/reescaneo/trabajos/{trabajo_administrador_id}/resultado"
+        ).status_code
+        == 404
+    )
+    assert (
+        client.post(
+            f"/api/v1/contabilidad-items/reescaneo/trabajos/{trabajo_administrador_id}/lote"
+        ).status_code
+        == 404
+    )
     clasificada = client.patch(
         f"/api/v1/contabilidad-items/lineas/{linea.id}/clasificacion",
         json={"categoria": "Artículos de prueba", "descripcion": "Descripción larga autorizada"},
@@ -334,6 +356,48 @@ def test_reescaneo_cubre_roles_operativos_y_confirmar_categoria_en_cartera(
     assert clasificada.json()["categoria"] == "Artículos de prueba"
     assert clasificada.json()["descripcion"] == "Descripción larga autorizada"
     assert session.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 1
+
+
+def test_reescaneo_avanza_si_el_documento_actual_dejo_de_ser_elegible(
+    client: TestClient,
+    session: Session,
+    settings,
+    auth_prueba: AuthPrueba,
+) -> None:
+    auth_prueba.como_admin()
+    tenant_id = auth_prueba.contexto.tenant_id
+    primero = _documento_xml(session, settings, tenant_id, UUID(int=10))
+    no_disponible = _documento_xml(
+        session, settings, tenant_id, UUID(int=20), contenido=XML + b"\n"
+    )
+    siguiente = _documento_xml(session, settings, tenant_id, UUID(int=30), contenido=XML + b"  ")
+    session.commit()
+
+    iniciado = client.post("/api/v1/contabilidad-items/reescaneo/trabajos")
+    assert iniciado.status_code == 201, iniciado.text
+    trabajo_id = UUID(iniciado.json()["id"])
+    trabajo = session.get(TrabajoReescaneoItems, trabajo_id)
+    assert trabajo is not None
+    trabajo.cursor_documento_id = primero.id
+    trabajo.documento_actual_id = no_disponible.id
+    trabajo.documento_actual_started_at = datetime.now(UTC) - timedelta(hours=1)
+    trabajo.procesados = 1
+    no_disponible.deleted_at = datetime.now(UTC)
+    session.commit()
+
+    lote = client.post(f"/api/v1/contabilidad-items/reescaneo/trabajos/{trabajo_id}/lote")
+    assert lote.status_code == 200, lote.text
+    assert lote.json()["estado"] == "COMPLETADO_CON_OBSERVACIONES"
+    assert lote.json()["procesados"] == 3
+    assert lote.json()["errores"] == 1
+    assert (
+        session.scalar(
+            select(func.count())
+            .select_from(LineaComprobanteItem)
+            .where(LineaComprobanteItem.documento_id == siguiente.id)
+        )
+        == 1
+    )
 
 
 def test_reescaneo_rhe_extrae_concepto_y_lo_marca_para_revision(
