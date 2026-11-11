@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select
 
 from app.api.deps import AlmacenDep, OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
@@ -11,7 +11,6 @@ from app.models import (
     AdelantoERP,
     Alerta,
     AlertaManual,
-    CorreccionIA,
     CuentaAcceso,
     CuentaPagoERP,
     Documento,
@@ -30,7 +29,11 @@ from app.schemas import (
     MantenimientoVistaPreviaOut,
 )
 from app.services import auditoria
-from app.services.eliminacion import procesar_archivo_pendiente
+from app.services.eliminacion import (
+    limpiar_dependencias_documentales,
+    procesar_archivo_pendiente,
+    tablas_que_referencian,
+)
 
 router = APIRouter(prefix="/configuracion/mantenimiento", tags=["mantenimiento"])
 
@@ -257,6 +260,22 @@ def vista_previa(
     return MantenimientoVistaPreviaOut(administradores=seleccionados, totales=totales)
 
 
+def _bloquear_dependencias(
+    session: SessionDep,
+    *,
+    documento_ids: set[object] | None = None,
+    expediente_ids: set[object] | None = None,
+) -> None:
+    tablas = tablas_que_referencian(
+        session, documento_ids=documento_ids or set(), expediente_ids=expediente_ids
+    )
+    if tablas:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "La selección tiene dependencias que deben conservarse: " + ", ".join(tablas),
+        )
+
+
 @router.post("/limpiar", response_model=MantenimientoResultadoOut)
 def limpiar(
     datos: MantenimientoEjecutarIn,
@@ -346,18 +365,22 @@ def limpiar(
 
     if "documentos" in datos.tipos:
         filtros = _filtros(Documento, tenant_id, datos)
-        documentos = list(session.scalars(select(Documento).where(*filtros)))
-        ids = [item.id for item in documentos]
-        rutas_archivo = [item.ruta_storage for item in documentos]
-        if ids:
-            session.execute(
-                update(PagoERP)
-                .where(PagoERP.voucher_documento_id.in_(ids))
-                .values(voucher_documento_id=None)
+        documentos = list(
+            session.scalars(
+                select(Documento).where(*filtros).order_by(Documento.id).with_for_update()
             )
-            session.execute(delete(CorreccionIA).where(CorreccionIA.documento_id.in_(ids)))
-            session.execute(delete(Documento).where(Documento.id.in_(ids)))
-        eliminados["documentos"] = len(ids)
+        )
+        ids_documentos = {item.id for item in documentos}
+        rutas_archivo = sorted({item.ruta_storage for item in documentos})
+        if ids_documentos:
+            limpiar_dependencias_documentales(session, tenant_id, ids_documentos)
+            _bloquear_dependencias(session, documento_ids=set(ids_documentos))
+            session.execute(
+                delete(Documento).where(
+                    Documento.tenant_id == tenant_id, Documento.id.in_(ids_documentos)
+                )
+            )
+        eliminados["documentos"] = len(ids_documentos)
 
     if "expedientes" in datos.tipos:
         ids = [item.id for item in expedientes_seleccionados]
@@ -380,8 +403,13 @@ def limpiar(
                 ),
             )
         if ids:
-            session.execute(delete(Alerta).where(Alerta.expediente_id.in_(ids)))
-            session.execute(delete(AlertaManual).where(AlertaManual.expediente_id.in_(ids)))
+            _bloquear_dependencias(session, expediente_ids=set(ids))
+            for modelo in (Alerta, AlertaManual):
+                session.execute(
+                    delete(modelo).where(
+                        modelo.tenant_id == tenant_id, modelo.expediente_id.in_(ids)
+                    )
+                )
             session.execute(delete(Expediente).where(Expediente.id.in_(ids)))
         eliminados["expedientes"] = len(ids)
 

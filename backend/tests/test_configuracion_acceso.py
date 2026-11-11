@@ -1,18 +1,27 @@
 from dataclasses import replace
 from datetime import date
 from decimal import Decimal
+from hashlib import sha256
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings
 from app.models import (
     CuentaAcceso,
     CuentaPagoERP,
+    Documento,
     Miembro,
+    PagoDocumental,
     PermisoConfigurado,
     PlanLiquidacion,
+    ReferenciaGRE,
+    RelacionDocumento,
     SolicitudRetiroMISD,
 )
+from app.services.expedientes import obtener_tenant
+from app.storage import AlmacenLocal
 from tests.conftest import AuthPrueba
 
 
@@ -52,6 +61,95 @@ def test_configuracion_acceso_es_exclusiva_de_administrador(
     assert datos["requiere_aprobacion"] is True
     assert datos["solo_correos_autorizados"] is True
     assert datos["proveedor_email_configurado"] is False
+
+
+def test_mantenimiento_elimina_mil_documentos_gre_solo_del_tenant(
+    client: TestClient,
+    auth_prueba: AuthPrueba,
+    session: Session,
+    settings: Settings,
+) -> None:
+    auth_prueba.como_admin()
+    tenant_id = auth_prueba.contexto.tenant_id
+    otro_tenant = obtener_tenant(session, "otro-tenant-gre")
+    almacen = AlmacenLocal(settings.storage_dir)
+    documentos = []
+    for indice in range(1001):
+        propietario = tenant_id if indice < 1000 else otro_tenant.id
+        contenido = str(indice % 1000).encode()
+        huella = sha256(contenido).hexdigest()
+        documento = Documento(
+            tenant_id=propietario,
+            tipo_documento="GRE",
+            estado="PENDIENTE",
+            sha256=huella,
+            nombre_original=f"guia-{indice}.xml",
+            mime_type="application/xml",
+            tamano_bytes=len(contenido),
+            ruta_storage=almacen.guardar(propietario, huella, contenido),
+        )
+        documentos.append(documento)
+    session.add_all(documentos)
+    session.flush()
+    session.add_all(
+        ReferenciaGRE(
+            tenant_id=documento.tenant_id,
+            documento_id=documento.id,
+            serie="T001",
+            correlativo=str(indice),
+            emisor_ruc="20000000001",
+            receptor_ruc="20000000002",
+        )
+        for indice, documento in enumerate(documentos)
+    )
+    session.add(
+        RelacionDocumento(
+            tenant_id=tenant_id,
+            origen_id=documentos[0].id,
+            destino_id=documentos[1].id,
+            tipo="PRUEBA",
+            evidencia="Relación de prueba",
+        )
+    )
+    session.commit()
+
+    ruta = "/api/v1/configuracion/mantenimiento"
+    seleccion = {
+        "cuenta_ids": [],
+        "incluir_sin_trazabilidad": True,
+        "tipos": ["documentos"],
+    }
+    vista = client.post(f"{ruta}/vista-previa", json=seleccion)
+    assert vista.status_code == 200, vista.text
+    assert vista.json()["totales"] == {"documentos": 1000}
+
+    pago = PagoDocumental(tenant_id=tenant_id, documento_id=documentos[0].id)
+    session.add(pago)
+    session.commit()
+    confirmacion = {**seleccion, "confirmacion": "ELIMINAR-DATOS-OPERATIVOS"}
+    bloqueado = client.post(f"{ruta}/limpiar", json=confirmacion)
+    assert bloqueado.status_code == 409, bloqueado.text
+    assert "pagos_documentales" in bloqueado.json()["detail"]
+    assert client.post(f"{ruta}/vista-previa", json=seleccion).json()["totales"] == {
+        "documentos": 1000
+    }
+    assert almacen.ruta_absoluta(documentos[0].ruta_storage).exists()
+    assert len(list(session.scalars(select(ReferenciaGRE.id)))) == 1001
+
+    session.delete(pago)
+    session.commit()
+    respuesta = client.post(f"{ruta}/limpiar", json=confirmacion)
+    assert respuesta.status_code == 200, respuesta.text
+    assert respuesta.json() == {
+        "eliminados": {"documentos": 1000},
+        "archivos_eliminados": 1000,
+    }
+    otro_documento = documentos[-1]
+    assert list(session.scalars(select(Documento.id))) == [otro_documento.id]
+    assert list(session.scalars(select(ReferenciaGRE.documento_id))) == [otro_documento.id]
+    assert session.scalar(select(RelacionDocumento.id)) is None
+    assert all(not almacen.ruta_absoluta(doc.ruta_storage).exists() for doc in documentos[:-1])
+    assert almacen.leer(otro_documento.ruta_storage) == b"0"
 
 
 def test_mantenimiento_preserva_expediente_con_historial_misd(

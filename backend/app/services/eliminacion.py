@@ -4,11 +4,19 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import select, text
+from sqlalchemy import delete, or_, select, text, update
 from sqlalchemy.orm import Session
 
-from app import item_models as _item_models  # noqa: F401 - registra sus claves foráneas.
-from app.models import Base, Documento, EliminacionArchivoPendiente
+from app.item_models import LineaComprobanteItem
+from app.models import (
+    Base,
+    CorreccionIA,
+    Documento,
+    EliminacionArchivoPendiente,
+    PagoERP,
+    ReferenciaGRE,
+    RelacionDocumento,
+)
 from app.storage import AlmacenLocal
 
 
@@ -54,17 +62,46 @@ def procesar_archivo_pendiente(
         return False
 
 
+def limpiar_dependencias_documentales(
+    session: Session, tenant_id: UUID, documento_ids: set[UUID]
+) -> None:
+    """Retira datos derivados y conserva los pagos ERP sin el adjunto retirado."""
+    session.execute(
+        delete(RelacionDocumento).where(
+            RelacionDocumento.tenant_id == tenant_id,
+            or_(
+                RelacionDocumento.origen_id.in_(documento_ids),
+                RelacionDocumento.destino_id.in_(documento_ids),
+            ),
+        )
+    )
+    for modelo in (ReferenciaGRE, CorreccionIA, LineaComprobanteItem):
+        session.execute(
+            delete(modelo).where(
+                modelo.tenant_id == tenant_id, modelo.documento_id.in_(documento_ids)
+            )
+        )
+    session.execute(
+        update(PagoERP)
+        .where(PagoERP.tenant_id == tenant_id, PagoERP.voucher_documento_id.in_(documento_ids))
+        .values(voucher_documento_id=None)
+    )
+
+
 def tablas_que_referencian(
     session: Session,
     *,
     documento_ids: set[object],
     expediente_id: object | None = None,
+    expediente_ids: set[object] | None = None,
 ) -> list[str]:
     """Devuelve tablas dependientes; no modifica datos ni permite borrados parciales."""
     objetivos: dict[str, set[object]] = {}
     if documento_ids:
         objetivos["documentos"] = documento_ids
-    if expediente_id is not None:
+    if expediente_ids:
+        objetivos["expedientes"] = expediente_ids
+    elif expediente_id is not None:
         objetivos["expedientes"] = {expediente_id}
 
     bloqueadas: set[str] = set()
@@ -78,11 +115,10 @@ def tablas_que_referencian(
                 ids = objetivos.get(clave.column.table.name)
                 if not ids:
                     continue
-                if (
-                    expediente_id is not None
-                    and clave.column.table.name == "expedientes"
-                    and tabla.name in {"alertas", "alertas_manuales"}
-                ):
+                if clave.column.table.name == "expedientes" and tabla.name in {
+                    "alertas",
+                    "alertas_manuales",
+                }:
                     continue
                 existe = session.scalar(select(tabla.c["id"]).where(columna.in_(ids)).limit(1))
                 if existe is not None:

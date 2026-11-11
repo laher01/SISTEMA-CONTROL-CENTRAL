@@ -11,7 +11,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, sta
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from pypdf import PdfReader
-from sqlalchemy import and_, case, delete, false, func, or_, select, update
+from sqlalchemy import and_, case, delete, false, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, selectinload
 from starlette.concurrency import run_in_threadpool
@@ -25,7 +25,6 @@ from app.models import (
     AlertaManual,
     Auditoria,
     ChatMensaje,
-    CorreccionIA,
     CuentaAcceso,
     Documento,
     EliminacionArchivoPendiente,
@@ -65,6 +64,7 @@ from app.services.automatizacion_documental import (
 from app.services.cache_ocr import eliminar_cache_ocr, procesar_con_cache
 from app.services.eliminacion import (
     bloquear_clave_archivo,
+    limpiar_dependencias_documentales,
     procesar_archivo_pendiente,
 )
 from app.services.expedientes import (
@@ -1654,25 +1654,7 @@ def eliminar_documento(
     expediente = documento.expediente
     # La baja es operativa y definitiva. Se limpian relaciones derivadas; si el
     # documento era comprobante de pago se conserva el pago sin su archivo adjunto.
-    from app.item_models import LineaComprobanteItem
-    from app.models import PagoERP
-
-    session.execute(
-        delete(RelacionDocumento).where(
-            (RelacionDocumento.origen_id == documento.id)
-            | (RelacionDocumento.destino_id == documento.id)
-        )
-    )
-    session.execute(delete(ReferenciaGRE).where(ReferenciaGRE.documento_id == documento.id))
-    session.execute(delete(CorreccionIA).where(CorreccionIA.documento_id == documento.id))
-    session.execute(
-        delete(LineaComprobanteItem).where(LineaComprobanteItem.documento_id == documento.id)
-    )
-    session.execute(
-        update(PagoERP)
-        .where(PagoERP.tenant_id == tenant_id, PagoERP.voucher_documento_id == documento.id)
-        .values(voucher_documento_id=None)
-    )
+    limpiar_dependencias_documentales(session, tenant_id, {documento.id})
     solicitudes_misd = set()
     if expediente is not None:
         solicitudes_misd = set(
