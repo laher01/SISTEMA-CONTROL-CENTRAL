@@ -30,6 +30,13 @@ type Resumen = {
   total_pendiente_atribucion?: string;
   pendientes_atribucion?: Array<{ responsable_id: string; responsable: string; registros: number; produccion: string }>;
 };
+type EquipoPago = {
+  gerentes: { gerente_id: string; gerente_codigo: string; gerente_nombre: string; produccion: string; comision: string }[];
+  clientes: (Fila & { gerente_id: string })[];
+  proveedores: { gerente_id: string; proveedor_id: string; gerente_nombre: string; ruc: string; razon_social: string; documentos: number; produccion: string }[];
+};
+const FILAS_RESUMIDAS = 8;
+
 type Pago = {
   id: string;
   responsable_id: string;
@@ -76,6 +83,9 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
   const [hasta, setHasta] = useState(inicial.hasta);
   const [moneda, setMoneda] = useState<"PEN" | "USD">("PEN");
   const [responsableSeleccionado, setResponsableSeleccionado] = useState("");
+  const [gerenteSeleccionado, setGerenteSeleccionado] = useState("");
+  const [desglose, setDesglose] = useState<"CLIENTES" | "PROVEEDORES">("CLIENTES");
+  const [verDetalle, setVerDetalle] = useState(false);
   const [accionPago, setAccionPago] = useState<"TOTAL" | "ADELANTO" | "POSTERGAR" | "">("");
   const [pagoSeleccionado, setPagoSeleccionado] = useState("");
   const { datos: responsablesActivos } = useDatos<FiltroOpcion[]>("/api/v1/pagos/responsables");
@@ -95,6 +105,12 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
   const { datos, error, cargando, recargar } = useDatos<Resumen>(
     conParametros("/api/v1/pagos-responsables/resumen", { desde, hasta, moneda }),
   );
+  const vistaAdmin = sesion.rol === "ADMINISTRADOR" && Boolean(responsableSeleccionado);
+  const equipo = useDatos<EquipoPago>(vistaAdmin
+    ? conParametros("/api/v1/pagos-responsables/equipo-resumen", {
+      desde, hasta, moneda, responsable_id: responsableSeleccionado,
+    })
+    : null);
   const pagos = useDatos<Pago[]>("/api/v1/pagos-responsables");
   const solicitudesCobro = useDatos<Array<{
     id: string; responsable_id: string; gerente_id: string; desde: string; hasta: string;
@@ -105,6 +121,15 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
     p.moneda === moneda && p.periodo_desde >= desde && p.periodo_hasta <= hasta
   );
   const filas = (datos?.filas ?? []).filter(f => !responsableSeleccionado || f.responsable_id === responsableSeleccionado);
+  const clientesDetalle = vistaAdmin && gerenteSeleccionado
+    ? (equipo.datos?.clientes ?? []).filter(fila => fila.gerente_id === gerenteSeleccionado)
+    : filas;
+  const proveedoresDetalle = (equipo.datos?.proveedores ?? []).filter(
+    fila => !gerenteSeleccionado || fila.gerente_id === gerenteSeleccionado,
+  );
+  const muestraProveedores = vistaAdmin && desglose === "PROVEEDORES";
+  const totalDetalle = muestraProveedores ? proveedoresDetalle.length : clientesDetalle.length;
+  const limiteDetalle = vistaAdmin && !verDetalle ? FILAS_RESUMIDAS : totalDetalle;
   const detalleHistorico = (datos?.detalle_historico_clientes ?? []).filter(f => !responsableSeleccionado || f.responsable_id === responsableSeleccionado);
   const produccionResponsable = filas.reduce((total, f) => total + Number(f.produccion), 0);
   const comisionResponsable = filas.reduce((total, f) => total + Number(f.comision), 0);
@@ -155,6 +180,7 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
       setMotivo("");
       recargar();
       setHistorial("");
+      if (vistaAdmin) equipo.recargar();
       setMensaje("Porcentaje actualizado y registrado en auditoría.");
     } catch (e) {
       setMensaje(e instanceof Error ? e.message : String(e));
@@ -269,7 +295,12 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
     <div className="filtros">
       <label>Responsable activo
         <select aria-label="Seleccionar Responsable" value={responsableSeleccionado}
-          onChange={e => setResponsableSeleccionado(e.target.value)}>
+          onChange={e => {
+            setResponsableSeleccionado(e.target.value);
+            setGerenteSeleccionado("");
+            setDesglose("CLIENTES");
+            setVerDetalle(false);
+          }}>
           <option value="">Todos los Responsables</option>
           {(responsablesActivos ?? []).map(r => <option key={r.id} value={r.id}>
             {r.codigo} · {r.nombre}
@@ -312,13 +343,46 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
       </>}
     </section>}
     {mensaje && <p role="status">{mensaje}</p>}
+    {vistaAdmin && <section className="panel-configuracion">
+      <h4>Gerentes vinculados al Responsable</h4>
+      {equipo.cargando && <p role="status">Cargando Gerentes vinculados…</p>}
+      {equipo.error && <p role="alert">{equipo.error}</p>}
+      {equipo.datos?.gerentes.length === 0 && <p>El Responsable no tiene Gerentes vinculados activos.</p>}
+      {Boolean(equipo.datos?.gerentes.length) && <label>Gerencia
+        <select value={gerenteSeleccionado} onChange={e => {
+          setGerenteSeleccionado(e.target.value);
+          setVerDetalle(false);
+        }}>
+          <option value="">Resumen del Responsable</option>
+          {equipo.datos?.gerentes.map(g => <option key={g.gerente_id} value={g.gerente_id}>
+            {g.gerente_codigo} · {g.gerente_nombre} · {formatearMonto(moneda, g.comision)} de comisión
+          </option>)}
+        </select>
+      </label>}
+      <div className="acciones" aria-label="Desglose del Responsable">
+        <button type="button" aria-pressed={desglose === "PROVEEDORES"} onClick={() => {
+          setDesglose("PROVEEDORES"); setVerDetalle(false);
+        }}>Proveedores</button>
+        <button type="button" aria-pressed={desglose === "CLIENTES"} onClick={() => {
+          setDesglose("CLIENTES"); setVerDetalle(false);
+        }}>Clientes</button>
+      </div>
+    </section>}
+    {muestraProveedores ? <div className="tabla-responsive"><table>
+      <thead><tr><th>Proveedor</th><th>Gerente</th><th>Expedientes</th><th>Producción</th></tr></thead>
+      <tbody>{proveedoresDetalle.slice(0, limiteDetalle).map(fila => <tr key={`${fila.gerente_id}:${fila.proveedor_id}`}>
+        <td>{fila.razon_social}<small className="bloque tenue">{fila.ruc}</small></td>
+        <td>{fila.gerente_nombre}</td><td>{fila.documentos}</td>
+        <td>{formatearMonto(moneda, fila.produccion)}</td>
+      </tr>)}</tbody>
+    </table></div> :
     <div className="tabla-responsive"><table>
       <thead><tr>
         <th>Responsable</th><th>Empresa receptora / Cliente</th><th>Producción</th>
         <th>% Comisión</th><th>Agente de retención</th><th>Total comisión</th>
         <th>Pedido</th><th>Exceso</th><th>Acciones</th>
       </tr></thead>
-      <tbody>{filas.map((fila) => {
+      <tbody>{clientesDetalle.slice(0, limiteDetalle).map((fila) => {
         const llave = `${fila.responsable_id}:${fila.cliente_id}`;
         const editar = editando === llave;
         return <tr key={llave}>
@@ -349,7 +413,11 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
           </td>
         </tr>;
       })}</tbody>
-    </table></div>
+    </table></div>}
+    {vistaAdmin && !equipo.cargando && !equipo.error && totalDetalle === 0 && <p>Sin registros para esta selección.</p>}
+    {vistaAdmin && totalDetalle > FILAS_RESUMIDAS && <button type="button" onClick={() => setVerDetalle(!verDetalle)}>
+      {verDetalle ? "Ver resumen" : `Ver las ${totalDetalle} filas`}
+    </button>}
     {puedeProgramar && responsables.map(([id, nombre]) => {
       const f = filas.filter((fila) => fila.responsable_id === id);
       const produccion = f.reduce((total, fila) => total + Number(fila.produccion), 0);

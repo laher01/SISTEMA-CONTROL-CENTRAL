@@ -515,16 +515,26 @@ def resumen_equipo_responsable(
     hasta: date,
     moneda: str = "PEN",
     gerente_ids: list[uuid.UUID] = Query(default=[]),
+    responsable_id: uuid.UUID | None = None,
 ) -> dict[str, object]:
     """Consulta por gerente, clientes, proveedores y Usuarios de referencia."""
-    if auth.rol != RolMiembro.RESPONSABLE or auth.miembro_id is None:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable")
+    vista_admin = auth.rol == RolMiembro.ADMINISTRADOR
+    if vista_admin:
+        if responsable_id is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Seleccione un Responsable")
+        _responsable(session, tenant_id, responsable_id)
+    elif auth.rol == RolMiembro.RESPONSABLE and auth.miembro_id is not None:
+        if responsable_id is not None and responsable_id != auth.miembro_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Fuera de su equipo")
+        responsable_id = auth.miembro_id
+    else:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable o Administrador")
     _periodo(desde, hasta, moneda)
-    disponibles = _gerentes_de_responsable(session, tenant_id, auth.miembro_id)
+    disponibles = _gerentes_de_responsable(session, tenant_id, responsable_id)
     by_id = {g.id: g for g in disponibles}
     elegidos = gerente_ids or list(by_id)
     if (
-        not elegidos
+        (not elegidos and not vista_admin)
         or len(elegidos) != len(set(elegidos))
         or any(gid not in by_id for gid in elegidos)
     ):
@@ -535,7 +545,7 @@ def resumen_equipo_responsable(
     clientes: list[dict[str, object]] = []
     gerentes: list[dict[str, object]] = []
     for gerente_id in elegidos:
-        calculo = _calculo(session, tenant_id, desde, hasta, moneda, auth.miembro_id, gerente_id)
+        calculo = _calculo(session, tenant_id, desde, hasta, moneda, responsable_id, gerente_id)
         filas = calculo["filas"]
         assert isinstance(filas, list)
         gerentes.append(
@@ -581,7 +591,7 @@ def resumen_equipo_responsable(
                 Expediente.pendiente_aprobacion.is_(False),
                 Miembro.tenant_id == tenant_id,
                 Miembro.rol == RolMiembro.USUARIO,
-                Miembro.responsable_id == auth.miembro_id,
+                Miembro.responsable_id == responsable_id,
                 Miembro.deleted_at.is_(None),
                 Empresa.tenant_id == tenant_id,
                 Empresa.deleted_at.is_(None),
@@ -603,6 +613,9 @@ def resumen_equipo_responsable(
         for gid, pid, ruc, nombre, cantidad, total in resumen_proveedores
         if gid in by_id
     ]
+
+    if vista_admin:
+        return {"gerentes": gerentes, "clientes": clientes, "proveedores": proveedores}
 
     # Hacer visibles expedientes sin atribución única y receptores aún no
     # autorizados. Ninguno se suma hasta que la causa esté resuelta.
@@ -656,7 +669,7 @@ def resumen_equipo_responsable(
                 Expediente.moneda == moneda,
                 Miembro.tenant_id == tenant_id,
                 Miembro.rol == RolMiembro.USUARIO,
-                Miembro.responsable_id == auth.miembro_id,
+                Miembro.responsable_id == responsable_id,
                 Miembro.deleted_at.is_(None),
                 receptor_pendiente.tenant_id == tenant_id,
                 receptor_pendiente.deleted_at.is_(None),
@@ -735,7 +748,7 @@ def resumen_equipo_responsable(
                 Empresa.deleted_at.is_(None),
                 Miembro.tenant_id == tenant_id,
                 Miembro.rol == RolMiembro.USUARIO,
-                Miembro.responsable_id == auth.miembro_id,
+                Miembro.responsable_id == responsable_id,
                 Miembro.deleted_at.is_(None),
             )
             .group_by(
