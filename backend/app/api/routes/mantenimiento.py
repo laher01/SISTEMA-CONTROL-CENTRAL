@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select
 
 from app.api.deps import AlmacenDep, OperativeAuthDep, SessionDep, TenantDep
 from app.enums import RolMiembro
@@ -11,7 +11,6 @@ from app.models import (
     AdelantoERP,
     Alerta,
     AlertaManual,
-    CorreccionIA,
     CuentaAcceso,
     CuentaPagoERP,
     Documento,
@@ -30,7 +29,11 @@ from app.schemas import (
     MantenimientoVistaPreviaOut,
 )
 from app.services import auditoria
-from app.services.eliminacion import procesar_archivo_pendiente
+from app.services.eliminacion import (
+    limpiar_dependencias_documentales,
+    procesar_archivo_pendiente,
+    tablas_que_referencian,
+)
 
 router = APIRouter(prefix="/configuracion/mantenimiento", tags=["mantenimiento"])
 
@@ -53,6 +56,19 @@ def _solo_administrador(rol: str) -> None:
 
 
 def _validar_seleccion(datos: MantenimientoSeleccionIn) -> None:
+    if datos.todos_los_documentos:
+        if (
+            datos.tipos != ["documentos"]
+            or datos.cuenta_ids
+            or datos.incluir_sin_trazabilidad
+            or datos.fecha_desde is not None
+            or datos.fecha_hasta is not None
+        ):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "Todos los documentos solo admite el tipo Documentos, sin cuentas ni fechas",
+            )
+        return
     desconocidos = sorted(set(datos.tipos) - set(TIPOS))
     if desconocidos:
         raise HTTPException(
@@ -77,6 +93,8 @@ def _filtros(
     datos: MantenimientoSeleccionIn,
 ) -> list[Any]:
     filtros: list[Any] = [modelo.tenant_id == tenant_id]
+    if datos.todos_los_documentos:
+        return filtros
     creadores: list[Any] = []
     if datos.cuenta_ids:
         creadores.append(modelo.creado_por_cuenta_id.in_(datos.cuenta_ids))
@@ -248,6 +266,8 @@ def vista_previa(
         nombre: _contar(session, TIPOS[nombre], _filtros(TIPOS[nombre], tenant_id, datos))
         for nombre in datos.tipos
     }
+    if datos.todos_los_documentos:
+        return MantenimientoVistaPreviaOut(administradores=[], totales=totales)
     seleccionados = [
         item
         for item in administradores(session, tenant_id, auth)
@@ -255,6 +275,22 @@ def vista_previa(
         or (item.cuenta_id is None and datos.incluir_sin_trazabilidad)
     ]
     return MantenimientoVistaPreviaOut(administradores=seleccionados, totales=totales)
+
+
+def _bloquear_dependencias(
+    session: SessionDep,
+    *,
+    documento_ids: set[object] | None = None,
+    expediente_ids: set[object] | None = None,
+) -> None:
+    tablas = tablas_que_referencian(
+        session, documento_ids=documento_ids or set(), expediente_ids=expediente_ids
+    )
+    if tablas:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "La selección tiene dependencias que deben conservarse: " + ", ".join(tablas),
+        )
 
 
 @router.post("/limpiar", response_model=MantenimientoResultadoOut)
@@ -267,7 +303,12 @@ def limpiar(
 ) -> MantenimientoResultadoOut:
     _solo_administrador(auth.rol)
     _validar_seleccion(datos)
-    if datos.confirmacion != "ELIMINAR-DATOS-OPERATIVOS":
+    frase = (
+        "ELIMINAR-TODOS-LOS-DOCUMENTOS"
+        if datos.todos_los_documentos
+        else "ELIMINAR-DATOS-OPERATIVOS"
+    )
+    if datos.confirmacion != frase:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "La frase de confirmación no coincide",
@@ -346,18 +387,22 @@ def limpiar(
 
     if "documentos" in datos.tipos:
         filtros = _filtros(Documento, tenant_id, datos)
-        documentos = list(session.scalars(select(Documento).where(*filtros)))
-        ids = [item.id for item in documentos]
-        rutas_archivo = [item.ruta_storage for item in documentos]
-        if ids:
-            session.execute(
-                update(PagoERP)
-                .where(PagoERP.voucher_documento_id.in_(ids))
-                .values(voucher_documento_id=None)
+        documentos = list(
+            session.scalars(
+                select(Documento).where(*filtros).order_by(Documento.id).with_for_update()
             )
-            session.execute(delete(CorreccionIA).where(CorreccionIA.documento_id.in_(ids)))
-            session.execute(delete(Documento).where(Documento.id.in_(ids)))
-        eliminados["documentos"] = len(ids)
+        )
+        ids_documentos = {item.id for item in documentos}
+        rutas_archivo = sorted({item.ruta_storage for item in documentos})
+        if ids_documentos:
+            limpiar_dependencias_documentales(session, tenant_id, ids_documentos)
+            _bloquear_dependencias(session, documento_ids=set(ids_documentos))
+            session.execute(
+                delete(Documento).where(
+                    Documento.tenant_id == tenant_id, Documento.id.in_(ids_documentos)
+                )
+            )
+        eliminados["documentos"] = len(ids_documentos)
 
     if "expedientes" in datos.tipos:
         ids = [item.id for item in expedientes_seleccionados]
@@ -380,8 +425,13 @@ def limpiar(
                 ),
             )
         if ids:
-            session.execute(delete(Alerta).where(Alerta.expediente_id.in_(ids)))
-            session.execute(delete(AlertaManual).where(AlertaManual.expediente_id.in_(ids)))
+            _bloquear_dependencias(session, expediente_ids=set(ids))
+            for modelo in (Alerta, AlertaManual):
+                session.execute(
+                    delete(modelo).where(
+                        modelo.tenant_id == tenant_id, modelo.expediente_id.in_(ids)
+                    )
+                )
             session.execute(delete(Expediente).where(Expediente.id.in_(ids)))
         eliminados["expedientes"] = len(ids)
 
@@ -393,6 +443,7 @@ def limpiar(
         tenant_id,
         {
             "actor": auth.codigo,
+            "todos_los_documentos": datos.todos_los_documentos,
             "cuenta_ids": [str(item) for item in datos.cuenta_ids],
             "incluye_sin_trazabilidad": datos.incluir_sin_trazabilidad,
             "tipos": datos.tipos,

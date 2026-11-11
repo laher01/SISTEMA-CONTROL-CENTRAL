@@ -1,6 +1,6 @@
 import InspeccionTenant from "./InspeccionTenant";
 import PanelPaginaWeb from "./PanelPaginaWeb";
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 
 import { eliminar, enviarJson, obtener, useDatos } from "../api";
 import type {
@@ -576,6 +576,7 @@ function MantenimientoPanel() {
   const administradores = useDatos<MantenimientoAdministrador[]>(
     "/api/v1/configuracion/mantenimiento/administradores",
   );
+  const [todosLosDocumentos, setTodosLosDocumentos] = useState(false);
   const [cuentas, setCuentas] = useState<string[]>([]);
   const [historicos, setHistoricos] = useState(false);
   const [tipos, setTipos] = useState<string[]>([
@@ -591,6 +592,10 @@ function MantenimientoPanel() {
   const [vista, setVista] = useState<MantenimientoVistaPrevia | null>(null);
   const [confirmacion, setConfirmacion] = useState("");
   const [mensaje, setMensaje] = useState("");
+  const [errorLimpieza, setErrorLimpieza] = useState("");
+  const [vistaSeleccion, setVistaSeleccion] = useState("");
+  const [ocupado, setOcupado] = useState<"vista" | "limpieza" | null>(null);
+  const solicitudActiva = useRef(false);
   const [diagnostico, setDiagnostico] = useState<{
     documentos_revisados: number;
     documentos_sin_original: number;
@@ -610,36 +615,56 @@ function MantenimientoPanel() {
     }
   };
 
-  const payload = () => ({
-    cuenta_ids: cuentas,
-    incluir_sin_trazabilidad: historicos,
-    tipos,
-    fecha_desde: desde || null,
-    fecha_hasta: hasta || null,
-  });
+  const fraseConfirmacion = todosLosDocumentos
+    ? "ELIMINAR-TODOS-LOS-DOCUMENTOS"
+    : "ELIMINAR-DATOS-OPERATIVOS";
+  const seleccion = todosLosDocumentos
+    ? { todos_los_documentos: true, tipos: ["documentos"] }
+    : {
+      cuenta_ids: cuentas,
+      incluir_sin_trazabilidad: historicos,
+      tipos,
+      fecha_desde: desde || null,
+      fecha_hasta: hasta || null,
+    };
+  const claveSeleccion = JSON.stringify(seleccion);
 
   const previsualizar = async () => {
+    if (solicitudActiva.current) return;
+    solicitudActiva.current = true;
+    setOcupado("vista");
     setMensaje("");
+    setErrorLimpieza("");
+    setVista(null);
+    setConfirmacion("");
     try {
       const datos = await enviarJson<MantenimientoVistaPrevia>(
         "/api/v1/configuracion/mantenimiento/vista-previa",
         "POST",
-        payload(),
+        seleccion,
       );
       setVista(datos);
+      setVistaSeleccion(claveSeleccion);
     } catch (err) {
-      setVista(null);
-      setMensaje(err instanceof Error ? err.message : String(err));
+      setErrorLimpieza(err instanceof Error ? err.message : String(err));
+    } finally {
+      solicitudActiva.current = false;
+      setOcupado(null);
     }
   };
 
   const ejecutar = async () => {
+    if (solicitudActiva.current || !vista || vistaSeleccion !== claveSeleccion
+      || confirmacion !== fraseConfirmacion) return;
+    solicitudActiva.current = true;
+    setOcupado("limpieza");
     setMensaje("");
+    setErrorLimpieza("");
     try {
       const resultado = await enviarJson<MantenimientoResultado>(
         "/api/v1/configuracion/mantenimiento/limpiar",
         "POST",
-        { ...payload(), confirmacion },
+        { ...seleccion, confirmacion },
       );
       setMensaje(
         "Limpieza completada: " +
@@ -652,7 +677,10 @@ function MantenimientoPanel() {
       setConfirmacion("");
       administradores.recargar();
     } catch (err) {
-      setMensaje(err instanceof Error ? err.message : String(err));
+      setErrorLimpieza(err instanceof Error ? err.message : String(err));
+    } finally {
+      solicitudActiva.current = false;
+      setOcupado(null);
     }
   };
 
@@ -660,8 +688,7 @@ function MantenimientoPanel() {
     <section className="panel-configuracion">
       <h3>Mantenimiento · Zona crítica</h3>
       <p className="tenue">
-        Exclusivo del ADMINISTRADOR del tenant. Selecciona primero el administrador responsable,
-        los tipos de registros y el rango de fechas. La auditoría de la limpieza se conserva.
+        Exclusivo del ADMINISTRADOR del tenant. Elige el alcance y revisa el conteo antes de eliminar.
       </p>
 
       <div className="panel-configuracion">
@@ -680,9 +707,26 @@ function MantenimientoPanel() {
         )}
       </div>
       {administradores.error && <p className="error">{administradores.error}</p>}
-      {mensaje && <p className="resumen-carga">{mensaje}</p>}
 
-      <h4>1. Administradores</h4>
+
+      <fieldset disabled={ocupado !== null} style={{ border: 0, padding: 0, margin: 0 }}>
+      <label>
+        Alcance
+        <select value={todosLosDocumentos ? "documentos" : "selectiva"} onChange={(e) => {
+          setTodosLosDocumentos(e.target.value === "documentos");
+          setVista(null);
+          setConfirmacion("");
+          setErrorLimpieza("");
+          setMensaje("");
+        }}>
+          <option value="selectiva">Limpieza selectiva</option>
+          <option value="documentos">Todos los documentos del tenant</option>
+        </select>
+      </label>
+      {todosLosDocumentos ? (
+        <p>Incluye todas las cuentas, los registros sin trazabilidad y todas las fechas. El borrado es definitivo.</p>
+      ) : <>
+      <h4>Administradores</h4>
       <table>
         <thead>
           <tr>
@@ -727,7 +771,7 @@ function MantenimientoPanel() {
         </tbody>
       </table>
 
-      <h4>2. Qué se eliminará</h4>
+      <h4>Qué se eliminará</h4>
       <div className="acciones">
         {TIPOS_MANTENIMIENTO.map(([valor, etiqueta]) => (
           <label key={valor}>
@@ -756,12 +800,15 @@ function MantenimientoPanel() {
           Hasta
           <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
         </label>
-        <button onClick={() => void previsualizar()}>Previsualizar limpieza</button>
       </div>
+      </>}
+      <button onClick={() => void previsualizar()}>{ocupado === "vista" ? "Preparando vista previa…" : "Previsualizar limpieza"}</button>
 
-      {vista && (
+      </fieldset>
+
+      {vista && vistaSeleccion === claveSeleccion && (
         <>
-          <h4>3. Vista previa</h4>
+          <h4>Vista previa</h4>
           <table>
             <thead><tr><th>Tipo</th><th>Total seleccionado</th></tr></thead>
             <tbody>
@@ -772,23 +819,34 @@ function MantenimientoPanel() {
           </table>
 
           <p className="tenue">
-            Para ejecutar escribe exactamente: <strong>ELIMINAR-DATOS-OPERATIVOS</strong>
+            Para ejecutar escribe exactamente: <strong>{fraseConfirmacion}</strong>
           </p>
           <div className="acciones">
             <input
+              disabled={ocupado !== null}
               value={confirmacion}
               onChange={(e) => setConfirmacion(e.target.value)}
-              placeholder="ELIMINAR-DATOS-OPERATIVOS"
+              aria-label="Frase de confirmación"
+              placeholder={fraseConfirmacion}
             />
             <button
-              disabled={confirmacion !== "ELIMINAR-DATOS-OPERATIVOS"}
+              disabled={ocupado !== null || confirmacion !== fraseConfirmacion || (todosLosDocumentos && !vista.totales.documentos)}
               onClick={() => void ejecutar()}
             >
-              Eliminar registros seleccionados
+              {ocupado === "limpieza" ? "Limpieza en curso…" : todosLosDocumentos ? "Eliminar todos los documentos" : "Eliminar registros seleccionados"}
             </button>
           </div>
         </>
       )}
+      {ocupado === "limpieza" && (
+        <div role="status">
+          <label>
+            Esperando la respuesta del servidor <progress />
+          </label>
+        </div>
+      )}
+      {errorLimpieza && <p role="alert" className="error">{errorLimpieza}</p>}
+      {mensaje && <p role="status" className="resumen-carga">{mensaje}</p>}
     </section>
   );
 }
