@@ -616,6 +616,21 @@ def test_resumen_responsable_por_gerente_y_solicitud_de_cobro(
     )
     assert fuera_de_vinculo.status_code == 422
     auth_prueba.contexto = contexto_gerente
+    vista_gerente = client.get(
+        "/api/v1/pagos-responsables/equipo-resumen",
+        params={**params, "responsable_id": str(responsable.id)},
+    )
+    assert vista_gerente.status_code == 200, vista_gerente.text
+    assert vista_gerente.json() == vista_admin.json()
+    otra_gerencia = client.get(
+        "/api/v1/pagos-responsables/equipo-resumen",
+        params={
+            **params,
+            "responsable_id": str(responsable.id),
+            "gerente_ids": str(gerente_alterno.id),
+        },
+    )
+    assert otra_gerencia.status_code == 422
     recibidas = client.get("/api/v1/pagos-responsables/solicitudes-cobro")
     assert recibidas.status_code == 200, recibidas.text
     assert recibidas.json()[0]["id"] == solicitud.json()["id"]

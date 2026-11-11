@@ -105,8 +105,9 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
   const { datos, error, cargando, recargar } = useDatos<Resumen>(
     conParametros("/api/v1/pagos-responsables/resumen", { desde, hasta, moneda }),
   );
-  const vistaAdmin = sesion.rol === "ADMINISTRADOR" && Boolean(responsableSeleccionado);
-  const equipo = useDatos<EquipoPago>(vistaAdmin
+  const esGerente = sesion.rol === "GERENTE";
+  const vistaResumida = (sesion.rol === "ADMINISTRADOR" || esGerente) && Boolean(responsableSeleccionado);
+  const equipo = useDatos<EquipoPago>(vistaResumida
     ? conParametros("/api/v1/pagos-responsables/equipo-resumen", {
       desde, hasta, moneda, responsable_id: responsableSeleccionado,
     })
@@ -121,15 +122,15 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
     p.moneda === moneda && p.periodo_desde >= desde && p.periodo_hasta <= hasta
   );
   const filas = (datos?.filas ?? []).filter(f => !responsableSeleccionado || f.responsable_id === responsableSeleccionado);
-  const clientesDetalle = vistaAdmin && gerenteSeleccionado
-    ? (equipo.datos?.clientes ?? []).filter(fila => fila.gerente_id === gerenteSeleccionado)
+  const clientesDetalle = vistaResumida && (esGerente || gerenteSeleccionado)
+    ? (equipo.datos?.clientes ?? []).filter(fila => !gerenteSeleccionado || fila.gerente_id === gerenteSeleccionado)
     : filas;
   const proveedoresDetalle = (equipo.datos?.proveedores ?? []).filter(
     fila => !gerenteSeleccionado || fila.gerente_id === gerenteSeleccionado,
   );
-  const muestraProveedores = vistaAdmin && desglose === "PROVEEDORES";
+  const muestraProveedores = vistaResumida && desglose === "PROVEEDORES";
   const totalDetalle = muestraProveedores ? proveedoresDetalle.length : clientesDetalle.length;
-  const limiteDetalle = vistaAdmin && !verDetalle ? FILAS_RESUMIDAS : totalDetalle;
+  const limiteDetalle = vistaResumida && !verDetalle ? FILAS_RESUMIDAS : totalDetalle;
   const detalleHistorico = (datos?.detalle_historico_clientes ?? []).filter(f => !responsableSeleccionado || f.responsable_id === responsableSeleccionado);
   const produccionResponsable = filas.reduce((total, f) => total + Number(f.produccion), 0);
   const comisionResponsable = filas.reduce((total, f) => total + Number(f.comision), 0);
@@ -180,7 +181,7 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
       setMotivo("");
       recargar();
       setHistorial("");
-      if (vistaAdmin) equipo.recargar();
+      if (vistaResumida) equipo.recargar();
       setMensaje("Porcentaje actualizado y registrado en auditoría.");
     } catch (e) {
       setMensaje(e instanceof Error ? e.message : String(e));
@@ -343,12 +344,15 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
       </>}
     </section>}
     {mensaje && <p role="status">{mensaje}</p>}
-    {vistaAdmin && <section className="panel-configuracion">
-      <h4>Gerentes vinculados al Responsable</h4>
+    {vistaResumida && <section className="panel-configuracion">
+      <h4>{esGerente ? "Mi Gerencia" : "Gerentes vinculados al Responsable"}</h4>
       {equipo.cargando && <p role="status">Cargando Gerentes vinculados…</p>}
       {equipo.error && <p role="alert">{equipo.error}</p>}
-      {equipo.datos?.gerentes.length === 0 && <p>El Responsable no tiene Gerentes vinculados activos.</p>}
-      {Boolean(equipo.datos?.gerentes.length) && <label>Gerencia
+      {equipo.datos?.gerentes.length === 0 && <p>{esGerente ? "Este Responsable no tiene vínculo activo con tu Gerencia." : "El Responsable no tiene Gerentes vinculados activos."}</p>}
+      {esGerente && equipo.datos?.gerentes.map(g => <p key={g.gerente_id}>
+        {g.gerente_codigo} · {g.gerente_nombre}
+      </p>)}
+      {!esGerente && Boolean(equipo.datos?.gerentes.length) && <label>Gerencia
         <select value={gerenteSeleccionado} onChange={e => {
           setGerenteSeleccionado(e.target.value);
           setVerDetalle(false);
@@ -414,8 +418,8 @@ export default function ComisionesResponsables({ sesion }: { sesion: SesionActua
         </tr>;
       })}</tbody>
     </table></div>}
-    {vistaAdmin && !equipo.cargando && !equipo.error && totalDetalle === 0 && <p>Sin registros para esta selección.</p>}
-    {vistaAdmin && totalDetalle > FILAS_RESUMIDAS && <button type="button" onClick={() => setVerDetalle(!verDetalle)}>
+    {vistaResumida && !equipo.cargando && !equipo.error && totalDetalle === 0 && <p>Sin registros para esta selección.</p>}
+    {vistaResumida && totalDetalle > FILAS_RESUMIDAS && <button type="button" onClick={() => setVerDetalle(!verDetalle)}>
       {verDetalle ? "Ver resumen" : `Ver las ${totalDetalle} filas`}
     </button>}
     {puedeProgramar && responsables.map(([id, nombre]) => {

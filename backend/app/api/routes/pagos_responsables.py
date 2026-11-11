@@ -518,8 +518,8 @@ def resumen_equipo_responsable(
     responsable_id: uuid.UUID | None = None,
 ) -> dict[str, object]:
     """Consulta por gerente, clientes, proveedores y Usuarios de referencia."""
-    vista_admin = auth.rol == RolMiembro.ADMINISTRADOR
-    if vista_admin:
+    vista_pago = auth.rol in (RolMiembro.ADMINISTRADOR, RolMiembro.GERENTE)
+    if vista_pago:
         if responsable_id is None:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Seleccione un Responsable")
         _responsable(session, tenant_id, responsable_id)
@@ -528,13 +528,15 @@ def resumen_equipo_responsable(
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Fuera de su equipo")
         responsable_id = auth.miembro_id
     else:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Responsable o Administrador")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Rol sin acceso a este resumen")
     _periodo(desde, hasta, moneda)
     disponibles = _gerentes_de_responsable(session, tenant_id, responsable_id)
+    if auth.rol == RolMiembro.GERENTE:
+        disponibles = [g for g in disponibles if g.id == auth.miembro_id]
     by_id = {g.id: g for g in disponibles}
     elegidos = gerente_ids or list(by_id)
     if (
-        (not elegidos and not vista_admin)
+        (not elegidos and not vista_pago)
         or len(elegidos) != len(set(elegidos))
         or any(gid not in by_id for gid in elegidos)
     ):
@@ -614,7 +616,7 @@ def resumen_equipo_responsable(
         if gid in by_id
     ]
 
-    if vista_admin:
+    if vista_pago:
         return {"gerentes": gerentes, "clientes": clientes, "proveedores": proveedores}
 
     # Hacer visibles expedientes sin atribución única y receptores aún no
