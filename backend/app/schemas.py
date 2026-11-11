@@ -867,6 +867,7 @@ class MantenimientoAdministradorOut(BaseModel):
 
 
 class MantenimientoSeleccionIn(BaseModel):
+    todos_los_documentos: bool = False
     cuenta_ids: list[uuid.UUID] = []
     incluir_sin_trazabilidad: bool = False
     tipos: list[str] = Field(min_length=1)

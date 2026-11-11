@@ -56,6 +56,19 @@ def _solo_administrador(rol: str) -> None:
 
 
 def _validar_seleccion(datos: MantenimientoSeleccionIn) -> None:
+    if datos.todos_los_documentos:
+        if (
+            datos.tipos != ["documentos"]
+            or datos.cuenta_ids
+            or datos.incluir_sin_trazabilidad
+            or datos.fecha_desde is not None
+            or datos.fecha_hasta is not None
+        ):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "Todos los documentos solo admite el tipo Documentos, sin cuentas ni fechas",
+            )
+        return
     desconocidos = sorted(set(datos.tipos) - set(TIPOS))
     if desconocidos:
         raise HTTPException(
@@ -80,6 +93,8 @@ def _filtros(
     datos: MantenimientoSeleccionIn,
 ) -> list[Any]:
     filtros: list[Any] = [modelo.tenant_id == tenant_id]
+    if datos.todos_los_documentos:
+        return filtros
     creadores: list[Any] = []
     if datos.cuenta_ids:
         creadores.append(modelo.creado_por_cuenta_id.in_(datos.cuenta_ids))
@@ -251,6 +266,8 @@ def vista_previa(
         nombre: _contar(session, TIPOS[nombre], _filtros(TIPOS[nombre], tenant_id, datos))
         for nombre in datos.tipos
     }
+    if datos.todos_los_documentos:
+        return MantenimientoVistaPreviaOut(administradores=[], totales=totales)
     seleccionados = [
         item
         for item in administradores(session, tenant_id, auth)
@@ -286,7 +303,12 @@ def limpiar(
 ) -> MantenimientoResultadoOut:
     _solo_administrador(auth.rol)
     _validar_seleccion(datos)
-    if datos.confirmacion != "ELIMINAR-DATOS-OPERATIVOS":
+    frase = (
+        "ELIMINAR-TODOS-LOS-DOCUMENTOS"
+        if datos.todos_los_documentos
+        else "ELIMINAR-DATOS-OPERATIVOS"
+    )
+    if datos.confirmacion != frase:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "La frase de confirmación no coincide",
@@ -421,6 +443,7 @@ def limpiar(
         tenant_id,
         {
             "actor": auth.codigo,
+            "todos_los_documentos": datos.todos_los_documentos,
             "cuenta_ids": [str(item) for item in datos.cuenta_ids],
             "incluye_sin_trazabilidad": datos.incluir_sin_trazabilidad,
             "tipos": datos.tipos,

@@ -80,6 +80,7 @@ def test_mantenimiento_elimina_mil_documentos_gre_solo_del_tenant(
         huella = sha256(contenido).hexdigest()
         documento = Documento(
             tenant_id=propietario,
+            creado_por_cuenta_id=auth_prueba.contexto.cuenta_id if indice == 0 else None,
             tipo_documento="GRE",
             estado="PENDIENTE",
             sha256=huella,
@@ -115,18 +116,24 @@ def test_mantenimiento_elimina_mil_documentos_gre_solo_del_tenant(
 
     ruta = "/api/v1/configuracion/mantenimiento"
     seleccion = {
-        "cuenta_ids": [],
-        "incluir_sin_trazabilidad": True,
+        "todos_los_documentos": True,
         "tipos": ["documentos"],
     }
     vista = client.post(f"{ruta}/vista-previa", json=seleccion)
     assert vista.status_code == 200, vista.text
     assert vista.json()["totales"] == {"documentos": 1000}
 
+    invalida = client.post(f"{ruta}/vista-previa", json={**seleccion, "tipos": ["pagos"]})
+    assert invalida.status_code == 422
+    frase_anterior = client.post(
+        f"{ruta}/limpiar", json={**seleccion, "confirmacion": "ELIMINAR-DATOS-OPERATIVOS"}
+    )
+    assert frase_anterior.status_code == 422
+
     pago = PagoDocumental(tenant_id=tenant_id, documento_id=documentos[0].id)
     session.add(pago)
     session.commit()
-    confirmacion = {**seleccion, "confirmacion": "ELIMINAR-DATOS-OPERATIVOS"}
+    confirmacion = {**seleccion, "confirmacion": "ELIMINAR-TODOS-LOS-DOCUMENTOS"}
     bloqueado = client.post(f"{ruta}/limpiar", json=confirmacion)
     assert bloqueado.status_code == 409, bloqueado.text
     assert "pagos_documentales" in bloqueado.json()["detail"]
@@ -303,6 +310,16 @@ def test_mantenimiento_es_exclusivo_de_administrador(
     auth_prueba.como_superadmin()
     respuesta = client.get("/api/v1/configuracion/mantenimiento/administradores")
     assert respuesta.status_code == 403
+    seleccion = {"todos_los_documentos": True, "tipos": ["documentos"]}
+    ruta = "/api/v1/configuracion/mantenimiento"
+    assert client.post(f"{ruta}/vista-previa", json=seleccion).status_code == 403
+    assert (
+        client.post(
+            f"{ruta}/limpiar",
+            json={**seleccion, "confirmacion": "ELIMINAR-TODOS-LOS-DOCUMENTOS"},
+        ).status_code
+        == 403
+    )
     auth_prueba.como_admin()
     respuesta = client.get("/api/v1/configuracion/mantenimiento/administradores")
     assert respuesta.status_code == 200, respuesta.text
