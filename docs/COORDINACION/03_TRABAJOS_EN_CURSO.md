@@ -5,7 +5,7 @@
 | ID | Trabajo | Área | Responsable | Estado | Rama / PR | Archivos previstos |
 | --- | --- | --- | --- | --- | --- | --- |
 | COORD-001 | Crear Centro de Coordinación | Coordinación | Chat arquitectura SaaS | PR EN PREPARACIÓN | `docs/centro-coordinacion-saas-20261015` | `AGENTS.md`, `docs/COORDINACION/**` |
-| SAAS-001 | Consola SUPERADMIN consulta integral solo lectura | SaaS | Chat arquitectura SaaS | PROPUESTO | Sin rama | Backend/frontend SUPERADMIN (por identificar) |
+| SAAS-001 | Ficha de acceso del propietario e inspección auditada | SaaS | Chat arquitectura SaaS | EN VALIDACIÓN LOCAL | `feat/superadmin-ficha` | API administraciones, ficha de inspección y prueba de acceso |
 | SAAS-002 | Auditoría de aislamiento cross-tenant | Seguridad | Chat arquitectura SaaS | PROPUESTO | Sin rama | Servicios API, autenticación, tests (por identificar) |
 | INFRA-001 | Inventario/telemetría de VPS | Infraestructura | Chat infraestructura SaaS | PROPUESTO | Sin rama | Módulo de observabilidad (por definir) |
 | INFRA-002 | Storage escalable y afinidad por Tenant | Infraestructura | Chat infraestructura SaaS | PROPUESTO | Sin rama | Almacenamiento, modelos, migraciones (por definir) |
