@@ -214,6 +214,12 @@ def get_contexto_operativo(
             }
         )
         or (
+            request.method == "POST"
+            and request.url.path.startswith("/api/v1/responsable/pagos/")
+            and request.url.path.endswith("/confirmar")
+            and len(request.url.path.split("/")) == 7
+        )
+        or (
             request.method == "DELETE" and request.url.path.startswith("/api/v1/responsable/pagos/")
         )
         or (
