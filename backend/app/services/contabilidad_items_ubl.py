@@ -170,69 +170,41 @@ def registrar_items_pdf_estacion(
     if detectar_formato_documental(texto) == "MASYDASE_FACTURA":
         items = extraer_items_pdf_masydase(texto)
         return _registrar_lineas(session, tenant_id, documento_id, items) if items else 0
-    normal = " ".join(texto.split())
-    if not re.search(r"\bFACTURA\b", normal, re.I) or "FACTURACION.JADAL.PE" not in normal.upper():
-        return 0
-    patron = re.compile(
-        r"(?<!\d)(\d{1,6}[.,]\d{1,3})\s+\d{1,5}\s+"
-        r"(GLL|GAL)\s+(DIESEL\s+B5\s+S50)\s+"
-        r"([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)(?!\d)",
+    cabecera = re.search(
+        r"CANTIDAD\s+C[ÓO]DIGO\s+U\.?M\.?\s+DESCRIPCI[ÓO]N\s+"
+        r"VALOR\s+UNITARIO\s+PRECIO\s+UNITARIO\s+IMPORTE",
+        texto,
         re.I,
     )
-    coincidencias = list(patron.finditer(normal))
-    if len(coincidencias) != 1:
+    if not cabecera or not re.search(r"\bFACTURA\b", texto[: cabecera.start()], re.I):
         return 0
-    linea = coincidencias[0]
-    try:
-        cantidad = Decimal(linea.group(1).replace(",", "."))
-        importe = Decimal(linea.group(6).replace(",", ""))
-    except InvalidOperation:
-        return 0
-    if not (cantidad.is_finite() and cantidad > 0 and importe.is_finite() and importe > 0):
-        return 0
-    existente = session.scalar(
-        select(LineaComprobanteItem.id)
-        .where(
-            LineaComprobanteItem.tenant_id == tenant_id,
-            LineaComprobanteItem.documento_id == documento_id,
-        )
-        .limit(1)
+    patron = re.compile(
+        rf"(?P<cantidad>{_NUMERO_TABLA})\s+\S+\s+"
+        rf"(?P<unidad>[A-Z][A-Z0-9./-]{{0,39}})\s+(?P<descripcion>.+?)\s+"
+        rf"{_NUMERO_TABLA}\s+{_NUMERO_TABLA}\s+(?P<importe>{_NUMERO_TABLA})",
+        re.I,
     )
-    if existente is not None:
+    tabla = _FIN_TABLA.split(texto[cabecera.end() :], maxsplit=1)[0]
+    if re.search(r"\bFACTURA\s+ELECTR[ÓO]NICA\b", tabla, re.I):
         return 0
-    descripcion = "DIESEL B5 S50"
-    unidad = linea.group(2).upper()
-    clave = hashlib.sha256(f"{texto_normalizado(descripcion)}|{unidad}".encode()).hexdigest()
-    producto = session.scalar(
-        select(ProductoItem).where(
-            ProductoItem.tenant_id == tenant_id,
-            ProductoItem.clave_catalogo == clave,
-        )
-    )
-    if producto is None:
-        producto = ProductoItem(
-            tenant_id=tenant_id,
-            clave_catalogo=clave,
-            descripcion=descripcion,
-            categoria=sugerir_categoria(descripcion),
-            clasificacion_confirmada=False,
-            activo=True,
-        )
-        session.add(producto)
-        session.flush()
-    session.add(
-        LineaComprobanteItem(
-            tenant_id=tenant_id,
-            documento_id=documento_id,
-            producto_id=producto.id,
-            numero_linea=1,
-            descripcion_original=descripcion,
-            cantidad=cantidad,
-            unidad=unidad,
-            importe_linea=importe,
-        )
-    )
-    return 1
+    items = []
+    for numero, fila in enumerate(tabla.strip().splitlines(), 1):
+        campos = patron.fullmatch(" ".join(fila.split()))
+        if campos is None:
+            continue
+        cantidad = Decimal(campos["cantidad"].replace(",", ""))
+        importe = Decimal(campos["importe"].replace(",", ""))
+        if 0 < cantidad < Decimal("100000000000000") and importe < Decimal("10000000000000000"):
+            items.append(
+                ItemUBL(
+                    numero,
+                    campos["descripcion"][:2000],
+                    cantidad,
+                    campos["unidad"].upper(),
+                    importe,
+                )
+            )
+    return _registrar_lineas(session, tenant_id, documento_id, items) if items else 0
 
 
 _NUMERO_TABLA = r"(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?"

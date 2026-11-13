@@ -204,6 +204,7 @@ def facturas_por_producto(
     limite: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0, le=1_000_000),
     vista_catalogo: bool = False,
+    solo_totales: bool = False,
 ) -> list[dict[str, str]]:
     """Documentos originales que contienen el producto; solo ámbito autorizado."""
     if desde is not None and hasta is not None and desde > hasta:
@@ -304,7 +305,7 @@ def facturas_por_producto(
         consulta = consulta.where(filtro_emisor)
     if filtro_receptor is not None:
         consulta = consulta.where(filtro_receptor)
-    if vista_catalogo:
+    if vista_catalogo or solo_totales:
         facturas = (
             consulta.with_only_columns(
                 Expediente.id.label("expediente_id"),
@@ -323,6 +324,15 @@ def facturas_por_producto(
             .distinct()
             .subquery()
         )
+        if solo_totales:
+            return [
+                {"moneda": moneda, "importe_total": str(total), "comprobantes": str(cantidad)}
+                for moneda, total, cantidad in session.execute(
+                    select(facturas.c.moneda, func.sum(facturas.c.importe_total), func.count())
+                    .group_by(facturas.c.moneda)
+                    .order_by(facturas.c.moneda)
+                )
+            ]
         return [
             {
                 "expediente_id": str(fila.expediente_id),

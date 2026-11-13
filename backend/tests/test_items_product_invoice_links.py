@@ -114,6 +114,13 @@ def test_search_and_linked_invoices_are_tenant_scoped(
     assert factura["emisor_ruc"] == "20100000001"
     assert factura["receptor_ruc"] == "20200000001"
     assert Decimal(factura["importe_total"]) == 60
+    totales = client.get(
+        f"/api/v1/contabilidad-items/productos/{product_id}/facturas",
+        params={"vista_catalogo": True, "solo_totales": True, "offset": 50},
+    )
+    assert totales.status_code == 200, totales.text
+    assert totales.json()[0]["comprobantes"] == "1"
+    assert Decimal(totales.json()[0]["importe_total"]) == 60
     detalle = client.get(f"/api/v1/expedientes/{factura['expediente_id']}")
     assert detalle.status_code == 200, detalle.text
     assert detalle.json()["anterior_id"] is None

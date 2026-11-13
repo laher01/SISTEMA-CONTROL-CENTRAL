@@ -132,10 +132,15 @@ type FacturaItem = {
 function FacturasItem({ item, cerrar }: { item: Item; cerrar: () => void }) {
   const modal = useRef<HTMLDialogElement>(null);
   const [pagina, setPagina] = useState(0);
+  const [filtros, setFiltros] = useState({ emisor_buscar: "", receptor_buscar: "" });
+  const ruta = `/api/v1/contabilidad-items/productos/${item.id}/facturas`;
+  const parametros = { ...filtros, vista_catalogo: "true" };
   const facturas = useDatos<FacturaItem[]>(conParametros(
-    `/api/v1/contabilidad-items/productos/${item.id}/facturas`,
-    { vista_catalogo: "true", limite: "51", offset: String(pagina * 50) },
+    ruta, { ...parametros, limite: "51", offset: String(pagina * 50) },
   ));
+  const totales = useDatos<{ moneda: Moneda; importe_total: string; comprobantes: string }[]>(
+    conParametros(ruta, { ...parametros, solo_totales: "true" }),
+  );
   useEffect(() => {
     modal.current?.showModal();
   }, []);
@@ -146,6 +151,29 @@ function FacturasItem({ item, cerrar }: { item: Item; cerrar: () => void }) {
         <h3 id="facturas-item-titulo">Facturas asociadas · {item.descripcion}</h3>
         <button type="button" onClick={() => modal.current?.close()}>Cerrar</button>
       </header>
+      <form onSubmit={(evento) => {
+        evento.preventDefault();
+        const datos = new FormData(evento.currentTarget);
+        setPagina(0);
+        setFiltros({
+          emisor_buscar: String(datos.get("emisor") ?? "").trim(),
+          receptor_buscar: String(datos.get("receptor") ?? "").trim(),
+        });
+      }}>
+        <label>Proveedor <input name="emisor" type="search" maxLength={150} placeholder="RUC o razón social" /></label>
+        <label>Cliente <input name="receptor" type="search" maxLength={150} placeholder="RUC o razón social" /></label>
+        <button type="submit">Filtrar</button>
+      </form>
+      <section className="tarjeta" aria-label="Total de comprobantes asociados" aria-live="polite">
+        <h4>Total de comprobantes asociados</h4>
+        {totales.cargando && <p>Calculando total…</p>}
+        {totales.error && <p role="alert">{totales.error}</p>}
+        {totales.datos?.length === 0 && <p>Sin comprobantes para estos filtros.</p>}
+        {totales.datos?.map((total) => <p key={total.moneda}>
+          <strong style={{ fontSize: "1.6rem" }}>{formatearMonto(total.moneda, total.importe_total)}</strong>
+          {" · "}{total.comprobantes} comprobantes
+        </p>)}
+      </section>
       {facturas.cargando && <p role="status">Cargando facturas…</p>}
       {facturas.error && <p role="alert">{facturas.error}</p>}
       {facturas.datos && (facturas.datos.length ? (

@@ -63,3 +63,21 @@ def test_zip_rechaza_bomba_en_archivo_no_xml() -> None:
         paquete.writestr("factura.xml", b"<Invoice/>")
     with pytest.raises(PaqueteNoSeguro, match="compresión"):
         extraer_xml_zip(memoria.getvalue())
+
+
+def test_recepcion_operativa_extrae_pdf_de_zip_y_voucher_individual():
+    mensaje = EmailMessage()
+    mensaje["From"] = "gestor@example.test"
+    mensaje.set_content("Adjuntos")
+    mensaje.add_attachment(
+        _zip("documentos/factura.pdf", b"%PDF-1.7"),
+        maintype="application",
+        subtype="zip",
+        filename="lote.zip",
+    )
+    mensaje.add_attachment(b"imagen", maintype="image", subtype="png", filename="voucher.png")
+    _, adjuntos = _adjuntos_xml(mensaje.as_bytes(), solo_xml=False)
+    assert [(a.nombre, a.mime_type) for a in adjuntos] == [
+        ("factura.pdf", "application/pdf"),
+        ("voucher.png", "image/png"),
+    ]

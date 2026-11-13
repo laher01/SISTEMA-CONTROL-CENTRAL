@@ -8,9 +8,9 @@ import email
 import imaplib
 import os
 import uuid
-from datetime import date
 from email.policy import default
 from email.utils import parseaddr
+from pathlib import PurePosixPath
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,14 +18,16 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.models import CorreoBuzon, CorreoMensaje, CorreoRemitente, Gestor
 from app.services.ingesta import ArchivoSubido
-from app.services.paquetes_correo import PaqueteNoSeguro, extraer_xml_zip
+from app.services.paquetes_correo import FORMATOS, PaqueteNoSeguro, extraer_documentos_paquete
+from app.services.procesamiento_documental import DocumentoNoProcesable
 from app.services.recepcion_correo_ingesta import admitir_adjunto_ubl
+from app.services.separador_pdf import analizar_paquete, extraer_fragmento
 from app.storage import AlmacenLocal
 
 MAX_MENSAJE_BYTES = 25 * 1024 * 1024
 
 
-def _adjuntos_xml(contenido: bytes) -> tuple[str, list[ArchivoSubido]]:
+def _adjuntos_xml(contenido: bytes, *, solo_xml: bool = True) -> tuple[str, list[ArchivoSubido]]:
     mensaje = email.message_from_bytes(contenido, policy=default)
     remitente = parseaddr(str(mensaje.get("From", "")))[1].lower()
     adjuntos: list[ArchivoSubido] = []
@@ -35,26 +37,48 @@ def _adjuntos_xml(contenido: bytes) -> tuple[str, list[ArchivoSubido]]:
         nombre = parte.get_filename()
         if not nombre:
             continue
-        extension = nombre.lower().rsplit(".", 1)[-1]
-        if extension not in ("xml", "zip"):
+        extension = PurePosixPath(nombre).suffix.lower()
+        if extension not in {*FORMATOS, ".zip", ".rar"}:
+            continue
+        if solo_xml and extension not in (".xml", ".zip"):
             continue
         archivo = parte.get_payload(decode=True)
         if not isinstance(archivo, bytes) or len(archivo) > MAX_MENSAJE_BYTES:
-            continue
-        if extension == "zip":
-            for nombre_xml, contenido_xml in extraer_xml_zip(archivo):
-                adjuntos.append(
-                    ArchivoSubido(
-                        nombre=nombre_xml,
-                        mime_type="application/xml",
-                        contenido=contenido_xml,
-                    )
-                )
-        else:
-            adjuntos.append(
-                ArchivoSubido(nombre=nombre, mime_type="application/xml", contenido=archivo)
-            )
+            raise PaqueteNoSeguro("Adjunto demasiado grande")
+        documentos = (
+            extraer_documentos_paquete(archivo, extension, solo_xml=solo_xml)
+            if extension in (".zip", ".rar")
+            else [(nombre, archivo)]
+        )
+        for nombre_documento, datos in documentos:
+            mime = FORMATOS[PurePosixPath(nombre_documento).suffix.lower()]
+            adjuntos.append(ArchivoSubido(nombre_documento, mime, datos))
+        if len(adjuntos) > 100 or sum(len(a.contenido) for a in adjuntos) > MAX_MENSAJE_BYTES:
+            raise PaqueteNoSeguro("El mensaje excede el límite de adjuntos extraídos")
     return remitente, adjuntos
+
+
+def _separar_adjuntos(archivos: list[ArchivoSubido]) -> list[ArchivoSubido]:
+    salida = []
+    for archivo in archivos:
+        if archivo.mime_type != "application/pdf":
+            salida.append(archivo)
+            continue
+        try:
+            segmentos = analizar_paquete(archivo.contenido, max_paginas=50, recepcion_correo=True)
+        except DocumentoNoProcesable:
+            salida.append(archivo)
+            continue
+        for segmento in segmentos:
+            nombre = f"{PurePosixPath(archivo.nombre).stem}-{segmento.inicio + 1}.pdf"
+            salida.append(
+                ArchivoSubido(
+                    nombre, archivo.mime_type, extraer_fragmento(archivo.contenido, segmento)
+                )
+            )
+    if len(salida) > 100 or sum(len(a.contenido) for a in salida) > MAX_MENSAJE_BYTES:
+        raise PaqueteNoSeguro("El PDF separado excede el límite de adjuntos")
+    return salida
 
 
 def procesar_mensaje(
@@ -105,26 +129,31 @@ def procesar_mensaje(
         session.commit()
         return registro.estado
     try:
-        _, archivos = _adjuntos_xml(contenido)
+        _, archivos = _adjuntos_xml(contenido, solo_xml=False)
+        archivos = _separar_adjuntos(archivos)
     except PaqueteNoSeguro:
         registro.estado = "REVISION"
         registro.error = "PAQUETE_NO_SEGURO"
         session.commit()
         return registro.estado
-    resultados = [
-        admitir_adjunto_ubl(
-            session,
-            AlmacenLocal(settings.storage_dir),
-            settings,
-            date.today(),
-            buzon.tenant_id,
-            remitente,
-            archivo,
-        ).estado
-        for archivo in archivos
-    ]
+    resultados = []
+    hoy = settings.hoy()
+    almacen = AlmacenLocal(settings.storage_dir)
+    for archivo in sorted(archivos, key=lambda a: a.mime_type != "application/xml"):
+        with session.begin_nested():
+            resultado = admitir_adjunto_ubl(
+                session,
+                almacen,
+                settings,
+                hoy,
+                buzon.tenant_id,
+                remitente,
+                archivo,
+                permitir_pdf_imagen=True,
+            )
+            resultados.append(resultado.estado)
     registro.estado = (
-        "INGRESADO" if "INGRESADO" in resultados else "REVISION" if resultados else "SIN_XML"
+        "INGRESADO" if "INGRESADO" in resultados else "REVISION" if resultados else "SIN_ADJUNTOS"
     )
     registro.error = ",".join(resultados)[:500] if resultados else None
     session.commit()
