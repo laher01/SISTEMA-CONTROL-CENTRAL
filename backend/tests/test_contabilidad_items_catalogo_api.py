@@ -100,6 +100,11 @@ def test_catalogo_lectura_por_roles_y_edicion_solo_administrador_aislada_por_ten
     # La API abre una sesión PostgreSQL independiente; publicar el fixture antes
     # de solicitar el trabajo para que el documento forme parte del lote.
     session.commit()
+    pendientes = client.get("/api/v1/contabilidad-items/reescaneo/sin-lineas")
+    assert pendientes.status_code == 200, pendientes.text
+    assert len(pendientes.json()) == 1
+    assert pendientes.json()[0]["nombre_original"] == "factura.xml"
+    assert pendientes.json()[0]["expediente_id"] is None
     trabajo_activo = client.post("/api/v1/contabilidad-items/reescaneo/trabajos")
     assert trabajo_activo.status_code == 201
     duplicado_activo = client.post("/api/v1/contabilidad-items/reescaneo/trabajos")

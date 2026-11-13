@@ -656,6 +656,62 @@ def vista_previa_reescaneo(session: SessionDep, auth: OperativeAuthDep) -> dict[
     }
 
 
+@router.get("/reescaneo/sin-lineas")
+def listar_comprobantes_sin_lineas(
+    session: SessionDep,
+    auth: OperativeAuthDep,
+    offset: int = Query(0, ge=0),
+) -> list[dict[str, object]]:
+    _autorizar_reescaneo(auth)
+    elegibles = _facturas_query(auth).with_only_columns(Documento.id)
+    consulta = (
+        select(
+            Documento.id,
+            Documento.nombre_original,
+            Documento.tipo_documento,
+            Expediente.id.label("expediente_id"),
+            Expediente.serie,
+            Expediente.correlativo,
+            Expediente.fecha_emision,
+            Empresa.razon_social,
+        )
+        .outerjoin(
+            Expediente,
+            (Expediente.id == Documento.expediente_id)
+            & (Expediente.tenant_id == auth.tenant_id)
+            & Expediente.deleted_at.is_(None),
+        )
+        .outerjoin(
+            Empresa,
+            (Empresa.id == Expediente.emisor_id) & (Empresa.tenant_id == auth.tenant_id),
+        )
+        .where(
+            Documento.id.in_(elegibles),
+            ~exists(
+                select(LineaComprobanteItem.id).where(
+                    LineaComprobanteItem.tenant_id == auth.tenant_id,
+                    LineaComprobanteItem.documento_id == Documento.id,
+                )
+            ),
+        )
+        .order_by(Documento.created_at.desc(), Documento.id)
+        .offset(offset)
+        .limit(21)
+    )
+    return [
+        {
+            "documento_id": fila.id,
+            "nombre_original": fila.nombre_original,
+            "tipo_documento": fila.tipo_documento,
+            "expediente_id": fila.expediente_id,
+            "comprobante": f"{fila.serie}-{fila.correlativo}" if fila.expediente_id else None,
+            "fecha_emision": fila.fecha_emision,
+            "emisor": fila.razon_social,
+        }
+        for fila in session.execute(consulta)
+    ]
+
+
 @router.get("/reescaneo/trabajos")
 def listar_trabajos(session: SessionDep, auth: OperativeAuthDep) -> list[dict[str, object]]:
     _autorizar_reescaneo(auth)
