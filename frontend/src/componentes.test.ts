@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { obtenerPaginasVisibles } from "./componentes";
+import { obtenerPaginasVisibles, paginaCorregida } from "./componentes";
 
 describe("obtenerPaginasVisibles", () => {
   it("muestra todas las páginas cuando el resultado tiene siete páginas", () => {
@@ -13,5 +13,20 @@ describe("obtenerPaginasVisibles", () => {
 
   it("no crea páginas si el filtro no tiene resultados", () => {
     expect(obtenerPaginasVisibles(0, 0)).toEqual([]);
+  });
+});
+
+
+describe("paginaCorregida", () => {
+  it("estabiliza una lista vacía en la primera página", () => {
+    const primera = paginaCorregida(4, -1);
+    expect(primera).toBe(0);
+    expect(paginaCorregida(primera, -1)).toBe(primera);
+  });
+
+  it("corrige una página fuera del rango y conserva las páginas válidas", () => {
+    expect(paginaCorregida(8, 2)).toBe(2);
+    expect(paginaCorregida(1, 2)).toBe(1);
+    expect(paginaCorregida(8)).toBe(8);
   });
 });
