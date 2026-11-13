@@ -103,7 +103,10 @@ def registrar_items_comprobante(
     if documento.tipo_documento == TipoDocumento.RHE:
         registrar_item_rhe(session, documento.tenant_id, documento.id, texto)
     elif documento.tipo_documento == TipoDocumento.FACT:
-        registrar_items_pdf_estacion(session, documento.tenant_id, documento.id, texto)
+        tabla = procesamiento.get("texto_tabla_items")
+        registrar_items_pdf_estacion(
+            session, documento.tenant_id, documento.id, tabla if isinstance(tabla, str) else texto
+        )
 
 
 def aplicar_automaticamente(

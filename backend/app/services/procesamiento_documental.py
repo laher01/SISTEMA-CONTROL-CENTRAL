@@ -14,6 +14,7 @@ from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
 from app.enums import TipoDocumento
+from app.services.contabilidad_items_ubl import extraer_items_pdf
 from app.services.extraccion_campos import extraer_campos
 
 
@@ -46,6 +47,7 @@ class ResultadoProcesamiento:
     idioma: str | None = None
     requiere_ocr: bool = False
     sugerencia: SugerenciaClasificacion | None = None
+    texto_tabla_items: str | None = None
 
     def a_dict(self) -> dict[str, object]:
         resultado: dict[str, object] = {
@@ -55,6 +57,8 @@ class ResultadoProcesamiento:
             "paginas": self.paginas,
             "requiere_ocr": self.requiere_ocr,
         }
+        if self.texto_tabla_items:
+            resultado["texto_tabla_items"] = self.texto_tabla_items
         if self.confianza is not None:
             resultado["confianza"] = self.confianza
         if self.idioma is not None:
@@ -90,15 +94,42 @@ def _procesar_pdf(contenido: bytes, limite: int, max_paginas_ocr: int) -> Result
     if not partes or not all(partes):
         return _procesar_pdf_escaneado(contenido, limite, max_paginas_ocr, partes)
     texto = _limitar("\n\n".join(partes), limite)
+    sugerencia = sugerir_tipo(texto)
+    tabla = (
+        leer_disposicion_items_pdf(contenido, limite)
+        if sugerencia and sugerencia.tipo == TipoDocumento.FACT and not extraer_items_pdf(texto)
+        else None
+    )
     return ResultadoProcesamiento(
         texto=texto,
+        texto_tabla_items=tabla,
         metodo="TEXTO_PDF",
         motor="pypdf",
         paginas=len(lector.pages),
         confianza=1.0 if texto else None,
         requiere_ocr=False,
-        sugerencia=sugerir_tipo(texto),
+        sugerencia=sugerencia,
     )
+
+
+def leer_disposicion_items_pdf(contenido: bytes, limite: int) -> str | None:
+    """Recupera las columnas del texto nativo con un límite de páginas y caracteres."""
+    try:
+        lector = PdfReader(io.BytesIO(contenido), strict=False)
+        if lector.is_encrypted and lector.decrypt("") == 0:
+            return None
+        partes = []
+        caracteres = 0
+        for pagina in lector.pages[:50]:
+            parte = pagina.extract_text(extraction_mode="layout") or ""
+            partes.append(parte[: max(0, limite - caracteres)])
+            caracteres += len(parte) + 1
+            if caracteres >= limite:
+                break
+        texto = "\n".join(partes)
+        return texto if extraer_items_pdf(texto) else None
+    except (PdfReadError, OSError, ValueError):
+        return None
 
 
 def _texto_pdf_util(texto: str) -> bool:

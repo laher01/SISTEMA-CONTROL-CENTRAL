@@ -239,3 +239,23 @@ IMPORTE TOTAL S/ 237.50
         "PETROLEO DIESEL",
         "ACEITE 20W50",
     }
+
+
+def test_tabla_columnas_reordenadas_lee_producto_real(session):
+    tenant = Tenant(nombre="tabla_columnas")
+    session.add(tenant)
+    session.flush()
+    documento = _documento(session, tenant.id)
+    texto = """FACTURA
+Código  Producto  U.M.  Cantidad  Precio unitario  Importe
+09  DIESEL B5 S50  GLL  49.499  23.96  1,005.08
+10  LUBRICANTE SINTÉTICO  UND  2.00  25.00  50.00
+Importe Total S/ 1055.08
+"""
+    assert registrar_items_pdf_estacion(session, tenant.id, documento.id, texto) == 2
+    assert registrar_items_pdf_estacion(session, tenant.id, documento.id, texto) == 0
+    lineas = list(session.scalars(select(LineaComprobanteItem)))
+    assert [(linea.descripcion_original, linea.cantidad, linea.unidad) for linea in lineas] == [
+        ("DIESEL B5 S50", Decimal("49.499"), "GLL"),
+        ("LUBRICANTE SINTÉTICO", Decimal("2"), "UND"),
+    ]
