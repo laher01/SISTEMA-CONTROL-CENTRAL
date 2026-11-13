@@ -174,6 +174,7 @@ export interface ComprobantePagoExpediente {
 }
 
 export interface ExpedienteDetalle extends Expediente {
+  fuera_rubro_items?: boolean;
   anterior_id?: string | null;
   siguiente_id?: string | null;
   documentos: Documento[];

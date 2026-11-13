@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.item_models import LineaComprobanteItem, ProductoItem, TrabajoReescaneoItems
 from app.models import Documento, Empresa, Expediente, Miembro
 from app.security import ContextoAcceso
+from app.services.contabilidad_items_ubl import registrar_items_ubl
 from app.storage import AlmacenLocal
 from tests.conftest import AuthPrueba
 
@@ -457,3 +458,39 @@ Total Neto Recibido:
     assert linea.descripcion_original == "SERVICIO DE ASESORIA Y DOCUMENTACION-PAITA"
     assert linea.importe_linea == Decimal("1500.00")
     assert lote.json()["lineas_nuevas"] == 1
+
+
+def test_combinar_conserva_variante_y_precio(client, session, settings, auth_prueba):
+    auth_prueba.como_admin()
+    tenant_id = auth_prueba.contexto.tenant_id
+    principal = ProductoItem(
+        tenant_id=tenant_id,
+        clave_catalogo=_clave("Producto principal", "NIU"),
+        descripcion="Producto principal",
+        unidad_base="NIU",
+    )
+    session.add(principal)
+    contenido = XML.replace(
+        b"</cac:InvoiceLine>",
+        b"<cac:Price><cbc:PriceAmount>5.001</cbc:PriceAmount></cac:Price></cac:InvoiceLine>",
+    )
+    documento = _documento_xml(session, settings, tenant_id, contenido=contenido)
+    assert registrar_items_ubl(session, tenant_id, documento.id, contenido) == 1
+    session.commit()
+    variante = session.scalar(
+        select(ProductoItem).where(ProductoItem.descripcion == "Producto de prueba")
+    )
+    respuesta = client.patch(
+        f"/api/v1/contabilidad-items/catalogo/{variante.id}",
+        json={"combinar_en": str(principal.id)},
+    )
+    assert respuesta.status_code == 200, respuesta.text
+    session.expire_all()
+    assert variante.combinado_en_id == principal.id
+    nueva = _documento_xml(session, settings, tenant_id, contenido=contenido + b"\n")
+    assert registrar_items_ubl(session, tenant_id, nueva.id, contenido) == 1
+    session.flush()
+    lineas = list(session.scalars(select(LineaComprobanteItem)))
+    assert len(lineas) == 2
+    assert all(linea.producto_id == principal.id for linea in lineas)
+    assert all(linea.precio_unitario == Decimal("5.001") for linea in lineas)

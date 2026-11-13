@@ -299,6 +299,7 @@ class ExpedienteAsistidoOut(BaseModel):
 
 
 class ExpedienteDetalle(ExpedienteOut):
+    fuera_rubro_items: bool = False
     anterior_id: uuid.UUID | None = None
     siguiente_id: uuid.UUID | None = None
     documentos: list[DocumentoOut]

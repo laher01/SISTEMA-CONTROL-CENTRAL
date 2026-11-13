@@ -33,6 +33,7 @@ type FacturaVista = {
   ruta_jerarquica: string[];
 };
 type ItemVista = {
+  fuera_rubro: boolean;
   linea_id: string;
   producto_id: string;
   descripcion: string;
@@ -221,8 +222,8 @@ export default function ReescanearItems({ rol }: { rol: string }) {
             const edicion = valorEdicion(item);
             const opciones = new Set((categorias.datos ?? []).filter((categoria) => categoria.activa).map((categoria) => categoria.nombre));
             opciones.add(item.categoria_sugerida);
-            return <tr key={item.linea_id}>
-              <td><strong>{item.factura.tipo_documento} {item.factura.comprobante}</strong><br />{item.factura.fecha_emision ?? "Fecha no disponible"}<br /><small>{item.factura.ruta_jerarquica.join(" › ")}</small></td>
+            return <tr key={item.linea_id} className={item.fuera_rubro ? "item-fuera-rubro" : undefined}>
+              <td><strong>{item.factura.tipo_documento} {item.factura.comprobante}</strong>{item.fuera_rubro && <small> · Fuera del rubro</small>}<br />{item.factura.fecha_emision ?? "Fecha no disponible"}<br /><small>{item.factura.ruta_jerarquica.join(" › ")}</small></td>
               <td><label><span className="solo-lectores">Descripción del ítem</span><textarea maxLength={2000} rows={3} value={edicion.descripcion} onChange={(evento) => setEdiciones((actual) => ({ ...actual, [item.linea_id]: { ...edicion, descripcion: evento.target.value } }))} /></label><small>Original: {item.descripcion_original}</small></td>
               <td>{item.categoria_sugerida}{item.categoria_confirmada ? " · confirmada manualmente" : " · sugerencia"}</td>
               <td><input list={`categorias-${item.linea_id}`} aria-label={`Categoría de ${item.descripcion}`} maxLength={80} value={edicion.categoria} onChange={(evento) => setEdiciones((actual) => ({ ...actual, [item.linea_id]: { ...edicion, categoria: evento.target.value } }))} /><datalist id={`categorias-${item.linea_id}`}>{[...opciones].map((nombre) => <option key={nombre} value={nombre} />)}</datalist><small>Selecciona una existente o escribe una nueva.</small></td>

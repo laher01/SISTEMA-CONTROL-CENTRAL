@@ -25,11 +25,12 @@ from app.item_models import (
     ProductoItem,
     TrabajoReescaneoItems,
 )
-from app.models import Documento, Empresa, Expediente, Gestor, Miembro
+from app.models import Documento, Empresa, Expediente, Gestor, Miembro, Tenant
 from app.security import ContextoAcceso
 from app.services import auditoria
 from app.services.cache_ocr import procesar_con_cache
 from app.services.contabilidad_items_rhe import registrar_item_rhe
+from app.services.contabilidad_items_rubro import expediente_fuera_rubro
 from app.services.contabilidad_items_rules import sugerir_categoria, texto_normalizado
 from app.services.contabilidad_items_ubl import registrar_items_pdf_estacion, registrar_items_ubl
 from app.services.expedientes import expediente_tiene_documentos_activos
@@ -75,6 +76,8 @@ class ProductoCrear(BaseModel):
 
 
 class ProductoEditar(BaseModel):
+    fuera_rubro: bool | None = None
+    combinar_en: uuid.UUID | None = None
     categoria_id: uuid.UUID | None = None
     activo: bool | None = None
 
@@ -246,6 +249,26 @@ def listar_catalogo(
             LineaComprobanteItem.producto_id.label("producto_id"),
             func.count(LineaComprobanteItem.id).label("lineas_asociadas"),
             func.min(LineaComprobanteItem.unidad).label("unidad"),
+            func.min(LineaComprobanteItem.precio_unitario).label("precio_min"),
+            func.max(LineaComprobanteItem.precio_unitario).label("precio_max"),
+            func.count(
+                func.distinct(
+                    case((LineaComprobanteItem.precio_unitario.is_not(None), Expediente.moneda))
+                )
+            ).label("monedas_precio"),
+            func.min(
+                case((LineaComprobanteItem.precio_unitario.is_not(None), Expediente.moneda))
+            ).label("moneda_precio"),
+            func.count(
+                func.distinct(
+                    case(
+                        (
+                            LineaComprobanteItem.precio_unitario.is_not(None),
+                            LineaComprobanteItem.unidad,
+                        )
+                    )
+                )
+            ).label("unidades_precio"),
         )
         .join(Documento, Documento.id == LineaComprobanteItem.documento_id)
         .join(Expediente, Expediente.id == Documento.expediente_id)
@@ -266,9 +289,14 @@ def listar_catalogo(
             ProductoItem,
             func.coalesce(lineas_visibles.c.lineas_asociadas, 0).label("lineas_asociadas"),
             lineas_visibles.c.unidad,
+            lineas_visibles.c.precio_min,
+            lineas_visibles.c.precio_max,
+            lineas_visibles.c.monedas_precio,
+            lineas_visibles.c.moneda_precio,
+            lineas_visibles.c.unidades_precio,
         )
         .outerjoin(lineas_visibles, lineas_visibles.c.producto_id == ProductoItem.id)
-        .where(ProductoItem.tenant_id == auth.tenant_id)
+        .where(ProductoItem.tenant_id == auth.tenant_id, ProductoItem.combinado_en_id.is_(None))
     )
     if solo_con_lineas or auth.rol not in {"ADMINISTRADOR", "SECRETARIA"}:
         consulta = consulta.where(lineas_visibles.c.producto_id.is_not(None))
@@ -288,13 +316,22 @@ def listar_catalogo(
             {
                 "id": str(producto.id),
                 "descripcion": producto.descripcion,
-                "unidad_base": producto.unidad_base or unidad or "",
+                "unidad_base": producto.unidad_base or fila.unidad or "",
                 "categoria": producto.categoria,
                 "categoria_confirmada": producto.clasificacion_confirmada,
                 "activo": producto.activo,
-                "lineas_asociadas": lineas_asociadas,
+                "fuera_rubro": producto.fuera_rubro,
+                "lineas_asociadas": fila.lineas_asociadas,
+                "precio": str(fila.precio_min) if fila.precio_min is not None else None,
+                "moneda_precio": fila.moneda_precio,
+                "varios_precios": (
+                    fila.precio_min != fila.precio_max
+                    or (fila.monedas_precio or 0) > 1
+                    or (fila.unidades_precio or 0) > 1
+                ),
             }
-            for producto, lineas_asociadas, unidad in filas
+            for fila in filas
+            for producto in (fila[0],)
         ],
     }
 
@@ -363,6 +400,7 @@ def editar_producto(
     auth: OperativeAuthDep,
 ) -> dict[str, object]:
     _solo_administracion(auth)
+    session.scalar(select(Tenant.id).where(Tenant.id == auth.tenant_id).with_for_update())
     producto = session.scalar(
         select(ProductoItem)
         .where(ProductoItem.id == producto_id, ProductoItem.tenant_id == auth.tenant_id)
@@ -370,6 +408,33 @@ def editar_producto(
     )
     if producto is None:
         raise HTTPException(404, "Ítem no encontrado")
+    if producto.combinado_en_id is not None:
+        raise HTTPException(409, "El ítem ya está combinado")
+    if datos.combinar_en is not None:
+        destino = session.scalar(
+            select(ProductoItem)
+            .where(
+                ProductoItem.tenant_id == auth.tenant_id,
+                ProductoItem.id == datos.combinar_en,
+                ProductoItem.combinado_en_id.is_(None),
+                ProductoItem.id != producto.id,
+            )
+            .with_for_update()
+        )
+        if destino is None:
+            raise HTTPException(422, "Seleccione un ítem principal válido")
+        session.query(LineaComprobanteItem).filter(
+            LineaComprobanteItem.tenant_id == auth.tenant_id,
+            LineaComprobanteItem.producto_id == producto.id,
+        ).update({LineaComprobanteItem.producto_id: destino.id}, synchronize_session=False)
+        session.query(ProductoItem).filter(
+            ProductoItem.tenant_id == auth.tenant_id,
+            ProductoItem.combinado_en_id == producto.id,
+        ).update({ProductoItem.combinado_en_id: destino.id}, synchronize_session=False)
+        producto.combinado_en_id = destino.id
+        destino.fuera_rubro = destino.fuera_rubro or producto.fuera_rubro
+    if datos.fuera_rubro is not None:
+        producto.fuera_rubro = datos.fuera_rubro
     if datos.categoria_id is not None:
         categoria = session.scalar(
             select(CategoriaItem).where(
@@ -390,7 +455,12 @@ def editar_producto(
         "ITEM_CATALOGO_ACTUALIZADO",
         "producto_item",
         producto.id,
-        {"categoria": producto.categoria, "activo": producto.activo},
+        {
+            "categoria": producto.categoria,
+            "activo": producto.activo,
+            "fuera_rubro": producto.fuera_rubro,
+            "combinado_en": str(producto.combinado_en_id) if producto.combinado_en_id else None,
+        },
     )
     session.commit()
     return {
@@ -841,6 +911,7 @@ def resultado_trabajo(
                 responsable.nombre,
                 usuario.nombre,
                 gestor.nombre,
+                expediente_fuera_rubro().label("fuera_rubro"),
             )
             .join(ProductoItem, ProductoItem.id == LineaComprobanteItem.producto_id)
             .join(Documento, Documento.id == LineaComprobanteItem.documento_id)
@@ -891,6 +962,7 @@ def resultado_trabajo(
             resp_nombre,
             usuario_nombre,
             gestor_nombre,
+            fuera_rubro,
         ) in filas:
             ruta = ["Administrador"]
             ruta.extend(
@@ -900,6 +972,7 @@ def resultado_trabajo(
             )
             lineas.append(
                 {
+                    "fuera_rubro": bool(fuera_rubro),
                     "linea_id": str(linea.id),
                     "producto_id": str(producto.id),
                     "descripcion": producto.descripcion,

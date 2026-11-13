@@ -20,6 +20,7 @@ from app.item_models import AuditoriaFacturaItem, LineaComprobanteItem, Producto
 from app.models import Documento, Empresa, Expediente, Miembro
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.contabilidad_items_auditoria import registrar_decision, resolver_propuesta
+from app.services.contabilidad_items_rubro import expediente_fuera_rubro
 from app.services.expedientes import expediente_tiene_documentos_activos
 
 router = APIRouter(prefix="/contabilidad-items", tags=["contabilidad-items"])
@@ -127,6 +128,7 @@ def resumen(
             Expediente.deleted_at.is_(None),
             expediente_tiene_documentos_activos(),
             ProductoItem.activo.is_(True),
+            ~expediente_fuera_rubro(),
             alcance,
             or_(
                 ultimo_estado.is_(None),
@@ -205,6 +207,9 @@ def facturas_por_producto(
     offset: int = Query(0, ge=0, le=1_000_000),
     vista_catalogo: bool = False,
     solo_totales: bool = False,
+    solo_precios: bool = False,
+    ordenar_por: Literal["emisor", "receptor"] = "emisor",
+    tipo_empresa: Literal["A", "B"] | None = None,
 ) -> list[dict[str, str]]:
     """Documentos originales que contienen el producto; solo ámbito autorizado."""
     if desde is not None and hasta is not None and desde > hasta:
@@ -291,6 +296,32 @@ def facturas_por_producto(
             ),
         )
     )
+    if not vista_catalogo:
+        consulta = consulta.where(~expediente_fuera_rubro())
+    if tipo_empresa is not None:
+        consulta = consulta.where(empresa_emisora.clasificacion_proveedor == tipo_empresa)
+    if solo_precios:
+        precios = (
+            consulta.with_only_columns(
+                Expediente.moneda,
+                LineaComprobanteItem.unidad,
+                LineaComprobanteItem.precio_unitario,
+                func.count(LineaComprobanteItem.id).label("lineas"),
+            )
+            .where(LineaComprobanteItem.precio_unitario.is_not(None))
+            .group_by(
+                Expediente.moneda,
+                LineaComprobanteItem.unidad,
+                LineaComprobanteItem.precio_unitario,
+            )
+            .order_by(
+                Expediente.moneda, LineaComprobanteItem.unidad, LineaComprobanteItem.precio_unitario
+            )
+        )
+        return [
+            {"moneda": moneda, "unidad": unidad, "precio": str(precio), "lineas": str(lineas)}
+            for moneda, unidad, precio, lineas in session.execute(precios)
+        ]
     if desde is not None:
         consulta = consulta.where(Expediente.fecha_emision >= desde)
     if hasta is not None:
@@ -316,6 +347,7 @@ def facturas_por_producto(
                 Expediente.fecha_emision,
                 Expediente.moneda,
                 Expediente.importe_total,
+                expediente_fuera_rubro().label("fuera_rubro"),
                 empresa_emisora.ruc.label("emisor_ruc"),
                 empresa_emisora.razon_social.label("emisor_nombre"),
                 empresa_receptora.ruc.label("receptor_ruc"),
@@ -340,6 +372,7 @@ def facturas_por_producto(
                 "fecha_emision": str(fila.fecha_emision),
                 "moneda": fila.moneda,
                 "importe_total": str(fila.importe_total),
+                "fuera_rubro": "true" if fila.fuera_rubro else "false",
                 "emisor_ruc": fila.emisor_ruc or "",
                 "emisor_nombre": fila.emisor_nombre or "",
                 "receptor_ruc": fila.receptor_ruc or "",
@@ -348,6 +381,10 @@ def facturas_por_producto(
             for fila in session.execute(
                 select(facturas)
                 .order_by(
+                    facturas.c.receptor_nombre
+                    if ordenar_por == "receptor"
+                    else facturas.c.emisor_nombre,
+                    facturas.c.receptor_ruc if ordenar_por == "receptor" else facturas.c.emisor_ruc,
                     facturas.c.emisor_nombre,
                     facturas.c.emisor_ruc,
                     facturas.c.receptor_nombre,
@@ -416,8 +453,9 @@ def conciliacion(
         .scalar_subquery()
     )
     estado = func.coalesce(ultimo_estado, "VIGENTE")
-    aprobado = estado == "VIGENTE"
-    observado = estado == "OBSERVADA"
+    fuera_rubro = expediente_fuera_rubro()
+    aprobado = (estado == "VIGENTE") & ~fuera_rubro
+    observado = (estado == "OBSERVADA") | ((estado == "VIGENTE") & fuera_rubro)
     otra = estado.not_in(("VIGENTE", "OBSERVADA"))
     consulta = (
         select(

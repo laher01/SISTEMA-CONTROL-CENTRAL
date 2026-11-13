@@ -205,6 +205,9 @@ export default function ExpedienteDetalle({ sesion }: { sesion: { rol: string } 
               : "FACT " + numeroExpediente(datos.tipo_comprobante, datos.serie, datos.correlativo_original ?? datos.correlativo)}{" "}
             <Semaforo estado={datos.estado} />
           </h2>
+          {datos.fuera_rubro_items && <p role="status" className="aviso-fuera-rubro">
+            Fuera del rubro · Excluido de Contabilidad de Ítems.
+          </p>}
           {pagosDocumentales?.length ? (
             <section className="tarjeta">
               <h3>Pagos documentales vinculados</h3>

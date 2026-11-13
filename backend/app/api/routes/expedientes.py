@@ -55,6 +55,7 @@ from app.schemas import (
 from app.security import cuenta_administradora_responsable
 from app.services import auditoria
 from app.services.ambito_gerencia import alcance_expedientes_gerente, expediente_visible_gerente
+from app.services.contabilidad_items_rubro import expediente_fuera_rubro
 from app.services.eliminacion import (
     procesar_archivo_pendiente,
 )
@@ -1390,6 +1391,13 @@ def detalle(
     )
     return ExpedienteDetalle(
         **base.model_dump(),
+        fuera_rubro_items=bool(
+            session.scalar(
+                select(expediente_fuera_rubro())
+                .select_from(Expediente)
+                .where(Expediente.id == expediente.id, Expediente.tenant_id == tenant_id)
+            )
+        ),
         anterior_id=anterior,
         siguiente_id=siguiente,
         documentos=[d for d in expediente.documentos if d.deleted_at is None],

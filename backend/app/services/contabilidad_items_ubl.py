@@ -26,6 +26,7 @@ class ItemUBL:
     cantidad: Decimal
     unidad: str
     importe: Decimal | None
+    precio: Decimal | None = None
 
 
 def extraer_items_ubl(contenido: bytes) -> list[ItemUBL]:
@@ -39,6 +40,7 @@ def extraer_items_ubl(contenido: bytes) -> list[ItemUBL]:
     salida: list[ItemUBL] = []
     for n, linea in enumerate(raiz.findall("cac:InvoiceLine", NS), start=1):
         nodo_cantidad = linea.find("cbc:InvoicedQuantity", NS)
+        valor_unitario = linea.findtext("cac:Price/cbc:PriceAmount", namespaces=NS)
         nodo_importe = linea.find("cbc:LineExtensionAmount", NS)
         nombre = (
             linea.findtext("cac:Item/cbc:Description", default="", namespaces=NS)
@@ -59,6 +61,12 @@ def extraer_items_ubl(contenido: bytes) -> list[ItemUBL]:
             continue
         if importe is not None and not importe.is_finite():
             continue
+        try:
+            precio = Decimal(valor_unitario) if valor_unitario else None
+        except InvalidOperation:
+            precio = None
+        if precio is not None and (not precio.is_finite() or not 0 <= precio < 10**14):
+            precio = None
         unidad = (nodo_cantidad.get("unitCode") or "NIU").strip().upper()
         salida.append(
             ItemUBL(
@@ -67,6 +75,7 @@ def extraer_items_ubl(contenido: bytes) -> list[ItemUBL]:
                 cantidad=cantidad,
                 unidad=unidad[:40],
                 importe=importe,
+                precio=precio,
             )
         )
     return salida
@@ -102,14 +111,22 @@ def _registrar_lineas(
         raise ValueError("Documento no encontrado en el tenant autorizado")
     registrados = 0
     for linea in items:
+        precio = linea.precio if linea.precio is not None and 0 <= linea.precio < 10**14 else None
         ya_registrada = session.scalar(
-            select(LineaComprobanteItem.id).where(
+            select(LineaComprobanteItem).where(
                 LineaComprobanteItem.tenant_id == tenant_id,
                 LineaComprobanteItem.documento_id == documento_id,
                 LineaComprobanteItem.numero_linea == linea.numero,
             )
         )
         if ya_registrada is not None:
+            if (
+                ya_registrada.precio_unitario is None
+                and ya_registrada.descripcion_original == linea.descripcion
+                and ya_registrada.unidad == linea.unidad
+                and ya_registrada.cantidad == linea.cantidad
+            ):
+                ya_registrada.precio_unitario = precio
             continue
         nombre = texto_normalizado(linea.descripcion)
         # SUNAT puede imprimir «500ML» o «500 ML» para la misma presentación.
@@ -141,16 +158,18 @@ def _registrar_lineas(
             )
             session.add(producto)
             session.flush()
+        producto_id = producto.combinado_en_id or producto.id
         session.add(
             LineaComprobanteItem(
                 tenant_id=tenant_id,
                 documento_id=documento_id,
-                producto_id=producto.id,
+                producto_id=producto_id,
                 numero_linea=linea.numero,
                 descripcion_original=linea.descripcion,
                 cantidad=linea.cantidad,
                 unidad=linea.unidad,
                 importe_linea=linea.importe,
+                precio_unitario=precio,
             )
         )
         registrados += 1
@@ -181,7 +200,7 @@ def registrar_items_pdf_estacion(
     patron = re.compile(
         rf"(?P<cantidad>{_NUMERO_TABLA})\s+\S+\s+"
         rf"(?P<unidad>[A-Z][A-Z0-9./-]{{0,39}})\s+(?P<descripcion>.+?)\s+"
-        rf"{_NUMERO_TABLA}\s+{_NUMERO_TABLA}\s+(?P<importe>{_NUMERO_TABLA})",
+        rf"(?P<precio>{_NUMERO_TABLA})\s+{_NUMERO_TABLA}\s+(?P<importe>{_NUMERO_TABLA})",
         re.I,
     )
     tabla = _FIN_TABLA.split(texto[cabecera.end() :], maxsplit=1)[0]
@@ -202,6 +221,7 @@ def registrar_items_pdf_estacion(
                     cantidad,
                     campos["unidad"].upper(),
                     importe,
+                    Decimal(campos["precio"].replace(",", "")),
                 )
             )
     return _registrar_lineas(session, tenant_id, documento_id, items) if items else 0
@@ -235,9 +255,9 @@ def extraer_items_pdf_tabla(texto: str) -> list[ItemUBL]:
         tabla = _FIN_TABLA.split(texto[cabecera.end() : fin], maxsplit=1)[0]
         filas = list(_INICIO_FILA.finditer(tabla))
         precio_final = (
-            rf"\s+{_NUMERO_TABLA}\s+{_NUMERO_TABLA}"
+            rf"\s+(?P<precio>{_NUMERO_TABLA})\s+{_NUMERO_TABLA}"
             if cabecera.group("icbper")
-            else rf"\s+{_NUMERO_TABLA}"
+            else rf"\s+(?P<precio>{_NUMERO_TABLA})"
         )
         for posicion, fila in enumerate(filas):
             numero_linea += 1
@@ -253,6 +273,7 @@ def extraer_items_pdf_tabla(texto: str) -> list[ItemUBL]:
                         cantidad,
                         fila.group("unidad").upper(),
                         None,
+                        Decimal(campos["precio"].replace(",", "")),
                     )
                 )
     return items
@@ -287,7 +308,14 @@ def extraer_items_pdf_masydase(texto: str) -> list[ItemUBL]:
         ) > Decimal("0.01"):
             return []
         items.append(
-            ItemUBL(len(items) + 1, descripcion, cantidad_decimal, unidad, importe_decimal)
+            ItemUBL(
+                len(items) + 1,
+                descripcion,
+                cantidad_decimal,
+                unidad,
+                importe_decimal,
+                Decimal(precio.replace(",", "")),
+            )
         )
         suma += importe_decimal
     if suma != Decimal(total.group(1).replace(",", "")):
