@@ -136,6 +136,7 @@ def _registrar_lineas(
         ):
             productos[producto_existente.clave_catalogo] = producto_existente
 
+    lineas_nuevas = []
     for linea, claves in pendientes:
         producto = next((productos[c] for c in claves if c in productos), None)
         clave = claves[0]
@@ -152,7 +153,7 @@ def _registrar_lineas(
             )
             session.add(producto)
             productos[clave] = producto
-        session.add(
+        lineas_nuevas.append(
             LineaComprobanteItem(
                 tenant_id=tenant_id,
                 documento_id=documento_id,
@@ -164,7 +165,9 @@ def _registrar_lineas(
                 importe_linea=linea.importe,
             )
         )
-    return len(pendientes)
+    session.flush()
+    session.add_all(lineas_nuevas)
+    return len(lineas_nuevas)
 
 
 def registrar_items_pdf_estacion(
