@@ -37,8 +37,8 @@ async function solicitar<T>(ruta: string, init?: RequestInit): Promise<T> {
   return cuerpo as T;
 }
 
-export function obtener<T>(ruta: string): Promise<T> {
-  return solicitar<T>(ruta);
+export function obtener<T>(ruta: string, signal?: AbortSignal): Promise<T> {
+  return solicitar<T>(ruta, { signal });
 }
 
 export function enviarJson<T>(
@@ -99,16 +99,24 @@ export function useDatos<T>(ruta: string | null) {
   const recargar = useCallback(() => setVersion((v) => v + 1), []);
 
   useEffect(() => {
-    let vigente = true;
     if (!ruta) return;
-    obtener<T>(ruta).then(
+    let vigente = true;
+    const controlador = new AbortController();
+    const plazo = window.setTimeout(() => {
+      vigente = false;
+      controlador.abort();
+      setEstado({ ruta, version, error: "La consulta tardó demasiado. Vuelve a intentar o cambia los filtros." });
+    }, 20000);
+    void obtener<T>(ruta, controlador.signal).then(
       (datos) => vigente && setEstado({ ruta, version, datos }),
       (error: unknown) =>
         vigente &&
         setEstado({ ruta, version, error: error instanceof Error ? error.message : String(error) }),
-    );
+    ).finally(() => window.clearTimeout(plazo));
     return () => {
       vigente = false;
+      window.clearTimeout(plazo);
+      controlador.abort();
     };
   }, [ruta, version]);
 

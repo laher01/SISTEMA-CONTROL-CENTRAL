@@ -18,10 +18,14 @@ export function Estado({
   vacio?: boolean;
   children: ReactNode;
 }) {
-  if (error) return <p className="error">No se pudo cargar: {error}</p>;
+  if (error) return <p role="alert" className="error">No se pudo cargar: {error}</p>;
   if (cargando && vacio !== false) return <p className="tenue">Cargando…</p>;
-  if (vacio) return <p className="tenue">No hay registros.</p>;
+  if (vacio) return <p role="status" className="tenue">No hay registros.</p>;
   return <>{children}</>;
+}
+
+export function paginaCorregida(pagina: number, ultimaPagina?: number): number {
+  return ultimaPagina === undefined ? pagina : Math.min(pagina, Math.max(0, ultimaPagina));
 }
 
 export function Paginacion({
@@ -42,11 +46,10 @@ export function Paginacion({
     : undefined;
   const ultimaPagina = paginasTotales === undefined ? undefined : paginasTotales - 1;
 
+  const paginaValida = paginaCorregida(pagina, ultimaPagina);
   useEffect(() => {
-    if (ultimaPagina !== undefined && pagina > ultimaPagina) {
-      alCambiar(Math.max(0, ultimaPagina));
-    }
-  }, [alCambiar, pagina, ultimaPagina]);
+    if (pagina !== paginaValida) alCambiar(paginaValida);
+  }, [alCambiar, pagina, paginaValida]);
 
   if (paginasTotales === 0 || (paginasTotales === undefined && pagina === 0 && !hayMas)) return null;
 
