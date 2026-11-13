@@ -27,7 +27,9 @@ def extraer_item_rhe(texto: str) -> tuple[str, Decimal] | None:
     if concepto_match is None:
         return None
     concepto = " ".join(concepto_match.group(1).split()).strip(" .:-")
-    if len(concepto) < 3:
+    if len(concepto) < 3 or re.fullmatch(
+        r"(?:de|del|la|el|y)(?: (?:de|del|la|el|y))*", concepto, re.I
+    ):
         return None
     texto_fiscal = re.sub(r"RECIBO\s+POR\s+HONORARIOS", "RECIBO POR HONORARIOS", texto, flags=re.I)
     campos = extraer_campos(texto_fiscal, "TEXTO_PDF", 1.0)

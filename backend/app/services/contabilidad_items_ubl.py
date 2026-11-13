@@ -190,7 +190,11 @@ def extraer_items_pdf(texto: str) -> list[ItemUBL]:
         re.I,
     )
     if not cabecera:
-        return extraer_items_pdf_ticket(texto) or extraer_items_pdf_columnas(texto)
+        return (
+            extraer_items_pdf_ticket(texto)
+            or extraer_items_pdf_columnas(texto)
+            or extraer_items_pdf_formatos_alternos(texto)
+        )
     if not re.search(r"\bFACTURA\b", texto[: cabecera.start()], re.I):
         return []
     patron = re.compile(
@@ -323,12 +327,20 @@ def extraer_items_pdf_columnas(texto: str) -> list[ItemUBL]:
         return []
     etiquetas = {
         "cantidad": {"cant", "cantidad"},
-        "unidad": {"um", "u m", "unidad", "unidad de medida", "unidad medida"},
+        "unidad": {"um", "u m", "und", "unid", "unidad", "unidad de medida", "unidad medida"},
         "descripcion": {"descripcion", "producto", "descripcion del producto", "detalle"},
-        "importe": {"importe", "total", "importe total", "valor de venta", "valor venta"},
+        "importe": {
+            "importe",
+            "total",
+            "importe total",
+            "valor de venta",
+            "valor venta",
+            "v venta",
+        },
     }
     columnas: dict[str, int] = {}
     ancho = 0
+    encabezados: list[str] = []
     items: list[ItemUBL] = []
     for linea in texto.splitlines():
         celdas = re.split(r" {2,}|\t+", linea.strip())
@@ -340,7 +352,7 @@ def extraer_items_pdf_columnas(texto: str) -> list[ItemUBL]:
             if nombre in opciones
         }
         if {"cantidad", "unidad", "descripcion"} <= detectadas.keys():
-            columnas, ancho = detectadas, len(celdas)
+            columnas, ancho, encabezados = detectadas, len(celdas), nombres
             continue
         if not columnas:
             continue
@@ -349,6 +361,10 @@ def extraer_items_pdf_columnas(texto: str) -> list[ItemUBL]:
         ):
             columnas = {}
             continue
+        if len(celdas) == ancho - 1 and "codigo" in encabezados:
+            posicion = encabezados.index("codigo")
+            if posicion == 0 and re.fullmatch(_NUMERO_TABLA, celdas[0]):
+                celdas.insert(0, "")
         if len(celdas) != ancho:
             continue
         cantidad = celdas[columnas["cantidad"]]
@@ -372,6 +388,73 @@ def extraer_items_pdf_columnas(texto: str) -> list[ItemUBL]:
                 ItemUBL(len(items) + 1, descripcion[:2000], unidades, unidad.upper(), importe)
             )
     return items
+
+
+def extraer_items_pdf_formatos_alternos(texto: str) -> list[ItemUBL]:
+    """Reconoce tablas con códigos, unidades compuestas y descripciones partidas."""
+    if not re.search(r"\bFACTURA\b", texto, re.I):
+        return []
+    formatos = (
+        (
+            r"CANTIDAD C[ÓO]DIGO DESCRIPCI[ÓO]N VALOR UNITARIO PRECIO UNITARIO IMPORTE",
+            rf"(?P<cantidad>{_NUMERO_TABLA}) \S+ (?P<unidad>[A-Z]{{2,5}}) "
+            rf"(?P<descripcion>.+?) {_NUMERO_TABLA} {_NUMERO_TABLA} "
+            rf"(?P<importe>{_NUMERO_TABLA})",
+        ),
+        (
+            r"CANTIDAD UNIDAD MEDIDA C[ÓO]DIGO DESCRIPCI[ÓO]N VALOR UNITARIO ICBPER",
+            rf"(?P<cantidad>{_NUMERO_TABLA}) (?P<unidad>.+?) \d{{8}} "
+            rf"(?P<descripcion>.+?) {_NUMERO_TABLA} {_NUMERO_TABLA}",
+        ),
+        (
+            r"C[ÓO]DIGO DESCRIPCI[ÓO]N CANT\. P\.UNIT\. P\.TOTAL",
+            rf"\S+ (?P<descripcion>.+?) (?P<cantidad>{_NUMERO_TABLA}) "
+            rf"{_NUMERO_TABLA} (?P<importe>{_NUMERO_TABLA})",
+        ),
+    )
+    lineas = texto.splitlines()
+    for indice, linea in enumerate(lineas):
+        cabecera = " ".join(linea.split())
+        for encabezado, patron in formatos:
+            if not re.fullmatch(encabezado, cabecera, re.I):
+                continue
+            items: list[ItemUBL] = []
+            for fila in lineas[indice + 1 :]:
+                limpia = " ".join(fila.split())
+                if not limpia:
+                    continue
+                if _FIN_TABLA.match(limpia) or re.match(
+                    r"^(?:OP[. ]|IGV\b|TOTAL\b|S/TOTAL|[-_]{3,})", limpia, re.I
+                ):
+                    break
+                match = re.fullmatch(patron, limpia, re.I)
+                if match:
+                    datos = match.groupdict()
+                    cantidad = Decimal(datos["cantidad"].replace(",", ""))
+                    monto = datos.get("importe")
+                    importe = Decimal(monto.replace(",", "")) if monto else None
+                    if 0 < cantidad < 10**14 and (importe is None or importe < 10**16):
+                        items.append(
+                            ItemUBL(
+                                len(items) + 1,
+                                datos["descripcion"][:2000],
+                                cantidad,
+                                (datos.get("unidad") or "")[:40].upper(),
+                                importe,
+                            )
+                        )
+                elif items and "P.TOTAL" in cabecera.upper():
+                    anterior = items[-1]
+                    items[-1] = ItemUBL(
+                        anterior.numero,
+                        f"{anterior.descripcion} {limpia}"[:2000],
+                        anterior.cantidad,
+                        anterior.unidad,
+                        anterior.importe,
+                    )
+            if items:
+                return items
+    return []
 
 
 def extraer_items_pdf_masydase(texto: str) -> list[ItemUBL]:

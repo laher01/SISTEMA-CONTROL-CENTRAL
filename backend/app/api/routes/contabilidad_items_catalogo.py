@@ -1068,8 +1068,16 @@ def procesar_lote_reescaneo(
                         )
                         texto = lectura.get("texto")
                         if isinstance(texto, str) and documento.tipo_documento == TipoDocumento.RHE:
+                            tabla = lectura.get("texto_tabla_items")
+                            if not isinstance(tabla, str) and contenido.startswith(b"%PDF-"):
+                                tabla = leer_disposicion_items_pdf(
+                                    contenido, settings.max_extracted_chars
+                                )
                             nuevos = registrar_item_rhe(
-                                session, auth.tenant_id, documento.id, texto
+                                session,
+                                auth.tenant_id,
+                                documento.id,
+                                tabla if isinstance(tabla, str) else texto,
                             )
                         elif isinstance(texto, str):
                             tabla = lectura.get("texto_tabla_items")
