@@ -173,16 +173,16 @@ def _registrar_lineas(
 def registrar_items_pdf_estacion(
     session: Session, tenant_id: uuid.UUID, documento_id: uuid.UUID, texto: str
 ) -> int:
-    """Registra líneas verificables de tablas de facturas PDF.
+    items = extraer_items_pdf(texto)
+    return _registrar_lineas(session, tenant_id, documento_id, items) if items else 0
 
-    No infiere importes, no sustituye UBL y evita duplicados ante reprocesamientos.
-    """
-    items_tabla = extraer_items_pdf_tabla(texto)
-    if items_tabla:
-        return _registrar_lineas(session, tenant_id, documento_id, items_tabla)
+
+def extraer_items_pdf(texto: str) -> list[ItemUBL]:
+    items = extraer_items_pdf_tabla(texto)
+    if items:
+        return items
     if detectar_formato_documental(texto) == "MASYDASE_FACTURA":
-        items = extraer_items_pdf_masydase(texto)
-        return _registrar_lineas(session, tenant_id, documento_id, items) if items else 0
+        return extraer_items_pdf_masydase(texto)
     cabecera = re.search(
         r"CANTIDAD\s+C[ÓO]DIGO\s+U\.?M\.?\s+DESCRIPCI[ÓO]N\s+"
         r"VALOR\s+UNITARIO\s+PRECIO\s+UNITARIO\s+IMPORTE",
@@ -190,10 +190,9 @@ def registrar_items_pdf_estacion(
         re.I,
     )
     if not cabecera:
-        items = extraer_items_pdf_ticket(texto)
-        return _registrar_lineas(session, tenant_id, documento_id, items) if items else 0
+        return extraer_items_pdf_ticket(texto) or extraer_items_pdf_columnas(texto)
     if not re.search(r"\bFACTURA\b", texto[: cabecera.start()], re.I):
-        return 0
+        return []
     patron = re.compile(
         rf"(?P<cantidad>{_NUMERO_TABLA})\s+\S+\s+"
         rf"(?P<unidad>[A-Z][A-Z0-9./-]{{0,39}})\s+(?P<descripcion>.+?)\s+"
@@ -202,7 +201,7 @@ def registrar_items_pdf_estacion(
     )
     tabla = _FIN_TABLA.split(texto[cabecera.end() :], maxsplit=1)[0]
     if re.search(r"\bFACTURA\s+ELECTR[ÓO]NICA\b", tabla, re.I):
-        return 0
+        return []
     items = []
     for numero, fila in enumerate(tabla.strip().splitlines(), 1):
         campos = patron.fullmatch(" ".join(fila.split()))
@@ -220,7 +219,7 @@ def registrar_items_pdf_estacion(
                     importe,
                 )
             )
-    return _registrar_lineas(session, tenant_id, documento_id, items) if items else 0
+    return items or extraer_items_pdf_columnas(texto)
 
 
 _NUMERO_TABLA = r"(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?"
@@ -314,6 +313,63 @@ def extraer_items_pdf_ticket(texto: str) -> list[ItemUBL]:
                     campos["unidad"].upper(),
                     importe,
                 )
+            )
+    return items
+
+
+def extraer_items_pdf_columnas(texto: str) -> list[ItemUBL]:
+    """Lee tablas con separadores de columna conservados en el texto del PDF."""
+    if not re.search(r"\bFACTURA\b", texto, re.I):
+        return []
+    etiquetas = {
+        "cantidad": {"cant", "cantidad"},
+        "unidad": {"um", "u m", "unidad", "unidad de medida", "unidad medida"},
+        "descripcion": {"descripcion", "producto", "descripcion del producto", "detalle"},
+        "importe": {"importe", "total", "importe total", "valor de venta", "valor venta"},
+    }
+    columnas: dict[str, int] = {}
+    ancho = 0
+    items: list[ItemUBL] = []
+    for linea in texto.splitlines():
+        celdas = re.split(r" {2,}|\t+", linea.strip())
+        nombres = [texto_normalizado(celda) for celda in celdas]
+        detectadas = {
+            campo: nombres.index(nombre)
+            for campo, opciones in etiquetas.items()
+            for nombre in nombres
+            if nombre in opciones
+        }
+        if {"cantidad", "unidad", "descripcion"} <= detectadas.keys():
+            columnas, ancho = detectadas, len(celdas)
+            continue
+        if not columnas:
+            continue
+        if _FIN_TABLA.match(linea) or re.match(
+            r"\s*(?:op\.\s*gravadas|igv|sub\s*total|total\s+s/)", linea, re.I
+        ):
+            columnas = {}
+            continue
+        if len(celdas) != ancho:
+            continue
+        cantidad = celdas[columnas["cantidad"]]
+        unidad = celdas[columnas["unidad"]]
+        descripcion = celdas[columnas["descripcion"]]
+        if (
+            not re.fullmatch(_NUMERO_TABLA, cantidad)
+            or not re.fullmatch(r"[A-Za-z][A-Za-z0-9./-]{0,39}", unidad)
+            or not any(letra.isalpha() for letra in descripcion)
+        ):
+            continue
+        unidades = Decimal(cantidad.replace(",", ""))
+        importe = None
+        if "importe" in columnas:
+            monto = re.sub(r"^(?:S/|USD)\s*|\s*(?:S/|USD)$", "", celdas[columnas["importe"]])
+            if not re.fullmatch(_NUMERO_TABLA, monto):
+                continue
+            importe = Decimal(monto.replace(",", ""))
+        if 0 < unidades < 10**14 and (importe is None or importe < 10**16):
+            items.append(
+                ItemUBL(len(items) + 1, descripcion[:2000], unidades, unidad.upper(), importe)
             )
     return items
 

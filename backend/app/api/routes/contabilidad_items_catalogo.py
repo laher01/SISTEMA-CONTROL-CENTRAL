@@ -31,8 +31,16 @@ from app.services import auditoria
 from app.services.cache_ocr import procesar_con_cache
 from app.services.contabilidad_items_rhe import registrar_item_rhe
 from app.services.contabilidad_items_rules import sugerir_categoria, texto_normalizado
-from app.services.contabilidad_items_ubl import registrar_items_pdf_estacion, registrar_items_ubl
-from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
+from app.services.contabilidad_items_ubl import (
+    extraer_items_pdf,
+    registrar_items_pdf_estacion,
+    registrar_items_ubl,
+)
+from app.services.procesamiento_documental import (
+    DocumentoNoProcesable,
+    leer_disposicion_items_pdf,
+    procesar,
+)
 
 router = APIRouter(prefix="/contabilidad-items", tags=["contabilidad-items-catalogo"])
 _OCR_LOCK = threading.Lock()
@@ -642,8 +650,8 @@ def vista_previa_reescaneo(session: SessionDep, auth: OperativeAuthDep) -> dict[
         "lote_maximo": MAX_REESCANEO_LOTE,
         "nota": (
             "Se conservan líneas, clasificaciones, expedientes y originales. Se extrae UBL y "
-            "los formatos PDF/imágenes con reglas validadas; actualmente, la regla PDF cubre "
-            "un formato específico. Los demás quedan para revisión manual."
+            "las tablas reconocibles en PDF e imágenes. Los comprobantes sin líneas "
+            "verificables quedan para revisión manual."
         ),
     }
 
@@ -1064,8 +1072,21 @@ def procesar_lote_reescaneo(
                                 session, auth.tenant_id, documento.id, texto
                             )
                         elif isinstance(texto, str):
+                            tabla = lectura.get("texto_tabla_items")
+                            if (
+                                not isinstance(tabla, str)
+                                and not lineas_previas
+                                and contenido.startswith(b"%PDF-")
+                                and not extraer_items_pdf(texto)
+                            ):
+                                tabla = leer_disposicion_items_pdf(
+                                    contenido, settings.max_extracted_chars
+                                )
                             nuevos = registrar_items_pdf_estacion(
-                                session, auth.tenant_id, documento.id, texto
+                                session,
+                                auth.tenant_id,
+                                documento.id,
+                                tabla if isinstance(tabla, str) else texto,
                             )
                     else:
                         nuevos = 0

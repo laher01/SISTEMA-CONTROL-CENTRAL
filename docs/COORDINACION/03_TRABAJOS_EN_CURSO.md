@@ -36,6 +36,7 @@
 | ITEMS-EXP-ORQ-001 | Leer tablas PDF de comprobantes, consultar facturas por ítem y navegar entre expedientes | Ítems / Expedientes | Orquestador de Desarrollo | Implementado localmente, validación de CI y despliegue pendientes | `fix/items-pdf-navegacion` | Extractor, consultas de catálogo y expedientes, vistas y pruebas |
 | ITEMS-CORREO-001 | Totales por ítem, categorías e ingreso de adjuntos documentales | Ítems / recepción documental | Orquestador | Implementado en rama; CI y despliegue pendientes | `fix/items-recepcion-operativa` | API, vistas, extracción y worker de correo; relacionado con #221 y #365 |
 | ITEMS-ING-003 | Cobertura de combustibles y RHE, registro asistido y consultas agrupadas | Contabilidad de Ítems / OCR | Orquestador | Implementado en rama; CI e integración pendientes | fix/items-ingreso-rendimiento | Extractores, persistencia y ruta de Documentos; compatible con PR #456 |
+| ITEMS-TABLA-004 | Extracción por columnas de comprobantes PDF | Ítems / OCR | Orquestador | Probado localmente; CI e integración pendientes | fix/items-tablas-columnas | Extractor, lectura PDF y reescaneo; relacionado con #365 |
 | ETAPA-7 | Landing/CMS/planes/NEXUS comercial | Comercial | Chat Etapa 7 | RESERVADO A OTRO CHAT | Consultar sus PR | Website y comercial |
 
 **Importante:** no se afirma que los PR abiertos no relacionados estén libres; inspeccionar GitHub antes de tocar archivos. Un cambio de estado requiere evidencia (commit, pruebas, PR o despliegue).
