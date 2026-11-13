@@ -14,6 +14,7 @@ from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
 from app.enums import TipoDocumento
+from app.services.contabilidad_items_rhe import extraer_item_rhe
 from app.services.contabilidad_items_ubl import extraer_items_pdf
 from app.services.extraccion_campos import extraer_campos
 
@@ -97,7 +98,11 @@ def _procesar_pdf(contenido: bytes, limite: int, max_paginas_ocr: int) -> Result
     sugerencia = sugerir_tipo(texto)
     tabla = (
         leer_disposicion_items_pdf(contenido, limite)
-        if sugerencia and sugerencia.tipo == TipoDocumento.FACT and not extraer_items_pdf(texto)
+        if sugerencia
+        and (
+            sugerencia.tipo == TipoDocumento.RHE
+            or (sugerencia.tipo == TipoDocumento.FACT and not extraer_items_pdf(texto))
+        )
         else None
     )
     return ResultadoProcesamiento(
@@ -127,7 +132,7 @@ def leer_disposicion_items_pdf(contenido: bytes, limite: int) -> str | None:
             if caracteres >= limite:
                 break
         texto = "\n".join(partes)
-        return texto if extraer_items_pdf(texto) else None
+        return texto if extraer_items_pdf(texto) or extraer_item_rhe(texto) else None
     except (PdfReadError, OSError, ValueError):
         return None
 

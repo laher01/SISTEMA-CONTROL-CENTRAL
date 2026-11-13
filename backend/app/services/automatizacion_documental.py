@@ -101,7 +101,10 @@ def registrar_items_comprobante(
     if not isinstance(texto, str):
         return
     if documento.tipo_documento == TipoDocumento.RHE:
-        registrar_item_rhe(session, documento.tenant_id, documento.id, texto)
+        tabla = procesamiento.get("texto_tabla_items")
+        registrar_item_rhe(
+            session, documento.tenant_id, documento.id, tabla if isinstance(tabla, str) else texto
+        )
     elif documento.tipo_documento == TipoDocumento.FACT:
         tabla = procesamiento.get("texto_tabla_items")
         registrar_items_pdf_estacion(

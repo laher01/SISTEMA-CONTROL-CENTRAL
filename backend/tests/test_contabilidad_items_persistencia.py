@@ -259,3 +259,21 @@ Importe Total S/ 1055.08
         ("DIESEL B5 S50", Decimal("49.499"), "GLL"),
         ("LUBRICANTE SINTÉTICO", Decimal("2"), "UND"),
     ]
+
+
+def test_tabla_san_jose_con_encabezado_und():
+    from app.services.contabilidad_items_ubl import extraer_items_pdf
+
+    texto = (
+        "FACTURA ELECTRÓNICA F091-00007289\n"
+        "Ítem  Código  Descripción  Und.  Cantidad  "
+        "V. Unitario  P. Unitario  Descuento  Valor Venta\n"
+        "1  05  DIESEL B5UV S50  GLL  300.00  19.92  23.50  0.00  5,974.58\n"
+        "Sub Total  S/  5,974.58\n"
+    )
+    items = extraer_items_pdf(texto)
+    assert len(items) == 1
+    assert items[0].descripcion == "DIESEL B5UV S50"
+    assert items[0].unidad == "GLL"
+    assert items[0].cantidad == Decimal("300.00")
+    assert items[0].importe == Decimal("5974.58")
