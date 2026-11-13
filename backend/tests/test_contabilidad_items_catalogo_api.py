@@ -437,7 +437,7 @@ def test_reescaneo_rhe_extrae_concepto_y_lo_marca_para_revision(
     session.add(documento)
     session.commit()
     texto = """RECIBO POR HONORARIOS ELECTRÓNICO
-Por concepto de SERVICIO DE ASESORIA Y DOCUMENTACION-PAITA
+Concepto: SERVICIO DE ASESORIA Y DOCUMENTACION-PAITA
 Inciso A DEL ARTICULO 33
 Total por honorarios:
 1,500.00

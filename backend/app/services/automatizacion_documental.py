@@ -92,7 +92,7 @@ def registrar_fallo(
     return ResultadoAutomatizacion("FALLIDO", motivos=(motivo,))
 
 
-def _registrar_items_comprobante(
+def registrar_items_comprobante(
     session: Session, documento: Documento, procesamiento: dict[str, object]
 ) -> None:
     if documento.expediente_id is None:
@@ -147,7 +147,7 @@ def aplicar_automaticamente(
             "COMPLETADO", relacionado=True, expediente_id=documento.expediente_id
         )
         _guardar_estado(documento, resultado.estado, expediente_id=documento.expediente_id)
-        _registrar_items_comprobante(session, documento, procesamiento)
+        registrar_items_comprobante(session, documento, procesamiento)
         return resultado
 
     sugerencia = procesamiento.get("clasificacion_sugerida")
@@ -362,7 +362,7 @@ def aplicar_automaticamente(
     }
     documento.datos_extraidos = datos
     vincular_documento(session, settings, hoy, documento, expediente.id, tipo)
-    _registrar_items_comprobante(session, documento, procesamiento)
+    registrar_items_comprobante(session, documento, procesamiento)
     _guardar_estado(documento, "COMPLETADO", expediente_id=expediente.id, creado=creado)
     auditoria.registrar(
         session,

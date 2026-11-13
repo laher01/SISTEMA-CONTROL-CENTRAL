@@ -32,7 +32,6 @@ from app.services.cache_ocr import procesar_con_cache
 from app.services.contabilidad_items_rhe import registrar_item_rhe
 from app.services.contabilidad_items_rules import sugerir_categoria, texto_normalizado
 from app.services.contabilidad_items_ubl import registrar_items_pdf_estacion, registrar_items_ubl
-from app.services.expedientes import expediente_tiene_documentos_activos
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 
 router = APIRouter(prefix="/contabilidad-items", tags=["contabilidad-items-catalogo"])
@@ -255,7 +254,6 @@ def listar_catalogo(
             Documento.deleted_at.is_(None),
             Expediente.tenant_id == auth.tenant_id,
             Expediente.deleted_at.is_(None),
-            expediente_tiene_documentos_activos(),
             _alcance(auth),
         )
         .group_by(LineaComprobanteItem.producto_id)
@@ -280,8 +278,15 @@ def listar_catalogo(
             ProductoItem.descripcion.ilike(termino) | ProductoItem.categoria.ilike(termino)
         )
     consulta = consulta.order_by(ProductoItem.descripcion, ProductoItem.id)
-    total = session.scalar(select(func.count()).select_from(consulta.subquery())) or 0
-    filas = session.execute(consulta.limit(limite).offset(offset)).all()
+    filas = session.execute(
+        consulta.add_columns(func.count().over().label("total")).limit(limite).offset(offset)
+    ).all()
+    total = filas[0].total if filas else 0
+    if not filas and offset:
+        total = (
+            session.scalar(select(func.count()).select_from(consulta.order_by(None).subquery()))
+            or 0
+        )
     return {
         "total": total,
         "items": [
@@ -294,7 +299,7 @@ def listar_catalogo(
                 "activo": producto.activo,
                 "lineas_asociadas": lineas_asociadas,
             }
-            for producto, lineas_asociadas, unidad in filas
+            for producto, lineas_asociadas, unidad, _ in filas
         ],
     }
 

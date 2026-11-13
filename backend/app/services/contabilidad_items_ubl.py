@@ -100,17 +100,19 @@ def _registrar_lineas(
     )
     if documento_valido is None:
         raise ValueError("Documento no encontrado en el tenant autorizado")
-    registrados = 0
-    for linea in items:
-        ya_registrada = session.scalar(
-            select(LineaComprobanteItem.id).where(
+    existentes = set(
+        session.scalars(
+            select(LineaComprobanteItem.numero_linea).where(
                 LineaComprobanteItem.tenant_id == tenant_id,
                 LineaComprobanteItem.documento_id == documento_id,
-                LineaComprobanteItem.numero_linea == linea.numero,
             )
         )
-        if ya_registrada is not None:
+    )
+    pendientes = []
+    for linea in items:
+        if linea.numero in existentes:
             continue
+        existentes.add(linea.numero)
         nombre = texto_normalizado(linea.descripcion)
         # SUNAT puede imprimir «500ML» o «500 ML» para la misma presentación.
         medida = r"(?<=\d) *(ml|cl|l|kg|g|mg)\b"
@@ -119,18 +121,27 @@ def _registrar_lineas(
             hashlib.sha256(f"{variante}|{linea.unidad}".encode()).hexdigest()
             for variante in dict.fromkeys((nombre, *variantes))
         ]
-        producto = session.scalar(
-            select(ProductoItem)
-            .where(
+        pendientes.append((linea, claves))
+    if not pendientes:
+        return 0
+
+    claves_pendientes = list(dict.fromkeys(clave for _, claves in pendientes for clave in claves))
+    productos: dict[str, ProductoItem] = {}
+    for inicio in range(0, len(claves_pendientes), 1000):
+        for producto_existente in session.scalars(
+            select(ProductoItem).where(
                 ProductoItem.tenant_id == tenant_id,
-                ProductoItem.clave_catalogo.in_(claves),
+                ProductoItem.clave_catalogo.in_(claves_pendientes[inicio : inicio + 1000]),
             )
-            .order_by((ProductoItem.clave_catalogo == claves[0]).desc(), ProductoItem.id)
-            .limit(1)
-        )
+        ):
+            productos[producto_existente.clave_catalogo] = producto_existente
+
+    for linea, claves in pendientes:
+        producto = next((productos[c] for c in claves if c in productos), None)
         clave = claves[0]
         if producto is None:
             producto = ProductoItem(
+                id=uuid.uuid4(),
                 tenant_id=tenant_id,
                 clave_catalogo=clave,
                 descripcion=linea.descripcion[:2000],
@@ -140,7 +151,7 @@ def _registrar_lineas(
                 activo=True,
             )
             session.add(producto)
-            session.flush()
+            productos[clave] = producto
         session.add(
             LineaComprobanteItem(
                 tenant_id=tenant_id,
@@ -153,8 +164,7 @@ def _registrar_lineas(
                 importe_linea=linea.importe,
             )
         )
-        registrados += 1
-    return registrados
+    return len(pendientes)
 
 
 def registrar_items_pdf_estacion(
@@ -176,7 +186,10 @@ def registrar_items_pdf_estacion(
         texto,
         re.I,
     )
-    if not cabecera or not re.search(r"\bFACTURA\b", texto[: cabecera.start()], re.I):
+    if not cabecera:
+        items = extraer_items_pdf_ticket(texto)
+        return _registrar_lineas(session, tenant_id, documento_id, items) if items else 0
+    if not re.search(r"\bFACTURA\b", texto[: cabecera.start()], re.I):
         return 0
     patron = re.compile(
         rf"(?P<cantidad>{_NUMERO_TABLA})\s+\S+\s+"
@@ -255,6 +268,50 @@ def extraer_items_pdf_tabla(texto: str) -> list[ItemUBL]:
                         None,
                     )
                 )
+    return items
+
+
+def extraer_items_pdf_ticket(texto: str) -> list[ItemUBL]:
+    """Lee tickets fiscales con descripción primero o cantidad primero."""
+    if not re.search(r"\bFACTURA\b", texto, re.I):
+        return []
+    cantidad = r"CANT(?:IDAD)?\.?"
+    unidad = r"(?:U\.?\s*M\.?|UNIDAD(?:\s+(?:DE\s+)?MEDIDA)?)"
+    descripcion = r"(?:DESCRIPCI[ÓO]N|PRODUCTO)"
+    precio = r"(?:P\.?\s*UNIT(?:ARIO)?\.?|(?:PRECIO|VALOR)\s+UNITARIO)"
+    cabecera = re.search(
+        rf"(?im)^\s*(?P<primero>{descripcion}\s+{cantidad}\s+{unidad}|"
+        rf"{cantidad}\s+{unidad}\s+{descripcion})\s+{precio}\s+(?:IMPORTE|TOTAL)\s*$",
+        texto,
+    )
+    if cabecera is None:
+        return []
+    numero = _NUMERO_TABLA
+    cantidad_unidad = rf"(?P<cantidad>{numero})\s+(?P<unidad>[A-Z][A-Z0-9./-]{{0,39}})"
+    descripcion_fila = r"(?P<descripcion>.+?)"
+    if re.match(descripcion, cabecera["primero"], re.I):
+        inicio = rf"{descripcion_fila}\s+{cantidad_unidad}"
+    else:
+        inicio = rf"{cantidad_unidad}\s+{descripcion_fila}"
+    fila = re.compile(rf"{inicio}\s+{numero}\s+(?P<importe>{numero})", re.I)
+    tabla = _FIN_TABLA.split(texto[cabecera.end() :], maxsplit=1)[0]
+    items = []
+    for posicion, linea in enumerate(tabla.strip().splitlines(), 1):
+        campos = fila.fullmatch(" ".join(linea.split()))
+        if campos is None:
+            continue
+        unidades = Decimal(campos["cantidad"].replace(",", ""))
+        importe = Decimal(campos["importe"].replace(",", ""))
+        if 0 < unidades < 10**14 and 0 <= importe < 10**16:
+            items.append(
+                ItemUBL(
+                    posicion,
+                    campos["descripcion"][:2000],
+                    unidades,
+                    campos["unidad"].upper(),
+                    importe,
+                )
+            )
     return items
 
 

@@ -10,7 +10,7 @@ from app.services.contabilidad_items_ubl import ItemUBL, _registrar_lineas
 from app.services.extraccion_campos import extraer_campos
 
 _CONCEPTO = re.compile(
-    r"\bpor\s+concepto\s+de\s*:?\s*(.+?)"
+    r"\b(?:por\s+concepto\s+de\s*:?|(?:concepto|descripci[oó]n del servicio)\s*:)\s*(.+?)"
     r"(?=\n\s*(?:inciso|fecha\s+de\s+emisi[oó]n|total\s+por\s+honorarios|"
     r"observaci[oó]n|retenci[oó]n|total\s+neto\s+recibido|\d{1,2}\s+de\s+"
     r"(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|"
@@ -21,7 +21,7 @@ _CONCEPTO = re.compile(
 
 def extraer_item_rhe(texto: str) -> tuple[str, Decimal] | None:
     """Devuelve concepto y honorario bruto solo cuando ambos tienen evidencia clara."""
-    if "RECIBO POR HONORARIOS" not in texto.upper():
+    if not re.search(r"\bRECIBO\s+POR\s+HONORARIOS\b", texto, re.I):
         return None
     concepto_match = _CONCEPTO.search(texto)
     if concepto_match is None:
@@ -29,7 +29,8 @@ def extraer_item_rhe(texto: str) -> tuple[str, Decimal] | None:
     concepto = " ".join(concepto_match.group(1).split()).strip(" .:-")
     if len(concepto) < 3:
         return None
-    campos = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    texto_fiscal = re.sub(r"RECIBO\s+POR\s+HONORARIOS", "RECIBO POR HONORARIOS", texto, flags=re.I)
+    campos = extraer_campos(texto_fiscal, "TEXTO_PDF", 1.0)
     bruto = (campos or {}).get("campos", {})
     total = bruto.get("importe_total") if isinstance(bruto, dict) else None
     if not isinstance(total, dict) or not isinstance(total.get("valor"), str):

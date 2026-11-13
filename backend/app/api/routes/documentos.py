@@ -60,6 +60,7 @@ from app.services.automatizacion_documental import (
     aplicar_automaticamente,
     guardar_procesamiento,
     registrar_fallo,
+    registrar_items_comprobante,
 )
 from app.services.cache_ocr import eliminar_cache_ocr, procesar_con_cache
 from app.services.eliminacion import (
@@ -2155,6 +2156,9 @@ def crear_expediente_asistido(
                 expediente.id,
                 TipoDocumento(pendiente.tipo_documento),
             )
+    lectura = (documento.datos_extraidos or {}).get("procesamiento_documental")
+    if isinstance(lectura, dict):
+        registrar_items_comprobante(session, documento, lectura)
     session.commit()
     return ExpedienteAsistidoOut(
         expediente=ExpedienteOut.model_validate(expediente),
@@ -2226,5 +2230,8 @@ def vincular(
     except ComprobanteYaRegistrado as exc:
         session.rollback()
         raise _comprobante_duplicado(session, auth, exc.expediente_id) from exc
+    lectura = (documento.datos_extraidos or {}).get("procesamiento_documental")
+    if isinstance(lectura, dict):
+        registrar_items_comprobante(session, documento, lectura)
     session.commit()
     return documento
