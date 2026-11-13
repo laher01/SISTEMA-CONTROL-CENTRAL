@@ -147,6 +147,21 @@ def test_search_and_linked_invoices_are_tenant_scoped(
 
     own_doc = session.get(Documento, UUID(invoices.json()[0]["documento_id"]))
     assert own_doc is not None
+    catalogo = "/api/v1/contabilidad-items/catalogo"
+    marcado = client.patch(f"{catalogo}/{product_id}", json={"fuera_rubro": True})
+    assert marcado.status_code == 200, marcado.text
+    assert client.get("/api/v1/contabilidad-items").json() == []
+    assert (
+        client.get(f"/api/v1/expedientes/{factura['expediente_id']}").json()["fuera_rubro_items"]
+        is True
+    )
+    consulta_excluida = client.get(
+        f"/api/v1/contabilidad-items/productos/{product_id}/facturas",
+        params={"vista_catalogo": True, "ordenar_por": "receptor"},
+    )
+    assert consulta_excluida.json()[0]["fuera_rubro"] == "true"
+    assert client.patch(f"{catalogo}/{product_id}", json={"fuera_rubro": False}).status_code == 200
+
     own_doc.deleted_at = datetime.now(UTC)
     session.commit()
     inactive = client.get(f"/api/v1/contabilidad-items/productos/{product_id}/facturas")

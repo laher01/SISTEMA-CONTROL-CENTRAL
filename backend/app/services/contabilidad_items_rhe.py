@@ -58,5 +58,5 @@ def registrar_item_rhe(
         session,
         tenant_id,
         documento_id,
-        [ItemUBL(1, descripcion, Decimal(1), "SERVICIO", importe)],
+        [ItemUBL(1, descripcion, Decimal(1), "SERVICIO", importe, importe)],
     )

@@ -1146,3 +1146,8 @@ button.peligro {
 .resumen-clasificacion__grupo strong {
   color: #183d62;
 }
+
+.item-fuera-rubro > td,
+.aviso-fuera-rubro {
+  background: color-mix(in srgb, #d99619 19%, var(--surface, #fff));
+}

@@ -30,6 +30,10 @@ class ProductoItem(ConId, ConTenant, ConCreacion, Base):
     unidad_base: Mapped[str | None] = mapped_column(String(40))
     clasificacion_confirmada: Mapped[bool] = mapped_column(default=False)
     activo: Mapped[bool] = mapped_column(default=True)
+    fuera_rubro: Mapped[bool] = mapped_column(default=False, server_default=text("false"))
+    combinado_en_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("productos_items.id", name="fk_items_combinado_en", ondelete="CASCADE")
+    )
 
 
 class CategoriaItem(ConId, ConTenant, ConCreacion, Base):
@@ -86,6 +90,7 @@ class LineaComprobanteItem(ConId, ConTenant, ConCreacion, Base):
     descripcion_original: Mapped[str] = mapped_column(String(2000))
     cantidad: Mapped[Decimal] = mapped_column(Numeric(18, 4))
     unidad: Mapped[str] = mapped_column(String(40))
+    precio_unitario: Mapped[Decimal | None] = mapped_column(Numeric(22, 8))
     importe_linea: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
 
 
