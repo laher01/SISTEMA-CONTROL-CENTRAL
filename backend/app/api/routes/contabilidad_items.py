@@ -212,7 +212,7 @@ def facturas_por_producto(
         select(ProductoItem).where(
             ProductoItem.id == producto_id,
             ProductoItem.tenant_id == auth.tenant_id,
-            or_(vista_catalogo, ProductoItem.activo.is_(True)),
+            true() if vista_catalogo else ProductoItem.activo.is_(True),
         )
     )
     if producto is None:
@@ -277,7 +277,7 @@ def facturas_por_producto(
             expediente_tiene_documentos_activos(),
             _alcance(auth),
             or_(
-                vista_catalogo,
+                true() if vista_catalogo else False,
                 ultimo_estado.is_(None),
                 ultimo_estado.not_in(
                     [
