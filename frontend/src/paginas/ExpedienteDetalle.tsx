@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
-import { eliminar, enviarFormulario, enviarJson, urlArchivo, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
+import { conParametros, eliminar, enviarFormulario, enviarJson, urlArchivo, urlPdfExpediente, urlZipExpediente, useDatos } from "../api";
 import { Estado, Semaforo } from "../componentes";
 import {
   ETIQUETA_ALERTA,
@@ -205,6 +205,7 @@ export default function ExpedienteDetalle({ sesion }: { sesion: { rol: string } 
               : "FACT " + numeroExpediente(datos.tipo_comprobante, datos.serie, datos.correlativo_original ?? datos.correlativo)}{" "}
             <Semaforo estado={datos.estado} />
           </h2>
+          {puedeConsultarPagosDocumentales && <BuscarPagoExistente key={datos.id} expedienteId={datos.id} />}
           {pagosDocumentales?.length ? (
             <section className="tarjeta">
               <h3>Pagos documentales vinculados</h3>
@@ -478,4 +479,45 @@ function AgregarDocumento({
       {mensaje && <span className="tenue">{mensaje}</span>}
     </form>
   );
+}
+
+function BuscarPagoExistente({ expedienteId }: { expedienteId: string }) {
+  const [abierto, setAbierto] = useState(false);
+  const [buscar, setBuscar] = useState("");
+  const [filtro, setFiltro] = useState("");
+  const [pagina, setPagina] = useState(0);
+  const pagos = useDatos<Documento[]>(abierto ? conParametros("/api/v1/documentos", {
+    tipo_documento: "VCHR", buscar_pago: filtro, limit: "21", offset: String(pagina * 20),
+  }) : null);
+
+  return <section className="tarjeta" aria-label="Vincular pago existente">
+    <button type="button" aria-expanded={abierto} onClick={() => setAbierto(!abierto)}>
+      Vincular pago existente
+    </button>
+    {abierto && <>
+      <form className="filtros" onSubmit={(evento) => {
+        evento.preventDefault();
+        setPagina(0);
+        setFiltro(buscar.trim());
+      }}>
+        <label>Archivo o número de operación
+          <input type="search" maxLength={100} value={buscar} onChange={(evento) => setBuscar(evento.target.value)} />
+        </label>
+        <button type="submit">Buscar</button>
+      </form>
+      {pagos.cargando && <p role="status">Buscando comprobantes de pago…</p>}
+      {pagos.error && <p role="alert">{pagos.error}</p>}
+      {pagos.datos?.length === 0 && <p>No hay vouchers o transferencias para esta búsqueda.</p>}
+      {pagos.datos?.slice(0, 20).map((pago) => <p key={pago.id}>
+        <Link to={`/pagos-documentales/${pago.id}?expediente=${expedienteId}`}>
+          {pago.nombre_original}
+        </Link>{" "}
+        <a href={urlArchivo(pago.id)} target="_blank" rel="noreferrer">Ver archivo</a>
+      </p>)}
+      {(pagina > 0 || (pagos.datos?.length ?? 0) > 20) && <div className="acciones">
+        <button type="button" disabled={!pagina || pagos.cargando} onClick={() => setPagina(pagina - 1)}>Anterior</button>
+        <button type="button" disabled={pagos.cargando || (pagos.datos?.length ?? 0) <= 20} onClick={() => setPagina(pagina + 1)}>Siguiente</button>
+      </div>}
+    </>}
+  </section>;
 }

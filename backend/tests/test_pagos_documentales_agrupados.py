@@ -108,6 +108,11 @@ def test_un_voucher_se_distribuye_a_cuatro_facturas_y_se_confirma_humanamente(
     voucher = _subir(client, "voucher-grupo.pdf", b"%PDF-1.7 voucher sintetico")
     _marcar_voucher(session, str(voucher["id"]), "28200.00")
 
+    for termino in ("voucher-grupo", f"OP-{str(voucher['id'])[:8]}"):
+        encontrados = client.get("/api/v1/documentos", params={"buscar_pago": termino})
+        assert encontrados.status_code == 200, encontrados.text
+        assert [fila["id"] for fila in encontrados.json()] == [voucher["id"]]
+
     distribucion_inicial = ["9400.00", "5875.00", "1175.00", "11650.00"]
     cuerpo = {
         "documento_id": voucher["id"],
