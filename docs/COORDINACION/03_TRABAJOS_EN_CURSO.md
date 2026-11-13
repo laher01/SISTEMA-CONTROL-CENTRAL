@@ -38,6 +38,7 @@
 | ITEMS-ING-003 | Cobertura de combustibles y RHE, registro asistido y consultas agrupadas | Contabilidad de Ítems / OCR | Orquestador | Implementado en rama; CI e integración pendientes | fix/items-ingreso-rendimiento | Extractores, persistencia y ruta de Documentos; compatible con PR #456 |
 | ITEMS-TABLA-004 | Extracción por columnas de comprobantes PDF | Ítems / OCR | Orquestador | Probado localmente; CI e integración pendientes | fix/items-tablas-columnas | Extractor, lectura PDF y reescaneo; relacionado con #365 |
 | PAG-DOC-004 | Buscar y vincular pagos ya cargados desde Expedientes | Pagos documentales | Orquestador | Implementado; CI e integración pendientes | fix/vincular-pago-existente | Detalle de expediente y distribución de pagos; complementa PAG-DOC-003 |
+| ITEMS-REV-005 | Listar comprobantes activos sin líneas extraídas | Contabilidad de Ítems | Orquestador | Implementado; CI e integración pendientes | fix/reescaneo-lista-sin-lineas | API y pantalla de Reescaneo |
 | ETAPA-7 | Landing/CMS/planes/NEXUS comercial | Comercial | Chat Etapa 7 | RESERVADO A OTRO CHAT | Consultar sus PR | Website y comercial |
 
 **Importante:** no se afirma que los PR abiertos no relacionados estén libres; inspeccionar GitHub antes de tocar archivos. Un cambio de estado requiere evidencia (commit, pruebas, PR o despliegue).

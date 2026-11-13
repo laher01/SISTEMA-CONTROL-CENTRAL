@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { enviarJson, useDatos } from "../api";
+import { Link } from "react-router-dom";
+import { enviarJson, urlArchivo, useDatos } from "../api";
 
 type Preview = {
   facturas: number;
@@ -50,6 +51,15 @@ type Resultado = {
   items: ItemVista[];
   limite_items_visibles: number;
 };
+type Pendiente = {
+  documento_id: string;
+  nombre_original: string;
+  tipo_documento: string;
+  expediente_id: string | null;
+  comprobante: string | null;
+  fecha_emision: string | null;
+  emisor: string | null;
+};
 type Categoria = { id: string; nombre: string; activa: boolean };
 type Edicion = { categoria: string; descripcion: string };
 
@@ -59,6 +69,10 @@ const RUTA_LINEAS = "/api/v1/contabilidad-items/lineas";
 
 export default function ReescanearItems({ rol }: { rol: string }) {
   const preview = useDatos<Preview>(RUTA_PREVIEW);
+  const [verPendientes, setVerPendientes] = useState(false);
+  const [paginaPendientes, setPaginaPendientes] = useState(0);
+  const pendientes = useDatos<Pendiente[]>(verPendientes
+    ? `/api/v1/contabilidad-items/reescaneo/sin-lineas?offset=${paginaPendientes * 20}` : null);
   const trabajos = useDatos<Trabajo[]>(RUTA_TRABAJOS);
   const categorias = useDatos<Categoria[]>("/api/v1/contabilidad-items/categorias");
   const [trabajo, setTrabajo] = useState<Trabajo | null>(null);
@@ -182,6 +196,11 @@ export default function ReescanearItems({ rol }: { rol: string }) {
           <p><strong>Ámbito:</strong> {alcanceTenant ? "Tenant completo" : "Tu cartera según jerarquía"}</p>
           <p><strong>Comprobantes activos:</strong> {preview.datos.facturas} · <strong>Facturas:</strong> {preview.datos.por_tipo.FACT ?? 0} · <strong>Recibos por honorarios:</strong> {preview.datos.por_tipo.RHE ?? 0}</p>
           <p><strong>Con líneas:</strong> {preview.datos.con_lineas} · <strong>Sin líneas:</strong> {preview.datos.sin_lineas}</p>
+          <button type="button" aria-expanded={verPendientes} onClick={() => {
+            setPaginaPendientes(0);
+            setVerPendientes(!verPendientes);
+            if (!verPendientes) pendientes.recargar();
+          }}>{verPendientes ? "Ocultar comprobantes sin líneas" : `Ver comprobantes sin líneas (${preview.datos.sin_lineas})`}</button>
           <p><strong>Por formato:</strong> XML {preview.datos.por_formato.XML ?? 0}, PDF {preview.datos.por_formato.PDF ?? 0}, imágenes {preview.datos.por_formato.IMAGEN ?? 0}, otros {preview.datos.por_formato.OTRO ?? 0}.</p>
           <p>{preview.datos.nota}</p>
         </div>
@@ -189,6 +208,25 @@ export default function ReescanearItems({ rol }: { rol: string }) {
           Iniciar reescaneo de {alcanceTenant ? "todos los comprobantes" : "mis comprobantes autorizados"}
         </button>
       </>}
+      {verPendientes && <section aria-label="Comprobantes sin líneas">
+        <h3>Comprobantes sin líneas</h3>
+        <p>Lista actual de comprobantes sin ítems registrados.</p>
+        {pendientes.cargando && <p role="status">Cargando comprobantes…</p>}
+        {pendientes.error && <p role="alert">{pendientes.error}</p>}
+        {pendientes.datos?.length === 0 && <p>No hay comprobantes en esta página.</p>}
+        {!!pendientes.datos?.length && <table>
+          <thead><tr><th>Comprobante</th><th>Fecha</th><th>Emisor</th><th>Archivo</th><th>Expediente</th></tr></thead>
+          <tbody>{pendientes.datos.slice(0, 20).map((fila) => <tr key={fila.documento_id}>
+            <td>{fila.tipo_documento} {fila.comprobante ?? "Sin expediente"}</td>
+            <td>{fila.fecha_emision ?? "—"}</td><td>{fila.emisor ?? "—"}</td>
+            <td><a href={urlArchivo(fila.documento_id)} target="_blank" rel="noreferrer">{fila.nombre_original}</a></td>
+            <td>{fila.expediente_id && <Link to={`/expedientes/${fila.expediente_id}`}>Abrir expediente</Link>}</td>
+          </tr>)}</tbody>
+        </table>}
+        <button type="button" disabled={!paginaPendientes || pendientes.cargando} onClick={() => setPaginaPendientes(paginaPendientes - 1)}>Anterior</button>
+        <button type="button" disabled={pendientes.cargando || (pendientes.datos?.length ?? 0) <= 20} onClick={() => setPaginaPendientes(paginaPendientes + 1)}>Siguiente</button>
+        <button type="button" onClick={() => { pendientes.recargar(); preview.recargar(); }}>Actualizar lista</button>
+      </section>}
       {activo && !trabajando && <button type="button" onClick={() => void procesarHastaPausa(activo)}>Continuar trabajo guardado</button>}
       {trabajando && <button type="button" disabled={pausar} onClick={detenerAlFinalDelLote}>Pausar al terminar este comprobante</button>}
       {activo && <button type="button" disabled={trabajando && !pausar} onClick={() => void cancelar()}>Cancelar trabajo</button>}
