@@ -220,3 +220,22 @@ Sub Total Ventas S/ 813.56
             LineaComprobanteItem.producto_id == producto.id
         )
     ) == Decimal("14")
+
+
+def test_ticket_combustible_lee_descripciones_y_no_el_total_fiscal(session):
+    tenant = Tenant(nombre="ticket_combustible")
+    session.add(tenant)
+    session.flush()
+    documento = _documento(session, tenant.id)
+    texto = """FACTURA ELECTRÓNICA F001-5
+Descripción Cant. U.M. P. Unit. Total
+PETROLEO DIESEL 12.50 GAL 15.00 187.50
+ACEITE 20W50 2.00 UND 25.00 50.00
+IMPORTE TOTAL S/ 237.50
+"""
+    assert registrar_items_pdf_estacion(session, tenant.id, documento.id, texto) == 2
+    assert registrar_items_pdf_estacion(session, tenant.id, documento.id, texto) == 0
+    assert set(session.scalars(select(LineaComprobanteItem.descripcion_original))) == {
+        "PETROLEO DIESEL",
+        "ACEITE 20W50",
+    }
