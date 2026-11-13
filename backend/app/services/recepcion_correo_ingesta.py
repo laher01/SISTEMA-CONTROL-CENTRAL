@@ -1,4 +1,4 @@
-"""Admisión segura de adjuntos UBL por remitente registrado.
+"""Admisión segura de adjuntos por remitente registrado.
 
 Este servicio se invoca tras recibir el adjunto por un conector autenticado.
 No descarga correos ni confirma autoría fiscal por sí mismo.
@@ -13,12 +13,14 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.models import CorreoRemitente, Documento, Empresa, Gestor, Miembro
+from app.services.automatizacion_documental import aplicar_automaticamente, guardar_procesamiento
 from app.services.ingesta import (
     ArchivoSubido,
     ComprobanteYaRegistrado,
     DocumentoDuplicado,
     ingerir_documento,
 )
+from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
 from app.services.ubl import UblInvalido, parse_ubl
 from app.storage import AlmacenLocal
 
@@ -37,6 +39,8 @@ def admitir_adjunto_ubl(
     tenant_id: uuid.UUID,
     remitente: str,
     archivo: ArchivoSubido,
+    *,
+    permitir_pdf_imagen: bool = False,
 ) -> ResultadoCorreo:
     """Falla cerrada antes de invocar la ingesta, que puede crear empresas.
 
@@ -67,23 +71,46 @@ def admitir_adjunto_ubl(
     }
     if len(gestores) != 1:
         return ResultadoCorreo("REMITENTE_NO_REGISTRADO" if not gestores else "GESTOR_AMBIGUO")
-    if not archivo.nombre.lower().endswith(".xml"):
+    lectura = None
+    ruc_receptor = None
+    if archivo.nombre.lower().endswith(".xml"):
+        try:
+            comprobante = parse_ubl(archivo.contenido)
+        except UblInvalido:
+            return ResultadoCorreo("REVISION_XML_INVALIDO")
+        if comprobante is None:
+            return ResultadoCorreo("REVISION_XML_NO_SOPORTADO")
+        ruc_receptor = comprobante.receptor.ruc
+    elif permitir_pdf_imagen:
+        try:
+            lectura = procesar(
+                archivo.contenido, settings.max_extracted_chars, settings.max_ocr_pdf_pages
+            ).a_dict()
+        except DocumentoNoProcesable:
+            return ResultadoCorreo("REVISION_ARCHIVO_NO_PROCESABLE")
+        sugerencia = lectura.get("clasificacion_sugerida")
+        if isinstance(sugerencia, dict) and sugerencia.get("tipo") in ("FACT", "RHE"):
+            extraccion = lectura.get("extraccion_estructurada")
+            campos = extraccion.get("campos", {}) if isinstance(extraccion, dict) else {}
+            receptor_ocr = campos.get("ruc_receptor", {})
+            ruc_receptor = receptor_ocr.get("valor")
+            if not ruc_receptor:
+                return ResultadoCorreo("REVISION_RECEPTOR_NO_IDENTIFICADO")
+    else:
         return ResultadoCorreo("REVISION_TIPO_DOCUMENTO")
-    try:
-        comprobante = parse_ubl(archivo.contenido)
-    except UblInvalido:
-        return ResultadoCorreo("REVISION_XML_INVALIDO")
-    if comprobante is None:
-        return ResultadoCorreo("REVISION_XML_NO_SOPORTADO")
-    receptor = session.scalar(
-        select(Empresa.id).where(
-            Empresa.tenant_id == tenant_id,
-            Empresa.ruc == comprobante.receptor.ruc,
-            Empresa.autorizada.is_(True),
-            Empresa.deleted_at.is_(None),
+
+    if (
+        ruc_receptor is not None
+        and session.scalar(
+            select(Empresa.id).where(
+                Empresa.tenant_id == tenant_id,
+                Empresa.ruc == ruc_receptor,
+                Empresa.autorizada.is_(True),
+                Empresa.deleted_at.is_(None),
+            )
         )
-    )
-    if receptor is None:
+        is None
+    ):
         return ResultadoCorreo("RECEPTOR_NO_AUTORIZADO")
     gestor_id = next(iter(gestores))
     usuario_id = session.scalar(
@@ -118,4 +145,14 @@ def admitir_adjunto_ubl(
         )
     except (DocumentoDuplicado, ComprobanteYaRegistrado):
         return ResultadoCorreo("DUPLICADO")
+    if lectura is not None:
+        try:
+            with session.begin_nested():
+                guardar_procesamiento(session, documento, lectura)
+                resultado = aplicar_automaticamente(session, settings, hoy, documento, lectura)
+        except ComprobanteYaRegistrado:
+            session.delete(documento)
+            return ResultadoCorreo("DUPLICADO")
+        if not resultado.relacionado:
+            return ResultadoCorreo(resultado.estado, documento.id)
     return ResultadoCorreo("INGRESADO", documento.id)

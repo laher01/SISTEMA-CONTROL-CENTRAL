@@ -36,6 +36,7 @@ services:
       FC_GOOGLE_OAUTH_CLIENT_SECRET: ${FC_GOOGLE_OAUTH_CLIENT_SECRET:-}
       FC_GOOGLE_OAUTH_REDIRECT_URI: ${FC_GOOGLE_OAUTH_REDIRECT_URI:-}
       FC_CORREO_TOKEN_ENCRYPTION_KEY: ${FC_CORREO_TOKEN_ENCRYPTION_KEY:-}
+      FC_CORREO_GOOGLE_WORKER_ENABLED: ${FC_CORREO_GOOGLE_WORKER_ENABLED:-false}
       FC_MAX_UPLOAD_MB: ${FC_MAX_UPLOAD_MB:-20}
       FC_MAX_EXTRACTED_CHARS: ${FC_MAX_EXTRACTED_CHARS:-200000}
       FC_MAX_OCR_PDF_PAGES: ${FC_MAX_OCR_PDF_PAGES:-50}
@@ -66,7 +67,6 @@ services:
     networks: [fact_central_internal]
 
   correo_google_worker:
-    profiles: ["correo"]
     build:
       context: ..
       dockerfile: deploy/backend.Dockerfile

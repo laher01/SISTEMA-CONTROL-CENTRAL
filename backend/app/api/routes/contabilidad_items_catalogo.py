@@ -137,6 +137,47 @@ def crear_categoria(
     return _categoria_dict(categoria)
 
 
+class CategoriasEliminar(BaseModel):
+    ids: list[uuid.UUID] = Field(min_length=1, max_length=5000)
+
+
+@router.post("/categorias/eliminar")
+def eliminar_categorias(
+    datos: CategoriasEliminar, session: SessionDep, auth: OperativeAuthDep
+) -> dict[str, int]:
+    _solo_administracion(auth)
+    ids = set(datos.ids)
+    categorias = list(
+        session.scalars(
+            select(CategoriaItem)
+            .where(CategoriaItem.tenant_id == auth.tenant_id, CategoriaItem.id.in_(ids))
+            .order_by(CategoriaItem.id)
+            .with_for_update()
+        )
+    )
+    if len(categorias) != len(ids):
+        raise HTTPException(404, "Hay categorías que ya no están disponibles")
+    nombres = [categoria.nombre for categoria in categorias]
+    session.query(ProductoItem).filter(
+        ProductoItem.tenant_id == auth.tenant_id, ProductoItem.categoria.in_(nombres)
+    ).update(
+        {ProductoItem.categoria: "POR_CATEGORIZAR", ProductoItem.clasificacion_confirmada: False},
+        synchronize_session=False,
+    )
+    for categoria in categorias:
+        auditoria.registrar(
+            session,
+            auth.tenant_id,
+            "ITEM_CATEGORIA_ELIMINADA",
+            "categoria_item",
+            categoria.id,
+            {"nombre": categoria.nombre},
+        )
+        session.delete(categoria)
+    session.commit()
+    return {"eliminadas": len(categorias)}
+
+
 @router.patch("/categorias/{categoria_id}")
 def editar_categoria(
     categoria_id: uuid.UUID,

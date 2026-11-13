@@ -247,6 +247,7 @@ def estado_proveedores(auth: OperativeAuthDep) -> dict[str, bool]:
     _solo_administracion(auth.rol)
     config = get_settings()
     return {
+        "worker_google_habilitado": config.correo_google_worker_enabled,
         "google_configurado": bool(
             config.google_oauth_client_id
             and config.google_oauth_client_secret

@@ -1106,7 +1106,7 @@ type BuzonCorreo = {
 };
 type RemitenteGestor = { id: string; direccion: string; gestor_id: string; gestor: string };
 type GestorCorreo = { id: string; codigo: string; nombre: string };
-type EstadoProveedores = { google_configurado: boolean; microsoft_configurado: boolean };
+type EstadoProveedores = { google_configurado: boolean; microsoft_configurado: boolean; worker_google_habilitado: boolean };
 type IncidenciaCorreo = { id: string; fecha: string; buzon: string; remitente: string; gestor: string | null; estado: string; motivo: string | null };
 
 function RecepcionAutomaticaPanel() {
@@ -1188,7 +1188,7 @@ function RecepcionAutomaticaPanel() {
       registrar una dirección no activa la lectura automática.
     </p>
     <h4>Preparación de conexiones OAuth</h4>
-    <p>Google: {estadoProveedores?.google_configurado ? "Configuración de aplicación disponible; autorización de buzón pendiente" : "Falta configurar la aplicación OAuth"}</p>
+    {estadoProveedores && <p>Google: {estadoProveedores.google_configurado ? "OAuth disponible" : "Falta configurar OAuth"} · {estadoProveedores.worker_google_habilitado ? "Lectura automática habilitada en el servidor" : "Lectura automática deshabilitada en el servidor"}</p>}
     <p>Microsoft: {estadoProveedores?.microsoft_configurado ? "Configuración de aplicación disponible; autorización de buzón pendiente" : "Falta configurar la aplicación OAuth"}</p>
     {window.location.search.includes("oauth=conectado") &&
       <p role="status">Autorización Google completada. Buzón conectado.</p>}
@@ -1221,7 +1221,7 @@ function RecepcionAutomaticaPanel() {
       <tbody>{(buzones ?? []).map((b) => <tr key={b.id}>
         <td>{b.direccion}</td><td>{b.proveedor}</td>
         <td>{b.importar_desde ?? "Configuración anterior"}</td>
-        <td>{b.activo ? "Autorizado" : "Pendiente de conexión"}</td>
+        <td>{b.activo ? "Autorizado" : "Pendiente de conexión"}{b.ultimo_error && <div role="status">{b.ultimo_error}</div>}</td>
         <td>{b.proveedor === "GOOGLE" && !b.activo ?
           <button type="button" disabled={guardando || !estadoProveedores?.google_configurado}
             onClick={() => void conectarGoogle(b.id)}>Conectar con Google</button>

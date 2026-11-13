@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
 
-from app.services.procesamiento_documental import DocumentoNoProcesable
+from app.services.procesamiento_documental import DocumentoNoProcesable, procesar, sugerir_tipo
 
 TIPOS = (
     ("COT", re.compile(r"COTIZACI[OÓ]N", re.I)),
@@ -81,7 +81,9 @@ def _cabecera(texto: str) -> tuple[str, str, str, str] | None:
     return tipo, serie.group(1).upper(), str(int(serie.group(2))), ruc.group(0)
 
 
-def analizar_paquete(contenido: bytes, max_paginas: int = 200) -> list[Fragmento]:
+def analizar_paquete(
+    contenido: bytes, max_paginas: int = 200, *, recepcion_correo: bool = False
+) -> list[Fragmento]:
     try:
         lector = PdfReader(io.BytesIO(contenido), strict=False)
         if lector.is_encrypted and lector.decrypt("") == 0:
@@ -94,7 +96,17 @@ def analizar_paquete(contenido: bytes, max_paginas: int = 200) -> list[Fragmento
         segmentos: list[Fragmento] = []
         for i, pagina in enumerate(lector.pages):
             texto = (pagina.extract_text() or "").strip()
+            if recepcion_correo and not texto:
+                escritor = PdfWriter()
+                escritor.add_page(pagina)
+                salida = io.BytesIO()
+                escritor.write(salida)
+                texto = procesar(salida.getvalue(), 15000, 1).texto
             cabecera = _cabecera(texto)
+            if cabecera is None and recepcion_correo:
+                sugerencia = sugerir_tipo(texto)
+                if sugerencia and sugerencia.tipo.value == "VCHR":
+                    cabecera = ("VCHR", "VCHR", str(i + 1), "")
             if cabecera is None:
                 # Evitar ocultar guías, vouchers, cotizaciones o PDFs escaneados
                 # dentro de una factura como si fueran páginas de continuación.

@@ -1,21 +1,18 @@
 """Extracción conservadora de un ítem de servicio desde recibo por honorarios."""
 
-import hashlib
 import re
 import uuid
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.item_models import LineaComprobanteItem, ProductoItem
-from app.services.contabilidad_items_rules import sugerir_categoria, texto_normalizado
+from app.services.contabilidad_items_ubl import ItemUBL, _registrar_lineas
 from app.services.extraccion_campos import extraer_campos
 
 _CONCEPTO = re.compile(
     r"\bpor\s+concepto\s+de\s*:?\s*(.+?)"
     r"(?=\n\s*(?:inciso|fecha\s+de\s+emisi[oó]n|total\s+por\s+honorarios|"
-    r"retenci[oó]n|total\s+neto\s+recibido|\d{1,2}\s+de\s+"
+    r"observaci[oó]n|retenci[oó]n|total\s+neto\s+recibido|\d{1,2}\s+de\s+"
     r"(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|"
     r"octubre|noviembre|diciembre)\b)|$)",
     re.IGNORECASE | re.DOTALL,
@@ -57,46 +54,9 @@ def registrar_item_rhe(
     if extraido is None:
         return 0
     descripcion, importe = extraido
-    existente = session.scalar(
-        select(LineaComprobanteItem.id)
-        .where(
-            LineaComprobanteItem.tenant_id == tenant_id,
-            LineaComprobanteItem.documento_id == documento_id,
-        )
-        .limit(1)
+    return _registrar_lineas(
+        session,
+        tenant_id,
+        documento_id,
+        [ItemUBL(1, descripcion, Decimal(1), "SERVICIO", importe)],
     )
-    if existente is not None:
-        return 0
-    unidad = "SERVICIO"
-    clave = hashlib.sha256(f"{texto_normalizado(descripcion)}|{unidad}".encode()).hexdigest()
-    producto = session.scalar(
-        select(ProductoItem).where(
-            ProductoItem.tenant_id == tenant_id,
-            ProductoItem.clave_catalogo == clave,
-        )
-    )
-    if producto is None:
-        producto = ProductoItem(
-            tenant_id=tenant_id,
-            clave_catalogo=clave,
-            descripcion=descripcion,
-            categoria=sugerir_categoria(descripcion),
-            unidad_base=unidad,
-            clasificacion_confirmada=False,
-            activo=True,
-        )
-        session.add(producto)
-        session.flush()
-    session.add(
-        LineaComprobanteItem(
-            tenant_id=tenant_id,
-            documento_id=documento_id,
-            producto_id=producto.id,
-            numero_linea=1,
-            descripcion_original=descripcion,
-            cantidad=Decimal("1"),
-            unidad=unidad,
-            importe_linea=importe,
-        )
-    )
-    return 1

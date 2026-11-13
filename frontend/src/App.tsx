@@ -64,7 +64,7 @@ const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = 
   { a: "/pago-gestores", texto: "Pago de Gestores", icono: "▣", roles: ["USUARIO"] },
   { a: "/comisiones", texto: "Simular comisiones", icono: "◉", roles: ["RESPONSABLE", "USUARIO"] },
   { a: "/subir", texto: "Subir documentos", icono: "↑", roles: ["GESTOR"] },
-  { a: "/mi-recepcion", texto: "Recepción Automática", icono: "✉", roles: ["GESTOR"] },
+  { a: "/mi-recepcion", texto: "Recepción Automática", icono: "✉", roles: ["GESTOR", "ADMINISTRADOR"] },
   {
     a: "/registros",
     texto: "Registros",
@@ -241,7 +241,7 @@ export default function App() {
           <Route path="/ingresar" element={<Navigate to="/" replace />} />
           <Route path="/subir" element={sesion.rol === "GESTOR" ? <Subir sesion={sesion} /> : <Navigate to="/" replace />} />
           <Route path="/registros" element={sesion.rol === "SECRETARIA" && activaciones?.registros === false ? <Navigate to="/expedientes" replace /> : <Registros sesion={sesion} />} />
-          <Route path="/mi-recepcion" element={sesion.rol === "GESTOR" ? <RecepcionGestor /> : <Navigate to="/" replace />} />
+          <Route path="/mi-recepcion" element={sesion.rol === "GESTOR" ? <RecepcionGestor /> : <Navigate to={sesion.rol === "ADMINISTRADOR" ? "/configuracion?seccion=correos" : "/"} replace />} />
           <Route path="/chat" element={<Chat />} />
           <Route path="/secretaria" element={["SUPERADMIN", "ADMINISTRADOR", "SECRETARIA"].includes(sesion.rol) && !(sesion.rol === "SECRETARIA" && activaciones?.control_documental === false) ? <Secretaria sesion={sesion} /> : <Navigate to="/expedientes" replace />} />
           <Route path="/contabilidad-items" element={<ContabilidadItems />} />

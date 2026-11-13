@@ -9,6 +9,29 @@ export default function CategoriasItems({ puedeAdministrar = false }: { puedeAdm
   const [mensaje, setMensaje] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
+  const [seleccion, setSeleccion] = useState<string[]>([]);
+  const ids = (datos ?? []).map((categoria) => categoria.id);
+  const seleccionActual = ids.filter((id) => seleccion.includes(id));
+  const todas = ids.length > 0 && seleccionActual.length === ids.length;
+
+  async function eliminarCategorias(elegidas: string[]) {
+    if (!elegidas.length || !window.confirm(
+      `¿Eliminar ${elegidas.length} categoría(s)? Sus ítems quedarán por categorizar.`,
+    )) return;
+    setOcupado(true);
+    setMensaje("");
+    try {
+      const resultado = await enviarJson("/api/v1/contabilidad-items/categorias/eliminar", "POST", { ids: elegidas }) as { eliminadas: number };
+      setSeleccion((actual) => actual.filter((id) => !elegidas.includes(id)));
+      setMensaje(`Categorías eliminadas: ${resultado.eliminadas}.`);
+      recargar();
+    } catch (fallo) {
+      setMensaje(fallo instanceof Error ? fallo.message : String(fallo));
+    } finally {
+      setOcupado(false);
+    }
+  }
+
   async function crear(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
     setOcupado(true);
@@ -66,12 +89,20 @@ export default function CategoriasItems({ puedeAdministrar = false }: { puedeAdm
       {mensaje && <p role="status">{mensaje}</p>}
       {error && <p role="alert">No se pudieron cargar las categorías: {error}</p>}
       {cargando && <p>Cargando categorías…</p>}
+      {puedeAdministrar && <button type="button" disabled={ocupado || !seleccionActual.length}
+        onClick={() => void eliminarCategorias(seleccionActual)}>Eliminar seleccionadas ({seleccionActual.length})</button>}
       {datos && <div style={{ overflowX: "auto" }}><table>
-        <thead><tr><th>Categoría</th><th>Estado</th>{puedeAdministrar && <th>Acciones</th>}</tr></thead>
+        <thead><tr>{puedeAdministrar && <th><input type="checkbox" aria-label="Seleccionar todas las categorías"
+          checked={todas} disabled={ocupado || !ids.length} onChange={() => setSeleccion(todas ? [] : ids)} /></th>}<th>Categoría</th><th>Estado</th>{puedeAdministrar && <th>Acciones</th>}</tr></thead>
         <tbody>{datos.map((categoria) => <tr key={categoria.id}>
+          {puedeAdministrar && <td><input type="checkbox" aria-label={`Seleccionar ${categoria.nombre}`}
+            checked={seleccion.includes(categoria.id)} disabled={ocupado} onChange={(evento) => {
+              setSeleccion(evento.target.checked ? [...seleccion, categoria.id] : seleccion.filter((id) => id !== categoria.id));
+            }} /></td>}
           <td>{categoria.nombre}</td><td>{categoria.activa ? "Activa" : "Inactiva"}</td>
           {puedeAdministrar && <td><button type="button" disabled={ocupado} onClick={() => void renombrar(categoria)}>Renombrar</button>{" "}
-            <button type="button" disabled={ocupado} onClick={() => void cambiarEstado(categoria)}>{categoria.activa ? "Desactivar" : "Activar"}</button></td>
+            <button type="button" disabled={ocupado} onClick={() => void cambiarEstado(categoria)}>{categoria.activa ? "Desactivar" : "Activar"}</button>{" "}
+            <button type="button" disabled={ocupado} onClick={() => void eliminarCategorias([categoria.id])}>Eliminar</button></td>
           }
         </tr>)}</tbody>
       </table></div>}
