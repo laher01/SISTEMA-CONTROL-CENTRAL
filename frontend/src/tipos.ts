@@ -174,6 +174,8 @@ export interface ComprobantePagoExpediente {
 }
 
 export interface ExpedienteDetalle extends Expediente {
+  anterior_id?: string | null;
+  siguiente_id?: string | null;
   documentos: Documento[];
   alertas: Alerta[];
   faltantes: TipoDocumento[];

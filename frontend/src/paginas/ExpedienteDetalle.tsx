@@ -35,8 +35,17 @@ export default function ExpedienteDetalle({ sesion }: { sesion: { rol: string } 
   const [releyendoPago, setReleyendoPago] = useState<string | null>(null);
   const solicitudActual = solicitudes?.find((solicitud) => solicitud.expediente_id === id);
 
+  const moverSinLista = (destino?: string | null) => {
+    if (!destino) return;
+    setMensajeAccion("");
+    setErrorAccion("");
+    navegar(`/expedientes/${destino}`);
+  };
+
   const moverEnLista = (siguiente: number) => {
     if (!puedeNavegarLista || siguiente < 0 || siguiente >= listaIds.length) return;
+    setMensajeAccion("");
+    setErrorAccion("");
     contexto.set("pos", String(siguiente));
     navegar(`/expedientes/${listaIds[siguiente]}?${contexto.toString()}`);
   };
@@ -177,11 +186,16 @@ export default function ExpedienteDetalle({ sesion }: { sesion: { rol: string } 
             <button type="button" className="boton-enlace" onClick={() => navegar(retorno.startsWith("/expedientes") && !retorno.startsWith("//") ? retorno : "/expedientes")}>
               Volver a registros de expedientes
             </button>
-            {puedeNavegarLista && (
+            {puedeNavegarLista ? (
               <>
-                <button type="button" disabled={posicion <= 0} onClick={() => moverEnLista(posicion - 1)}>← Anterior</button>
+                <button type="button" disabled={ocupado || posicion <= 0} onClick={() => moverEnLista(posicion - 1)}>← Anterior</button>
                 <span className="tenue">Expediente {posicion + 1} de {listaIds.length}</span>
-                <button type="button" disabled={posicion >= listaIds.length - 1} onClick={() => moverEnLista(posicion + 1)}>Siguiente →</button>
+                <button type="button" disabled={ocupado || posicion >= listaIds.length - 1} onClick={() => moverEnLista(posicion + 1)}>Siguiente →</button>
+              </>
+            ) : (
+              <>
+                <button type="button" disabled={ocupado || !datos.anterior_id} onClick={() => moverSinLista(datos.anterior_id)}>← Anterior</button>
+                <button type="button" disabled={ocupado || !datos.siguiente_id} onClick={() => moverSinLista(datos.siguiente_id)}>Siguiente →</button>
               </>
             )}
           </div>

@@ -111,20 +111,30 @@ def _registrar_lineas(
         )
         if ya_registrada is not None:
             continue
-        clave = hashlib.sha256(
-            f"{texto_normalizado(linea.descripcion)}|{linea.unidad}".encode()
-        ).hexdigest()
+        nombre = texto_normalizado(linea.descripcion)
+        # SUNAT puede imprimir «500ML» o «500 ML» para la misma presentación.
+        medida = r"(?<=\d) *(ml|cl|l|kg|g|mg)\b"
+        variantes = (re.sub(medida, r" \1", nombre), re.sub(medida, r"\1", nombre))
+        claves = [
+            hashlib.sha256(f"{variante}|{linea.unidad}".encode()).hexdigest()
+            for variante in dict.fromkeys((nombre, *variantes))
+        ]
         producto = session.scalar(
-            select(ProductoItem).where(
+            select(ProductoItem)
+            .where(
                 ProductoItem.tenant_id == tenant_id,
-                ProductoItem.clave_catalogo == clave,
+                ProductoItem.clave_catalogo.in_(claves),
             )
+            .order_by((ProductoItem.clave_catalogo == claves[0]).desc(), ProductoItem.id)
+            .limit(1)
         )
+        clave = claves[0]
         if producto is None:
             producto = ProductoItem(
                 tenant_id=tenant_id,
                 clave_catalogo=clave,
                 descripcion=linea.descripcion[:2000],
+                unidad_base=linea.unidad,
                 categoria=sugerir_categoria(linea.descripcion),
                 clasificacion_confirmada=False,
                 activo=True,
@@ -150,10 +160,13 @@ def _registrar_lineas(
 def registrar_items_pdf_estacion(
     session: Session, tenant_id: uuid.UUID, documento_id: uuid.UUID, texto: str
 ) -> int:
-    """Registra líneas verificables de facturas Masydase y Escorpio.
+    """Registra líneas verificables de tablas de facturas PDF.
 
     No infiere importes, no sustituye UBL y evita duplicados ante reprocesamientos.
     """
+    items_tabla = extraer_items_pdf_tabla(texto)
+    if items_tabla:
+        return _registrar_lineas(session, tenant_id, documento_id, items_tabla)
     if detectar_formato_documental(texto) == "MASYDASE_FACTURA":
         items = extraer_items_pdf_masydase(texto)
         return _registrar_lineas(session, tenant_id, documento_id, items) if items else 0
@@ -220,6 +233,57 @@ def registrar_items_pdf_estacion(
         )
     )
     return 1
+
+
+_NUMERO_TABLA = r"(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?"
+_CABECERA_TABLA = re.compile(
+    r"\bCantidad\s+Unidad(?:\s+de)?\s+Medida\s+Descripci[óo]n\s+"
+    r"Valor\s+Unitario(?P<icbper>\s+ICBPER)?\s*(?:\n|$)",
+    re.I,
+)
+_FIN_TABLA = re.compile(
+    r"(?im)^\s*(?:Valor de Venta de Operaciones|Sub\s*Total Ventas|"
+    r"Importe Total|Total a Pagar|SON:|Observaci[óo]n\s*:|Esta es una representaci[óo]n)"
+)
+_INICIO_FILA = re.compile(
+    rf"(?m)^\s*(?P<cantidad>{_NUMERO_TABLA})[ \t]+(?P<unidad>[A-Z][A-Z0-9./-]{{0,39}})[ \t]+",
+    re.I,
+)
+
+
+def extraer_items_pdf_tabla(texto: str) -> list[ItemUBL]:
+    """Lee las filas de una tabla de factura con valor unitario e ICBPER opcional."""
+    if not re.search(r"\bFACTURA\b", texto, re.I):
+        return []
+    cabeceras = list(_CABECERA_TABLA.finditer(texto))
+    items: list[ItemUBL] = []
+    numero_linea = 0
+    for indice, cabecera in enumerate(cabeceras):
+        fin = cabeceras[indice + 1].start() if indice + 1 < len(cabeceras) else len(texto)
+        tabla = _FIN_TABLA.split(texto[cabecera.end() : fin], maxsplit=1)[0]
+        filas = list(_INICIO_FILA.finditer(tabla))
+        precio_final = (
+            rf"\s+{_NUMERO_TABLA}\s+{_NUMERO_TABLA}"
+            if cabecera.group("icbper")
+            else rf"\s+{_NUMERO_TABLA}"
+        )
+        for posicion, fila in enumerate(filas):
+            numero_linea += 1
+            fin_fila = filas[posicion + 1].start() if posicion + 1 < len(filas) else len(tabla)
+            cuerpo = " ".join(tabla[fila.end() : fin_fila].split())
+            campos = re.fullmatch(rf"(.+?){precio_final}", cuerpo)
+            cantidad = Decimal(fila.group("cantidad").replace(",", ""))
+            if campos and 0 < cantidad < Decimal("100000000000000"):
+                items.append(
+                    ItemUBL(
+                        numero_linea,
+                        campos.group(1)[:2000],
+                        cantidad,
+                        fila.group("unidad").upper(),
+                        None,
+                    )
+                )
+    return items
 
 
 def extraer_items_pdf_masydase(texto: str) -> list[ItemUBL]:

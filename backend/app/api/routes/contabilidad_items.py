@@ -203,6 +203,7 @@ def facturas_por_producto(
     receptor_buscar: Annotated[str | None, Query(max_length=150)] = None,
     limite: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0, le=1_000_000),
+    vista_catalogo: bool = False,
 ) -> list[dict[str, str]]:
     """Documentos originales que contienen el producto; solo ámbito autorizado."""
     if desde is not None and hasta is not None and desde > hasta:
@@ -211,7 +212,7 @@ def facturas_por_producto(
         select(ProductoItem).where(
             ProductoItem.id == producto_id,
             ProductoItem.tenant_id == auth.tenant_id,
-            ProductoItem.activo.is_(True),
+            or_(vista_catalogo, ProductoItem.activo.is_(True)),
         )
     )
     if producto is None:
@@ -276,6 +277,7 @@ def facturas_por_producto(
             expediente_tiene_documentos_activos(),
             _alcance(auth),
             or_(
+                vista_catalogo,
                 ultimo_estado.is_(None),
                 ultimo_estado.not_in(
                     [
@@ -302,6 +304,51 @@ def facturas_por_producto(
         consulta = consulta.where(filtro_emisor)
     if filtro_receptor is not None:
         consulta = consulta.where(filtro_receptor)
+    if vista_catalogo:
+        facturas = (
+            consulta.with_only_columns(
+                Expediente.id.label("expediente_id"),
+                Expediente.serie,
+                func.coalesce(Expediente.correlativo_original, Expediente.correlativo).label(
+                    "correlativo"
+                ),
+                Expediente.fecha_emision,
+                Expediente.moneda,
+                Expediente.importe_total,
+                empresa_emisora.ruc.label("emisor_ruc"),
+                empresa_emisora.razon_social.label("emisor_nombre"),
+                empresa_receptora.ruc.label("receptor_ruc"),
+                empresa_receptora.razon_social.label("receptor_nombre"),
+            )
+            .distinct()
+            .subquery()
+        )
+        return [
+            {
+                "expediente_id": str(fila.expediente_id),
+                "comprobante": f"{fila.serie}-{fila.correlativo}",
+                "fecha_emision": str(fila.fecha_emision),
+                "moneda": fila.moneda,
+                "importe_total": str(fila.importe_total),
+                "emisor_ruc": fila.emisor_ruc or "",
+                "emisor_nombre": fila.emisor_nombre or "",
+                "receptor_ruc": fila.receptor_ruc or "",
+                "receptor_nombre": fila.receptor_nombre or "",
+            }
+            for fila in session.execute(
+                select(facturas)
+                .order_by(
+                    facturas.c.emisor_nombre,
+                    facturas.c.emisor_ruc,
+                    facturas.c.receptor_nombre,
+                    facturas.c.receptor_ruc,
+                    facturas.c.fecha_emision.desc(),
+                    facturas.c.expediente_id,
+                )
+                .offset(offset)
+                .limit(limite)
+            )
+        ]
     consulta = (
         consulta.order_by(
             Expediente.fecha_emision.desc(),

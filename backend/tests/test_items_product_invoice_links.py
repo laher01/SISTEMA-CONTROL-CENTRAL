@@ -104,6 +104,21 @@ def test_search_and_linked_invoices_are_tenant_scoped(
     assert invoices.json()[0]["descripcion_original"] == "Pota congelada"
     assert Decimal(invoices.json()[0]["importe"]) == 60
 
+    catalog_invoices = client.get(
+        f"/api/v1/contabilidad-items/productos/{product_id}/facturas",
+        params={"vista_catalogo": True},
+    )
+    assert catalog_invoices.status_code == 200, catalog_invoices.text
+    assert len(catalog_invoices.json()) == 1
+    factura = catalog_invoices.json()[0]
+    assert factura["emisor_ruc"] == "20100000001"
+    assert factura["receptor_ruc"] == "20200000001"
+    assert Decimal(factura["importe_total"]) == 60
+    detalle = client.get(f"/api/v1/expedientes/{factura['expediente_id']}")
+    assert detalle.status_code == 200, detalle.text
+    assert detalle.json()["anterior_id"] is None
+    assert detalle.json()["siguiente_id"] is None
+
     # Only the authorized tenant and operational roles may consult a product.
     assert foreign_emisor_id is not None
     foreign = client.get(

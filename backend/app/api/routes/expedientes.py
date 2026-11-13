@@ -12,11 +12,12 @@ from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
-from sqlalchemy import case, delete, func, or_, select, update
+from sqlalchemy import case, delete, func, or_, select, true, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.sql import Select
+from sqlalchemy.sql.elements import ColumnElement
 from starlette.background import BackgroundTask
 
 from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
@@ -893,14 +894,7 @@ def listar_ids(
         Expediente.deleted_at.is_(None),
         expediente_tiene_documentos_activos(),
     )
-    if auth.rol == "GESTOR":
-        consulta = consulta.where(Expediente.gestor_id == auth.gestor_id)
-    elif auth.rol == RolMiembro.USUARIO:
-        consulta = consulta.where(Expediente.usuario_id == auth.usuario_id)
-    elif auth.rol == RolMiembro.RESPONSABLE:
-        consulta = consulta.where(Expediente.usuario_id.in_(_usuarios_responsable(tenant_id, auth)))
-    elif auth.rol == RolMiembro.GERENTE:
-        consulta = consulta.where(alcance_expedientes_gerente(auth))
+    consulta = consulta.where(_alcance_navegacion(tenant_id, auth))
     if estado is not None:
         consulta = consulta.where(Expediente.estado == estado)
     if pendiente_aprobacion is not None:
@@ -986,6 +980,18 @@ def _usuarios_responsable(tenant_id: uuid.UUID, auth: OperativeAuthDep) -> Selec
         Miembro.rol == RolMiembro.USUARIO,
         Miembro.deleted_at.is_(None),
     )
+
+
+def _alcance_navegacion(tenant_id: uuid.UUID, auth: OperativeAuthDep) -> ColumnElement[bool]:
+    if auth.rol == "GESTOR":
+        return Expediente.gestor_id == auth.gestor_id
+    elif auth.rol == RolMiembro.USUARIO:
+        return Expediente.usuario_id == auth.usuario_id
+    elif auth.rol == RolMiembro.RESPONSABLE:
+        return Expediente.usuario_id.in_(_usuarios_responsable(tenant_id, auth))
+    elif auth.rol == RolMiembro.GERENTE:
+        return alcance_expedientes_gerente(auth)
+    return true()
 
 
 def _visible_para_auth(expediente: Expediente, auth: OperativeAuthDep, session: SessionDep) -> bool:
@@ -1349,8 +1355,43 @@ def detalle(
     base = base.model_copy(
         update={"documentos_count": sum(1 for d in expediente.documentos if d.deleted_at is None)}
     )
+    vecinos = select(Expediente.id).where(
+        Expediente.tenant_id == tenant_id,
+        Expediente.deleted_at.is_(None),
+        expediente_tiene_documentos_activos(),
+        _alcance_navegacion(tenant_id, auth),
+    )
+    fecha = Expediente.fecha_emision
+    creado = Expediente.created_at
+    identificador = Expediente.id
+    misma_fecha = fecha == expediente.fecha_emision
+    misma_creacion = creado == expediente.created_at
+    anterior = session.scalar(
+        vecinos.where(
+            or_(
+                fecha > expediente.fecha_emision,
+                misma_fecha & (creado > expediente.created_at),
+                misma_fecha & misma_creacion & (identificador < expediente.id),
+            )
+        )
+        .order_by(fecha, creado, identificador.desc())
+        .limit(1)
+    )
+    siguiente = session.scalar(
+        vecinos.where(
+            or_(
+                fecha < expediente.fecha_emision,
+                misma_fecha & (creado < expediente.created_at),
+                misma_fecha & misma_creacion & (identificador > expediente.id),
+            )
+        )
+        .order_by(fecha.desc(), creado.desc(), identificador)
+        .limit(1)
+    )
     return ExpedienteDetalle(
         **base.model_dump(),
+        anterior_id=anterior,
+        siguiente_id=siguiente,
         documentos=[d for d in expediente.documentos if d.deleted_at is None],
         alertas=expediente.alertas,
         faltantes=documentos_faltantes(expediente, settings),
