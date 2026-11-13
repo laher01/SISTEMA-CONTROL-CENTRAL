@@ -48,6 +48,7 @@ export default function PagoDocumental() {
   const { datos: grupos, error: errorPago, recargar } = useDatos<Pago[]>(
     `/api/v1/pagos-documentales/por-documento/${documentoId}`,
   );
+  const objetivo = useDatos<Expediente>(destacado ? `/api/v1/expedientes/${destacado}` : null);
   const [buscar, setBuscar] = useState("");
   const busqueda = useDatos<Expediente[]>(
     conParametros("/api/v1/expedientes", { buscar: buscar.trim(), limit: "20" }),
@@ -104,20 +105,38 @@ export default function PagoDocumental() {
     if (!pago) return;
     setCargando(true); setError(""); setMensaje("");
     try {
-      await enviarJson(`/api/v1/pagos-documentales/${pago.id}/asignaciones`, "PUT", {
-        asignaciones: pago.asignaciones.map((fila) => ({
+      const asignaciones = pago.asignaciones.map((fila) => ({
           expediente_id: fila.expediente_id,
           importe_asignado: montos[fila.expediente_id] ?? fila.importe_asignado,
           evidencia: fila.evidencia,
           confianza: fila.confianza,
-        })),
+      }));
+      await enviarJson(`/api/v1/pagos-documentales/${pago.id}/asignaciones`, "PUT", {
+        asignaciones: [...asignaciones, ...borradores.map((fila) => ({
+          expediente_id: fila.expediente.id,
+          importe_asignado: fila.importe,
+          evidencia: `Referencia elegida por el usuario: ${numeroComprobante(fila.expediente.serie, fila.expediente.correlativo)}`,
+          confianza: undefined,
+        }))],
       });
+      setBorradores([]);
       setMensaje("Distribución actualizada; permanece pendiente de confirmación.");
       setMontos({});
       recargar();
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setCargando(false); }
   };
+
+  const objetivoDisponible = objetivo.datos
+    && !pago?.asignaciones.some((fila) => fila.expediente_id === objetivo.datos?.id);
+  const borradoresValidos = borradores.every((fila) => Number(fila.importe) > 0);
+  const tablaBorradores = (
+    borradores.length > 0 && <table><thead><tr><th>Factura fiscal</th><th>Importe asignado</th><th></th></tr></thead><tbody>
+            {borradores.map((fila) => <tr key={fila.expediente.id}><td>{numeroComprobante(fila.expediente.serie, fila.expediente.correlativo)}</td>
+              <td><input aria-label={`Importe ${numeroComprobante(fila.expediente.serie, fila.expediente.correlativo)}`} type="number" min="0.01" step="0.01" value={fila.importe} onChange={(e) => setBorradores((actual) => actual.map((item) => item.expediente.id === fila.expediente.id ? { ...item, importe: e.target.value } : item))} /></td>
+              <td><button className="secundario" onClick={() => setBorradores((actual) => actual.filter((item) => item.expediente.id !== fila.expediente.id))}>Quitar</button></td></tr>)}
+          </tbody></table>
+  );
 
   if (cargandoDocumento || !documento) {
     return <main className="pagina"><Estado cargando={cargandoDocumento} error={errorDocumento} vacio={false}>{null}</Estado></main>;
@@ -127,7 +146,9 @@ export default function PagoDocumental() {
     <main className="pagina">
       <header className="encabezado-pagina">
         <div><h1>Pago documental agrupado</h1><p>El voucher reúne pagos; cada factura conserva su expediente fiscal.</p></div>
-        <Link className="boton secundario" to="/pendientes">Volver a Pendientes</Link>
+        {destacado && objetivo.datos
+          ? <Link className="boton secundario" to={`/expedientes/${objetivo.datos.id}`}>Volver al expediente</Link>
+          : <Link className="boton secundario" to="/pendientes">Volver a Pendientes</Link>}
       </header>
       <section className="tarjeta">
         <h2>Voucher</h2>
@@ -152,6 +173,13 @@ export default function PagoDocumental() {
         </li>)}</ul>
       </section>}
 
+      {objetivo.error && <p role="alert">{objetivo.error}</p>}
+      {objetivoDisponible && objetivo.datos && !pago?.conciliado && <section className="tarjeta">
+        <button type="button" disabled={borradores.some((fila) => fila.expediente.id === objetivo.datos?.id)}
+          onClick={() => { if (objetivo.datos) agregar(objetivo.datos); }}>
+          Agregar expediente {numeroComprobante(objetivo.datos.serie, objetivo.datos.correlativo)}
+        </button>
+      </section>}
       {pago ? (
         <section className="tarjeta">
           <h2>Facturas incluidas</h2>
@@ -164,8 +192,9 @@ export default function PagoDocumental() {
             </tr>)}</tbody>
           </table>
           {!pago.conciliado && <>
-            <button className="secundario" disabled={cargando} onClick={() => void actualizarDistribucion()}>Actualizar distribución</button>
-            <button disabled={cargando || !pago.importe || Number(pago.diferencia) !== 0} onClick={() => void confirmar()}>Confirmar conciliación</button>
+            {tablaBorradores}
+            <button className="secundario" disabled={cargando || !borradoresValidos} onClick={() => void actualizarDistribucion()}>Actualizar distribución</button>
+            <button disabled={cargando || borradores.length > 0 || !pago.importe || Number(pago.diferencia) !== 0} onClick={() => void confirmar()}>Confirmar conciliación</button>
           </>}
         </section>
       ) : (
@@ -178,11 +207,7 @@ export default function PagoDocumental() {
             <button className="secundario" onClick={() => agregar(expediente)}>Agregar</button>{" "}
             {numeroComprobante(expediente.serie, expediente.correlativo)} · {expediente.emisor.razon_social} · {formatearMonto(expediente.moneda, expediente.importe_total)}
           </p>)}
-          {borradores.length > 0 && <table><thead><tr><th>Factura fiscal</th><th>Importe asignado</th><th></th></tr></thead><tbody>
-            {borradores.map((fila) => <tr key={fila.expediente.id}><td>{numeroComprobante(fila.expediente.serie, fila.expediente.correlativo)}</td>
-              <td><input aria-label={`Importe ${numeroComprobante(fila.expediente.serie, fila.expediente.correlativo)}`} type="number" min="0.01" step="0.01" value={fila.importe} onChange={(e) => setBorradores((actual) => actual.map((item) => item.expediente.id === fila.expediente.id ? { ...item, importe: e.target.value } : item))} /></td>
-              <td><button className="secundario" onClick={() => setBorradores((actual) => actual.filter((item) => item.expediente.id !== fila.expediente.id))}>Quitar</button></td></tr>)}
-          </tbody></table>}
+          {tablaBorradores}
           <p>Total distribuido: {totalBorrador.toFixed(2)} {leerCampo(documento, "moneda")}</p>
           <button disabled={cargando || !borradores.length || borradores.some((fila) => !fila.importe || Number(fila.importe) <= 0)} onClick={() => void guardarDistribucion()}>
             {cargando ? "Guardando…" : "Guardar distribución"}

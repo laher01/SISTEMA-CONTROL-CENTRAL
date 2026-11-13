@@ -763,6 +763,7 @@ def listar_documentos(
     fecha_emision: date | None = None,
     mes: Annotated[str | None, Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")] = None,
     serie_correlativo: Annotated[str | None, Query(min_length=1, max_length=60)] = None,
+    buscar_pago: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[DocumentoOut]:
@@ -779,6 +780,22 @@ def listar_documentos(
         consulta = consulta.where(Documento.estado == estado)
     if tipo_documento is not None:
         consulta = consulta.where(Documento.tipo_documento == tipo_documento)
+    if buscar_pago and buscar_pago.strip():
+        termino = buscar_pago.strip().upper()
+        operacion_confirmada = Documento.datos_extraidos["extraccion_confirmada"]["campos"][
+            "numero_operacion"
+        ].as_string()
+        operacion_ocr = Documento.datos_extraidos["procesamiento_documental"][
+            "extraccion_estructurada"
+        ]["campos"]["numero_operacion"]["valor"].as_string()
+        consulta = consulta.where(
+            Documento.tipo_documento == TipoDocumento.VCHR,
+            or_(
+                func.upper(Documento.nombre_original).contains(termino, autoescape=True),
+                func.upper(operacion_confirmada).contains(termino, autoescape=True),
+                func.upper(operacion_ocr).contains(termino, autoescape=True),
+            ),
+        )
     if expediente_id is not None:
         consulta = consulta.where(Documento.expediente_id == expediente_id)
     if responsable_id is not None:
