@@ -299,6 +299,8 @@ class ExpedienteAsistidoOut(BaseModel):
 
 
 class ExpedienteDetalle(ExpedienteOut):
+    anterior_id: uuid.UUID | None = None
+    siguiente_id: uuid.UUID | None = None
     documentos: list[DocumentoOut]
     alertas: list[AlertaOut]
     faltantes: list[TipoDocumento]

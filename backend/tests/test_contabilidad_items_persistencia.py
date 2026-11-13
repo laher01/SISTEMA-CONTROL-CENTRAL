@@ -175,3 +175,48 @@ def test_concurrencia_mismo_tenant_un_catalogo_y_dos_lineas(engine):
     with fabrica() as comprobacion:
         assert comprobacion.scalar(select(func.count()).select_from(ProductoItem)) == 1
         assert comprobacion.scalar(select(func.count()).select_from(LineaComprobanteItem)) == 2
+
+
+def test_tablas_sunat_sin_catalogo_previo_y_con_variantes_de_presentacion(session):
+    tenant = Tenant(nombre="tablas_sunat")
+    session.add(tenant)
+    session.flush()
+    cabecera = "FACTURA ELECTRÓNICA\nCantidad Unidad Medida Descripción Valor Unitario"
+    primera = (
+        cabecera
+        + """ ICBPER
+8.00 PAQUETE GATORADE 500 ML 17.80 0.00
+12.00 PAQUETE AGUA SAN CARLOS 500 ML 11.017 0.00
+8.00 PAQUETE INCA KOLA 600 ML 28.813 0.00
+10.00 PAQUETE FRUGO FRESH 500 ML 14.41 0.00
+8.00 PAQUETE GUARANA 450 ML 19.49 0.00
+Valor de Venta de Operaciones Gratuitas : S/ 0.00
+"""
+    )
+    segunda = (
+        cabecera
+        + """
+8.00 CAJA PULP TETRA 22.882
+10.00 PAQUETE SPORADE 500ML 18.644
+6.00 PAQUETE INCA KOLA 600ML 28.812
+8.00 PAQUETE AGUA SAN LUIS 750 ML 15.255
+8.00 PAQUETE VOLT 300 ML 18.644
+Sub Total Ventas S/ 813.56
+"""
+    )
+    for texto in (primera, segunda):
+        documento = _documento(session, tenant.id)
+        assert registrar_items_pdf_estacion(session, tenant.id, documento.id, texto) == 5
+        session.flush()
+        assert registrar_items_pdf_estacion(session, tenant.id, documento.id, texto) == 0
+    assert session.scalar(select(func.count()).select_from(ProductoItem)) == 9
+    producto = session.scalar(
+        select(ProductoItem).where(ProductoItem.descripcion == "INCA KOLA 600 ML")
+    )
+    assert producto is not None
+    assert producto.unidad_base == "PAQUETE"
+    assert session.scalar(
+        select(func.sum(LineaComprobanteItem.cantidad)).where(
+            LineaComprobanteItem.producto_id == producto.id
+        )
+    ) == Decimal("14")

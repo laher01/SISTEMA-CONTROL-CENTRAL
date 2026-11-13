@@ -194,6 +194,7 @@ def listar_catalogo(
     auth: OperativeAuthDep,
     buscar: Annotated[str | None, Query(max_length=150)] = None,
     incluir_inactivos: bool = False,
+    solo_con_lineas: bool = False,
     limite: int = Query(100, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> dict[str, object]:
@@ -203,6 +204,7 @@ def listar_catalogo(
         select(
             LineaComprobanteItem.producto_id.label("producto_id"),
             func.count(LineaComprobanteItem.id).label("lineas_asociadas"),
+            func.min(LineaComprobanteItem.unidad).label("unidad"),
         )
         .join(Documento, Documento.id == LineaComprobanteItem.documento_id)
         .join(Expediente, Expediente.id == Documento.expediente_id)
@@ -222,11 +224,12 @@ def listar_catalogo(
         select(
             ProductoItem,
             func.coalesce(lineas_visibles.c.lineas_asociadas, 0).label("lineas_asociadas"),
+            lineas_visibles.c.unidad,
         )
         .outerjoin(lineas_visibles, lineas_visibles.c.producto_id == ProductoItem.id)
         .where(ProductoItem.tenant_id == auth.tenant_id)
     )
-    if auth.rol not in {"ADMINISTRADOR", "SECRETARIA"}:
+    if solo_con_lineas or auth.rol not in {"ADMINISTRADOR", "SECRETARIA"}:
         consulta = consulta.where(lineas_visibles.c.producto_id.is_not(None))
     if not incluir_inactivos:
         consulta = consulta.where(ProductoItem.activo.is_(True))
@@ -244,13 +247,13 @@ def listar_catalogo(
             {
                 "id": str(producto.id),
                 "descripcion": producto.descripcion,
-                "unidad_base": producto.unidad_base or "",
+                "unidad_base": producto.unidad_base or unidad or "",
                 "categoria": producto.categoria,
                 "categoria_confirmada": producto.clasificacion_confirmada,
                 "activo": producto.activo,
                 "lineas_asociadas": lineas_asociadas,
             }
-            for producto, lineas_asociadas in filas
+            for producto, lineas_asociadas, unidad in filas
         ],
     }
 
