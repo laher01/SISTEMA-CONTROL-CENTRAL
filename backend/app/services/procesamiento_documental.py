@@ -7,6 +7,7 @@ import tempfile
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
+from time import monotonic
 
 import pypdfium2 as pdfium
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
@@ -17,6 +18,9 @@ from app.enums import TipoDocumento
 from app.services.contabilidad_items_rhe import extraer_item_rhe
 from app.services.contabilidad_items_ubl import extraer_items_pdf
 from app.services.extraccion_campos import extraer_campos
+
+CONFIANZA_MINIMA_REESCANEO = 0.75
+TIEMPO_REESCANEO_SEGUNDOS = 20
 
 
 class DocumentoNoProcesable(Exception):
@@ -49,6 +53,8 @@ class ResultadoProcesamiento:
     requiere_ocr: bool = False
     sugerencia: SugerenciaClasificacion | None = None
     texto_tabla_items: str | None = None
+    reescaneo_intentos: int = 0
+    reescaneo_aplicados: int = 0
 
     def a_dict(self) -> dict[str, object]:
         resultado: dict[str, object] = {
@@ -58,6 +64,11 @@ class ResultadoProcesamiento:
             "paginas": self.paginas,
             "requiere_ocr": self.requiere_ocr,
         }
+        if self.reescaneo_intentos:
+            resultado["reescaneo_ocr"] = {
+                "intentos": self.reescaneo_intentos,
+                "aplicados": self.reescaneo_aplicados,
+            }
         if self.texto_tabla_items:
             resultado["texto_tabla_items"] = self.texto_tabla_items
         if self.confianza is not None:
@@ -170,6 +181,7 @@ def _procesar_pdf_escaneado(
     textos: list[str] = []
     confianzas: list[float] = []
     paginas_ocr_leidas = 0
+    reescaneo = _ReescaneoOCR()
     try:
         with tempfile.TemporaryDirectory(prefix="fact-central-pdf-ocr-") as temporal:
             for indice in range(paginas):
@@ -186,7 +198,7 @@ def _procesar_pdf_escaneado(
                     imagen.close()
                     bitmap.close()
                     pagina.close()
-                texto, confianza = _ejecutar_tesseract(ejecutable, entrada, idioma, limite)
+                texto, confianza = reescaneo.leer(ejecutable, entrada, idioma, limite)
                 if texto:
                     textos.append(f"--- Página {indice + 1} ---\n{texto}")
                     paginas_ocr_leidas += 1
@@ -205,6 +217,8 @@ def _procesar_pdf_escaneado(
         idioma=idioma,
         requiere_ocr=paginas_ocr_leidas < pendientes,
         sugerencia=sugerir_tipo(texto_final),
+        reescaneo_intentos=reescaneo.intentos,
+        reescaneo_aplicados=reescaneo.aplicados,
     )
 
 
@@ -215,10 +229,11 @@ def _procesar_imagen(contenido: bytes, extension: str, limite: int) -> Resultado
             "Tesseract OCR no está instalado; el original permanece guardado para reprocesarlo"
         )
     idioma = _idioma_disponible(ejecutable)
+    reescaneo = _ReescaneoOCR()
     with tempfile.TemporaryDirectory(prefix="fact-central-ocr-") as temporal:
         entrada = Path(temporal) / "entrada.png"
         _preparar_imagen_ocr(contenido, entrada, extension)
-        texto, confianza = _ejecutar_tesseract(ejecutable, entrada, idioma, limite)
+        texto, confianza = reescaneo.leer(ejecutable, entrada, idioma, limite)
     return ResultadoProcesamiento(
         texto=texto,
         metodo="OCR_IMAGEN",
@@ -228,6 +243,8 @@ def _procesar_imagen(contenido: bytes, extension: str, limite: int) -> Resultado
         idioma=idioma,
         requiere_ocr=not texto,
         sugerencia=sugerir_tipo(texto),
+        reescaneo_intentos=reescaneo.intentos,
+        reescaneo_aplicados=reescaneo.aplicados,
     )
 
 
@@ -254,15 +271,72 @@ def _preparar_imagen_ocr(contenido: bytes, destino: Path, extension: str) -> Non
     imagen.save(destino, format="PNG", optimize=True)
 
 
+@dataclass
+class _ReescaneoOCR:
+    """Segundo modo de lectura con un presupuesto acumulado por documento."""
+
+    intentos: int = 0
+    aplicados: int = 0
+    segundos_restantes: float = TIEMPO_REESCANEO_SEGUNDOS
+
+    def leer(
+        self, ejecutable: str, entrada: Path, idioma: str, limite: int
+    ) -> tuple[str, float | None]:
+        error_original = None
+        try:
+            texto, confianza = _ejecutar_tesseract(ejecutable, entrada, idioma, limite)
+        except DocumentoNoProcesable as exc:
+            error_original = exc
+            texto, confianza = "", None
+
+        lectura_suficiente = (
+            texto and confianza is not None and confianza >= CONFIANZA_MINIMA_REESCANEO
+        )
+        if not lectura_suficiente and self.segundos_restantes > 0:
+            inicio = monotonic()
+            self.intentos += 1
+            try:
+                alternativo, confianza_alternativa = _ejecutar_tesseract(
+                    ejecutable,
+                    entrada,
+                    idioma,
+                    limite,
+                    modo_segmentacion=11,
+                    timeout=self.segundos_restantes,
+                )
+            except DocumentoNoProcesable:
+                alternativo, confianza_alternativa = "", None
+            finally:
+                self.segundos_restantes -= monotonic() - inicio
+
+            if alternativo and (not texto or (confianza_alternativa or 0) > (confianza or 0)):
+                self.aplicados += 1
+                return alternativo, confianza_alternativa
+
+        if error_original is not None:
+            raise error_original
+        return texto, confianza
+
+
 def _ejecutar_tesseract(
-    ejecutable: str, entrada: Path, idioma: str, limite: int
+    ejecutable: str,
+    entrada: Path,
+    idioma: str,
+    limite: int,
+    *,
+    modo_segmentacion: int | None = None,
+    timeout: float = 120,
 ) -> tuple[str, float | None]:
+    comando = [ejecutable, str(entrada), "stdout", "-l", idioma]
+    if modo_segmentacion is not None:
+        comando.extend(["--psm", str(modo_segmentacion)])
+    comando.append("tsv")
     try:
         proceso = subprocess.run(
-            [ejecutable, str(entrada), "stdout", "-l", idioma, "tsv"],
+            comando,
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=timeout,
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
