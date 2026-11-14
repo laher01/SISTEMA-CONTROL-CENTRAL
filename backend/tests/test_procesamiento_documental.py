@@ -665,3 +665,43 @@ def test_detector_ose_no_confunde_nombres_comunes() -> None:
 
     assert detectar_formato_documental("FACTURA ELECTRONICA\nJOSE PEREZ\nE001-1") != "OSE"
     assert detectar_formato_documental("PROVEEDOR OSE\nFACTURA ELECTRONICA") == "OSE"
+
+
+@pytest.mark.parametrize("pdf", [False, True])
+def test_reescanea_lectura_vacia_y_conserva_trazabilidad(monkeypatch, pdf):
+    monkeypatch.setattr(pd.shutil, "which", lambda _: "/usr/bin/tesseract")
+    monkeypatch.setattr(pd, "_idioma_disponible", lambda _: "spa")
+
+    def ejecutar(*args, **opciones):
+        if not opciones:
+            return "", None
+        assert opciones["modo_segmentacion"] == 11
+        assert 0 < opciones["timeout"] <= 20
+        return "OPERACIÓN EXITOSA Nro. operación: AB-908771 TOTAL PAGADO S/ 350.00", 0.89
+
+    monkeypatch.setattr(pd, "_ejecutar_tesseract", ejecutar)
+    contenido = pdf_vacio() if pdf else b"\x89PNG\r\n\x1a\ncontenido"
+    resultado = pd.procesar(contenido, 10_000).a_dict()
+
+    assert resultado["requiere_ocr"] is False
+    assert resultado["reescaneo_ocr"] == {"intentos": 1, "aplicados": 1}
+    assert resultado["extraccion_estructurada"]["campos"]["numero_operacion"]["valor"] == (
+        "AB-908771"
+    )
+
+
+def test_reescaneo_con_error_conserva_lectura_previa(monkeypatch):
+    def ejecutar(*args, **opciones):
+        if opciones:
+            raise pd.DocumentoNoProcesable("Sin resultado en el segundo intento")
+        return "GUÍA DE REMISIÓN", 0.62
+
+    monkeypatch.setattr(pd, "_ejecutar_tesseract", ejecutar)
+    reescaneo = pd._ReescaneoOCR()
+
+    assert reescaneo.leer("tesseract", pd.Path("entrada.png"), "spa", 10_000) == (
+        "GUÍA DE REMISIÓN",
+        0.62,
+    )
+    assert reescaneo.intentos == 1
+    assert reescaneo.aplicados == 0

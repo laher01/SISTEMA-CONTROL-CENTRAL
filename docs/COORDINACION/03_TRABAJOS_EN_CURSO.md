@@ -39,6 +39,7 @@
 | ITEMS-TABLA-004 | Extracción por columnas de comprobantes PDF | Ítems / OCR | Orquestador | Probado localmente; CI e integración pendientes | fix/items-tablas-columnas | Extractor, lectura PDF y reescaneo; relacionado con #365 |
 | PAG-DOC-004 | Buscar y vincular pagos ya cargados desde Expedientes | Pagos documentales | Orquestador | Implementado; CI e integración pendientes | fix/vincular-pago-existente | Detalle de expediente y distribución de pagos; complementa PAG-DOC-003 |
 | ITEMS-UND-006 | Reconocer encabezado Und. en tablas de facturas | Ítems | Orquestador | En validación local | fix/items-unidad-abreviada | Extractor por columnas |
+| OCR-ING-RESCAN-001 | Segundo intento automático de OCR en el ingreso documental | Módulo 10 OCR/PDF | Codex, a solicitud de Luis | PROBADO LOCALMENTE; revisión por PR pendiente | `feat/ocr-reescaneo-ingreso` | Lector compartido, caché OCR y pruebas; usa Tesseract y PDFium existentes |
 | ETAPA-7 | Landing/CMS/planes/NEXUS comercial | Comercial | Chat Etapa 7 | RESERVADO A OTRO CHAT | Consultar sus PR | Website y comercial |
 
 **Importante:** no se afirma que los PR abiertos no relacionados estén libres; inspeccionar GitHub antes de tocar archivos. Un cambio de estado requiere evidencia (commit, pruebas, PR o despliegue).
