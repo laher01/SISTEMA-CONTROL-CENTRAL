@@ -1,0 +1,122 @@
+name: postgres-staging-diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: fact-central-staging
+  cancel-in-progress: false
+
+jobs:
+  diagnostico:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 4
+    steps:
+      - name: Medir consultas de solo lectura
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test "$VPS_HOST" = "132.145.233.172"
+          test "$VPS_USER" = ubuntu
+          test -n "$VPS_DEPLOY_PATH"
+          test -n "$VPS_SSH_PRIVATE_KEY"
+          test -n "$VPS_SSH_KNOWN_HOSTS"
+          ssh_dir="$(mktemp -d)"
+          trap 'rm -rf -- "$ssh_dir"' EXIT
+          umask 077
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$ssh_dir/id_ed25519"
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          printf -v destino '%q' "$VPS_DEPLOY_PATH"
+
+          ssh -i "$ssh_dir/id_ed25519" -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$ssh_dir/known_hosts" \
+            -o ConnectTimeout=15 "$VPS_USER@$VPS_HOST" \
+            "cd -- $destino && bash -s" <<'REMOTE'
+          set -euo pipefail
+          test -s deploy/.env.production
+          compose=(docker compose -p fact-central-staging --env-file deploy/.env.production
+                   -f deploy/docker-compose.production.yml)
+          echo "Commit instalado: $(git rev-parse HEAD)"
+          "${compose[@]}" exec -T db sh -c \
+            'PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=5000 -c lock_timeout=1000" exec psql -X -v ON_ERROR_STOP=1 -P pager=off -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+            2>&1 <<'SQL' | sed -E 's/[[:xdigit:]]{8}(-[[:xdigit:]]{4}){3}-[[:xdigit:]]{12}/[uuid]/g'
+          BEGIN READ ONLY;
+          SELECT tablename, indexname, indexdef
+          FROM pg_indexes
+          WHERE schemaname = 'public'
+            AND tablename IN ('documentos', 'expedientes', 'empresas',
+                              'productos_items', 'lineas_comprobantes_items')
+          ORDER BY tablename, indexname;
+
+          SELECT coalesce(e.tenant_id::text, '') AS ambito,
+                 coalesce(e.usuario_id::text, '') AS usuario,
+                 coalesce(date_trunc('month', e.fecha_emision)::date::text, '') AS desde,
+                 coalesce((date_trunc('month', e.fecha_emision) + interval '1 month')::date::text, '') AS hasta,
+                 e.tenant_id IS NOT NULL AS hay_muestra
+          FROM (VALUES (1)) AS base(n)
+          LEFT JOIN LATERAL (
+              SELECT tenant_id, usuario_id, fecha_emision
+              FROM expedientes
+              WHERE deleted_at IS NULL AND usuario_id IS NOT NULL
+                AND fecha_emision IS NOT NULL
+              ORDER BY fecha_emision DESC, created_at DESC, id
+              LIMIT 1
+          ) e ON true
+          \gset
+
+          \if :hay_muestra
+          \echo 'Registros - primera página por mes con EXTRACT'
+          EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
+          SELECT e.* FROM expedientes e
+          WHERE e.tenant_id = :'ambito' AND e.usuario_id = :'usuario'
+            AND e.deleted_at IS NULL
+            AND extract(year FROM e.fecha_emision) = extract(year FROM :'desde'::date)
+            AND extract(month FROM e.fecha_emision) = extract(month FROM :'desde'::date)
+            AND EXISTS (SELECT 1 FROM documentos d
+                        WHERE d.expediente_id = e.id AND d.deleted_at IS NULL)
+          ORDER BY e.fecha_emision DESC, e.created_at DESC
+          LIMIT 50;
+
+          \echo 'Registros - primera página del mismo mes por rango'
+          EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
+          SELECT e.* FROM expedientes e
+          WHERE e.tenant_id = :'ambito' AND e.usuario_id = :'usuario'
+            AND e.deleted_at IS NULL
+            AND e.fecha_emision >= :'desde'::date AND e.fecha_emision < :'hasta'::date
+            AND EXISTS (SELECT 1 FROM documentos d
+                        WHERE d.expediente_id = e.id AND d.deleted_at IS NULL)
+          ORDER BY e.fecha_emision DESC, e.created_at DESC
+          LIMIT 50;
+
+          \echo 'Expedientes - suma y conteo por moneda para el ámbito completo'
+          EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
+          SELECT e.moneda, count(*), sum(e.importe_total)
+          FROM expedientes e
+          WHERE e.tenant_id = :'ambito' AND e.deleted_at IS NULL
+            AND EXISTS (SELECT 1 FROM documentos d
+                        WHERE d.expediente_id = e.id AND d.deleted_at IS NULL)
+          GROUP BY e.moneda;
+
+          \echo 'Documentos - primera página por coincidencia parcial de nombre'
+          EXPLAIN (ANALYZE, BUFFERS, TIMING OFF)
+          SELECT d.* FROM documentos d
+          WHERE d.tenant_id = :'ambito' AND d.deleted_at IS NULL
+            AND upper(d.nombre_original) LIKE '%FACTURA%'
+          ORDER BY d.created_at DESC
+          LIMIT 50;
+          \else
+          \echo 'Sin expedientes activos con usuario y fecha. Se informa solo el inventario.'
+          \endif
+          ROLLBACK;
+          SQL
+          REMOTE
