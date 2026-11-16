@@ -8,7 +8,7 @@ from threading import Lock
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from pypdf import PdfReader
 from sqlalchemy import and_, case, delete, false, func, or_, select
@@ -73,6 +73,7 @@ from app.services.expedientes import (
     buscar_expediente,
     eliminar_expediente_vacio,
 )
+from app.services.exportacion_excel import exportar_listado
 from app.services.identidad_cotizaciones import identidad_cotizacion
 from app.services.ingesta import (
     ArchivoSubido,
@@ -766,7 +767,8 @@ def listar_documentos(
     buscar_pago: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[DocumentoOut]:
+    formato: Literal["xlsx"] | None = None,
+) -> list[DocumentoOut] | Response:
     consulta = (
         select(Documento)
         .options(
@@ -949,6 +951,9 @@ def listar_documentos(
                     | (receptor.ruc.contains(termino, autoescape=True))
                 )
 
+    if formato == "xlsx":
+        ids_exportacion = consulta.with_only_columns(Documento.id, maintain_column_froms=True)
+        return exportar_listado(session, tenant_id, ids_exportacion, "documentos")
     consulta = consulta.order_by(Documento.created_at.desc()).limit(limit).offset(offset)
     filas = list(session.scalars(consulta))
     jerarquias = nombres_jerarquia(session, tenant_id, filas)

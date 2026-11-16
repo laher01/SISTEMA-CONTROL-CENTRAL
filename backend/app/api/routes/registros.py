@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
+from fastapi.responses import Response
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import aliased
 
@@ -18,6 +19,7 @@ from app.services.expedientes import (
     expediente_tiene_documentos_activos,
     tipos_presentes,
 )
+from app.services.exportacion_excel import exportar_listado
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 
 router = APIRouter(prefix="/registros", tags=["registros"])
@@ -170,7 +172,8 @@ def listar(
     mes: Annotated[str | None, Query(pattern=r"^\d{4}-\d{2}$")] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> RegistroResumen:
+    formato: Literal["xlsx"] | None = None,
+) -> RegistroResumen | Response:
     _validar_filtros(auth.rol, usuario_id, gestor_id)
 
     usuario = aliased(Miembro)
@@ -257,6 +260,9 @@ def listar(
             func.extract("month", Expediente.fecha_emision) == numero_mes,
         )
 
+    if formato == "xlsx":
+        ids_exportacion = consulta.with_only_columns(Expediente.id, maintain_column_froms=True)
+        return exportar_listado(session, tenant_id, ids_exportacion, "registros")
     base = consulta.subquery()
     total = session.execute(
         select(
