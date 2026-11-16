@@ -1,6 +1,12 @@
 """Casos reales de GRE remitente y referencias fiscales seguras."""
 
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from app.models import Documento, Gestor, Miembro, ReferenciaGRE
 from app.services.referencias_gre import extraer_referencias_factura_gre
+
+from tests.conftest import AuthPrueba
 
 EJEMPLO = (
     "Datos del Destinatario :INVERSIONES Y NEGOCIACIONES MAREUF E.I.R.L. - "
@@ -72,3 +78,59 @@ def test_referencias_de_cinco_gre_sunat_reales_anonimizadas_por_formato() -> Non
         assert (refs[0].serie, refs[0].correlativo) == (serie, correlativo)
         assert refs[0].emisor_ruc == emisor
         assert refs[0].receptor_ruc == receptor
+
+
+def test_provisional_muestra_jerarquia_en_administracion(
+    client: TestClient, session: Session, auth_prueba: AuthPrueba
+) -> None:
+    tenant_id = auth_prueba.contexto.tenant_id
+    usuario = session.get(Miembro, auth_prueba.usuario_id)
+    gestor = session.get(Gestor, auth_prueba.gestor_id)
+    assert usuario is not None
+    assert gestor is not None
+    responsable = Miembro(
+        tenant_id=tenant_id, codigo="RESP-GRE", nombre="Responsable GRE", rol="RESPONSABLE"
+    )
+    session.add(responsable)
+    session.flush()
+    usuario.responsable_id = responsable.id
+    documento = Documento(
+        tenant_id=tenant_id,
+        usuario_id=usuario.id,
+        gestor_id=gestor.id,
+        tipo_documento="GRE",
+        estado="PENDIENTE_RELACION",
+        sha256="a" * 64,
+        nombre_original="guia.pdf",
+        mime_type="application/pdf",
+        tamano_bytes=1,
+        ruta_storage="pruebas/guia.pdf",
+    )
+    session.add(documento)
+    session.flush()
+    session.add(
+        ReferenciaGRE(
+            tenant_id=tenant_id,
+            documento_id=documento.id,
+            serie="E001",
+            correlativo="175",
+            emisor_ruc="10421885627",
+            receptor_ruc="20538821374",
+        )
+    )
+    documento_id = str(documento.id)
+    esperado = (gestor.nombre, usuario.nombre, responsable.nombre)
+    session.commit()
+
+    auth_prueba.como_admin()
+    ruta = "/api/v1/documentos/provisionales-gre"
+    respuesta = client.get(ruta)
+    assert respuesta.status_code == 200, respuesta.text
+    fila = next(item for item in respuesta.json() if item["documento_id"] == documento_id)
+    assert (fila["gestor_nombre"], fila["usuario_nombre"], fila["responsable_nombre"]) == esperado
+
+    auth_prueba.como_gestor(auth_prueba.gestor_id, auth_prueba.usuario_id)
+    respuesta = client.get(ruta)
+    assert respuesta.status_code == 200, respuesta.text
+    fila = next(item for item in respuesta.json() if item["documento_id"] == documento_id)
+    assert "responsable_nombre" not in fila
