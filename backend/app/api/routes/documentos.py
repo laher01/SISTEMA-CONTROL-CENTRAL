@@ -1516,7 +1516,8 @@ def provisionales_gre(
     jerarquias = (
         nombres_jerarquia(session, tenant_id, [documento for _, _, documento in filas])
         if filas
-        and auth.rol in (
+        and auth.rol
+        in (
             RolMiembro.ADMINISTRADOR,
             RolMiembro.GERENTE,
             RolMiembro.SECRETARIA,
