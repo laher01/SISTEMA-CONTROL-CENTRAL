@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
 from sqlalchemy import case, delete, func, or_, select, true, update
@@ -67,6 +67,7 @@ from app.services.expedientes import (
     fecha_limite,
     recalcular_expedientes,
 )
+from app.services.exportacion_excel import exportar_listado
 from app.services.ingesta import crear_expediente
 from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.pdf_consolidado import pdf_con_documentos
@@ -375,7 +376,8 @@ def listar(
     buscar: Annotated[str | None, Query(max_length=100)] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[ExpedienteOut]:
+    formato: Literal["xlsx"] | None = None,
+) -> list[ExpedienteOut] | Response:
     consulta = select(Expediente).where(
         Expediente.tenant_id == tenant_id,
         Expediente.deleted_at.is_(None),
@@ -457,6 +459,9 @@ def listar(
                 func.lower(emisor.razon_social).contains(texto, autoescape=True),
             )
         )
+    if formato == "xlsx":
+        ids_exportacion = consulta.with_only_columns(Expediente.id, maintain_column_froms=True)
+        return exportar_listado(session, tenant_id, ids_exportacion, "expedientes")
     consulta = (
         consulta.order_by(
             Expediente.fecha_emision.desc(),

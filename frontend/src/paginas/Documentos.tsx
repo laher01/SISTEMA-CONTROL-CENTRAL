@@ -1,3 +1,4 @@
+import ExportarExcel from "../ExportarExcel";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
@@ -405,6 +406,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
       <div className="encabezado-pagina">
         <div>
           <h2>Documentos</h2>
+          <ExportarExcel listado="documentos" ruta={ruta} />
           <p className="tenue">
             Bandeja para revisar registros, filtrar expedientes y resolver correcciones de documentos.
           </p>

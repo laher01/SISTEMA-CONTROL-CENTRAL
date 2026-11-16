@@ -1,3 +1,7 @@
+from io import BytesIO
+from xml.etree import ElementTree
+from zipfile import ZipFile
+
 from fastapi.testclient import TestClient
 
 from tests.conftest import AuthPrueba
@@ -43,3 +47,31 @@ def test_filtros_a_b_registros_documentos_expedientes(
 
     for ruta in ["/api/v1/registros", "/api/v1/documentos", "/api/v1/expedientes"]:
         assert client.get(ruta, params={"tipo_empresa": "C"}).status_code == 422
+        exportado = client.get(
+            ruta, params={"tipo_empresa": "A", "formato": "xlsx", "limit": 1, "offset": 1}
+        )
+        assert exportado.status_code == 200, exportado.text
+        assert exportado.headers["content-type"].endswith("spreadsheetml.sheet")
+        with ZipFile(BytesIO(exportado.content)) as libro:
+            hoja = ElementTree.fromstring(libro.read("xl/worksheets/sheet1.xml"))
+        filas = hoja.findall(".//{*}row")
+        assert len(filas) == 3
+        assert [celda.text for celda in filas[0].findall(".//{*}t")] == [
+            "USUARIO",
+            "PEDIDO",
+            "RUC del Emisor",
+            "Razón Social del Emisor",
+            "Fecha de Emisión",
+            "Razón Social del Receptor",
+            "RUC del Receptor",
+            "Importe Total",
+            "Número Correlativo",
+        ]
+        assert {fila[8].findtext(".//{*}t") for fila in filas[1:]} == {
+            "F001-123",
+            "F001-124",
+        }
+        for fila in filas[1:]:
+            assert fila[0].findtext(".//{*}t")
+            assert fila[2].findtext(".//{*}t") == "20500000002"
+            assert fila[7].findtext("{*}v") is not None

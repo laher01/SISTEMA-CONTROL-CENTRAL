@@ -1,3 +1,4 @@
+import ExportarExcel from "../ExportarExcel";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
@@ -212,6 +213,7 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
       <div className="encabezado-pagina">
         <div>
           <h2>Base de registros</h2>
+          <ExportarExcel listado="registros" ruta={ruta} />
           <p className="tenue">
             Compras con totales, propiedad, emisor, receptor y documentación del expediente.
           </p>

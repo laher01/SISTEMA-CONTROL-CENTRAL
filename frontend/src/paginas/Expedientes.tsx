@@ -1,3 +1,4 @@
+import ExportarExcel from "../ExportarExcel";
 import { useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 
@@ -312,6 +313,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
   return (
     <>
       <h2>Expedientes</h2>
+          <ExportarExcel listado="expedientes" ruta={ruta} />
       <div className="acciones">
         <button type="button" onClick={() => { recargar(); recargarResumen(); }}>
           Actualizar expedientes y total
