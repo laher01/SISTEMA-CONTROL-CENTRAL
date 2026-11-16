@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from app.models import Documento, Gestor, Miembro, ReferenciaGRE
 from app.services.referencias_gre import extraer_referencias_factura_gre
-
 from tests.conftest import AuthPrueba
 
 EJEMPLO = (
