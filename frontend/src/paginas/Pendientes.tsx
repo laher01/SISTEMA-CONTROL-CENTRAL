@@ -15,6 +15,7 @@ import {
   type Documento,
   type Expediente,
   type RelacionSugerida,
+  type SesionActual,
   type TipoDocumento,
 } from "../tipos";
 
@@ -27,7 +28,12 @@ type ResultadoLote = {
   fallidos: number;
 };
 type SeleccionSugerida = { expediente: Expediente; tipo?: TipoDocumento };
-type ProvisionalGRE = {
+type OrigenDocumental = Pick<Documento,
+  "gestor_nombre" | "gestor_codigo" | "usuario_nombre" | "usuario_codigo" |
+  "responsable_nombre" | "responsable_codigo"
+>;
+
+type ProvisionalGRE = OrigenDocumental & {
   documento_id: string;
   factura: string;
   emisor_ruc: string;
@@ -55,7 +61,8 @@ const ETIQUETAS_CAMPOS: Record<string, string> = {
   numero_operacion: "N.º de operación",
 };
 
-export default function Pendientes() {
+export default function Pendientes({ rol }: { rol: SesionActual["rol"] }) {
+  const mostrarOrigen = ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE"].includes(rol);
   const [parametros, setParametros] = useSearchParams();
   const estado = parametros.get("estado") === "PENDIENTE_RELACION" ? "PENDIENTE_RELACION" : "PENDIENTE_CLASIFICACION";
   const pagina = Number(parametros.get("pagina") ?? "0");
@@ -198,7 +205,7 @@ export default function Pendientes() {
           <p className="tenue">Ya identificados por la GRE remitente. Sin monto ni producción hasta recibir la factura y validar al cliente.</p>
           <table>
             <thead>
-              <tr><th>Factura referenciada</th><th>RUC emisor</th><th>RUC receptor</th><th>Validación del cliente</th><th>Guía</th></tr>
+              <tr><th>Factura referenciada</th><th>RUC emisor</th><th>RUC receptor</th><th>Validación del cliente</th>{mostrarOrigen && <th>Ruta de origen</th>}<th>Guía</th></tr>
             </thead>
             <tbody>
               {provisionales.map((p) => (
@@ -211,6 +218,7 @@ export default function Pendientes() {
                       ? <span>Autorizado · pendiente de factura</span>
                       : <strong style={{ color: "#b91c1c" }}>NO VÁLIDO — CLIENTE NO AUTORIZADO</strong>}
                   </td>
+                  {mostrarOrigen && <td><RutaOrigen origen={p} /></td>}
                   <td><a href={urlArchivo(p.documento_id)} target="_blank" rel="noreferrer">Ver GRE</a></td>
                 </tr>
               ))}
@@ -260,6 +268,7 @@ export default function Pendientes() {
             <tr>
               <th><input type="checkbox" aria-label="Seleccionar pendientes visibles" checked={(datos?.length ?? 0) > 0 && (datos ?? []).every((d) => seleccionados.includes(d.id))} onChange={(e) => setSeleccionados(e.target.checked ? (datos ?? []).map((d) => d.id) : [])} /></th>
               <th>Archivo</th>
+              {mostrarOrigen && <th>Ruta de origen</th>}
               <th>Subido</th>
               <th>Lectura</th>
               <th>Vincular</th>
@@ -267,7 +276,7 @@ export default function Pendientes() {
             </tr>
           </thead>
           <tbody>
-            {datos?.map((d) => <FilaPendiente key={d.id} documento={d} alVincular={recargar} puedeRetirar={capacidades?.puede_retirar ?? false} seleccionado={seleccionados.includes(d.id)} alSeleccionar={(activo) => setSeleccionados((actual) => activo ? [...new Set([...actual, d.id])] : actual.filter((id) => id !== d.id))} />)}
+            {datos?.map((d) => <FilaPendiente key={d.id} documento={d} mostrarOrigen={mostrarOrigen} alVincular={recargar} puedeRetirar={capacidades?.puede_retirar ?? false} seleccionado={seleccionados.includes(d.id)} alSeleccionar={(activo) => setSeleccionados((actual) => activo ? [...new Set([...actual, d.id])] : actual.filter((id) => id !== d.id))} />)}
           </tbody>
         </table>
       </Estado>
@@ -280,14 +289,29 @@ export default function Pendientes() {
   );
 }
 
+function RutaOrigen({ origen }: { origen: OrigenDocumental }) {
+  const niveles = [
+    ["Gestor", origen.gestor_nombre, origen.gestor_codigo],
+    ["Usuario", origen.usuario_nombre, origen.usuario_codigo],
+    ["Responsable", origen.responsable_nombre, origen.responsable_codigo],
+  ];
+  return niveles.map(([nivel, nombre, codigo]) => (
+    <span key={nivel} className="bloque">
+      <strong>{nivel}</strong>{" "}{[nombre, codigo].filter(Boolean).join(" · ") || "Sin asignar"}
+    </span>
+  ));
+}
+
 function FilaPendiente({
   documento,
+  mostrarOrigen,
   alVincular,
   seleccionado,
   alSeleccionar,
   puedeRetirar,
 }: {
   documento: Documento;
+  mostrarOrigen: boolean;
   alVincular: () => void;
   seleccionado: boolean;
   alSeleccionar: (activo: boolean) => void;
@@ -324,6 +348,7 @@ function FilaPendiente({
           {documento.nombre_original}
         </a>
       </td>
+      {mostrarOrigen && <td><RutaOrigen origen={documento} /></td>}
       <td>{formatearFecha(documento.created_at)}</td>
       <td>
         <Procesar documento={documento} alSeleccionar={setSeleccion} alCompletar={alVincular} />
