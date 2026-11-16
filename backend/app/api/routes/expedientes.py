@@ -70,6 +70,7 @@ from app.services.expedientes import (
 from app.services.exportacion_excel import exportar_listado
 from app.services.ingesta import crear_expediente
 from app.services.jerarquia_documental import nombres_jerarquia
+from app.services.orden_listados import DireccionListado, OrdenListado, ordenar_listado
 from app.services.pdf_consolidado import pdf_con_documentos
 from app.services.permisos import (
     PERMISO_ELIMINAR_REGISTROS,
@@ -377,6 +378,8 @@ def listar(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
     formato: Literal["xlsx"] | None = None,
+    orden: OrdenListado | None = None,
+    direccion: DireccionListado = "asc",
 ) -> list[ExpedienteOut] | Response:
     consulta = select(Expediente).where(
         Expediente.tenant_id == tenant_id,
@@ -462,15 +465,13 @@ def listar(
     if formato == "xlsx":
         ids_exportacion = consulta.with_only_columns(Expediente.id, maintain_column_froms=True)
         return exportar_listado(session, tenant_id, ids_exportacion, "expedientes")
-    consulta = (
-        consulta.order_by(
-            Expediente.fecha_emision.desc(),
-            Expediente.created_at.desc(),
-            Expediente.id,
+    if orden:
+        consulta = ordenar_listado(consulta, tenant_id, orden, direccion)
+    else:
+        consulta = consulta.order_by(
+            Expediente.fecha_emision.desc(), Expediente.created_at.desc(), Expediente.id
         )
-        .limit(limit)
-        .offset(offset)
-    )
+    consulta = consulta.limit(limit).offset(offset)
     filas = list(session.scalars(consulta))
     jerarquias = nombres_jerarquia(session, tenant_id, filas)
     ids = [fila.id for fila in filas]

@@ -1,3 +1,4 @@
+import EncabezadoOrden, { parametrosOrden } from "../componentes/EncabezadoOrden";
 import ExportarExcel from "../ExportarExcel";
 import { useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
@@ -69,6 +70,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
   const inicioMes = mes ? `${mes}-01` : "";
   const finMes = mes ? `${mes}-${String(ultimoDiaMes).padStart(2, "0")}` : "";
   const buscar = parametros.get("buscar") ?? "";
+  const orden = parametros.get("orden") ?? "";
   const pagina = Number(parametros.get("pagina") ?? "0");
 
   const filtrosBase = {
@@ -90,6 +92,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
 
   const ruta = conParametros("/api/v1/expedientes", {
     ...filtrosBase,
+    ...parametrosOrden(orden),
     limit: String(POR_PAGINA),
     offset: String(pagina * POR_PAGINA),
   });
@@ -434,21 +437,21 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
                   onChange={(e) => alternarTodosVisibles(e.target.checked)}
                 />
               </th>
-              {!responsableId && <th>Responsable</th>}
-              {!usuarioId && <th>Usuario</th>}
-              {!gestorId && <th>Gestor</th>}
+              {!responsableId && <EncabezadoOrden campo="responsable" orden={orden} cambiar={cambiar}>Responsable</EncabezadoOrden>}
+              {!usuarioId && <EncabezadoOrden campo="usuario" orden={orden} cambiar={cambiar}>Usuario</EncabezadoOrden>}
+              {!gestorId && <EncabezadoOrden campo="gestor" orden={orden} cambiar={cambiar}>Gestor</EncabezadoOrden>}
               <th>Estado</th>
-              <th>Tipo</th>
-              <th>Comprobante</th>
-              <th>Fecha documento</th>
-               <th>Fecha de carga</th>
-              <th>Emisor</th>
-              <th>Receptor</th>
+              <EncabezadoOrden campo="tipo_empresa" orden={orden} cambiar={cambiar}>Tipo empresa</EncabezadoOrden>
+              <EncabezadoOrden campo="correlativo" orden={orden} cambiar={cambiar}>Comprobante</EncabezadoOrden>
+              <EncabezadoOrden campo="fecha_documento" orden={orden} cambiar={cambiar}>Fecha documento</EncabezadoOrden>
+               <EncabezadoOrden campo="fecha_carga" orden={orden} cambiar={cambiar}>Fecha de carga</EncabezadoOrden>
+              <EncabezadoOrden campo="emisor" orden={orden} cambiar={cambiar}>Emisor</EncabezadoOrden>
+              <EncabezadoOrden campo="receptor" orden={orden} cambiar={cambiar}>Receptor</EncabezadoOrden>
               <th>N° Doc</th>
               <th>TIP-COMP-PGO</th>
               <th>DTS-COMP-PGO</th>
               <th>Vínculo de pago</th>
-              <th className="num">Importe</th>
+              <EncabezadoOrden className="num" campo="monto" orden={orden} cambiar={cambiar}>Importe</EncabezadoOrden>
               <th>Descarga</th>
         {(capacidades?.puede_retirar ?? false) && <th>Acciones</th>}
             </tr>

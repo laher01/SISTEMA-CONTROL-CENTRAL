@@ -4,6 +4,7 @@
 
 | ID | Trabajo | Área | Responsable | Estado | Rama / PR | Archivos previstos |
 | --- | --- | --- | --- | --- | --- | --- |
+| DOC-ORD-001 | Ordenar Documentos, Registros y Expedientes antes de paginar | Operación documental | Chat operativo — solicitud del usuario | PR EN PREPARACIÓN; regresión API, frontend y compilación local aprobados | `feat/orden-columnas-documentales` | Rutas documentales, servicio de orden y encabezados de los tres listados |
 | COORD-001 | Crear Centro de Coordinación | Coordinación | Chat arquitectura SaaS | PR EN PREPARACIÓN | `docs/centro-coordinacion-saas-20261015` | `AGENTS.md`, `docs/COORDINACION/**` |
 | SAAS-001 | Consola SUPERADMIN consulta integral solo lectura | SaaS | Chat arquitectura SaaS | PROPUESTO | Sin rama | Backend/frontend SUPERADMIN (por identificar) |
 | SAAS-002 | Auditoría de aislamiento cross-tenant | Seguridad | Chat arquitectura SaaS | PROPUESTO | Sin rama | Servicios API, autenticación, tests (por identificar) |

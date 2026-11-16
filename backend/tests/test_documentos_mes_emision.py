@@ -88,3 +88,67 @@ def test_empresa_proveedora_y_cliente_se_filtran_independientemente(
         expedientes = client.get("/api/v1/expedientes/resumen", params=incorrecto)
         assert expedientes.status_code == 200, expedientes.text
         assert expedientes.json()["total_expedientes"] == 0
+
+
+def test_orden_documental_respeta_paginacion_y_filtros(client: TestClient) -> None:
+    documentos = []
+    for numero, importe in (("2", "9.00"), ("10", "100.00")):
+        respuesta = client.post(
+            "/api/v1/documentos",
+            files={
+                "archivo": (
+                    f"F001-{numero}.xml",
+                    factura(numero=f"F001-{numero}", importe=importe, fecha="2026-09-21"),
+                )
+            },
+        )
+        assert respuesta.status_code == 201, respuesta.text
+        documentos.append(respuesta.json())
+
+    for modulo in ("documentos", "expedientes", "registros"):
+        ruta = f"/api/v1/{modulo}"
+        filtros = (
+            {"emisor": "PROVEEDOR"}
+            if modulo == "registros"
+            else {
+                "empresa_emisora": "PROVEEDOR",
+            }
+        )
+        for orden in ("monto", "correlativo"):
+            for direccion, primero in (("asc", 0), ("desc", 1)):
+                for pagina in (0, 1):
+                    respuesta = client.get(
+                        ruta,
+                        params={
+                            **filtros,
+                            "orden": orden,
+                            "direccion": direccion,
+                            "limit": 1,
+                            "offset": pagina,
+                        },
+                    )
+                    assert respuesta.status_code == 200, respuesta.text
+                    datos = respuesta.json()
+                    filas = datos["filas"] if modulo == "registros" else datos
+                    esperado = documentos[(primero + pagina) % 2]
+                    clave = "id" if modulo == "documentos" else "expediente_id"
+                    assert len(filas) == 1
+                    assert (
+                        filas[0].get("expediente_id" if modulo == "registros" else "id")
+                        == esperado[clave]
+                    )
+                    if modulo == "registros":
+                        assert datos["total_registros"] == 2
+
+        for orden in (
+            "gestor",
+            "usuario",
+            "responsable",
+            "fecha_documento",
+            "fecha_carga",
+            "emisor",
+            "receptor",
+            "tipo_empresa",
+        ):
+            respuesta = client.get(ruta, params={**filtros, "orden": orden})
+            assert respuesta.status_code == 200, respuesta.text

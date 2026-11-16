@@ -87,6 +87,12 @@ from app.services.ingesta import (
 from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.lotes_imagenes import MAX_IMAGENES_POR_SUBLOTE
 from app.services.metadatos_documento import metadatos_individuales
+from app.services.orden_listados import (
+    DireccionListado,
+    OrdenListado,
+    importe_individual,
+    ordenar_listado,
+)
 from app.services.permisos import (
     PERMISO_ELIMINAR_REGISTROS,
     permiso_habilitado,
@@ -768,6 +774,8 @@ def listar_documentos(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
     formato: Literal["xlsx"] | None = None,
+    orden: OrdenListado | None = None,
+    direccion: DireccionListado = "asc",
 ) -> list[DocumentoOut] | Response:
     consulta = (
         select(Documento)
@@ -954,12 +962,27 @@ def listar_documentos(
     if formato == "xlsx":
         ids_exportacion = consulta.with_only_columns(Documento.id, maintain_column_froms=True)
         return exportar_listado(session, tenant_id, ids_exportacion, "documentos")
-    consulta = consulta.order_by(Documento.created_at.desc()).limit(limit).offset(offset)
+    if orden:
+        consulta = ordenar_listado(
+            consulta,
+            tenant_id,
+            orden,
+            direccion,
+            documento=True,
+            postgres=session.get_bind().dialect.name == "postgresql",
+        )
+    else:
+        consulta = consulta.order_by(Documento.created_at.desc(), Documento.id)
+    consulta = consulta.limit(limit).offset(offset)
     filas = list(session.scalars(consulta))
     jerarquias = nombres_jerarquia(session, tenant_id, filas)
     return [
         DocumentoOut.model_validate(fila).model_copy(
-            update={**jerarquias[fila.id], **metadatos_individuales(fila)}
+            update={
+                **jerarquias[fila.id],
+                **metadatos_individuales(fila),
+                **importe_individual(fila),
+            }
         )
         for fila in filas
     ]

@@ -20,6 +20,7 @@ from app.services.expedientes import (
     tipos_presentes,
 )
 from app.services.exportacion_excel import exportar_listado
+from app.services.orden_listados import DireccionListado, OrdenListado, ordenar_listado
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 
 router = APIRouter(prefix="/registros", tags=["registros"])
@@ -173,6 +174,8 @@ def listar(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
     formato: Literal["xlsx"] | None = None,
+    orden: OrdenListado | None = None,
+    direccion: DireccionListado = "asc",
 ) -> RegistroResumen | Response:
     _validar_filtros(auth.rol, usuario_id, gestor_id)
 
@@ -278,14 +281,13 @@ def listar(
         )
     ).one()
 
-    filas_query = (
-        consulta.order_by(
-            Expediente.fecha_emision.desc(),
-            Expediente.created_at.desc(),
+    if orden:
+        consulta = ordenar_listado(consulta, tenant_id, orden, direccion)
+    else:
+        consulta = consulta.order_by(
+            Expediente.fecha_emision.desc(), Expediente.created_at.desc(), Expediente.id
         )
-        .limit(limit)
-        .offset(offset)
-    )
+    filas_query = consulta.limit(limit).offset(offset)
 
     puede_eliminar_rol = auth.rol != RolMiembro.SUPERADMIN and permiso_habilitado(
         session,
