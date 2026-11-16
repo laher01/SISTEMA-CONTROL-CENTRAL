@@ -1,3 +1,4 @@
+import EncabezadoOrden, { parametrosOrden } from "../componentes/EncabezadoOrden";
 import ExportarExcel from "../ExportarExcel";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -45,6 +46,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
   const desde = parametros.get("fecha_desde") ?? "";
   const hasta = parametros.get("fecha_hasta") ?? "";
   const mes = parametros.get("mes") ?? "";
+  const orden = parametros.get("orden") ?? "";
   const pagina = Number(parametros.get("pagina") ?? "0");
 
   const ruta = conParametros("/api/v1/documentos", {
@@ -64,6 +66,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
     empresa_receptora: receptor.length === 11 ? undefined : receptor,
     fecha_desde: desde,
     fecha_hasta: hasta,
+    ...parametrosOrden(orden),
     limit: String(POR_PAGINA),
     offset: String(pagina * POR_PAGINA),
   });
@@ -520,17 +523,20 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
                     }}
                   />
                 </th>
-                {!responsableId && <th>Responsable</th>}
-                {!usuarioId && <th>Usuario</th>}
-                {!gestorId && <th>Gestor</th>}
+                {!responsableId && <EncabezadoOrden campo="responsable" orden={orden} cambiar={cambiar}>Responsable</EncabezadoOrden>}
+                {!usuarioId && <EncabezadoOrden campo="usuario" orden={orden} cambiar={cambiar}>Usuario</EncabezadoOrden>}
+                {!gestorId && <EncabezadoOrden campo="gestor" orden={orden} cambiar={cambiar}>Gestor</EncabezadoOrden>}
                 <th>Estado</th>
                 <th>Archivo</th>
+                <EncabezadoOrden campo="correlativo" orden={orden} cambiar={cambiar}>Correlativo</EncabezadoOrden>
                 <th>Tipo</th>
-                <th>Fecha documento</th>
-                 <th>Fecha de carga</th>
+                <EncabezadoOrden campo="tipo_empresa" orden={orden} cambiar={cambiar}>Tipo empresa</EncabezadoOrden>
+                <EncabezadoOrden campo="fecha_documento" orden={orden} cambiar={cambiar}>Fecha documento</EncabezadoOrden>
+                 <EncabezadoOrden campo="fecha_carga" orden={orden} cambiar={cambiar}>Fecha de carga</EncabezadoOrden>
                 <th>Lectura</th>
-                <th>Emisor</th>
-                <th>Receptor</th>
+                <EncabezadoOrden campo="emisor" orden={orden} cambiar={cambiar}>Emisor</EncabezadoOrden>
+                <EncabezadoOrden campo="receptor" orden={orden} cambiar={cambiar}>Receptor</EncabezadoOrden>
+                <EncabezadoOrden className="num" campo="monto" orden={orden} cambiar={cambiar}>Monto</EncabezadoOrden>
                 <th>Expediente</th>
                 <th>Acciones</th>
               </tr>
@@ -671,17 +677,17 @@ function FilaDocumento({
         <a href={urlArchivo(documento.id)} target="_blank" rel="noreferrer">
           {documento.nombre_original}
         </a>
-        {documento.serie_documento && documento.correlativo_documento && (
-          <small className="bloque tenue">{documento.serie_documento}-{documento.correlativo_documento}</small>
-        )}
         {error && <small className="error bloque">{error}</small>}
         {mensajeMisd && <small role="status" className="bloque">{mensajeMisd}</small>}
       </td>
+      <td>{documento.serie_documento && documento.correlativo_documento
+        ? `${documento.serie_documento}-${documento.correlativo_documento}` : "—"}</td>
       <td>
         {documento.tipo_documento
           ? ETIQUETA_TIPO_DOCUMENTO[documento.tipo_documento as TipoDocumento]
           : "Sin clasificar"}
       </td>
+      <td>{documento.emisor?.clasificacion_proveedor ? `Tipo ${documento.emisor.clasificacion_proveedor}` : "Sin clasificar"}</td>
       <td>{documento.fecha_documento ? formatearFecha(documento.fecha_documento) : "Pendiente de identificar"}</td>
        <td>{formatearFecha(documento.created_at)}</td>
       <td>
@@ -698,6 +704,8 @@ function FilaDocumento({
       <td>
         <ParteDocumento razonSocial={partes.receptor.razonSocial} ruc={partes.receptor.ruc} />
       </td>
+      <td className="num">{documento.importe_total == null ? "—" : documento.moneda
+        ? formatearMonto(documento.moneda, documento.importe_total) : documento.importe_total}</td>
       <td>
         {documento.expediente_id ? (
           <><Link to={`/expedientes/${documento.expediente_id}`}>Ver expediente</Link>{" · "}<a href={urlZipExpediente(documento.expediente_id)}>ZIP</a>{" · "}<a href={urlPdfExpediente(documento.expediente_id)}>PDF</a></>

@@ -1146,3 +1146,17 @@ button.peligro {
 .resumen-clasificacion__grupo strong {
   color: #183d62;
 }
+
+button.encabezado-orden {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  text-align: inherit;
+  white-space: nowrap;
+}
+
+button.encabezado-orden:hover {
+  text-decoration: underline;
+}

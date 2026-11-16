@@ -1,3 +1,4 @@
+import EncabezadoOrden, { parametrosOrden } from "../componentes/EncabezadoOrden";
 import ExportarExcel from "../ExportarExcel";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -36,6 +37,7 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
   const ultimoDiaMes = mes ? new Date(Date.UTC(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0)).getUTCDate() : 0;
   const inicioMes = mes ? `${mes}-01` : "";
   const finMes = mes ? `${mes}-${String(ultimoDiaMes).padStart(2, "0")}` : "";
+  const orden = parametros.get("orden") ?? "";
   const pagina = Number(parametros.get("pagina") ?? "0");
 
   const ruta = conParametros("/api/v1/registros", {
@@ -49,6 +51,7 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
     fecha_desde: desde,
     fecha_hasta: hasta,
     mes,
+    ...parametrosOrden(orden),
     limit: String(POR_PAGINA),
     offset: String(pagina * POR_PAGINA),
   });
@@ -298,16 +301,16 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
               <tr>
                 <th>Estado</th>
               <th>Seleccionar</th>
-                {mostrarResponsable && <th>Responsable</th>}
-                {mostrarUsuario && <th>Usuario</th>}
-                {mostrarGestor && <th>Gestor</th>}
-                <th>Fecha documento</th>
-                <th>Fecha de carga</th>
-                <th>Tipo empresa</th>
-                <th>Correlativo</th>
-                <th className="columna-empresa">Emisor</th>
-                <th className="columna-empresa">Receptor</th>
-                <th className="num">Monto</th>
+                {mostrarResponsable && <EncabezadoOrden campo="responsable" orden={orden} cambiar={cambiar}>Responsable</EncabezadoOrden>}
+                {mostrarUsuario && <EncabezadoOrden campo="usuario" orden={orden} cambiar={cambiar}>Usuario</EncabezadoOrden>}
+                {mostrarGestor && <EncabezadoOrden campo="gestor" orden={orden} cambiar={cambiar}>Gestor</EncabezadoOrden>}
+                <EncabezadoOrden campo="fecha_documento" orden={orden} cambiar={cambiar}>Fecha documento</EncabezadoOrden>
+                <EncabezadoOrden campo="fecha_carga" orden={orden} cambiar={cambiar}>Fecha de carga</EncabezadoOrden>
+                <EncabezadoOrden campo="tipo_empresa" orden={orden} cambiar={cambiar}>Tipo empresa</EncabezadoOrden>
+                <EncabezadoOrden campo="correlativo" orden={orden} cambiar={cambiar}>Correlativo</EncabezadoOrden>
+                <EncabezadoOrden className="columna-empresa" campo="emisor" orden={orden} cambiar={cambiar}>Emisor</EncabezadoOrden>
+                <EncabezadoOrden className="columna-empresa" campo="receptor" orden={orden} cambiar={cambiar}>Receptor</EncabezadoOrden>
+                <EncabezadoOrden className="num" campo="monto" orden={orden} cambiar={cambiar}>Monto</EncabezadoOrden>
                 <th>Documentación / opciones</th>
               </tr>
             </thead>
