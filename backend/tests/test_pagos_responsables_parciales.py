@@ -1,7 +1,7 @@
 """Pruebas de adelantos, saldo y comprobantes de Gerencia."""
 
 from dataclasses import replace
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
@@ -104,7 +104,7 @@ def test_adelanto_y_pago_total_con_comprobante(
 
     reprogramado = client.post(
         f"{url}/{pago_id}/reprogramar",
-        json={"fecha": "2026-11-15", "motivo": "Se pagará en noviembre"},
+        json={"fecha": (date.today() + timedelta(days=1)).isoformat(), "motivo": "Pago postergado"},
     )
     assert reprogramado.status_code == 200, reprogramado.text
 
