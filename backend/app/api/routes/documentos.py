@@ -1488,11 +1488,15 @@ def provisionales_gre(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
     limit: Annotated[int, Query(ge=1, le=2000)] = 100,
-) -> list[dict[str, str | bool]]:
+) -> list[dict[str, str | bool | None]]:
     """Expedientes provisionales identificados por una guía, sin factura ni importe."""
     consulta = (
-        select(ReferenciaGRE, Empresa)
-        .join(Documento, Documento.id == ReferenciaGRE.documento_id)
+        select(ReferenciaGRE, Empresa, Documento)
+        .join(
+            Documento,
+            (Documento.id == ReferenciaGRE.documento_id)
+            & (Documento.tenant_id == ReferenciaGRE.tenant_id),
+        )
         .outerjoin(
             Empresa,
             (Empresa.tenant_id == ReferenciaGRE.tenant_id)
@@ -1508,8 +1512,21 @@ def provisionales_gre(
         .limit(limit)
     )
     consulta = _aplicar_ambito_documentos(consulta, auth)
+    filas = list(session.execute(consulta))
+    jerarquias = (
+        nombres_jerarquia(session, tenant_id, [documento for _, _, documento in filas])
+        if filas
+        and auth.rol in (
+            RolMiembro.ADMINISTRADOR,
+            RolMiembro.GERENTE,
+            RolMiembro.SECRETARIA,
+            RolMiembro.RESPONSABLE,
+        )
+        else {}
+    )
     return [
         {
+            **jerarquias.get(documento.id, {}),
             "documento_id": str(ref.documento_id),
             "factura": f"{ref.serie}-{ref.correlativo}",
             "estado": "PENDIENTE_FACTURA",
@@ -1521,7 +1538,7 @@ def provisionales_gre(
                 empresa and empresa.autorizada and empresa.deleted_at is None
             ),
         }
-        for ref, empresa in session.execute(consulta)
+        for ref, empresa, documento in filas
     ]
 
 
