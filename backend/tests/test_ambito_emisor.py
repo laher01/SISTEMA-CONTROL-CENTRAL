@@ -117,6 +117,11 @@ def test_emisor_asignado_a_otro_gestor_se_identifica_sin_mutaciones(
     )
     assert propio.estado == EstadoAmbitoEmisor.ASIGNADO_AL_GRUPO
 
+    otro_gestor = revisar_asignaciones_emisor(
+        session, tenant_id, emisor.ruc, usuario.id, uuid.uuid4()
+    )
+    assert otro_gestor.estado == EstadoAmbitoEmisor.ASIGNADO_A_OTRO_GRUPO
+
     externo = Tenant(nombre="TENANT EXTERNO EMISOR", codigo="EXTERNO-EMISOR")
     session.add(externo)
     session.commit()
