@@ -5,7 +5,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.enums import RolMiembro
@@ -232,7 +232,6 @@ def crear_o_restablecer_cuenta(
         cuenta.miembro_id = miembro_id
         cuenta.gestor_id = gestor_id
         cuenta.password_hash = hash_clave(temporal)
-        cuenta.activo = True
         cuenta.cambio_clave_obligatorio = True
         cuenta.intentos_fallidos = 0
         cuenta.bloqueado_hasta = None
@@ -276,3 +275,51 @@ def actualizar_login_cuenta(
         raise ValueError("El login ya pertenece a otra cuenta")
     cuenta.login = login_normalizado
     session.flush()
+
+
+def estados_acceso(
+    session: Session, tenant_id: uuid.UUID, *, gestores: bool = False
+) -> dict[uuid.UUID, bool]:
+    identidad = CuentaAcceso.gestor_id if gestores else CuentaAcceso.miembro_id
+    filas = session.execute(
+        select(identidad, CuentaAcceso.activo).where(
+            CuentaAcceso.tenant_id == tenant_id,
+            CuentaAcceso.deleted_at.is_(None),
+            identidad.is_not(None),
+        )
+    )
+    return {identificador: activo for identificador, activo in filas if identificador is not None}
+
+
+def cambiar_estado_acceso(
+    session: Session,
+    tenant_id: uuid.UUID,
+    identidad_id: uuid.UUID,
+    activo: bool,
+    *,
+    gestores: bool = False,
+) -> CuentaAcceso | None:
+    identidad = CuentaAcceso.gestor_id if gestores else CuentaAcceso.miembro_id
+    cuenta = session.scalar(
+        select(CuentaAcceso)
+        .where(
+            CuentaAcceso.tenant_id == tenant_id,
+            CuentaAcceso.deleted_at.is_(None),
+            identidad == identidad_id,
+        )
+        .with_for_update()
+    )
+    if cuenta is None:
+        return None
+    cuenta.activo = activo
+    if not activo:
+        session.execute(
+            update(SesionAcceso)
+            .where(
+                SesionAcceso.tenant_id == tenant_id,
+                SesionAcceso.cuenta_id == cuenta.id,
+                SesionAcceso.revocada_at.is_(None),
+            )
+            .values(revocada_at=datetime.now(UTC))
+        )
+    return cuenta
