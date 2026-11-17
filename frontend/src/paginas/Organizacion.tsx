@@ -27,6 +27,40 @@ export default function Organizacion({ sesion }: { sesion: SesionActual }) {
 interface VinculoGerencia { id: string; gerente_id: string; responsable_id: string; activo: boolean }
 interface CarteraGerente { id: string; gerente_id: string; empresa_id: string; activo: boolean }
 
+function FiltroColumna({
+  titulo,
+  etiqueta,
+  todos,
+  sinAsignar,
+  opciones,
+  valor,
+  alCambiar,
+}: {
+  titulo: string;
+  etiqueta: string;
+  todos: string;
+  sinAsignar: string;
+  opciones: Miembro[];
+  valor: string;
+  alCambiar: (valor: string) => void;
+}) {
+  return (
+    <th scope="col">
+      {titulo}
+      <select className="bloque" aria-label={etiqueta} value={valor}
+        onChange={(e) => alCambiar(e.target.value)}>
+        <option value="">{todos}</option>
+        <option value="sin-asignar">{sinAsignar}</option>
+        {opciones.map((m) => <option key={m.id} value={m.id}>{m.codigo} · {m.nombre}</option>)}
+      </select>
+    </th>
+  );
+}
+
+function coincideAsignacion(filtro: string, asignacion?: string | null) {
+  return !filtro || (filtro === "sin-asignar" ? !asignacion : asignacion === filtro);
+}
+
 function OrganizacionAdmin() {
   const { datos: miembros, error, cargando, recargar } = useDatos<Miembro[]>("/api/v1/miembros");
   const { datos: gestores, recargar: recargarGestores } = useDatos<Gestor[]>("/api/v1/gestores");
@@ -41,6 +75,7 @@ function OrganizacionAdmin() {
   const [porcentajeSinAgente, setPorcentajeSinAgente] = useState("1.5");
   const [miembroEditando, setMiembroEditando] = useState<string | null>(null);
   const [usuarioId, setUsuarioId] = useState("");
+  const [filtroResponsable, setFiltroResponsable] = useState("");
   const [codigoGestor, setCodigoGestor] = useState("");
   const [nombreGestor, setNombreGestor] = useState("");
   const [porcentajeGestor, setPorcentajeGestor] = useState("");
@@ -66,6 +101,13 @@ function OrganizacionAdmin() {
     () => (miembros ?? []).filter((m) => m.rol === "USUARIO"),
     [miembros],
   );
+
+  const usuariosFiltrados = usuarios.filter((u) =>
+    coincideAsignacion(filtroResponsable, u.responsable_id),
+  );
+  const miembrosVisibles = pestanaAdmin === "USUARIO"
+    ? usuariosFiltrados
+    : (miembros ?? []).filter((m) => m.rol === pestanaAdmin);
 
   const asignarAdministrador = async (responsable: Miembro, administradorId: string) => {
     try {
@@ -362,8 +404,16 @@ function OrganizacionAdmin() {
         <h3>Asignación de Usuarios a Responsables</h3>
         <p className="tenue">La asignación se limita a esta Administración. No modifica los pagos históricos.</p>
         <table>
-          <thead><tr><th>Usuario</th><th>Responsable asignado</th></tr></thead>
-          <tbody>{usuarios.map((u) => (
+          <thead><tr>
+            <th>Usuario</th>
+            <FiltroColumna titulo="Responsable asignado" etiqueta="Filtrar usuarios por responsable"
+              todos="Todos los responsables" sinAsignar="Sin responsable"
+              opciones={responsables} valor={filtroResponsable} alCambiar={setFiltroResponsable} />
+          </tr></thead>
+          <tbody>
+          {usuariosFiltrados.length === 0 && filtroResponsable &&
+            <tr><td colSpan={2}>No hay usuarios para este filtro.</td></tr>}
+          {usuariosFiltrados.map((u) => (
             <tr key={u.id}>
               <td>{u.codigo} · {u.nombre}</td>
               <td><select value={u.responsable_id ?? ""} onChange={(e) => void asignarResponsable(u, e.target.value)}>
@@ -421,13 +471,23 @@ function OrganizacionAdmin() {
 
           <h3>Miembros</h3>
           <table>
-            <thead><tr><th>Código</th><th>Nombre</th><th>Rol</th><th>% con agente</th><th>% sin agente</th><th>Acciones</th></tr></thead>
+            <thead><tr><th>Código</th><th>Nombre</th><th>Rol</th><th>% con agente</th><th>% sin agente</th>
+              {pestanaAdmin === "USUARIO" && <FiltroColumna titulo="Responsable" etiqueta="Filtrar miembros por responsable"
+                todos="Todos los responsables" sinAsignar="Sin responsable"
+                opciones={responsables} valor={filtroResponsable} alCambiar={setFiltroResponsable} />}
+              <th>Acciones</th></tr></thead>
             <tbody>
-              {miembros?.filter((m) => m.rol === pestanaAdmin).map((m) => (
+              {pestanaAdmin === "USUARIO" && miembrosVisibles.length === 0 && filtroResponsable &&
+                <tr><td colSpan={7}>No hay usuarios para este filtro.</td></tr>}
+              {miembrosVisibles.map((m) => (
                 <tr key={m.id}>
                   <td>{m.codigo}</td><td>{m.nombre}</td><td>{m.rol}</td>
                   <td>{m.rol === "USUARIO" ? (m.porcentaje_con_agente ?? m.porcentaje_produccion ?? "0") + "%" : "—"}</td>
                   <td>{m.rol === "USUARIO" ? (m.porcentaje_sin_agente ?? m.porcentaje_produccion ?? "0") + "%" : "—"}</td>
+                  {pestanaAdmin === "USUARIO" && <td>
+                    {responsables.find((r) => r.id === m.responsable_id)?.nombre ??
+                      (m.responsable_id ? "No disponible" : "Sin asignar")}
+                  </td>}
                   <td>
                     <button type="button" onClick={() => {
                       setMiembroEditando(m.id);
@@ -502,6 +562,10 @@ function OrganizacionResponsable() {
   const [pestana, setPestana] = useState<"USUARIO" | "GESTOR">("USUARIO");
   const { datos: gestores, error } = useDatos<Gestor[]>("/api/v1/gestores");
   const { datos: usuarios } = useDatos<Miembro[]>("/api/v1/miembros/mis-usuarios");
+  const [filtroUsuario, setFiltroUsuario] = useState("");
+  const gestoresVisibles = (gestores ?? []).filter((g) =>
+    coincideAsignacion(filtroUsuario, g.usuario_id),
+  );
   return <>
     <h2>Organización de mi equipo</h2>
     <div className="acciones" role="tablist" aria-label="Mi organización">
@@ -511,8 +575,12 @@ function OrganizacionResponsable() {
     {pestana === "USUARIO" ? <MiEquipoResponsable /> : <>
       <p className="tenue">Gestores vinculados a los usuarios de tu equipo. Las asignaciones se modifican desde Administración o desde el usuario propietario.</p>
       {error && <p className="error">{error}</p>}
-      <table><thead><tr><th>Gestor</th><th>Usuario propietario</th></tr></thead><tbody>
-        {(gestores ?? []).map(g => { const u = (usuarios ?? []).find(u => u.id === g.usuario_id); return <tr key={g.id}><td>{g.codigo} · {g.nombre}</td><td>{u ? `${u.codigo} · ${u.nombre}` : "No disponible"}</td></tr>; })}
+      <table><thead><tr><th>Gestor</th><FiltroColumna titulo="Usuario propietario" etiqueta="Filtrar gestores por usuario"
+        todos="Todos los usuarios" sinAsignar="Sin usuario"
+        opciones={usuarios ?? []} valor={filtroUsuario} alCambiar={setFiltroUsuario} /></tr></thead><tbody>
+        {gestoresVisibles.length === 0 && filtroUsuario &&
+          <tr><td colSpan={2}>No hay gestores para este filtro.</td></tr>}
+        {gestoresVisibles.map(g => { const u = (usuarios ?? []).find(u => u.id === g.usuario_id); return <tr key={g.id}><td>{g.codigo} · {g.nombre}</td><td>{u ? `${u.codigo} · ${u.nombre}` : "No disponible"}</td></tr>; })}
       </tbody></table>
     </>}
   </>;
@@ -624,6 +692,10 @@ function TablaGestores({
   alRestablecer: (gestor: Gestor) => void;
   ocultarUsuario?: boolean;
 }) {
+  const [filtroUsuario, setFiltroUsuario] = useState("");
+  const gestoresVisibles = gestores.filter((g) =>
+    ocultarUsuario || coincideAsignacion(filtroUsuario, g.usuario_id),
+  );
   return (
     <>
       <h3>Gestores</h3>
@@ -632,12 +704,16 @@ function TablaGestores({
           <tr>
             <th>Gestor</th>
             <th>Comisión</th>
-            {!ocultarUsuario && <th>Usuario</th>}
+            {!ocultarUsuario && <FiltroColumna titulo="Usuario" etiqueta="Filtrar gestores por usuario"
+              todos="Todos los usuarios" sinAsignar="Sin usuario"
+              opciones={usuarios} valor={filtroUsuario} alCambiar={setFiltroUsuario} />}
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
-          {gestores.map((g) => {
+          {!ocultarUsuario && gestoresVisibles.length === 0 && filtroUsuario &&
+            <tr><td colSpan={4}>No hay gestores para este filtro.</td></tr>}
+          {gestoresVisibles.map((g) => {
             const usuario = usuarios.find((u) => u.id === g.usuario_id);
             return (
               <tr key={g.id}>
