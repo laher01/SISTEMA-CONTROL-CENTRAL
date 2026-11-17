@@ -366,6 +366,9 @@ def extraer_campos(
                     referencia_guia.group(),
                     fuente,
                 )
+    # Las representaciones nativas pueden ordenar los bloques por objeto PDF,
+    # no por posición visual. Priorizar evidencia fiscal explícita por formato.
+    _ajustar_formatos_pdf_nativos(texto, formato, campos, fuente, factor)
     if "tipo_operacion" in campos:
         if "fecha_emision" in campos:
             campos["fecha_operacion"] = campos["fecha_emision"].copy()
@@ -410,6 +413,67 @@ def extraer_campos(
         resultado["alertas"] = ["TIPO_COMPROBANTE_CONFLICTIVO"]
         resultado["requiere_revision"] = True
     return resultado
+
+
+def _ajustar_formatos_pdf_nativos(
+    texto: str,
+    formato: str,
+    campos: dict[str, dict[str, object]],
+    fuente: str,
+    factor: float,
+) -> None:
+    normal = _sin_tildes(texto).upper()
+    factura = bool(re.search(r"\bFACTURA ELECTRONICA\b", normal))
+    es_factcentral = factura and bool(
+        re.search(r"https?://[^\s/]+\.factcentral\.online/buscar", texto, re.I)
+    )
+
+    def fijar(nombre: str, valor: str, evidencia: str) -> None:
+        campos[nombre] = CampoExtraido(valor, min(0.98, 0.97 * factor), evidencia).a_dict(fuente)
+
+    if formato == "OSE_EFACT" and factura:
+        fecha = re.search(
+            r"(?im)^[ \t]*(\d{1,2})-([a-z]{3})-(\d{4})[ \t]*\n"
+            r"[ \t]*FECHA DE EMISI[ÓO]N[ \t]*:",
+            texto,
+        )
+        meses = {mes[:3]: numero for mes, numero in MESES_ES.items()}
+        if fecha and fecha[2].upper() in meses:
+            try:
+                valor = date(int(fecha[3]), meses[fecha[2].upper()], int(fecha[1]))
+            except ValueError:
+                pass
+            else:
+                fijar("fecha_emision", valor.isoformat(), fecha.group())
+    if es_factcentral:
+        emisor = re.search(r"(?im)^([^\n]+)\n[ \t]*R\.?U\.?C\.?[ \t]*:?[ \t]*(\d{11})\b", texto)
+        receptor = re.search(
+            r"(?im)^CLIENTE[ \t]*:[ \t]*([^\n]+(?:\n[^\n]+){0,2}?)"
+            r"\n[ \t]*RUC[ \t]*:[ \t]*(\d{11})\b",
+            texto,
+        )
+        for parte, coincidencia in (("emisor", emisor), ("receptor", receptor)):
+            if coincidencia:
+                razon = " ".join(coincidencia[1].split())
+                if _razon_social_valida(razon):
+                    fijar(f"razon_social_{parte}", razon, coincidencia.group())
+                    fijar(f"ruc_{parte}", coincidencia[2], coincidencia.group())
+        total = re.search(
+            r"(?im)^\s*TOTAL A PAGAR[ \t]*:[ \t]*(S/|US\$)[ \t]*([\d,]+\.\d{2})\s*$",
+            texto,
+        )
+        if total and (importe := _normalizar_importe(total[2])) is not None:
+            fijar("importe_total", format(importe, ".2f"), total.group())
+            fijar("moneda", "PEN" if total[1] == "S/" else "USD", total.group())
+    if formato == "OSE_FACTURALAYA" and factura:
+        total = re.search(
+            r"(?im)^[ \t]*TOTAL[ \t]*:\s*(S/|US\$|USD)\s*([\d,]+\.\d{2})(?![\d.])",
+            texto,
+        )
+        if total and (importe := _normalizar_importe(total[2])) is not None:
+            fijar("importe_total", format(importe, ".2f"), total.group())
+            # Las cuentas bancarias en dólares del pie no definen la moneda fiscal.
+            fijar("moneda", "PEN" if total[1] == "S/" else "USD", total.group())
 
 
 def _extraer_datos_bancarios(
