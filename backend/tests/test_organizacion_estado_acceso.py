@@ -12,9 +12,7 @@ def test_estado_acceso_organizacion(
 ) -> None:
     auth_prueba.como_admin()
     for rol in ("USUARIO", "RESPONSABLE"):
-        alta = client.post(
-            "/api/v1/miembros", json={"nombre": f"Estado {rol}", "rol": rol}
-        )
+        alta = client.post("/api/v1/miembros", json={"nombre": f"Estado {rol}", "rol": rol})
         assert alta.status_code == 201, alta.text
         miembro = alta.json()["miembro"]
         ruta = f"/api/v1/miembros/{miembro['id']}/estado-acceso"
@@ -34,9 +32,7 @@ def test_estado_acceso_organizacion(
     assert alta.status_code == 201, alta.text
     gestor = alta.json()["gestor"]
     ruta = f"/api/v1/gestores/{gestor['id']}/estado-acceso"
-    cuenta = session.scalar(
-        select(CuentaAcceso).where(CuentaAcceso.login == gestor["codigo"])
-    )
+    cuenta = session.scalar(select(CuentaAcceso).where(CuentaAcceso.login == gestor["codigo"]))
     assert cuenta is not None
     _, token = crear_sesion(session, cuenta, "GESTOR")
     session.commit()
