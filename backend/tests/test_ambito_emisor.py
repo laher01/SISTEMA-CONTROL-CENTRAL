@@ -271,6 +271,12 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
             "cantidad_solicitudes": 1,
         }
     ]
+    detalle = f"{ruta_lotes}/{empresa.ruc}"
+    parametros = {"gestor_solicitante_id": str(solicitud.gestor_solicitante_id)}
+    assert client.get(detalle, params=parametros).json()[0]["id"] == str(solicitud.id)
+    assert client.get(detalle, params={**parametros, "offset": 1}).json() == []
+    assert client.get(detalle, params={**parametros, "limite": 201}).status_code == 422
+    assert client.get(detalle, params={"gestor_solicitante_id": str(uuid.uuid4())}).json() == []
     # Una segunda cuenta administrativa REAL: la decisión conserva
     # trazabilidad y validez referencial con cuentas_acceso.
     revisor = CuentaAcceso(
