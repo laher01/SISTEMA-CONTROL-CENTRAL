@@ -60,6 +60,9 @@ const ETIQUETAS_CAMPOS: Record<string, string> = {
   fecha_emision: "Fecha de emisión",
   moneda: "Moneda",
   importe_total: "Importe total",
+  serie_factura: "Serie de la factura referenciada",
+  correlativo_factura: "Correlativo de la factura referenciada",
+  emisor_factura_ruc: "RUC emisor de la factura",
   subtotal: "Subtotal (opcional)",
   igv: "IGV (opcional)",
   numero_operacion: "N.º de operación",
@@ -280,7 +283,7 @@ export default function Pendientes({ rol }: { rol: SesionActual["rol"] }) {
             </tr>
           </thead>
           <tbody>
-            {datos?.map((d) => <FilaPendiente key={d.id} documento={d} mostrarOrigen={mostrarOrigen} alVincular={recargar} puedeRetirar={capacidades?.puede_retirar ?? false} seleccionado={seleccionados.includes(d.id)} alSeleccionar={(activo) => setSeleccionados((actual) => activo ? [...new Set([...actual, d.id])] : actual.filter((id) => id !== d.id))} />)}
+            {datos?.map((d) => <FilaPendiente key={d.id} documento={d} mostrarOrigen={mostrarOrigen} alVincular={() => { recargar(); recargarProvisionales(); }} puedeRetirar={capacidades?.puede_retirar ?? false} seleccionado={seleccionados.includes(d.id)} alSeleccionar={(activo) => setSeleccionados((actual) => activo ? [...new Set([...actual, d.id])] : actual.filter((id) => id !== d.id))} />)}
           </tbody>
         </table>
       </Estado>
@@ -564,11 +567,12 @@ function ConfirmarCampos({
   const [modificado, setModificado] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [creando, setCreando] = useState(false);
-  const [tipoComprobante, setTipoComprobante] = useState<"FACT" | "RHE">("FACT");
+  const esGuia = documento.tipo_documento === "GRR" || tipoSugerido === "GRR";
+  const [tipoComprobante, setTipoComprobante] = useState<"FACT" | "RHE" | "GRR">("FACT");
   const [requiereGuia, setRequiereGuia] = useState(true);
   const [error, setError] = useState("");
   const [duplicado, setDuplicado] = useState<Expediente | null>(null);
-  const errores = validarCamposManuales(tipoComprobante === "RHE" ? { ...valores, subtotal: "", igv: "" } : valores);
+  const errores = validarCamposManuales(tipoComprobante === "RHE" ? { ...valores, subtotal: "", igv: "" } : valores, tipoComprobante);
   const ocupado = guardando || creando;
   const listo = confirmado && !modificado;
   const valido = Object.keys(errores).length === 0;
@@ -581,7 +585,7 @@ function ConfirmarCampos({
       : {};
     const iniciales: Record<string, string> = { moneda: "PEN", ...Object.fromEntries(campos.map((campo) => [campo.nombre, campo.valor])), ...confirmados };
     setValores(iniciales);
-    const tipo = tipoSugerido === "RHE" ? "RHE" : "FACT";
+    const tipo = esGuia ? "GRR" : tipoSugerido === "RHE" ? "RHE" : "FACT";
     setTipoComprobante(tipo);
     setRequiereGuia(tipo === "FACT");
     setModificado(Object.entries(iniciales).some(([nombre, valor]) => valor.trim() && confirmados[nombre] !== valor));
@@ -589,9 +593,21 @@ function ConfirmarCampos({
     setDuplicado(null);
     setMostrarManual(true);
     dialogo.current?.showModal();
+    if (esGuia) {
+      void obtener<Record<string, string | null>>(`/api/v1/documentos/${documentoId}/referencia-gre`)
+        .then((ref) => setValores((actual) => {
+          const siguientes = { ...actual };
+          for (const [nombre, valor] of Object.entries(ref)) {
+            const campo = nombre === "receptor_ruc" ? "ruc_receptor" : nombre;
+            if (valor && (campo !== "ruc_receptor" || !siguientes[campo])) siguientes[campo] = siguientes[campo] || valor;
+          }
+          return siguientes;
+        }))
+        .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+    }
   };
   const editar = (nombre: string, valor: string) => {
-    setValores((actual) => ({ ...actual, [nombre]: nombre === "serie" ? valor.toUpperCase() : valor }));
+    setValores((actual) => ({ ...actual, [nombre]: nombre.startsWith("serie") ? valor.toUpperCase() : valor }));
     setModificado(true);
     setDuplicado(null);
   };
@@ -618,12 +634,21 @@ function ConfirmarCampos({
     }
   };
   const crearExpediente = async () => {
-    if (!listo || !valido || ocupado) return;
+    if ((!listo && tipoComprobante !== "GRR") || !valido || ocupado) return;
     setCreando(true);
     setError("");
     setDuplicado(null);
     try {
-      await enviarJson(
+      if (tipoComprobante === "GRR") {
+        await enviarJson(`/api/v1/documentos/${documentoId}/referencia-gre`, "POST", {
+          serie_guia: valores.serie,
+          correlativo_guia: valores.correlativo,
+          serie_factura: valores.serie_factura,
+          correlativo_factura: valores.correlativo_factura,
+          emisor_factura_ruc: valores.emisor_factura_ruc,
+          receptor_ruc: valores.ruc_receptor,
+        });
+      } else await enviarJson(
         `/api/v1/documentos/${documentoId}/crear-expediente`,
         "POST",
         {
@@ -654,7 +679,7 @@ function ConfirmarCampos({
 
   const campo = (nombre: string, ancho = false) => {
     const extraido = campos.find((item) => item.nombre === nombre);
-    const etiqueta = ETIQUETAS_CAMPOS[nombre] ?? nombre;
+    const etiqueta = tipoComprobante === "GRR" && nombre === "serie" ? "Serie de la guía" : tipoComprobante === "GRR" && nombre === "correlativo" ? "Correlativo de la guía" : ETIQUETAS_CAMPOS[nombre] ?? nombre;
     const id = `manual-${documentoId}-${nombre}`;
     return (
       <div className={`manual-expediente-campo${ancho ? " ancho" : ""}`}>
@@ -668,8 +693,8 @@ function ConfirmarCampos({
         ) : (
           <input id={id} value={valores[nombre] ?? ""}
             type={nombre === "fecha_emision" ? "date" : "text"}
-            inputMode={nombre.startsWith("ruc_") || nombre === "correlativo" ? "numeric" : ["importe_total", "subtotal", "igv"].includes(nombre) ? "decimal" : undefined}
-            maxLength={nombre.startsWith("ruc_") ? 11 : nombre === "serie" ? 4 : nombre === "correlativo" ? 32 : nombre.startsWith("razon_social") ? 300 : undefined}
+            inputMode={nombre.includes("ruc") || nombre.startsWith("correlativo") ? "numeric" : ["importe_total", "subtotal", "igv"].includes(nombre) ? "decimal" : undefined}
+            maxLength={nombre.includes("ruc") ? 11 : nombre.startsWith("serie") ? 4 : nombre === "correlativo_factura" ? 8 : nombre === "correlativo" ? 32 : nombre.startsWith("razon_social") ? 300 : undefined}
             onChange={(e) => editar(nombre, e.target.value)}
             aria-invalid={Boolean(errores[nombre])}
             aria-describedby={errores[nombre] ? id + "-error" : undefined}
@@ -706,29 +731,34 @@ function ConfirmarCampos({
                 <div className="manual-expediente-campos">
                   <div className="manual-expediente-campo ancho"><label htmlFor={`manual-tipo-${documentoId}`}>Tipo de comprobante</label>
                     <select id={`manual-tipo-${documentoId}`} value={tipoComprobante} onChange={(e) => {
-                      const tipo = e.target.value as "FACT" | "RHE";
+                      const tipo = e.target.value as "FACT" | "RHE" | "GRR";
                       setTipoComprobante(tipo); setRequiereGuia(tipo === "FACT"); setDuplicado(null);
                       setModificado(true);
-                    }}><option value="FACT">Factura</option><option value="RHE">Recibo por honorarios</option></select>
+                    }}>{esGuia ? <option value="GRR">GRE remitente</option> : <><option value="FACT">Factura</option><option value="RHE">Recibo por honorarios</option></>}</select>
                   </div>
-                  {campo("serie")}{campo("correlativo")}{campo("fecha_emision")}{campo("moneda")}
+                  {campo("serie")}{campo("correlativo")}{tipoComprobante !== "GRR" && <>{campo("fecha_emision")}{campo("moneda")}</>}
                 </div>
               </fieldset>
-              <fieldset disabled={ocupado} className="manual-expediente-grupo">
+              {tipoComprobante === "GRR" && <fieldset disabled={ocupado} className="manual-expediente-grupo">
+                <legend>Factura referenciada (no es el número de la guía)</legend>
+                <p className="tenue">Confirme los datos impresos en Documentos relacionados. Si la referencia no se lee, ingrésela desde el original.</p>
+                <div className="manual-expediente-campos">{campo("serie_factura")}{campo("correlativo_factura")}{campo("emisor_factura_ruc", true)}{campo("ruc_receptor", true)}</div>
+              </fieldset>}
+              {tipoComprobante !== "GRR" && <fieldset disabled={ocupado} className="manual-expediente-grupo">
                 <legend>Emisor y receptor</legend>
                 <div className="manual-expediente-campos">
                   {campo("ruc_emisor")}{campo("razon_social_emisor", true)}
                   {campo("ruc_receptor")}{campo("razon_social_receptor", true)}
                 </div>
-              </fieldset>
-              <fieldset disabled={ocupado} className="manual-expediente-grupo">
+              </fieldset>}
+              {tipoComprobante === "GRR" ? <div className="manual-expediente-aviso"><strong>Esperando factura · S/ 0.00 contabilizable</strong><p>La fecha y el importe fiscales se obtendrán de la factura cuando llegue.</p></div> : <fieldset disabled={ocupado} className="manual-expediente-grupo">
                 <legend>Importes y requisitos</legend>
                 <div className="manual-expediente-campos">
                   {tipoComprobante === "FACT" && <>{campo("subtotal")}{campo("igv")}</>}
                   {campo("importe_total", true)}
                   {tipoComprobante === "FACT" && <label className="manual-expediente-campo ancho"><span><input type="checkbox" checked={requiereGuia} onChange={(e) => setRequiereGuia(e.target.checked)} /> Requiere guía de remisión</span></label>}
                 </div>
-              </fieldset>
+              </fieldset>}
               {error && <p role="alert" className="error manual-expediente-aviso">{error}</p>}
               {duplicado && <div role="alert" className="manual-expediente-aviso">
                 <strong>Ya existe un expediente con esta identidad fiscal. No se creó otro.</strong>
@@ -749,8 +779,8 @@ function ConfirmarCampos({
           </div>
           <footer className="manual-expediente-pie">
             <button type="button" className="secundario" disabled={ocupado} onClick={() => dialogo.current?.close()}>Cancelar</button>
-            <button type="button" disabled={ocupado || !valido} onClick={() => void guardar()}>{guardando ? "Guardando…" : listo ? "Actualizar confirmación" : "Confirmar datos"}</button>
-            <button type="button" disabled={ocupado || !listo || !valido || Boolean(duplicado)} onClick={() => void crearExpediente()}>{creando ? "Creando…" : "Crear expediente"}</button>
+            {tipoComprobante !== "GRR" && <button type="button" disabled={ocupado || !valido} onClick={() => void guardar()}>{guardando ? "Guardando…" : listo ? "Actualizar confirmación" : "Confirmar datos"}</button>}
+            <button type="button" disabled={ocupado || (tipoComprobante !== "GRR" && !listo) || !valido || Boolean(duplicado)} onClick={() => void crearExpediente()}>{creando ? "Guardando…" : tipoComprobante === "GRR" ? "Crear expediente provisional" : "Crear expediente"}</button>
           </footer>
         </>}
       </dialog>
