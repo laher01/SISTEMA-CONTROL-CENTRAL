@@ -714,3 +714,82 @@ def test_fecha_rhe_visual_no_confunde_observacion() -> None:
         )
         is None
     )
+
+
+@pytest.mark.parametrize(
+    ("numero", "nombre", "nombre_visual", "importe"),
+    [
+        ("495", "CLIENTE COMERCIALIMPORT", "CLIENTE COMERCIAL\nIMPORT", "492.06"),
+        ("474", "CLIENTE PRUEBAE.I.R.L.", "CLIENTE PRUEBA\nE.I.R.L.", "660.56"),
+        ("468", "INVERSIONES DELOS ANDES", "INVERSIONES DE\nLOS ANDES", "6990.32"),
+        ("481", "COMERCIAL SUR E.I.R.L.", "COMERCIAL SUR E.I.R.L.", "492.06"),
+    ],
+)
+def test_sunat_eclipse_nombre_en_cabecera_desordenada(
+    monkeypatch: pytest.MonkeyPatch,
+    numero: str,
+    nombre: str,
+    nombre_visual: str,
+    importe: str,
+) -> None:
+    texto = (
+        f"FACTURA ELECTRONICA\nRUC: 20123456789\nE001-{numero}\n"
+        f"Importe Total : S/ {importe}\n"
+        "ECLIPSE COMERCIAL E.I.R.L.\n1133 P.J. GARZON DPTO. 302\n"
+        "Fecha de Emisión : 20/09/2026\n"
+        f"Señor(es) : {nombre}\nRUC : 20987654321\n"
+        "Dirección del Cliente : AV. EJEMPLO\nTipo de Moneda : SOLES\n"
+        "1.00 UNIDAD CODOS CEDULA 10 220.00 0.00\n"
+        "GENERADA EN EL SISTEMA DE SUNAT"
+    )
+    visual = texto.replace(nombre, nombre_visual)
+    monkeypatch.setattr(
+        PageObject,
+        "extract_text",
+        lambda self, **kwargs: visual if kwargs.get("extraction_mode") == "layout" else texto,
+    )
+    resultado = pd.procesar(pdf_vacio(), 10_000).a_dict()["extraccion_estructurada"]
+    assert resultado["formato_documental"] == "SUNAT_FACTURA"
+    campos = resultado["campos"]
+    assert campos["ruc_emisor"]["valor"] == "20123456789"
+    assert campos["ruc_receptor"]["valor"] == "20987654321"
+    assert campos["razon_social_emisor"]["valor"] == "ECLIPSE COMERCIAL E.I.R.L."
+    assert campos["razon_social_receptor"]["valor"] == nombre_visual.replace("\n", " ")
+    assert campos["importe_total"]["valor"] == importe
+    assert campos["correlativo"]["valor"] == numero
+    assert len(resultado["candidatos"]["ruc"]) == 2
+
+
+def test_gre_sunat_eclipse_serie_y_factura_con_espacio() -> None:
+    from app.services.referencias_gre import extraer_referencias_factura_gre
+
+    texto = (
+        "RUC N°20123456789\nGUÍA DE REMISIÓN ELECTRÓNICA\nREMITENTE\n"
+        "N° EG07 - 00000335\nECLIPSE COMERCIAL E.I.R.L.\n"
+        "26/09/2026 05:39 PM\nFecha de inicio de Traslado :\n"
+        "Datos del Destinatario :CLIENTE PRUEBA E.I.R.L. - "
+        "REGISTRO ÚNICO DE CONTRIBUYENTES N° 20987654321\n"
+        "Documentos Relacionados:\nFactura N° E001 474 - RUC N° 20123456789\n"
+        "GENERADA EN EL SISTEMA DE LA SUNAT"
+    )
+    resultado = extraer_campos(texto, "TEXTO_PDF", 1.0)
+    assert resultado is not None
+    assert resultado["formato_documental"] == "SUNAT_GRE"
+    campos = resultado["campos"]
+    assert campos["serie"]["valor"] == "EG07"
+    assert campos["correlativo"]["valor"] == "00000335"
+    assert campos["ruc_emisor"]["valor"] == "20123456789"
+    assert campos["ruc_receptor"]["valor"] == "20987654321"
+    assert campos["factura_referenciada"]["valor"] == "E001-474"
+    assert "importe_total" not in campos
+    refs = extraer_referencias_factura_gre(texto)
+    assert len(refs) == 1
+    assert refs[0].emisor_ruc == "20123456789"
+    assert refs[0].receptor_ruc == "20987654321"
+
+
+def test_pse_no_coincide_con_fragmento_de_razon_social() -> None:
+    from app.services.extraccion_campos import detectar_formato_documental
+
+    assert detectar_formato_documental("ECLIPSE COMERCIAL") == "DESCONOCIDO"
+    assert detectar_formato_documental("PROVEEDOR PSE") == "PSE"
