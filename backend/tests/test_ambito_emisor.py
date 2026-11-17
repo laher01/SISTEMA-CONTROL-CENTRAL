@@ -143,7 +143,7 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
 ):
     from sqlalchemy import func, select
 
-    from app.models import Documento, Expediente, SolicitudCargaEmisor
+    from app.models import AlertaManual, Documento, Expediente, SolicitudCargaEmisor
     from tests.xml import factura
 
     tenant_id = auth_prueba.contexto.tenant_id
@@ -272,6 +272,13 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
     )
     assert segunda.status_code == 409
     assert segunda.json()["detail"]["solicitud_id"] != str(solicitud.id)
+    alertas = session.scalars(
+        select(AlertaManual).where(
+            AlertaManual.tenant_id == tenant_id,
+            AlertaManual.asunto == "Autorización de documento de empresa ajena",
+        )
+    ).all()
+    assert len(alertas) == 1
 
     ruta_lotes = "/api/v1/solicitudes-carga-emisor/lotes"
     assert client.get(ruta_lotes).status_code == 403
