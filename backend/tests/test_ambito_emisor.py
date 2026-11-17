@@ -242,7 +242,22 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
     ruta_temporal = settings.storage_dir / solicitud.ruta_temporal
     assert ruta_temporal.is_file()
 
+    ruta_lotes = "/api/v1/solicitudes-carga-emisor/lotes"
+    assert client.get(ruta_lotes).status_code == 403
+
     auth_prueba.como_admin()
+    lotes = client.get(ruta_lotes)
+    assert lotes.status_code == 200, lotes.text
+    assert lotes.json() == [
+        {
+            "ruc_emisor": empresa.ruc,
+            "gestor_solicitante_id": (
+                str(solicitud.gestor_solicitante_id) if solicitud.gestor_solicitante_id else None
+            ),
+            "cantidad_documentos": 1,
+            "cantidad_solicitudes": 1,
+        }
+    ]
     # Una segunda cuenta administrativa REAL: la decisión conserva
     # trazabilidad y validez referencial con cuentas_acceso.
     revisor = CuentaAcceso(
@@ -262,6 +277,7 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
     assert rechazo.status_code == 200, rechazo.text
     assert rechazo.json()["estado"] == "RECHAZADA"
     assert not ruta_temporal.exists()
+    assert client.get(ruta_lotes).json() == []
 
 
 def test_admin_asigna_empresa_y_bloquea_ajenos(
