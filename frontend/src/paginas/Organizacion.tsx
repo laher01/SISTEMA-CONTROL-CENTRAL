@@ -84,17 +84,39 @@ interface SolicitudEmisor {
   estado: string;
 }
 
-function DetalleLoteEmisor({ lote, gestores, miembros }: {
+function DetalleLoteEmisor({ lote, gestores, miembros, alResolver }: {
   lote: LoteEmisor;
   gestores: Gestor[];
   miembros: Miembro[];
+  alResolver: () => void;
 }) {
   const [pagina, setPagina] = useState(0);
+  const [motivo, setMotivo] = useState("");
+  const [resolviendo, setResolviendo] = useState(false);
+  const [errorDecision, setErrorDecision] = useState("");
   const parametros = new URLSearchParams({ offset: String(pagina * 100), limite: "100" });
   if (lote.gestor_solicitante_id) parametros.set("gestor_solicitante_id", lote.gestor_solicitante_id);
   const { datos, error, cargando } = useDatos<SolicitudEmisor[]>(
     "/api/v1/solicitudes-carga-emisor/lotes/" + encodeURIComponent(lote.ruc_emisor) + "?" + parametros.toString()
   );
+  const rechazar = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!motivo.trim() || resolviendo) return;
+    setResolviendo(true);
+    setErrorDecision("");
+    try {
+      await enviarJson("/api/v1/solicitudes-carga-emisor/lotes/" + encodeURIComponent(lote.ruc_emisor) + "/rechazar", "POST", {
+        gestor_solicitante_id: lote.gestor_solicitante_id,
+        cantidad_esperada: lote.cantidad_solicitudes,
+        observacion: motivo.trim(),
+      });
+      alResolver();
+    } catch (e) {
+      setErrorDecision(e instanceof Error ? e.message : String(e));
+    } finally {
+      setResolviendo(false);
+    }
+  };
   return <section>
     <h4>Solicitudes de {lote.ruc_emisor}</h4>
     {error && <p role="alert">{String(error)}</p>}
@@ -111,6 +133,12 @@ function DetalleLoteEmisor({ lote, gestores, miembros }: {
     {!cargando && !error && datos?.length === 0 && <p>No hay más solicitudes.</p>}
     <button type="button" disabled={pagina === 0 || cargando} onClick={() => setPagina((p) => p - 1)}>Anterior</button>
     <button type="button" disabled={cargando || (datos?.length ?? 0) < 100} onClick={() => setPagina((p) => p + 1)}>Siguiente</button>
+    <form onSubmit={(e) => void rechazar(e)}>
+      <label>Motivo del rechazo <input value={motivo} onChange={(e) => setMotivo(e.target.value)} maxLength={500} required /></label>
+      <button type="submit" disabled={!motivo.trim() || resolviendo}>Rechazar {lote.cantidad_solicitudes} solicitudes</button>
+      <p>Los originales quedan en cuarentena y no se contabilizan.</p>
+      {errorDecision && <p role="alert">{errorDecision}</p>}
+    </form>
   </section>;
 }
 
@@ -145,7 +173,7 @@ function RevisionEmisores({ gestores, miembros, empresas }: {
         </tr>;
       })}</tbody>
     </table></div>}
-    {loteSeleccionado && <DetalleLoteEmisor key={loteSeleccionado.ruc_emisor + ":" + loteSeleccionado.gestor_solicitante_id} lote={loteSeleccionado} gestores={gestores} miembros={miembros} />}
+    {loteSeleccionado && <DetalleLoteEmisor key={loteSeleccionado.ruc_emisor + ":" + loteSeleccionado.gestor_solicitante_id} lote={loteSeleccionado} gestores={gestores} miembros={miembros} alResolver={() => { setLoteSeleccionado(null); recargar(); }} />}
   </section>;
 }
 
