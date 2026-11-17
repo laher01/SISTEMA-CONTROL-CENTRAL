@@ -1,0 +1,55 @@
+.manual-expediente-dialog {
+  width: min(76rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  padding: 0;
+  border: 1px solid var(--borde);
+  border-radius: .8rem;
+  background: Canvas;
+  color: CanvasText;
+  overflow: auto;
+}
+.manual-expediente-dialog::backdrop { background: rgb(15 23 42 / .62); }
+.manual-expediente-cabecera, .manual-expediente-pie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: .75rem;
+  padding: 1rem 1.25rem;
+  background: Canvas;
+}
+.manual-expediente-cabecera { border-bottom: 1px solid var(--borde); }
+.manual-expediente-cabecera h2, .manual-expediente-cabecera p { margin: 0 0 .3rem; }
+.manual-expediente-cuerpo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+}
+.manual-expediente-cuerpo > * { min-width: 0; }
+.manual-expediente-archivo { overflow-wrap: anywhere; }
+.manual-expediente-preview { width: 100%; height: 62vh; min-height: 18rem; border: 1px solid var(--borde); border-radius: .5rem; background: white; }
+.manual-expediente-formulario { display: grid; gap: 1rem; min-width: 0; }
+.manual-expediente-grupo { min-width: 0; margin: 0; border: 1px solid var(--borde); border-radius: .5rem; padding: .85rem; }
+.manual-expediente-grupo legend { font-weight: 650; padding: 0 .35rem; }
+.manual-expediente-campos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
+.manual-expediente-campo { display: grid; gap: .3rem; align-content: start; min-width: 0; }
+.manual-expediente-campo.ancho { grid-column: 1 / -1; }
+.manual-expediente-campo label { font-weight: 600; }
+.manual-expediente-campo input, .manual-expediente-campo select { width: 100%; min-width: 0; min-height: 2.3rem; color: CanvasText; background: Canvas; }
+.manual-expediente-campo [aria-invalid="true"] { border-color: var(--rojo); }
+.manual-expediente-campo details { overflow-wrap: anywhere; font-size: .78rem; }
+.manual-expediente-campo details summary { cursor: pointer; }
+.manual-expediente-ruta { display: grid; gap: .3rem; }
+.manual-expediente-aviso { padding: .75rem; border: 1px solid var(--borde); border-radius: .5rem; overflow-wrap: anywhere; }
+.manual-expediente-comparacion { overflow-x: auto; }
+.manual-expediente-pie { position: sticky; bottom: 0; border-top: 1px solid var(--borde); justify-content: flex-end; z-index: 1; }
+.manual-expediente-dialog button { width: auto; height: auto; min-height: 2.3rem; align-self: center; white-space: normal; }
+@media (max-width: 850px) {
+  .manual-expediente-cuerpo { grid-template-columns: minmax(0, 1fr); }
+  .manual-expediente-preview { height: 36vh; }
+}
+@media (max-width: 420px) {
+  .manual-expediente-campos { grid-template-columns: minmax(0, 1fr); }
+  .manual-expediente-pie button { flex: 1 1 100%; }
+}
