@@ -11,6 +11,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from app.services.facturas_estaciones import extraer_factura_estacion
+from app.services.referencias_gre import extraer_referencias_factura_gre
 from app.services.transferencias_bcp import extraer_transferencia_bcp
 
 
@@ -188,7 +189,12 @@ def extraer_campos(
             referencia.group(2), min(0.98, 0.96 * factor), evidencia
         ).a_dict(fuente)
 
+    formato = detectar_formato_documental(texto)
     rucs = _rucs_en_texto(texto)
+    if fuente == "TEXTO_PDF" and formato in {"SUNAT_FACTURA", "SUNAT_GRE"}:
+        exactos = list(dict.fromkeys(ruc for ruc in RUC.findall(texto) if ruc[:2] in {"10", "20"}))
+        if len(exactos) >= 2:
+            rucs = exactos
     candidatos: dict[str, list[dict[str, object]]] = {}
     if rucs:
         candidatos["ruc"] = [
@@ -196,7 +202,6 @@ def extraer_campos(
             for ruc in rucs
         ]
 
-    formato = detectar_formato_documental(texto)
     if formato == "OSE_FACTURALAYA":
         numero = re.search(
             r"FACTURA ELECTR[ÓO]NICA[ \t]*:?\s+([FE]\d{3})[ \t]*[-–—][ \t]*(\d+)\b",
@@ -369,6 +374,8 @@ def extraer_campos(
     # Las representaciones nativas pueden ordenar los bloques por objeto PDF,
     # no por posición visual. Priorizar evidencia fiscal explícita por formato.
     _ajustar_formatos_pdf_nativos(texto, formato, campos, fuente, factor)
+    if formato == "SUNAT_GRE":
+        _extraer_partes_gre_sunat(texto, campos, fuente, factor)
     if "tipo_operacion" in campos:
         if "fecha_emision" in campos:
             campos["fecha_operacion"] = campos["fecha_emision"].copy()
@@ -739,6 +746,69 @@ def _bloque_despues_de_etiqueta(
     return None
 
 
+def _extraer_partes_gre_sunat(
+    texto: str, campos: dict[str, dict[str, object]], fuente: str, factor: float
+) -> None:
+    """Solo asignar partes y factura cuando las etiquetas fiscales son explícitas."""
+    emisor = re.search(
+        r"(?im)^RUC\s*(?:N[°º.]*)?\s*:?\s*(\d{11})\s*\n"
+        r"GU[IÍ]A DE REMISI[ÓO]N ELECTR[ÓO]NICA\s*\n(?:REMITENTE|TRANSPORTISTA)\s*\n"
+        r"N[°º.]?\s*[A-Z0-9]{4}\s*[-–—]\s*\d+\s*\n([^\n]+)",
+        texto,
+    )
+    receptor = re.search(
+        r"(?im)^DATOS DEL DESTINATARIO\s*:\s*([^\n]+?)\s*-\s*"
+        r"REGISTRO [ÚU]NICO DE CONTRIBUYENTES\s*N[°º.]?\s*(\d{11})\b",
+        texto,
+    )
+    for parte, coincidencia, indices in (
+        ("emisor", emisor, (1, 2)),
+        ("receptor", receptor, (2, 1)),
+    ):
+        if coincidencia:
+            ruc = coincidencia.group(indices[0])
+            razon = coincidencia.group(indices[1]).strip()
+            if _razon_social_valida(razon):
+                _poner_campo(campos, f"ruc_{parte}", ruc, 0.96 * factor, ruc, fuente)
+                _poner_campo(campos, f"razon_social_{parte}", razon, 0.96 * factor, razon, fuente)
+                etiqueta = "remitente" if parte == "emisor" else "beneficiario"
+                _poner_campo(campos, etiqueta, razon, 0.96 * factor, razon, fuente)
+    referencias = extraer_referencias_factura_gre(texto)
+    if len(referencias) == 1:
+        ref = referencias[0]
+        _poner_campo(
+            campos,
+            "factura_referenciada",
+            f"{ref.serie}-{ref.correlativo}",
+            0.96 * factor,
+            "Documentos relacionados",
+            fuente,
+        )
+
+
+def extraer_campos_sunat_layout(texto: str, formato: str) -> dict[str, CampoExtraido]:
+    """Restituye nombres partidos y fecha GRE a partir de filas visuales."""
+    campos: dict[str, CampoExtraido] = {}
+    if formato == "SUNAT_FACTURA":
+        lineas = _lineas_limpias(texto)
+        receptor = _bloque_despues_de_etiqueta(
+            lineas,
+            "SEÑOR(ES)",
+            detener=("RUC", "DIRECCION DEL CLIENTE", "TIPO DE MONEDA", "OBSERVACION"),
+            max_lineas=4,
+        )
+        if receptor:
+            campos["razon_social_receptor"] = CampoExtraido(receptor[0], 0.98, receptor[1])
+    elif formato == "SUNAT_GRE":
+        fechas = re.findall(
+            r"(?im)^[ \t]*FECHA Y HORA DE EMISI[ÓO]N[ \t]*:[ \t]*(\d{1,2}/\d{1,2}/\d{4})",
+            texto,
+        )
+        if len(set(fechas)) == 1 and (fecha := _normalizar_fecha(fechas[0])):
+            campos["fecha_emision"] = CampoExtraido(fecha, 0.98, fechas[0])
+    return campos
+
+
 def _parsear_factura_sunat(
     texto: str,
     rucs: list[str],
@@ -772,6 +842,20 @@ def _parsear_factura_sunat(
     )
 
     emisor = _razon_emisor_encabezado(lineas, indice_factura)
+    if not emisor and fuente == "TEXTO_PDF":
+        # La impresión del navegador puede colocar primero el cuadro fiscal y los totales.
+        for indice in range(indice_factura + 1, len(lineas) - 1):
+            linea = lineas[indice]
+            if re.search(r"(?i)^FECHA DE EMISI[ÓO]N", linea):
+                break
+            if (
+                _razon_social_valida(linea)
+                and not re.search(r"\d", linea)
+                and _parece_direccion(lineas[indice + 1])
+                and re.search(r"\d", lineas[indice + 1])
+            ):
+                emisor = (linea, linea)
+                break
     if fuente == "OCR" and _total_ocr_sunat_desalineado(texto, fuente):
         for indice, linea in enumerate(lineas[:indice_factura]):
             if indice and _parece_direccion(linea) and re.search(r"\d", linea):
@@ -1501,11 +1585,18 @@ def detectar_formato_documental(texto: str) -> str:
         return "OSE_FACTUHOST"
     if "EFACT" in normalizado or "WWW.EFACT.PE" in normalizado:
         return "OSE_EFACT"
+    if (
+        "GUIA DE REMISION ELECTRONICA" in normalizado
+        and "GENERADA EN EL SISTEMA DE LA SUNAT" in normalizado
+    ):
+        return "SUNAT_GRE"
+    if "FACTURA ELECTRONICA" in normalizado and "GENERADA EN EL SISTEMA DE SUNAT" in normalizado:
+        return "SUNAT_FACTURA"
     if re.search(r"\bOSE\b", normalizado) or any(
         marca in normalizado for marca in ("NUBEFACT", "BIZLINK", "DIGIFLOW")
     ):
         return "OSE"
-    if "PSE" in normalizado or "PROVEEDOR DE SERVICIOS ELECTRONICOS" in normalizado:
+    if re.search(r"\bPSE\b", normalizado) or "PROVEEDOR DE SERVICIOS ELECTRONICOS" in normalizado:
         return "PSE"
     if "TICKET" in normalizado or "BOLETA DE VENTA" in normalizado:
         return "TICKET"

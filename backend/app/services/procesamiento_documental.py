@@ -18,7 +18,9 @@ from app.services.contabilidad_items_rhe import extraer_item_rhe
 from app.services.contabilidad_items_ubl import extraer_items_pdf
 from app.services.extraccion_campos import (
     CampoExtraido,
+    detectar_formato_documental,
     extraer_campos,
+    extraer_campos_sunat_layout,
     extraer_fecha_emision_rhe_etiquetada,
 )
 
@@ -54,6 +56,7 @@ class ResultadoProcesamiento:
     sugerencia: SugerenciaClasificacion | None = None
     texto_tabla_items: str | None = None
     fecha_emision_rhe: CampoExtraido | None = None
+    campos_sunat_layout: dict[str, CampoExtraido] | None = None
 
     def a_dict(self) -> dict[str, object]:
         resultado: dict[str, object] = {
@@ -76,6 +79,10 @@ class ResultadoProcesamiento:
             campos = extraccion.get("campos")
             if isinstance(campos, dict) and self.fecha_emision_rhe is not None:
                 campos["fecha_emision"] = self.fecha_emision_rhe.a_dict("TEXTO_PDF")
+            if isinstance(campos, dict) and self.campos_sunat_layout:
+                campos.update(
+                    {k: v.a_dict("TEXTO_PDF") for k, v in self.campos_sunat_layout.items()}
+                )
             resultado["extraccion_estructurada"] = extraccion
         return resultado
 
@@ -106,11 +113,19 @@ def _procesar_pdf(contenido: bytes, limite: int, max_paginas_ocr: int) -> Result
     sugerencia = sugerir_tipo(texto)
     tabla = None
     fecha_rhe = None
+    campos_sunat = None
+    formato = detectar_formato_documental(texto)
     if sugerencia and sugerencia.tipo == TipoDocumento.RHE:
         disposicion = _leer_disposicion_pdf(contenido, limite)
         if disposicion:
             fecha_rhe = extraer_fecha_emision_rhe_etiquetada(disposicion)
             if extraer_item_rhe(disposicion) or extraer_items_pdf(disposicion):
+                tabla = disposicion
+    elif formato in {"SUNAT_FACTURA", "SUNAT_GRE"}:
+        disposicion = _leer_disposicion_pdf(contenido, limite)
+        if disposicion:
+            campos_sunat = extraer_campos_sunat_layout(disposicion, formato)
+            if formato == "SUNAT_FACTURA" and extraer_items_pdf(disposicion):
                 tabla = disposicion
     elif sugerencia and sugerencia.tipo == TipoDocumento.FACT and not extraer_items_pdf(texto):
         tabla = leer_disposicion_items_pdf(contenido, limite)
@@ -118,6 +133,7 @@ def _procesar_pdf(contenido: bytes, limite: int, max_paginas_ocr: int) -> Result
         texto=texto,
         texto_tabla_items=tabla,
         fecha_emision_rhe=fecha_rhe,
+        campos_sunat_layout=campos_sunat,
         metodo="TEXTO_PDF",
         motor="pypdf",
         paginas=len(lector.pages),
