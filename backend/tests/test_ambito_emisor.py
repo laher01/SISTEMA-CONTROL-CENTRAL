@@ -255,6 +255,19 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
     assert reintento.status_code == 409
     assert reintento.json()["detail"]["solicitud_id"] == str(solicitud.id)
 
+    segunda = client.post(
+        "/api/v1/documentos",
+        files={
+            "archivo": (
+                "factura_ajena_2.xml",
+                factura(numero="F001-00000852", emisor=empresa.ruc),
+                "application/xml",
+            )
+        },
+    )
+    assert segunda.status_code == 409
+    assert segunda.json()["detail"]["solicitud_id"] != str(solicitud.id)
+
     ruta_lotes = "/api/v1/solicitudes-carga-emisor/lotes"
     assert client.get(ruta_lotes).status_code == 403
 
@@ -267,8 +280,8 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
             "gestor_solicitante_id": (
                 str(solicitud.gestor_solicitante_id) if solicitud.gestor_solicitante_id else None
             ),
-            "cantidad_documentos": 1,
-            "cantidad_solicitudes": 1,
+            "cantidad_documentos": 2,
+            "cantidad_solicitudes": 2,
         }
     ]
     detalle = f"{ruta_lotes}/{empresa.ruc}"
@@ -277,8 +290,11 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
         if solicitud.gestor_solicitante_id
         else {}
     )
-    assert client.get(detalle, params=parametros).json()[0]["id"] == str(solicitud.id)
-    assert client.get(detalle, params={**parametros, "offset": 1}).json() == []
+    assert {fila["id"] for fila in client.get(detalle, params=parametros).json()} == {
+        str(solicitud.id),
+        segunda.json()["detail"]["solicitud_id"],
+    }
+    assert client.get(detalle, params={**parametros, "offset": 2}).json() == []
     assert client.get(detalle, params={**parametros, "limite": 201}).status_code == 422
     assert client.get(detalle, params={"gestor_solicitante_id": str(uuid.uuid4())}).json() == []
     # Una segunda cuenta administrativa REAL: la decisión conserva
@@ -297,14 +313,14 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
         "gestor_solicitante_id": (
             str(solicitud.gestor_solicitante_id) if solicitud.gestor_solicitante_id else None
         ),
-        "cantidad_esperada": 1,
+        "cantidad_esperada": 2,
         "observacion": "No autorizado",
     }
     ruta_rechazo = f"{detalle}/rechazar"
-    assert client.post(ruta_rechazo, json={**payload, "cantidad_esperada": 2}).status_code == 409
+    assert client.post(ruta_rechazo, json={**payload, "cantidad_esperada": 3}).status_code == 409
     rechazo = client.post(ruta_rechazo, json=payload)
     assert rechazo.status_code == 200, rechazo.text
-    assert rechazo.json() == {"rechazadas": 1}
+    assert rechazo.json() == {"rechazadas": 2}
     session.expire_all()
     assert solicitud.estado == "RECHAZADA"
     assert ruta_temporal.exists()
