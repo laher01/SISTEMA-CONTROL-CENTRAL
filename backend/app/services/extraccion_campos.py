@@ -446,9 +446,7 @@ def _ajustar_formatos_pdf_nativos(
             else:
                 fijar("fecha_emision", valor.isoformat(), fecha.group())
     if es_factcentral:
-        emisor = re.search(
-            r"(?im)^([^\n]+)\n[ \t]*R\.?U\.?C\.?[ \t]*:?[ \t]*(\d{11})\b", texto
-        )
+        emisor = re.search(r"(?im)^([^\n]+)\n[ \t]*R\.?U\.?C\.?[ \t]*:?[ \t]*(\d{11})\b", texto)
         receptor = re.search(
             r"(?im)^CLIENTE[ \t]*:[ \t]*([^\n]+(?:\n[^\n]+){0,2}?)"
             r"\n[ \t]*RUC[ \t]*:[ \t]*(\d{11})\b",
@@ -1710,4 +1708,3 @@ def _ajustar_partes_cotizacion(
             campos[campo] = CampoExtraido(
                 nombre, min(0.88, 0.86 * factor), f"{etiqueta}: {nombre}"
             ).a_dict(fuente)
-
