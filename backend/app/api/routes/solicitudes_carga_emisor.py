@@ -5,13 +5,14 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from app.api.deps import AlmacenDep, OperativeAuthDep, SessionDep, TenantDep
 from app.models import SolicitudCargaEmisor
 from app.security import ContextoAcceso
 from app.services import auditoria
+from app.services.eliminacion import bloquear_clave_archivo
 
 router = APIRouter(prefix="/solicitudes-carga-emisor", tags=["solicitudes-carga-emisor"])
 
@@ -95,6 +96,64 @@ def detalle_lote(
         .limit(limite)
     )
     return list(session.scalars(consulta))
+
+
+class RechazoLoteIn(BaseModel):
+    gestor_solicitante_id: uuid.UUID | None = None
+    cantidad_esperada: int = Field(gt=0)
+    observacion: str = Field(min_length=1, max_length=500)
+
+
+@router.post("/lotes/{ruc_emisor}/rechazar")
+def rechazar_lote(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    ruc_emisor: str,
+    datos: RechazoLoteIn,
+) -> dict[str, int]:
+    """Cierra solicitudes en cuarentena sin borrar originales ni contabilizar."""
+    if auth.rol != "ADMINISTRADOR":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Administración")
+    motivo = datos.observacion.strip()
+    if not motivo:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Indique un motivo")
+    bloquear_clave_archivo(
+        session, tenant_id, f"emisor:{ruc_emisor}:gestor:{datos.gestor_solicitante_id}"
+    )
+    modelo = SolicitudCargaEmisor
+    solicitudes = list(
+        session.scalars(
+            select(modelo)
+            .where(
+                modelo.tenant_id == tenant_id,
+                modelo.ruc_emisor == ruc_emisor,
+                modelo.gestor_solicitante_id == datos.gestor_solicitante_id,
+                modelo.estado == "PENDIENTE",
+            )
+            .order_by(modelo.id)
+            .with_for_update()
+        )
+    )
+    if len(solicitudes) != datos.cantidad_esperada:
+        raise HTTPException(status.HTTP_409_CONFLICT, "El lote cambió; actualice la revisión")
+    if any(s.solicitante_cuenta_id == auth.cuenta_id for s in solicitudes):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No puede decidir su propia solicitud")
+    for solicitud in solicitudes:
+        solicitud.estado = "RECHAZADA"
+        solicitud.observacion = motivo
+        solicitud.decidido_por_cuenta_id = auth.cuenta_id
+        solicitud.decidido_at = datetime.now(UTC)
+        auditoria.registrar(
+            session,
+            tenant_id,
+            "CARGA_EMISOR_RECHAZADA",
+            "solicitud_carga_emisor",
+            solicitud.id,
+            {"ruc_emisor": ruc_emisor, "por": auth.codigo, "lote": True},
+        )
+    session.commit()
+    return {"rechazadas": len(solicitudes)}
 
 
 @router.get("", response_model=list[SolicitudOut])
