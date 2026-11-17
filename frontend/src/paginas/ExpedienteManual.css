@@ -53,3 +53,5 @@
   .manual-expediente-campos { grid-template-columns: minmax(0, 1fr); }
   .manual-expediente-pie button { flex: 1 1 100%; }
 }
+
+.manual-expediente-campo input[type="checkbox"] { width: 1.1rem; min-height: 0; vertical-align: middle; }
