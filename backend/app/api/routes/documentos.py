@@ -665,6 +665,16 @@ async def subir_documento(
                             "estado": revision.estado.value,
                         },
                     )
+                lote_existente = session.scalar(
+                    select(SolicitudCargaEmisor.id)
+                    .where(
+                        SolicitudCargaEmisor.tenant_id == tenant_id,
+                        SolicitudCargaEmisor.ruc_emisor == ubl.emisor.ruc,
+                        SolicitudCargaEmisor.gestor_solicitante_id == gestor_id,
+                        SolicitudCargaEmisor.estado == "PENDIENTE",
+                    )
+                    .limit(1)
+                )
                 solicitud = SolicitudCargaEmisor(
                     tenant_id=tenant_id,
                     ruc_emisor=ubl.emisor.ruc,
@@ -683,23 +693,24 @@ async def subir_documento(
                 solicitud.ruta_temporal = almacen.guardar(
                     tenant_id, f"cuarentena-{solicitud.id}-{huella}", subido.contenido
                 )
-                session.add(
-                    AlertaManual(
-                        tenant_id=tenant_id,
-                        creado_por_codigo=auth.codigo,
-                        creado_por_rol=auth.rol,
-                        destinatario_usuario_id=revision.responsable_propietario_id,
-                        destinatario_gestor_id=revision.gestor_propietario_id,
-                        para_administracion=True,
-                        asunto="Autorización de documento de empresa ajena",
-                        mensaje=(
-                            f"Solicitud {solicitud.id}; emisor {ubl.emisor.ruc}; "
-                            f"solicitante {auth.codigo}; gestor propietario "
-                            f"{revision.gestor_propietario_id}; responsable "
-                            f"{revision.responsable_propietario_id}."
-                        ),
+                if lote_existente is None:
+                    session.add(
+                        AlertaManual(
+                            tenant_id=tenant_id,
+                            creado_por_codigo=auth.codigo,
+                            creado_por_rol=auth.rol,
+                            destinatario_usuario_id=revision.responsable_propietario_id,
+                            destinatario_gestor_id=revision.gestor_propietario_id,
+                            para_administracion=True,
+                            asunto="Autorización de documento de empresa ajena",
+                            mensaje=(
+                                f"Solicitud {solicitud.id}; emisor {ubl.emisor.ruc}; "
+                                f"solicitante {auth.codigo}; gestor propietario "
+                                f"{revision.gestor_propietario_id}; responsable "
+                                f"{revision.responsable_propietario_id}."
+                            ),
+                        )
                     )
-                )
                 auditoria.registrar(
                     session,
                     tenant_id,
