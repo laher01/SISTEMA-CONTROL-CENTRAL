@@ -16,7 +16,11 @@ from pypdf.errors import PdfReadError
 from app.enums import TipoDocumento
 from app.services.contabilidad_items_rhe import extraer_item_rhe
 from app.services.contabilidad_items_ubl import extraer_items_pdf
-from app.services.extraccion_campos import extraer_campos
+from app.services.extraccion_campos import (
+    CampoExtraido,
+    extraer_campos,
+    extraer_fecha_emision_rhe_etiquetada,
+)
 
 
 class DocumentoNoProcesable(Exception):
@@ -49,6 +53,7 @@ class ResultadoProcesamiento:
     requiere_ocr: bool = False
     sugerencia: SugerenciaClasificacion | None = None
     texto_tabla_items: str | None = None
+    fecha_emision_rhe: CampoExtraido | None = None
 
     def a_dict(self) -> dict[str, object]:
         resultado: dict[str, object] = {
@@ -68,6 +73,9 @@ class ResultadoProcesamiento:
             resultado["clasificacion_sugerida"] = self.sugerencia.a_dict()
         extraccion = extraer_campos(self.texto, self.metodo, self.confianza)
         if extraccion is not None:
+            campos = extraccion.get("campos")
+            if isinstance(campos, dict) and self.fecha_emision_rhe is not None:
+                campos["fecha_emision"] = self.fecha_emision_rhe.a_dict("TEXTO_PDF")
             resultado["extraccion_estructurada"] = extraccion
         return resultado
 
@@ -96,18 +104,20 @@ def _procesar_pdf(contenido: bytes, limite: int, max_paginas_ocr: int) -> Result
         return _procesar_pdf_escaneado(contenido, limite, max_paginas_ocr, partes)
     texto = _limitar("\n\n".join(partes), limite)
     sugerencia = sugerir_tipo(texto)
-    tabla = (
-        leer_disposicion_items_pdf(contenido, limite)
-        if sugerencia
-        and (
-            sugerencia.tipo == TipoDocumento.RHE
-            or (sugerencia.tipo == TipoDocumento.FACT and not extraer_items_pdf(texto))
-        )
-        else None
-    )
+    tabla = None
+    fecha_rhe = None
+    if sugerencia and sugerencia.tipo == TipoDocumento.RHE:
+        disposicion = _leer_disposicion_pdf(contenido, limite)
+        if disposicion:
+            fecha_rhe = extraer_fecha_emision_rhe_etiquetada(disposicion)
+            if extraer_item_rhe(disposicion) or extraer_items_pdf(disposicion):
+                tabla = disposicion
+    elif sugerencia and sugerencia.tipo == TipoDocumento.FACT and not extraer_items_pdf(texto):
+        tabla = leer_disposicion_items_pdf(contenido, limite)
     return ResultadoProcesamiento(
         texto=texto,
         texto_tabla_items=tabla,
+        fecha_emision_rhe=fecha_rhe,
         metodo="TEXTO_PDF",
         motor="pypdf",
         paginas=len(lector.pages),
@@ -118,7 +128,13 @@ def _procesar_pdf(contenido: bytes, limite: int, max_paginas_ocr: int) -> Result
 
 
 def leer_disposicion_items_pdf(contenido: bytes, limite: int) -> str | None:
-    """Recupera las columnas del texto nativo con un límite de páginas y caracteres."""
+    """Recupera las columnas del texto nativo que contienen ítems."""
+    texto = _leer_disposicion_pdf(contenido, limite)
+    return texto if texto and (extraer_items_pdf(texto) or extraer_item_rhe(texto)) else None
+
+
+def _leer_disposicion_pdf(contenido: bytes, limite: int) -> str | None:
+    """Recupera texto visual aunque no contenga ítems reconocibles."""
     try:
         lector = PdfReader(io.BytesIO(contenido), strict=False)
         if lector.is_encrypted and lector.decrypt("") == 0:
@@ -131,8 +147,7 @@ def leer_disposicion_items_pdf(contenido: bytes, limite: int) -> str | None:
             caracteres += len(parte) + 1
             if caracteres >= limite:
                 break
-        texto = "\n".join(partes)
-        return texto if extraer_items_pdf(texto) or extraer_item_rhe(texto) else None
+        return "\n".join(partes) or None
     except (PdfReadError, OSError, ValueError):
         return None
 
