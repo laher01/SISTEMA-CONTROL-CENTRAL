@@ -6,7 +6,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.api.deps import AlmacenDep, OperativeAuthDep, SessionDep, TenantDep
 from app.models import SolicitudCargaEmisor
@@ -33,6 +33,38 @@ def _puede_revisar(auth: ContextoAcceso, solicitud: SolicitudCargaEmisor) -> boo
         auth.rol == "ADMINISTRADOR"
         or (auth.rol == "RESPONSABLE" and auth.miembro_id == solicitud.responsable_propietario_id)
     )
+
+
+
+class LoteEmisorOut(BaseModel):
+    ruc_emisor: str
+    gestor_solicitante_id: uuid.UUID | None
+    cantidad_documentos: int
+    cantidad_solicitudes: int
+
+
+@router.get("/lotes", response_model=list[LoteEmisorOut])
+def listar_lotes(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+) -> list[LoteEmisorOut]:
+    """Cola administrativa agrupada; ningún efecto contable ni cambio de titularidad."""
+    if auth.rol != "ADMINISTRADOR":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Administración")
+    modelo = SolicitudCargaEmisor
+    filas = session.execute(
+        select(
+            modelo.ruc_emisor,
+            modelo.gestor_solicitante_id,
+            func.count(func.distinct(modelo.sha256_archivo)).label("cantidad_documentos"),
+            func.count(modelo.id).label("cantidad_solicitudes"),
+        )
+        .where(modelo.tenant_id == tenant_id, modelo.estado == "PENDIENTE")
+        .group_by(modelo.ruc_emisor, modelo.gestor_solicitante_id)
+        .order_by(modelo.ruc_emisor, modelo.gestor_solicitante_id)
+    )
+    return [LoteEmisorOut(**fila._mapping) for fila in filas]
 
 
 @router.get("", response_model=list[SolicitudOut])
