@@ -242,6 +242,19 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
     ruta_temporal = settings.storage_dir / solicitud.ruta_temporal
     assert ruta_temporal.is_file()
 
+    reintento = client.post(
+        "/api/v1/documentos",
+        files={
+            "archivo": (
+                "factura_ajena.xml",
+                factura(numero="F001-00000851", emisor=empresa.ruc),
+                "application/xml",
+            )
+        },
+    )
+    assert reintento.status_code == 409
+    assert reintento.json()["detail"]["solicitud_id"] == str(solicitud.id)
+
     ruta_lotes = "/api/v1/solicitudes-carga-emisor/lotes"
     assert client.get(ruta_lotes).status_code == 403
 
