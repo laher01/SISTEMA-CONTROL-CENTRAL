@@ -568,7 +568,7 @@ function ConfirmarCampos({
   const [requiereGuia, setRequiereGuia] = useState(true);
   const [error, setError] = useState("");
   const [duplicado, setDuplicado] = useState<Expediente | null>(null);
-  const errores = validarCamposManuales(valores);
+  const errores = validarCamposManuales(tipoComprobante === "RHE" ? { ...valores, subtotal: "", igv: "" } : valores);
   const ocupado = guardando || creando;
   const listo = confirmado && !modificado;
   const valido = Object.keys(errores).length === 0;
@@ -579,11 +579,12 @@ function ConfirmarCampos({
       && previa.campos && typeof previa.campos === "object"
       ? Object.fromEntries(Object.entries(previa.campos).map(([nombre, valor]) => [nombre, String(valor)]))
       : {};
-    setValores({ moneda: "PEN", ...Object.fromEntries(campos.map((campo) => [campo.nombre, campo.valor])), ...confirmados });
+    const iniciales: Record<string, string> = { moneda: "PEN", ...Object.fromEntries(campos.map((campo) => [campo.nombre, campo.valor])), ...confirmados };
+    setValores(iniciales);
     const tipo = tipoSugerido === "RHE" ? "RHE" : "FACT";
     setTipoComprobante(tipo);
     setRequiereGuia(tipo === "FACT");
-    setModificado(false);
+    setModificado(Object.entries(iniciales).some(([nombre, valor]) => valor.trim() && confirmados[nombre] !== valor));
     setError("");
     setDuplicado(null);
     setMostrarManual(true);
@@ -600,7 +601,7 @@ function ConfirmarCampos({
     setError("");
     const permitidos = ["serie", "correlativo", "ruc_emisor", "ruc_receptor", "fecha_emision", "moneda", "importe_total", "razon_social_emisor", "razon_social_receptor", "subtotal", "igv", "descuentos", "importe_a_pagar", "numero_operacion"];
     const payload = Object.fromEntries(Object.entries(valores).flatMap(([nombre, valor]) =>
-      permitidos.includes(nombre) && valor.trim() ? [[nombre, valor.trim()]] : [],
+      permitidos.includes(nombre) && valor.trim() && !(tipoComprobante === "RHE" && ["subtotal", "igv"].includes(nombre)) ? [[nombre, valor.trim()]] : [],
     ));
     try {
       const actualizado = await enviarJson<Documento>(
