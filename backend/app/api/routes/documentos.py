@@ -1522,6 +1522,8 @@ def provisionales_gre(
             RolMiembro.GERENTE,
             RolMiembro.SECRETARIA,
             RolMiembro.RESPONSABLE,
+            RolMiembro.USUARIO,
+            "GESTOR",
         )
         else {}
     )
