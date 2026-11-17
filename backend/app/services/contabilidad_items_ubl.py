@@ -16,6 +16,7 @@ from app.item_models import LineaComprobanteItem, ProductoItem
 from app.models import Documento, Tenant
 from app.services.contabilidad_items_rules import sugerir_categoria, texto_normalizado
 from app.services.extraccion_campos import detectar_formato_documental
+from app.services.items_formatos_nativos import extraer_items_nativos
 from app.services.ubl import INVOICE, NS
 
 
@@ -178,6 +179,12 @@ def registrar_items_pdf_estacion(
 
 
 def extraer_items_pdf(texto: str) -> list[ItemUBL]:
+    nativos = extraer_items_nativos(texto)
+    if nativos:
+        return [
+            ItemUBL(numero, descripcion, cantidad, unidad, importe)
+            for numero, (descripcion, cantidad, unidad, importe) in enumerate(nativos, 1)
+        ]
     items = extraer_items_pdf_tabla(texto)
     if items:
         return items
