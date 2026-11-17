@@ -640,6 +640,31 @@ async def subir_documento(
                 # El archivo permanece en área de cuarentena, fuera de los
                 # listados, y solo la API de revisión puede liberarlo.
                 huella = hashlib.sha256(subido.contenido).hexdigest()
+                bloquear_clave_archivo(
+                    session, tenant_id, f"emisor:{ubl.emisor.ruc}:gestor:{gestor_id}"
+                )
+                pendiente = session.scalar(
+                    select(SolicitudCargaEmisor)
+                    .where(
+                        SolicitudCargaEmisor.tenant_id == tenant_id,
+                        SolicitudCargaEmisor.ruc_emisor == ubl.emisor.ruc,
+                        SolicitudCargaEmisor.gestor_solicitante_id == gestor_id,
+                        SolicitudCargaEmisor.sha256_archivo == huella,
+                        SolicitudCargaEmisor.estado == "PENDIENTE",
+                    )
+                    .limit(1)
+                )
+                if pendiente is not None:
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        {
+                            "codigo": "EMISOR_REQUIERE_AUTORIZACION",
+                            "solicitud_id": str(pendiente.id),
+                            "mensaje": "Archivo ya pendiente de autorización",
+                            "ruc_emisor": ubl.emisor.ruc,
+                            "estado": revision.estado.value,
+                        },
+                    )
                 solicitud = SolicitudCargaEmisor(
                     tenant_id=tenant_id,
                     ruc_emisor=ubl.emisor.ruc,
