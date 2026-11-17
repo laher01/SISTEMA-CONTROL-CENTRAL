@@ -168,8 +168,8 @@ def estado_acceso(
     gestor_id: uuid.UUID,
     datos: EstadoAccesoIn,
 ) -> GestorOut:
-    if auth.rol not in (RolMiembro.ADMINISTRADOR, RolMiembro.USUARIO):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "No puede modificar el acceso")
+    if auth.rol != RolMiembro.ADMINISTRADOR:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Administración modifica el acceso")
     gestor = _gestor_editable(session, tenant_id, auth, gestor_id)
     cuenta = cambiar_estado_acceso(session, tenant_id, gestor.id, datos.activo, gestores=True)
     if cuenta is None:
