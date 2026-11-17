@@ -20,9 +20,12 @@ def test_estado_acceso_organizacion(
         assert respuesta.status_code == 200, respuesta.text
         assert respuesta.json()["acceso_activo"] is False
         assert respuesta.json()["activo"] is True
-        assert next(
-            m for m in client.get("/api/v1/miembros").json() if m["id"] == miembro["id"]
-        )["acceso_activo"] is False
+        assert (
+            next(m for m in client.get("/api/v1/miembros").json() if m["id"] == miembro["id"])[
+                "acceso_activo"
+            ]
+            is False
+        )
         assert client.patch(ruta, json={"activo": True}).json()["acceso_activo"] is True
 
     alta = client.post(
@@ -43,13 +46,19 @@ def test_estado_acceso_organizacion(
     session.expire_all()
     assert contexto_desde_token(session, token) is None
     assert client.post(f"/api/v1/gestores/{gestor['id']}/restablecer-acceso").status_code == 200
-    assert next(
-        g for g in client.get("/api/v1/gestores").json() if g["id"] == gestor["id"]
-    )["acceso_activo"] is False
+    assert (
+        next(g for g in client.get("/api/v1/gestores").json() if g["id"] == gestor["id"])[
+            "acceso_activo"
+        ]
+        is False
+    )
     assert client.patch(ruta, json={"activo": True}).json()["acceso_activo"] is True
     session.expire_all()
     assert contexto_desde_token(session, token) is None
     auth_prueba.como_usuario(auth_prueba.usuario_id)
-    assert client.patch(
-        f"/api/v1/miembros/{auth_prueba.usuario_id}/estado-acceso", json={"activo": False}
-    ).status_code == 403
+    assert (
+        client.patch(
+            f"/api/v1/miembros/{auth_prueba.usuario_id}/estado-acceso", json={"activo": False}
+        ).status_code
+        == 403
+    )
