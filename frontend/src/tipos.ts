@@ -69,6 +69,7 @@ export interface Miembro {
   porcentaje_con_agente: string | null;
   porcentaje_sin_agente: string | null;
   activo: boolean;
+  acceso_activo?: boolean | null;
 }
 
 export interface Gestor {
@@ -77,6 +78,7 @@ export interface Gestor {
   codigo: string;
   nombre: string;
   usuario_id: string | null;
+  acceso_activo?: boolean | null;
 }
 
 export interface Documento {
