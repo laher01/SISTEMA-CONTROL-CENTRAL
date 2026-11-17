@@ -21,3 +21,13 @@ describe("validación de creación manual", () => {
     expect(validarCamposManuales({ ...factura, importe_total: "1.234" }).importe_total).toBeTruthy();
   });
 });
+
+describe("GRE provisional", () => {
+  const guia = { serie: "EG07", correlativo: "526", serie_factura: "F001", correlativo_factura: "175", emisor_factura_ruc: "20614885085", ruc_receptor: "20523209176" };
+  it("no exige monto, moneda ni fecha de factura", () => {
+    expect(validarCamposManuales(guia, "GRR")).toEqual({});
+  });
+  it("no permite usar la serie propia de GRE como factura", () => {
+    expect(validarCamposManuales({ ...guia, serie_factura: "EG07" }, "GRR").serie_factura).toBeTruthy();
+  });
+});

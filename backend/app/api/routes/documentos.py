@@ -20,7 +20,7 @@ from starlette.datastructures import Headers
 from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado
 from app.core.config import Settings
-from app.enums import EstadoDocumento, Moneda, RolMiembro, TipoDocumento
+from app.enums import EstadoDocumento, Moneda, RolMiembro, TipoComprobante, TipoDocumento
 from app.models import (
     AlertaManual,
     Auditoria,
@@ -36,6 +36,7 @@ from app.models import (
     RelacionDocumento,
     SolicitudCargaEmisor,
     SolicitudRetiroMISD,
+    ahora,
 )
 from app.schemas import (
     DocumentoOut,
@@ -82,6 +83,7 @@ from app.services.ingesta import (
     ExpedienteNoEncontrado,
     crear_expediente,
     ingerir_documento,
+    registrar_referencia_gre,
     vincular_documento,
 )
 from app.services.jerarquia_documental import nombres_jerarquia
@@ -98,6 +100,7 @@ from app.services.permisos import (
     permiso_habilitado,
 )
 from app.services.procesamiento_documental import DocumentoNoProcesable, procesar
+from app.services.referencias_gre import ReferenciaFacturaGRE, extraer_referencias_factura_gre
 from app.services.relaciones_documentales import sugerir_relaciones
 from app.services.separador_pdf import analizar_paquete, extraer_fragmento
 from app.services.separador_vouchers_imagen import detectar_vouchers, recortar_voucher
@@ -2052,6 +2055,140 @@ def _automatizacion_ya_evaluada(documento: Documento) -> bool:
     }
 
 
+class ReferenciaGREManualIn(BaseModel):
+    serie_guia: str = Field(pattern=r"^[A-Z0-9]{4}$")
+    correlativo_guia: str = Field(pattern=r"^\d{1,32}$")
+    serie_factura: str = Field(pattern=r"^[FE][0-9]{3}$")
+    correlativo_factura: str = Field(pattern=r"^\d{1,8}$")
+    emisor_factura_ruc: str = Field(pattern=r"^\d{11}$")
+    receptor_ruc: str = Field(pattern=r"^\d{11}$")
+
+
+@router.get("/{documento_id}/referencia-gre")
+def sugerir_referencia_gre(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    documento_id: uuid.UUID,
+) -> dict[str, str | None]:
+    documento = _documento(session, tenant_id, documento_id)
+    _validar_ambito_documento(auth, documento, session)
+    ref = session.scalar(
+        select(ReferenciaGRE).where(
+            ReferenciaGRE.tenant_id == tenant_id,
+            ReferenciaGRE.documento_id == documento_id,
+        )
+    )
+    if ref is not None:
+        return {
+            "serie_factura": ref.serie,
+            "correlativo_factura": ref.correlativo,
+            "emisor_factura_ruc": ref.emisor_ruc,
+            "receptor_ruc": ref.receptor_ruc,
+        }
+    procesamiento = (documento.datos_extraidos or {}).get("procesamiento_documental")
+    texto = procesamiento.get("texto") if isinstance(procesamiento, dict) else None
+    referencias = extraer_referencias_factura_gre(texto if isinstance(texto, str) else "")
+    if len(referencias) != 1:
+        return {}
+    referencia = referencias[0]
+    return {
+        "serie_factura": referencia.serie,
+        "correlativo_factura": referencia.correlativo,
+        "emisor_factura_ruc": referencia.emisor_ruc,
+        "receptor_ruc": referencia.receptor_ruc,
+    }
+
+
+@router.post("/{documento_id}/referencia-gre")
+def confirmar_referencia_gre(
+    session: SessionDep,
+    settings: SettingsDep,
+    hoy: HoyDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    documento_id: uuid.UUID,
+    solicitud: ReferenciaGREManualIn,
+) -> dict[str, str]:
+    """Confirma una guía remitente sin crear ni contabilizar una factura."""
+    documento = _documento(session, tenant_id, documento_id)
+    _validar_ambito_documento(auth, documento, session)
+    session.refresh(documento, with_for_update=True)
+    if documento.deleted_at is not None or documento.expediente_id is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Documento no disponible para revisión")
+    if documento.tipo_documento != TipoDocumento.GRR:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Se requiere GRE remitente")
+    if (
+        solicitud.emisor_factura_ruc == solicitud.receptor_ruc
+        or int(solicitud.correlativo_factura) == 0
+        or int(solicitud.correlativo_guia) == 0
+    ):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Identidad fiscal inválida")
+    referencia = registrar_referencia_gre(
+        session,
+        documento,
+        ReferenciaFacturaGRE(
+            solicitud.serie_factura,
+            str(int(solicitud.correlativo_factura)),
+            solicitud.emisor_factura_ruc,
+            solicitud.receptor_ruc,
+        ),
+    )
+    datos = dict(documento.datos_extraidos or {})
+    datos["gre_referencia_confirmada"] = solicitud.model_dump(mode="json")
+    datos["automatizacion_documental"] = {
+        "version": 1,
+        "estado": "PENDIENTE_FACTURA",
+        "motivos": ["Referencia fiscal confirmada manualmente; esperando factura"],
+    }
+    datos.pop("gre_factura_pendiente", None)
+    documento.datos_extraidos = datos
+    documento.estado = EstadoDocumento.PENDIENTE_RELACION
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "GRE_REFERENCIA_CONFIRMADA_MANUALMENTE",
+        "documento",
+        documento.id,
+        {"actor": auth.codigo, "factura": f"{referencia.serie}-{referencia.correlativo}"},
+    )
+    consulta = (
+        select(Expediente)
+        .join(Documento, Documento.expediente_id == Expediente.id)
+        .where(
+            Expediente.tenant_id == tenant_id,
+            Expediente.deleted_at.is_(None),
+            Expediente.tipo_comprobante == TipoComprobante.FACT,
+            Expediente.serie == referencia.serie,
+            Expediente.correlativo == referencia.correlativo,
+            Expediente.emisor.has(Empresa.ruc == referencia.emisor_ruc),
+            Expediente.receptor.has(Empresa.ruc == referencia.receptor_ruc),
+            Expediente.usuario_id == documento.usuario_id,
+            Expediente.gestor_id == documento.gestor_id,
+            Documento.tenant_id == tenant_id,
+            Documento.deleted_at.is_(None),
+            Documento.tipo_documento == TipoDocumento.FACT,
+        )
+        .limit(2)
+    )
+    candidatos = list(session.scalars(consulta))
+    estado = "PENDIENTE_FACTURA"
+    if len(candidatos) == 1:
+        expediente = candidatos[0]
+        vincular_documento(session, settings, hoy, documento, expediente.id, TipoDocumento.GRR)
+        referencia.expediente_id = expediente.id
+        referencia.resuelta_at = ahora()
+        datos["automatizacion_documental"] = {
+            "version": 1,
+            "estado": "COMPLETADO",
+            "expediente_id": str(expediente.id),
+        }
+        documento.datos_extraidos = dict(datos)
+        estado = "COMPLETADO"
+    session.commit()
+    return {"estado": estado, "factura": f"{referencia.serie}-{referencia.correlativo}"}
+
+
 @router.put("/{documento_id}/extraccion-confirmada", response_model=DocumentoOut)
 def confirmar_extraccion(
     session: SessionDep,
@@ -2099,6 +2236,11 @@ def crear_expediente_asistido(
     """Materializa una extracción ya confirmada y vincula su documento atómicamente."""
     documento = _documento(session, tenant_id, documento_id)
     _validar_ambito_documento(auth, documento, session)
+    if documento.tipo_documento == TipoDocumento.GRR:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Las GRE remitente requieren confirmar la referencia de factura",
+        )
     gestor_id = documento.gestor_id
     campos = _campos_confirmados(documento)
     faltantes = [

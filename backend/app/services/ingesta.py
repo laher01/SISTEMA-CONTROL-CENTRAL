@@ -366,6 +366,10 @@ def _conciliar_guias_de_factura(
             continue
         if guia.expediente_id is not None:
             continue
+        if (guia.datos_extraidos or {}).get("gre_referencia_confirmada") and (
+            guia.usuario_id != expediente.usuario_id or guia.gestor_id != expediente.gestor_id
+        ):
+            continue
         if (
             guia.usuario_id is not None
             and expediente.usuario_id is not None

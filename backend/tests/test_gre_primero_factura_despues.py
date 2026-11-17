@@ -121,3 +121,57 @@ def test_gre_sunat_con_referencia_impresa_ambigua_no_inventa_factura(
     resumen = client.get("/api/v1/expedientes/resumen")
     assert resumen.status_code == 200
     assert resumen.json()["total_expedientes"] == 0
+
+
+def test_confirmacion_manual_gre_sin_importe_y_factura_posterior(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    texto = (
+        "GUÍA DE REMISIÓN ELECTRÓNICA REMITENTE\n"
+        "EG07-00000526\n"
+        f"Datos del Destinatario: RUC N° {RECEPTOR}\n"
+        "Documentos Relacionados:\n"
+        f"Factura N° 0002 8 - RUC N° {EMISOR}"
+    )
+    monkeypatch.setattr(
+        documentos_routes,
+        "procesar",
+        lambda *_: ResultadoProcesamiento(
+            texto=texto,
+            metodo="TEXTO_PDF",
+            motor="prueba",
+            paginas=1,
+            confianza=1.0,
+            sugerencia=sugerir_tipo(texto),
+        ),
+    )
+    guia = subir(client, "gre-manual.pdf", pdf_vacio())
+    assert guia["tipo_documento"] == "GRR"
+    url = f"/api/v1/documentos/{guia['id']}/referencia-gre"
+    datos = {
+        "serie_guia": "EG07",
+        "correlativo_guia": "526",
+        "serie_factura": "F001",
+        "correlativo_factura": "00000175",
+        "emisor_factura_ruc": EMISOR,
+        "receptor_ruc": RECEPTOR,
+    }
+    assert client.post(url, json={**datos, "serie_factura": "EG07"}).status_code == 422
+    for _ in range(2):
+        respuesta = client.post(url, json=datos)
+        assert respuesta.status_code == 200, respuesta.text
+    listado = client.get("/api/v1/documentos/provisionales-gre").json()
+    assert len(listado) == 1
+    assert listado[0]["factura"] == "F001-175"
+    assert listado[0]["monto_contabilizable"] == "0.00"
+    assert client.get("/api/v1/expedientes/resumen").json()["total_expedientes"] == 0
+    assert client.get(url).json()["serie_factura"] == "F001"
+    reproceso = client.post(f"/api/v1/documentos/{guia['id']}/procesar")
+    assert reproceso.status_code == 200, reproceso.text
+    assert client.get(url).json()["serie_factura"] == "F001"
+    factura_doc = subir(client, "factura-manual-gre.xml", factura(numero="F001-00000175"))
+    assert factura_doc["expediente_id"] is not None
+    final = client.get(f"/api/v1/documentos/{guia['id']}").json()
+    assert final["expediente_id"] == factura_doc["expediente_id"]
+    assert client.get("/api/v1/documentos/provisionales-gre").json() == []
+    assert client.post(url, json=datos).status_code == 409

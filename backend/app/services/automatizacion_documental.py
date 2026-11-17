@@ -119,6 +119,14 @@ def aplicar_automaticamente(
     documento: Documento,
     procesamiento: dict[str, object],
 ) -> ResultadoAutomatizacion:
+    if (
+        documento.expediente_id is None
+        and (documento.datos_extraidos or {}).get("gre_referencia_confirmada")
+        and documento.tipo_documento == TipoDocumento.GRR
+    ):
+        motivo = "Referencia fiscal confirmada manualmente; esperando factura"
+        _guardar_estado(documento, "PENDIENTE_FACTURA", (motivo,))
+        return ResultadoAutomatizacion("PENDIENTE_FACTURA", motivos=(motivo,))
     if procesamiento.get("requiere_ocr") is True:
         return _revision(documento, ["Hay páginas pendientes de lectura por OCR"])
     extraccion = procesamiento.get("extraccion_estructurada")
