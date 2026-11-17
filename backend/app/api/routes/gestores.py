@@ -11,15 +11,19 @@ from app.models import Gestor, Miembro
 from app.schemas import (
     AltaGestorOut,
     CredencialTemporalOut,
+    EstadoAccesoIn,
     GestorActualizar,
     GestorIn,
     GestorOut,
 )
 from app.security import (
     actualizar_login_cuenta,
+    cambiar_estado_acceso,
     crear_o_restablecer_cuenta,
     cuenta_administradora_responsable,
+    estados_acceso,
 )
+from app.services import auditoria
 
 router = APIRouter(prefix="/gestores", tags=["gestores"])
 
@@ -72,7 +76,7 @@ def listar(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
     usuario_id: uuid.UUID | None = None,
-) -> list[Gestor]:
+) -> list[GestorOut]:
     if auth.rol not in (
         RolMiembro.SUPERADMIN,
         RolMiembro.ADMINISTRADOR,
@@ -101,7 +105,11 @@ def listar(
         )
     elif usuario_id is not None:
         consulta = consulta.where(Gestor.usuario_id == usuario_id)
-    return list(session.scalars(consulta.order_by(Gestor.codigo)))
+    estados = estados_acceso(session, tenant_id, gestores=True)
+    return [
+        GestorOut.model_validate(g).model_copy(update={"acceso_activo": estados.get(g.id)})
+        for g in session.scalars(consulta.order_by(Gestor.codigo))
+    ]
 
 
 @router.patch("/{gestor_id}", response_model=GestorOut)
@@ -150,6 +158,32 @@ def actualizar(
             "El código/login de gestor ya existe",
         ) from exc
     return gestor
+
+
+@router.patch("/{gestor_id}/estado-acceso", response_model=GestorOut)
+def estado_acceso(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    gestor_id: uuid.UUID,
+    datos: EstadoAccesoIn,
+) -> GestorOut:
+    if auth.rol not in (RolMiembro.ADMINISTRADOR, RolMiembro.USUARIO):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No puede modificar el acceso")
+    gestor = _gestor_editable(session, tenant_id, auth, gestor_id)
+    cuenta = cambiar_estado_acceso(session, tenant_id, gestor.id, datos.activo, gestores=True)
+    if cuenta is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "No tiene una cuenta de acceso")
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "ESTADO_ACCESO_MODIFICADO",
+        "gestor",
+        gestor.id,
+        {"activo": datos.activo, "actor": str(auth.cuenta_id)},
+    )
+    session.commit()
+    return GestorOut.model_validate(gestor).model_copy(update={"acceso_activo": datos.activo})
 
 
 @router.post("/{gestor_id}/restablecer-acceso", response_model=CredencialTemporalOut)
