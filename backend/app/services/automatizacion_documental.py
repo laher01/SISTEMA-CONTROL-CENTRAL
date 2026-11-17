@@ -121,8 +121,8 @@ def aplicar_automaticamente(
 ) -> ResultadoAutomatizacion:
     if (
         documento.expediente_id is None
-        and documento.tipo_documento == TipoDocumento.GRR
         and (documento.datos_extraidos or {}).get("gre_referencia_confirmada")
+        and documento.tipo_documento == TipoDocumento.GRR
     ):
         motivo = "Referencia fiscal confirmada manualmente; esperando factura"
         _guardar_estado(documento, "PENDIENTE_FACTURA", (motivo,))
