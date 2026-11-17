@@ -4,6 +4,7 @@
 
 | ID | Trabajo | Área | Responsable | Estado | Rama / PR | Archivos previstos |
 | --- | --- | --- | --- | --- | --- | --- |
+| ORG-ESTADO-ACCESO | Activar/desactivar acceso de responsables, usuarios y gestores con auditoría | Organización | Chat operativo | EN DESARROLLO | `feat/organizacion-estado-acceso` | Rutas miembros/gestores, esquemas, servicio de cuentas, interfaz Organización y pruebas |
 | ORG-FILTROS-JERARQUIA | Filtrar gestores por usuario y usuarios por responsable desde el encabezado | Organización | Chat operativo | PR en borrador; tipado, lint y 72 pruebas de frontend aprobados localmente | `feat/filtros-jerarquia-organizacion` | `frontend/src/paginas/Organizacion.tsx` |
 | OCR-SUNAT-ECLIPSE | Clasificación SUNAT, partes y referencias GRE nativas | Operación documental | Chat operativo | PR #470 EN VALIDACIÓN; cinco PDF locales recuperados, CI pendiente; coordinar #462 (caché/layout) | `fix/sunat-eclipse-gre-native` | Extractor fiscal, disposición PDF, caché y regresiones sintéticas; no modifica permisos ni reglas de vinculación |
 | OCR-RHE-FECHA | Fecha de emisión RHE desde disposición visual, separada de observaciones | Operación documental | Chat operativo | EN DESARROLLO; coordinar solapamiento con #462 | `fix/rhe-fecha-emision-layout` | Procesamiento PDF, extractor fiscal, caché y regresión; no modifica creación de expedientes ni permisos |
