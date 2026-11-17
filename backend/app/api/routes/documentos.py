@@ -20,7 +20,7 @@ from starlette.datastructures import Headers
 from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado
 from app.core.config import Settings
-from app.enums import EstadoDocumento, Moneda, RolMiembro, TipoDocumento
+from app.enums import EstadoDocumento, Moneda, RolMiembro, TipoComprobante, TipoDocumento
 from app.models import (
     AlertaManual,
     Auditoria,
@@ -36,6 +36,7 @@ from app.models import (
     RelacionDocumento,
     SolicitudCargaEmisor,
     SolicitudRetiroMISD,
+    ahora,
 )
 from app.schemas import (
     DocumentoOut,
@@ -2102,6 +2103,8 @@ def sugerir_referencia_gre(
 @router.post("/{documento_id}/referencia-gre")
 def confirmar_referencia_gre(
     session: SessionDep,
+    settings: SettingsDep,
+    hoy: HoyDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
     documento_id: uuid.UUID,
@@ -2149,8 +2152,41 @@ def confirmar_referencia_gre(
         documento.id,
         {"actor": auth.codigo, "factura": f"{referencia.serie}-{referencia.correlativo}"},
     )
+    consulta = (
+        select(Expediente)
+        .join(Documento, Documento.expediente_id == Expediente.id)
+        .where(
+            Expediente.tenant_id == tenant_id,
+            Expediente.deleted_at.is_(None),
+            Expediente.tipo_comprobante == TipoComprobante.FACT,
+            Expediente.serie == referencia.serie,
+            Expediente.correlativo == referencia.correlativo,
+            Expediente.emisor.has(Empresa.ruc == referencia.emisor_ruc),
+            Expediente.receptor.has(Empresa.ruc == referencia.receptor_ruc),
+            Expediente.usuario_id == documento.usuario_id,
+            Expediente.gestor_id == documento.gestor_id,
+            Documento.tenant_id == tenant_id,
+            Documento.deleted_at.is_(None),
+            Documento.tipo_documento == TipoDocumento.FACT,
+        )
+        .limit(2)
+    )
+    candidatos = list(session.scalars(consulta))
+    estado = "PENDIENTE_FACTURA"
+    if len(candidatos) == 1:
+        expediente = candidatos[0]
+        vincular_documento(session, settings, hoy, documento, expediente.id, TipoDocumento.GRR)
+        referencia.expediente_id = expediente.id
+        referencia.resuelta_at = ahora()
+        datos["automatizacion_documental"] = {
+            "version": 1,
+            "estado": "COMPLETADO",
+            "expediente_id": str(expediente.id),
+        }
+        documento.datos_extraidos = dict(datos)
+        estado = "COMPLETADO"
     session.commit()
-    return {"estado": "PENDIENTE_FACTURA", "factura": f"{referencia.serie}-{referencia.correlativo}"}
+    return {"estado": estado, "factura": f"{referencia.serie}-{referencia.correlativo}"}
 
 
 @router.put("/{documento_id}/extraccion-confirmada", response_model=DocumentoOut)
@@ -2200,6 +2236,11 @@ def crear_expediente_asistido(
     """Materializa una extracción ya confirmada y vincula su documento atómicamente."""
     documento = _documento(session, tenant_id, documento_id)
     _validar_ambito_documento(auth, documento, session)
+    if documento.tipo_documento == TipoDocumento.GRR:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Las GRE remitente requieren confirmar la referencia de factura",
+        )
     gestor_id = documento.gestor_id
     campos = _campos_confirmados(documento)
     faltantes = [
