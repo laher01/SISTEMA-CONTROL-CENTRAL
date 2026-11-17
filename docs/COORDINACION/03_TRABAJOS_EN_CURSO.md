@@ -46,6 +46,7 @@
 | ITEMS-UND-006 | Reconocer encabezado Und. en tablas de facturas | Ítems | Orquestador | En validación local | fix/items-unidad-abreviada | Extractor por columnas |
 | EXPORT-XLSX-001 | Exportar filtros de Expedientes, Documentos y Registros | Documentos / Expedientes / Registros | Orquestador | Probado localmente; CI pendiente | feat/exportar-listas-excel | Listados, UI y generación XLSX |
 | PEND-MANUAL-UX-001 | Rediseñar creación asistida y validaciones | Pendientes / frontend | Chat actual — solicitud expresa | IMPLEMENTADO EN RAMA; cinco regresiones de validación añadidas; CI y autorización de integración pendientes | `fix/pendientes-formulario-manual` | `Pendientes.tsx`, CSS aislado, validación y pruebas; conserva API, permisos y prevención de duplicados |
+| GRE-MANUAL-001 | Creación manual provisional GRE remitente | Pendientes / documental | Chat actual | EN DESARROLLO | `fix/gre-provisional-manual` | Rutas documentos, automatización/ingesta, formulario y pruebas; reutiliza ReferenciaGRE sin monto ni migración |
 | ETAPA-7 | Landing/CMS/planes/NEXUS comercial | Comercial | Chat Etapa 7 | RESERVADO A OTRO CHAT | Consultar sus PR | Website y comercial |
 
 **Importante:** no se afirma que los PR abiertos no relacionados estén libres; inspeccionar GitHub antes de tocar archivos. Un cambio de estado requiere evidencia (commit, pruebas, PR o despliegue).
