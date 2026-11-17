@@ -66,6 +66,37 @@ def listar_lotes(
     return [LoteEmisorOut(**fila._mapping) for fila in filas]
 
 
+@router.get("/lotes/{ruc_emisor}", response_model=list[SolicitudOut])
+def detalle_lote(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    ruc_emisor: str,
+    gestor_solicitante_id: uuid.UUID | None = None,
+    offset: int = 0,
+    limite: int = 100,
+) -> list[SolicitudCargaEmisor]:
+    """Consulta paginada de integrantes de un lote, sin liberar documentos."""
+    if auth.rol != "ADMINISTRADOR":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Administración")
+    if offset < 0 or not 1 <= limite <= 200:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Paginación inválida")
+    modelo = SolicitudCargaEmisor
+    consulta = (
+        select(modelo)
+        .where(
+            modelo.tenant_id == tenant_id,
+            modelo.estado == "PENDIENTE",
+            modelo.ruc_emisor == ruc_emisor,
+            modelo.gestor_solicitante_id == gestor_solicitante_id,
+        )
+        .order_by(modelo.created_at, modelo.id)
+        .offset(offset)
+        .limit(limite)
+    )
+    return list(session.scalars(consulta))
+
+
 @router.get("", response_model=list[SolicitudOut])
 def listar(
     session: SessionDep,
