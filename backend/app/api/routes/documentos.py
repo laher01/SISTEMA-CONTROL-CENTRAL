@@ -2303,6 +2303,18 @@ def crear_expediente_asistido(
     correlativo = str(int(str(campos["correlativo"])))
     emisor_ruc = str(campos["ruc_emisor"])
     receptor_ruc = str(campos["ruc_receptor"])
+    if tipo_documento == TipoDocumento.FACT:
+        revision = revisar_asignaciones_emisor(
+            session, tenant_id, emisor_ruc, documento.usuario_id, gestor_id
+        )
+        if revision.estado in (
+            EstadoAmbitoEmisor.ASIGNADO_A_OTRO_GRUPO,
+            EstadoAmbitoEmisor.AMBIGUO,
+        ):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Proveedor requiere revisión administrativa de cartera",
+            )
     existente = buscar_expediente(
         session,
         tenant_id,
