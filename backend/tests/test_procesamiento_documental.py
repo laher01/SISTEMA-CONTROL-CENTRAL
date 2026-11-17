@@ -665,3 +665,52 @@ def test_detector_ose_no_confunde_nombres_comunes() -> None:
 
     assert detectar_formato_documental("FACTURA ELECTRONICA\nJOSE PEREZ\nE001-1") != "OSE"
     assert detectar_formato_documental("PROVEEDOR OSE\nFACTURA ELECTRONICA") == "OSE"
+
+
+@pytest.mark.parametrize(
+    ("numero", "dia", "pago", "total"),
+    [
+        ("9", "10", "27 DE FEBRERO DEL 2026", "785.00"),
+        ("10", "10", "27 DE FEBRERO DEL 2026", "825.00"),
+        ("12", "11", "04 DE MARZO DEL 2026", "825.00"),
+    ],
+)
+def test_rhe_fecha_visual_distinta_de_pago(
+    monkeypatch: pytest.MonkeyPatch, numero: str, dia: str, pago: str, total: str
+) -> None:
+    encabezado = (
+        "RECIBO POR HONORARIOS ELECTRONICO\n"
+        f"R.U.C. 10123456789\nNro: E001- {numero}\n"
+    )
+    observacion = f"Observación RECIBO POR PAGO REALIZADO EL {pago}\n"
+    pie = f"Total por honorarios: {total}\nTotal Neto Recibido: {total} SOLES"
+    plano = encabezado + observacion + f"{dia} Marzo 2026\nFecha de emisión\n" + pie
+    visual = (
+        encabezado
+        + observacion
+        + f"Fecha de emisión     {dia}    de   Marzo         del  2026\n"
+        + pie
+    )
+    monkeypatch.setattr(
+        PageObject,
+        "extract_text",
+        lambda self, **kwargs: visual if kwargs.get("extraction_mode") == "layout" else plano,
+    )
+    resultado = pd.procesar(pdf_vacio(), 10_000)
+    assert resultado.sugerencia.tipo == TipoDocumento.RHE
+    campos = resultado.a_dict()["extraccion_estructurada"]["campos"]
+    assert campos["fecha_emision"]["valor"] == f"2026-03-{dia}"
+    assert "Fecha de emisión" in campos["fecha_emision"]["evidencia"]
+    assert campos["importe_total"]["valor"] == total
+    assert campos["correlativo"]["valor"] == numero
+
+
+def test_fecha_rhe_visual_no_confunde_observacion() -> None:
+    from app.services.extraccion_campos import extraer_fecha_emision_rhe_etiquetada
+
+    texto = "Observación: RECIBO POR PAGO REALIZADO EL 27 DE FEBRERO DEL 2026"
+    assert extraer_fecha_emision_rhe_etiquetada(texto) is None
+    assert extraer_fecha_emision_rhe_etiquetada("Fecha de emisión: 31 de febrero del 2026") is None
+    assert extraer_fecha_emision_rhe_etiquetada(
+        "Fecha de emisión: 10/03/2026\nFecha de emisión: 11/03/2026"
+    ) is None
