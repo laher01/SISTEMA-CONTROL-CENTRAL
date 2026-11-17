@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
+import pytest
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -135,11 +136,13 @@ def test_emisor_asignado_a_otro_gestor_se_identifica_sin_mutaciones(
     assert aislado.estado == EstadoAmbitoEmisor.SIN_ASIGNACION
 
 
+@pytest.mark.parametrize("derivar", [False, True])
 def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
     client,
     session: Session,
     auth_prueba,
     settings,
+    derivar: bool,
 ):
     from sqlalchemy import func, select
 
@@ -336,15 +339,23 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
         "gestor_destino_id": str(gestor.id),
         "referencia_sustento": "Verificación documental de prueba",
     }
-    assert client.post(
+    destino_invalido = client.post(
         ruta_revision, json={**revision, "gestor_destino_id": str(uuid.uuid4())}
-    ).status_code == 409
+    )
+    assert destino_invalido.status_code == 409
     assert client.post(ruta_rechazo, json={**payload, "cantidad_esperada": 3}).status_code == 409
-    rechazo = client.post(ruta_rechazo, json=payload)
-    assert rechazo.status_code == 200, rechazo.text
-    assert rechazo.json() == {"rechazadas": 2}
+    if derivar:
+        resultado = client.post(ruta_revision, json=revision)
+        assert resultado.status_code == 200, resultado.text
+        assert resultado.json() == {"resueltas": 2}
+        estado_esperado = "DERIVADA_REVISION"
+    else:
+        rechazo = client.post(ruta_rechazo, json=payload)
+        assert rechazo.status_code == 200, rechazo.text
+        assert rechazo.json() == {"rechazadas": 2}
+        estado_esperado = "RECHAZADA"
     session.expire_all()
-    assert solicitud.estado == "RECHAZADA"
+    assert solicitud.estado == estado_esperado
     assert ruta_temporal.exists()
     assert client.get(ruta_lotes).json() == []
     assert client.post(ruta_rechazo, json=payload).status_code == 409
