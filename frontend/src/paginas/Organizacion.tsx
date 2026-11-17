@@ -644,17 +644,6 @@ function OrganizacionUsuario({ sesion }: { sesion: SesionActual }) {
     }
   };
 
-  const cambiarAcceso = async (g: Gestor) => {
-    try {
-      await enviarJson(`/api/v1/gestores/${g.id}/estado-acceso`, "PATCH", { activo: !g.acceso_activo });
-      setMensaje(g.acceso_activo ? "Acceso desactivado. Sesiones cerradas." : "Acceso activado.");
-      setCredencial(null);
-      recargar();
-    } catch (e) {
-      setMensaje(e instanceof Error ? e.message : String(e));
-    }
-  };
-
   const restablecer = async (g: Gestor) => {
     const nueva = await enviarJson<CredencialTemporal>(
       "/api/v1/gestores/" + g.id + "/restablecer-acceso",
@@ -699,7 +688,6 @@ function OrganizacionUsuario({ sesion }: { sesion: SesionActual }) {
           setNombre(g.nombre);
         }}
         alRestablecer={(g) => void restablecer(g)}
-        alCambiarAcceso={(g) => void cambiarAcceso(g)}
         ocultarUsuario
       />
     </>
@@ -730,7 +718,7 @@ function TablaGestores({
   usuarios: Miembro[];
   alEditar: (gestor: Gestor) => void;
   alRestablecer: (gestor: Gestor) => void;
-  alCambiarAcceso: (gestor: Gestor) => void;
+  alCambiarAcceso?: (gestor: Gestor) => void;
   ocultarUsuario?: boolean;
 }) {
   const [filtroUsuario, setFiltroUsuario] = useState("");
@@ -762,7 +750,7 @@ function TablaGestores({
                 <td>{g.codigo} · {g.nombre}</td>
                 <td>{g.porcentaje_comision != null ? g.porcentaje_comision + "%" : "Sin configurar"}</td>
                 {!ocultarUsuario && <td>{usuario ? usuario.codigo + " · " + usuario.nombre : "Sin usuario"}</td>}
-                <td><EstadoAcceso activo={g.acceso_activo} alCambiar={() => alCambiarAcceso(g)} /></td>
+                <td><EstadoAcceso activo={g.acceso_activo} alCambiar={alCambiarAcceso ? () => alCambiarAcceso(g) : undefined} /></td>
                 <td>
                   <button type="button" onClick={() => alEditar(g)}>Editar</button>{" "}
                   <button type="button" onClick={() => alRestablecer(g)}>Restablecer acceso</button>
