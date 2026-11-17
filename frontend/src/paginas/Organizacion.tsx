@@ -17,7 +17,7 @@ const ROLES: RolMiembro[] = ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSA
 
 export default function Organizacion({ sesion }: { sesion: SesionActual }) {
   if (sesion.rol === "SUPERADMIN" || sesion.rol === "ADMINISTRADOR") {
-    return <OrganizacionAdmin />;
+    return <OrganizacionAdmin permiteRevisionEmisores={sesion.rol === "ADMINISTRADOR"} />;
   }
   if (sesion.rol === "RESPONSABLE") return <OrganizacionResponsable />;
   if (sesion.rol === "USUARIO") return <OrganizacionUsuario sesion={sesion} />;
@@ -70,7 +70,47 @@ function EstadoAcceso({ activo, alCambiar }: { activo?: boolean | null; alCambia
   </>;
 }
 
-function OrganizacionAdmin() {
+interface LoteEmisor {
+  ruc_emisor: string;
+  gestor_solicitante_id: string | null;
+  cantidad_documentos: number;
+  cantidad_solicitudes: number;
+}
+
+function RevisionEmisores({ gestores, miembros, empresas }: {
+  gestores: Gestor[];
+  miembros: Miembro[];
+  empresas: Empresa[];
+}) {
+  const { datos, error, cargando, recargar } = useDatos<LoteEmisor[]>("/api/v1/solicitudes-carga-emisor/lotes");
+  return <section>
+    <h3>Revisión de proveedores pendientes</h3>
+    <p>Los documentos en cuarentena no se incorporan a la contabilidad. La revisión de cartera no acredita la validez fiscal.</p>
+    <button type="button" onClick={() => recargar()}>Actualizar solicitudes</button>
+    {cargando && <p>Cargando solicitudes…</p>}
+    {error && <p role="alert">{String(error)}</p>}
+    {!cargando && !error && datos?.length === 0 && <p>No hay solicitudes pendientes.</p>}
+    {!!datos?.length && <div className="tabla-scroll"><table>
+      <thead><tr><th>RUC</th><th>Proveedor</th><th>Gestor solicitante</th><th>Usuario</th><th>Responsable</th><th>Archivos únicos</th><th>Solicitudes</th></tr></thead>
+      <tbody>{datos.map((lote) => {
+        const gestor = gestores.find((g) => g.id === lote.gestor_solicitante_id);
+        const usuario = miembros.find((m) => m.id === gestor?.usuario_id);
+        const responsable = miembros.find((m) => m.id === usuario?.responsable_id);
+        const empresa = empresas.find((e) => e.ruc === lote.ruc_emisor);
+        return <tr key={lote.ruc_emisor + ":" + lote.gestor_solicitante_id}>
+          <td>{lote.ruc_emisor}</td><td>{empresa?.razon_social ?? "Sin nombre registrado"}</td>
+          <td>{gestor ? gestor.codigo + " · " + gestor.nombre : "No identificado"}</td>
+          <td>{usuario ? usuario.codigo + " · " + usuario.nombre : "No identificado"}</td>
+          <td>{responsable ? responsable.codigo + " · " + responsable.nombre : "No identificado"}</td>
+          <td>{lote.cantidad_documentos}</td><td>{lote.cantidad_solicitudes}</td>
+        </tr>;
+      })}</tbody>
+    </table></div>}
+  </section>;
+}
+
+function OrganizacionAdmin({ permiteRevisionEmisores }: { permiteRevisionEmisores: boolean }) {
+  const [verRevisionEmisores, setVerRevisionEmisores] = useState(false);
   const { datos: miembros, error, cargando, recargar } = useDatos<Miembro[]>("/api/v1/miembros");
   const { datos: gestores, recargar: recargarGestores } = useDatos<Gestor[]>("/api/v1/gestores");
   const { datos: vinculos, recargar: recargarVinculos } = useDatos<VinculoGerencia[]>("/api/v1/gerencias/vinculos");
@@ -294,6 +334,12 @@ function OrganizacionAdmin() {
   return (
     <>
       <h2>Organización</h2>
+      {permiteRevisionEmisores && <>
+        <button type="button" onClick={() => setVerRevisionEmisores((v) => !v)}>
+          {verRevisionEmisores ? "Ocultar revisión de proveedores" : "Revisión de proveedores"}
+        </button>
+        {verRevisionEmisores && <RevisionEmisores gestores={gestores ?? []} miembros={miembros ?? []} empresas={empresas ?? []} />}
+      </>}
       <p className="tenue">
         Administración crea miembros y puede crear Gestores. Cada alta genera una clave temporal
         que debe cambiarse en el primer inicio de sesión.
