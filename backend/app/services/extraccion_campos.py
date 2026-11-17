@@ -1535,6 +1535,24 @@ def _normalizar_fecha(valor: str) -> str | None:
         return None
 
 
+def extraer_fecha_emision_rhe_etiquetada(texto: str) -> CampoExtraido | None:
+    """Obtiene únicamente fechas de emisión asociadas a su etiqueta en la misma fila."""
+    candidatos: dict[str, str] = {}
+    for linea in texto.splitlines():
+        for literal in FECHA_LITERAL_ES.finditer(linea):
+            valor = _normalizar_fecha_literal_es(*literal.groups())
+            if valor:
+                candidatos[valor] = literal.group()
+        for numerica in FECHA_ETIQUETADA.finditer(linea):
+            valor = _normalizar_fecha(numerica.group(1))
+            if valor:
+                candidatos[valor] = numerica.group()
+    if len(candidatos) == 1:
+        valor, evidencia = next(iter(candidatos.items()))
+        return CampoExtraido(valor, 0.98, evidencia)
+    return None
+
+
 def _normalizar_fecha_literal_es(dia: str, mes: str, anio: str) -> str | None:
     try:
         numero_mes = MESES_ES[_sin_tildes(mes).upper()]
