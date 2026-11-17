@@ -13,11 +13,18 @@ from app.models import Gestor, Miembro
 from app.schemas import (
     AltaMiembroOut,
     CredencialTemporalOut,
+    EstadoAccesoIn,
     MiembroActualizar,
     MiembroIn,
     MiembroOut,
 )
-from app.security import actualizar_login_cuenta, crear_o_restablecer_cuenta
+from app.security import (
+    actualizar_login_cuenta,
+    cambiar_estado_acceso,
+    crear_o_restablecer_cuenta,
+    estados_acceso,
+)
+from app.services import auditoria
 
 router = APIRouter(prefix="/miembros", tags=["miembros"])
 
@@ -107,7 +114,7 @@ def listar(
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
     rol: RolMiembro | None = None,
-) -> list[Miembro]:
+) -> list[MiembroOut]:
     if auth.rol in (RolMiembro.GERENTE, RolMiembro.SECRETARIA):
         if rol != RolMiembro.RESPONSABLE:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo puede consultar Responsables")
@@ -120,7 +127,11 @@ def listar(
     )
     if rol is not None:
         consulta = consulta.where(Miembro.rol == rol)
-    return list(session.scalars(consulta.order_by(Miembro.rol, Miembro.codigo)))
+    estados = estados_acceso(session, tenant_id)
+    return [
+        MiembroOut.model_validate(m).model_copy(update={"acceso_activo": estados.get(m.id)})
+        for m in session.scalars(consulta.order_by(Miembro.rol, Miembro.codigo))
+    ]
 
 
 class AltaResponsableOperativoIn(BaseModel):
@@ -483,6 +494,36 @@ def actualizar(
             "El código/login del miembro ya existe",
         ) from exc
     return miembro
+
+
+@router.patch("/{miembro_id}/estado-acceso", response_model=MiembroOut)
+def estado_acceso(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    miembro_id: uuid.UUID,
+    datos: EstadoAccesoIn,
+) -> MiembroOut:
+    if auth.rol != RolMiembro.ADMINISTRADOR:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo Administración modifica el acceso")
+    miembro = session.get(Miembro, miembro_id)
+    if miembro is None or miembro.tenant_id != tenant_id or miembro.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Miembro no encontrado")
+    if miembro.rol not in (RolMiembro.USUARIO, RolMiembro.RESPONSABLE):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Rol no permitido")
+    cuenta = cambiar_estado_acceso(session, tenant_id, miembro.id, datos.activo)
+    if cuenta is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "No tiene una cuenta de acceso")
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "ESTADO_ACCESO_MODIFICADO",
+        "miembro",
+        miembro.id,
+        {"activo": datos.activo, "actor": str(auth.cuenta_id)},
+    )
+    session.commit()
+    return MiembroOut.model_validate(miembro).model_copy(update={"acceso_activo": datos.activo})
 
 
 @router.post("/{miembro_id}/restablecer-acceso", response_model=CredencialTemporalOut)

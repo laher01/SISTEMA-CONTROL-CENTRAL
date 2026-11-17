@@ -17,7 +17,7 @@ const ROLES: RolMiembro[] = ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSA
 
 export default function Organizacion({ sesion }: { sesion: SesionActual }) {
   if (sesion.rol === "SUPERADMIN" || sesion.rol === "ADMINISTRADOR") {
-    return <OrganizacionAdmin />;
+    return <OrganizacionAdmin permiteRevisionEmisores={sesion.rol === "ADMINISTRADOR"} />;
   }
   if (sesion.rol === "RESPONSABLE") return <OrganizacionResponsable />;
   if (sesion.rol === "USUARIO") return <OrganizacionUsuario sesion={sesion} />;
@@ -61,7 +61,139 @@ function coincideAsignacion(filtro: string, asignacion?: string | null) {
   return !filtro || (filtro === "sin-asignar" ? !asignacion : asignacion === filtro);
 }
 
-function OrganizacionAdmin() {
+function EstadoAcceso({ activo, alCambiar }: { activo?: boolean | null; alCambiar?: () => void }) {
+  return <>
+    <span>{activo == null ? "Sin cuenta" : activo ? "Activo" : "Inactivo"}</span>
+    {activo != null && alCambiar && <>{" "}
+      <button type="button" onClick={alCambiar}>{activo ? "Desactivar" : "Activar"}</button>
+    </>}
+  </>;
+}
+
+interface LoteEmisor {
+  ruc_emisor: string;
+  gestor_solicitante_id: string | null;
+  cantidad_documentos: number;
+  cantidad_solicitudes: number;
+}
+
+interface SolicitudEmisor {
+  id: string;
+  gestor_propietario_id: string | null;
+  responsable_propietario_id: string | null;
+  estado: string;
+}
+
+function DetalleLoteEmisor({ lote, gestores, miembros, alResolver }: {
+  lote: LoteEmisor;
+  gestores: Gestor[];
+  miembros: Miembro[];
+  alResolver: () => void;
+}) {
+  const [pagina, setPagina] = useState(0);
+  const [motivo, setMotivo] = useState("");
+  const [accion, setAccion] = useState("RECHAZAR");
+  const [sustento, setSustento] = useState("");
+  const [destino, setDestino] = useState("");
+  const [resolviendo, setResolviendo] = useState(false);
+  const [errorDecision, setErrorDecision] = useState("");
+  const parametros = new URLSearchParams({ offset: String(pagina * 100), limite: "100" });
+  if (lote.gestor_solicitante_id) parametros.set("gestor_solicitante_id", lote.gestor_solicitante_id);
+  const { datos, error, cargando } = useDatos<SolicitudEmisor[]>(
+    "/api/v1/solicitudes-carga-emisor/lotes/" + encodeURIComponent(lote.ruc_emisor) + "?" + parametros.toString()
+  );
+  const rechazar = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!motivo.trim() || resolviendo) return;
+    setResolviendo(true);
+    setErrorDecision("");
+    try {
+      const ruta = accion === "RECHAZAR" ? "/rechazar" : "/resolver-revision";
+      await enviarJson("/api/v1/solicitudes-carga-emisor/lotes/" + encodeURIComponent(lote.ruc_emisor) + ruta, "POST", {
+        gestor_solicitante_id: lote.gestor_solicitante_id,
+        cantidad_esperada: lote.cantidad_solicitudes,
+        observacion: motivo.trim(),
+        ...(accion === "RECHAZAR" ? {} : { accion, referencia_sustento: sustento.trim(), gestor_destino_id: accion === "VALIDAR_REVISION" ? lote.gestor_solicitante_id : destino }),
+      });
+      alResolver();
+    } catch (e) {
+      setErrorDecision(e instanceof Error ? e.message : String(e));
+    } finally {
+      setResolviendo(false);
+    }
+  };
+  return <section>
+    <h4>Solicitudes de {lote.ruc_emisor}</h4>
+    {error && <p role="alert">{String(error)}</p>}
+    {cargando && <p>Cargando detalle…</p>}
+    {!!datos?.length && <table>
+      <thead><tr><th>Solicitud</th><th>Gestor de cartera</th><th>Responsable de cartera</th><th>Estado</th></tr></thead>
+      <tbody>{datos.map((solicitud) => <tr key={solicitud.id}>
+        <td>{solicitud.id}</td>
+        <td>{gestores.find((g) => g.id === solicitud.gestor_propietario_id)?.nombre ?? "Por verificar"}</td>
+        <td>{miembros.find((m) => m.id === solicitud.responsable_propietario_id)?.nombre ?? "Por verificar"}</td>
+        <td>{solicitud.estado}</td>
+      </tr>)}</tbody>
+    </table>}
+    {!cargando && !error && datos?.length === 0 && <p>No hay más solicitudes.</p>}
+    <button type="button" disabled={pagina === 0 || cargando} onClick={() => setPagina((p) => p - 1)}>Anterior</button>
+    <button type="button" disabled={cargando || (datos?.length ?? 0) < 100} onClick={() => setPagina((p) => p + 1)}>Siguiente</button>
+    <form onSubmit={(e) => void rechazar(e)}>
+      <label>Decisión <select value={accion} onChange={(e) => setAccion(e.target.value)}>
+        <option value="RECHAZAR">Rechazar lote</option>
+        <option value="VALIDAR_REVISION" disabled={!lote.gestor_solicitante_id}>Validar para revisión fiscal</option>
+        <option value="DERIVAR_REVISION">Derivar revisión al propietario</option>
+      </select></label>
+      {accion !== "RECHAZAR" && <label>Referencia del sustento <input value={sustento} onChange={(e) => setSustento(e.target.value)} maxLength={200} required /></label>}
+      {accion === "DERIVAR_REVISION" && <label>Gestor propietario <select value={destino} onChange={(e) => setDestino(e.target.value)} required>
+        <option value="">Seleccione gestor</option>
+        {gestores.filter((g) => datos?.some((d) => d.gestor_propietario_id === g.id)).map((g) => <option key={g.id} value={g.id}>{g.codigo} · {g.nombre}</option>)}
+      </select></label>}
+      <label>Motivo de la decisión <input value={motivo} onChange={(e) => setMotivo(e.target.value)} maxLength={500} required /></label>
+      <button type="submit" disabled={!motivo.trim() || resolviendo || (accion !== "RECHAZAR" && !sustento.trim()) || (accion === "DERIVAR_REVISION" && !destino)}>{accion === "RECHAZAR" ? "Rechazar" : "Resolver revisión de"} {lote.cantidad_solicitudes} solicitudes</button>
+      <p>Los originales quedan en cuarentena y no se contabilizan.</p>
+      {errorDecision && <p role="alert">{errorDecision}</p>}
+    </form>
+  </section>;
+}
+
+function RevisionEmisores({ gestores, miembros, empresas }: {
+  gestores: Gestor[];
+  miembros: Miembro[];
+  empresas: Empresa[];
+}) {
+  const [loteSeleccionado, setLoteSeleccionado] = useState<LoteEmisor | null>(null);
+  const { datos, error, cargando, recargar } = useDatos<LoteEmisor[]>("/api/v1/solicitudes-carga-emisor/lotes");
+  return <section>
+    <h3>Revisión de proveedores pendientes</h3>
+    <p>Los documentos en cuarentena no se incorporan a la contabilidad. La revisión de cartera no acredita la validez fiscal.</p>
+    <button type="button" onClick={() => recargar()}>Actualizar solicitudes</button>
+    {cargando && <p>Cargando solicitudes…</p>}
+    {error && <p role="alert">{String(error)}</p>}
+    {!cargando && !error && datos?.length === 0 && <p>No hay solicitudes pendientes.</p>}
+    {!!datos?.length && <div className="tabla-scroll"><table>
+      <thead><tr><th>RUC</th><th>Proveedor</th><th>Gestor solicitante</th><th>Usuario</th><th>Responsable</th><th>Archivos únicos</th><th>Solicitudes</th><th>Detalle</th></tr></thead>
+      <tbody>{datos.map((lote) => {
+        const gestor = gestores.find((g) => g.id === lote.gestor_solicitante_id);
+        const usuario = miembros.find((m) => m.id === gestor?.usuario_id);
+        const responsable = miembros.find((m) => m.id === usuario?.responsable_id);
+        const empresa = empresas.find((e) => e.ruc === lote.ruc_emisor);
+        return <tr key={lote.ruc_emisor + ":" + lote.gestor_solicitante_id}>
+          <td>{lote.ruc_emisor}</td><td>{empresa?.razon_social ?? "Sin nombre registrado"}</td>
+          <td>{gestor ? gestor.codigo + " · " + gestor.nombre : "No identificado"}</td>
+          <td>{usuario ? usuario.codigo + " · " + usuario.nombre : "No identificado"}</td>
+          <td>{responsable ? responsable.codigo + " · " + responsable.nombre : "No identificado"}</td>
+          <td>{lote.cantidad_documentos}</td><td>{lote.cantidad_solicitudes}</td>
+          <td><button type="button" onClick={() => setLoteSeleccionado(lote)}>Ver solicitudes</button></td>
+        </tr>;
+      })}</tbody>
+    </table></div>}
+    {loteSeleccionado && <DetalleLoteEmisor key={loteSeleccionado.ruc_emisor + ":" + loteSeleccionado.gestor_solicitante_id} lote={loteSeleccionado} gestores={gestores} miembros={miembros} alResolver={() => { setLoteSeleccionado(null); recargar(); }} />}
+  </section>;
+}
+
+function OrganizacionAdmin({ permiteRevisionEmisores }: { permiteRevisionEmisores: boolean }) {
+  const [verRevisionEmisores, setVerRevisionEmisores] = useState(false);
   const { datos: miembros, error, cargando, recargar } = useDatos<Miembro[]>("/api/v1/miembros");
   const { datos: gestores, recargar: recargarGestores } = useDatos<Gestor[]>("/api/v1/gestores");
   const { datos: vinculos, recargar: recargarVinculos } = useDatos<VinculoGerencia[]>("/api/v1/gerencias/vinculos");
@@ -224,6 +356,19 @@ function OrganizacionAdmin() {
     }
   };
 
+  const cambiarAcceso = async (tipo: "miembros" | "gestores", id: string, activo: boolean) => {
+    try {
+      setMensaje("");
+      await enviarJson(`/api/v1/${tipo}/${id}/estado-acceso`, "PATCH", { activo });
+      setMensaje(activo ? "Acceso activado." : "Acceso desactivado. Sesiones cerradas.");
+      setCredencial(null);
+      recargar();
+      recargarGestores();
+    } catch (e) {
+      setMensaje(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const restablecerMiembro = async (miembro: Miembro) => {
     setMensaje("");
     const nueva = await enviarJson<CredencialTemporal>(
@@ -272,6 +417,12 @@ function OrganizacionAdmin() {
   return (
     <>
       <h2>Organización</h2>
+      {permiteRevisionEmisores && <>
+        <button type="button" onClick={() => setVerRevisionEmisores((v) => !v)}>
+          {verRevisionEmisores ? "Ocultar revisión de proveedores" : "Revisión de proveedores"}
+        </button>
+        {verRevisionEmisores && <RevisionEmisores gestores={gestores ?? []} miembros={miembros ?? []} empresas={empresas ?? []} />}
+      </>}
       <p className="tenue">
         Administración crea miembros y puede crear Gestores. Cada alta genera una clave temporal
         que debe cambiarse en el primer inicio de sesión.
@@ -475,10 +626,11 @@ function OrganizacionAdmin() {
               {pestanaAdmin === "USUARIO" && <FiltroColumna titulo="Responsable" etiqueta="Filtrar miembros por responsable"
                 todos="Todos los responsables" sinAsignar="Sin responsable"
                 opciones={responsables} valor={filtroResponsable} alCambiar={setFiltroResponsable} />}
+              {(pestanaAdmin === "USUARIO" || pestanaAdmin === "RESPONSABLE") && <th>Estado de acceso</th>}
               <th>Acciones</th></tr></thead>
             <tbody>
               {pestanaAdmin === "USUARIO" && miembrosVisibles.length === 0 && filtroResponsable &&
-                <tr><td colSpan={7}>No hay usuarios para este filtro.</td></tr>}
+                <tr><td colSpan={8}>No hay usuarios para este filtro.</td></tr>}
               {miembrosVisibles.map((m) => (
                 <tr key={m.id}>
                   <td>{m.codigo}</td><td>{m.nombre}</td><td>{m.rol}</td>
@@ -487,6 +639,9 @@ function OrganizacionAdmin() {
                   {pestanaAdmin === "USUARIO" && <td>
                     {responsables.find((r) => r.id === m.responsable_id)?.nombre ??
                       (m.responsable_id ? "No disponible" : "Sin asignar")}
+                  </td>}
+                  {(m.rol === "USUARIO" || m.rol === "RESPONSABLE") && <td>
+                    <EstadoAcceso activo={m.acceso_activo} alCambiar={() => void cambiarAcceso("miembros", m.id, !m.acceso_activo)} />
                   </td>}
                   <td>
                     <button type="button" onClick={() => {
@@ -551,6 +706,7 @@ function OrganizacionAdmin() {
               setPorcentajeGestor(g.porcentaje_comision ?? "");
             }}
             alRestablecer={(g) => void restablecerGestor(g)}
+            alCambiarAcceso={(g) => void cambiarAcceso("gestores", g.id, !g.acceso_activo)}
           />
         </section>}
       </div>
@@ -684,12 +840,14 @@ function TablaGestores({
   usuarios,
   alEditar,
   alRestablecer,
+  alCambiarAcceso,
   ocultarUsuario = false,
 }: {
   gestores: Gestor[];
   usuarios: Miembro[];
   alEditar: (gestor: Gestor) => void;
   alRestablecer: (gestor: Gestor) => void;
+  alCambiarAcceso?: (gestor: Gestor) => void;
   ocultarUsuario?: boolean;
 }) {
   const [filtroUsuario, setFiltroUsuario] = useState("");
@@ -707,12 +865,13 @@ function TablaGestores({
             {!ocultarUsuario && <FiltroColumna titulo="Usuario" etiqueta="Filtrar gestores por usuario"
               todos="Todos los usuarios" sinAsignar="Sin usuario"
               opciones={usuarios} valor={filtroUsuario} alCambiar={setFiltroUsuario} />}
+            <th>Estado de acceso</th>
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
           {!ocultarUsuario && gestoresVisibles.length === 0 && filtroUsuario &&
-            <tr><td colSpan={4}>No hay gestores para este filtro.</td></tr>}
+            <tr><td colSpan={5}>No hay gestores para este filtro.</td></tr>}
           {gestoresVisibles.map((g) => {
             const usuario = usuarios.find((u) => u.id === g.usuario_id);
             return (
@@ -720,6 +879,7 @@ function TablaGestores({
                 <td>{g.codigo} · {g.nombre}</td>
                 <td>{g.porcentaje_comision != null ? g.porcentaje_comision + "%" : "Sin configurar"}</td>
                 {!ocultarUsuario && <td>{usuario ? usuario.codigo + " · " + usuario.nombre : "Sin usuario"}</td>}
+                <td><EstadoAcceso activo={g.acceso_activo} alCambiar={alCambiarAcceso ? () => alCambiarAcceso(g) : undefined} /></td>
                 <td>
                   <button type="button" onClick={() => alEditar(g)}>Editar</button>{" "}
                   <button type="button" onClick={() => alRestablecer(g)}>Restablecer acceso</button>

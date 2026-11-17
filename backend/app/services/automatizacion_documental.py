@@ -18,6 +18,7 @@ from app.core.config import Settings
 from app.enums import EstadoDocumento, Moneda, TipoComprobante, TipoDocumento
 from app.models import Documento, Empresa, Expediente
 from app.services import auditoria
+from app.services.ambito_emisor import EstadoAmbitoEmisor, revisar_asignaciones_emisor
 from app.services.contabilidad_items_rhe import registrar_item_rhe
 from app.services.contabilidad_items_ubl import registrar_items_pdf_estacion
 from app.services.expedientes import (
@@ -273,6 +274,16 @@ def aplicar_automaticamente(
         importe_total = Decimal(campos["importe_total"])
     except (KeyError, ValueError, InvalidOperation) as exc:
         return _revision(documento, [f"Los campos fiscales no tienen un formato válido: {exc}"])
+
+    if tipo == TipoDocumento.FACT:
+        revision = revisar_asignaciones_emisor(
+            session, documento.tenant_id, emisor_ruc, documento.usuario_id, documento.gestor_id
+        )
+        if revision.estado in (
+            EstadoAmbitoEmisor.ASIGNADO_A_OTRO_GRUPO,
+            EstadoAmbitoEmisor.AMBIGUO,
+        ):
+            return _revision(documento, ["Proveedor requiere revisión administrativa de cartera"])
 
     campos_confirmados = {campo: campos[campo] for campo in CAMPOS_FISCALES}
     for opcional in ("razon_social_emisor", "razon_social_receptor"):

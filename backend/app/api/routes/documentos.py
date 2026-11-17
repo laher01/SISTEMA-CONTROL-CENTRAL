@@ -640,6 +640,41 @@ async def subir_documento(
                 # El archivo permanece en área de cuarentena, fuera de los
                 # listados, y solo la API de revisión puede liberarlo.
                 huella = hashlib.sha256(subido.contenido).hexdigest()
+                bloquear_clave_archivo(
+                    session, tenant_id, f"emisor:{ubl.emisor.ruc}:gestor:{gestor_id}"
+                )
+                pendiente = session.scalar(
+                    select(SolicitudCargaEmisor)
+                    .where(
+                        SolicitudCargaEmisor.tenant_id == tenant_id,
+                        SolicitudCargaEmisor.ruc_emisor == ubl.emisor.ruc,
+                        SolicitudCargaEmisor.gestor_solicitante_id == gestor_id,
+                        SolicitudCargaEmisor.sha256_archivo == huella,
+                        SolicitudCargaEmisor.estado == "PENDIENTE",
+                    )
+                    .limit(1)
+                )
+                if pendiente is not None:
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        {
+                            "codigo": "EMISOR_REQUIERE_AUTORIZACION",
+                            "solicitud_id": str(pendiente.id),
+                            "mensaje": "Archivo ya pendiente de autorización",
+                            "ruc_emisor": ubl.emisor.ruc,
+                            "estado": revision.estado.value,
+                        },
+                    )
+                lote_existente = session.scalar(
+                    select(SolicitudCargaEmisor.id)
+                    .where(
+                        SolicitudCargaEmisor.tenant_id == tenant_id,
+                        SolicitudCargaEmisor.ruc_emisor == ubl.emisor.ruc,
+                        SolicitudCargaEmisor.gestor_solicitante_id == gestor_id,
+                        SolicitudCargaEmisor.estado == "PENDIENTE",
+                    )
+                    .limit(1)
+                )
                 solicitud = SolicitudCargaEmisor(
                     tenant_id=tenant_id,
                     ruc_emisor=ubl.emisor.ruc,
@@ -658,23 +693,24 @@ async def subir_documento(
                 solicitud.ruta_temporal = almacen.guardar(
                     tenant_id, f"cuarentena-{solicitud.id}-{huella}", subido.contenido
                 )
-                session.add(
-                    AlertaManual(
-                        tenant_id=tenant_id,
-                        creado_por_codigo=auth.codigo,
-                        creado_por_rol=auth.rol,
-                        destinatario_usuario_id=revision.responsable_propietario_id,
-                        destinatario_gestor_id=revision.gestor_propietario_id,
-                        para_administracion=True,
-                        asunto="Autorización de documento de empresa ajena",
-                        mensaje=(
-                            f"Solicitud {solicitud.id}; emisor {ubl.emisor.ruc}; "
-                            f"solicitante {auth.codigo}; gestor propietario "
-                            f"{revision.gestor_propietario_id}; responsable "
-                            f"{revision.responsable_propietario_id}."
-                        ),
+                if lote_existente is None:
+                    session.add(
+                        AlertaManual(
+                            tenant_id=tenant_id,
+                            creado_por_codigo=auth.codigo,
+                            creado_por_rol=auth.rol,
+                            destinatario_usuario_id=revision.responsable_propietario_id,
+                            destinatario_gestor_id=revision.gestor_propietario_id,
+                            para_administracion=True,
+                            asunto="Autorización de documento de empresa ajena",
+                            mensaje=(
+                                f"Solicitud {solicitud.id}; emisor {ubl.emisor.ruc}; "
+                                f"solicitante {auth.codigo}; gestor propietario "
+                                f"{revision.gestor_propietario_id}; responsable "
+                                f"{revision.responsable_propietario_id}."
+                            ),
+                        )
                     )
-                )
                 auditoria.registrar(
                     session,
                     tenant_id,
@@ -2267,6 +2303,18 @@ def crear_expediente_asistido(
     correlativo = str(int(str(campos["correlativo"])))
     emisor_ruc = str(campos["ruc_emisor"])
     receptor_ruc = str(campos["ruc_receptor"])
+    if tipo_documento == TipoDocumento.FACT:
+        revision = revisar_asignaciones_emisor(
+            session, tenant_id, emisor_ruc, documento.usuario_id, gestor_id
+        )
+        if revision.estado in (
+            EstadoAmbitoEmisor.ASIGNADO_A_OTRO_GRUPO,
+            EstadoAmbitoEmisor.AMBIGUO,
+        ):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Proveedor requiere revisión administrativa de cartera",
+            )
     existente = buscar_expediente(
         session,
         tenant_id,

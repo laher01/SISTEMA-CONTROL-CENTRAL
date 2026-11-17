@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
+import pytest
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -117,6 +118,11 @@ def test_emisor_asignado_a_otro_gestor_se_identifica_sin_mutaciones(
     )
     assert propio.estado == EstadoAmbitoEmisor.ASIGNADO_AL_GRUPO
 
+    otro_gestor = revisar_asignaciones_emisor(
+        session, tenant_id, empresa.ruc, usuario.id, uuid.uuid4()
+    )
+    assert otro_gestor.estado == EstadoAmbitoEmisor.ASIGNADO_A_OTRO_GRUPO
+
     externo = Tenant(nombre="TENANT EXTERNO EMISOR", codigo="EXTERNO-EMISOR")
     session.add(externo)
     session.commit()
@@ -130,15 +136,17 @@ def test_emisor_asignado_a_otro_gestor_se_identifica_sin_mutaciones(
     assert aislado.estado == EstadoAmbitoEmisor.SIN_ASIGNACION
 
 
+@pytest.mark.parametrize("derivar", [False, True])
 def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
     client,
     session: Session,
     auth_prueba,
     settings,
+    derivar: bool,
 ):
     from sqlalchemy import func, select
 
-    from app.models import Documento, Expediente, SolicitudCargaEmisor
+    from app.models import AlertaManual, Documento, Expediente, SolicitudCargaEmisor
     from tests.xml import factura
 
     tenant_id = auth_prueba.contexto.tenant_id
@@ -242,7 +250,68 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
     ruta_temporal = settings.storage_dir / solicitud.ruta_temporal
     assert ruta_temporal.is_file()
 
+    reintento = client.post(
+        "/api/v1/documentos",
+        files={
+            "archivo": (
+                "factura_ajena.xml",
+                factura(numero="F001-00000851", emisor=empresa.ruc),
+                "application/xml",
+            )
+        },
+    )
+    assert reintento.status_code == 409
+    assert reintento.json()["detail"]["solicitud_id"] == str(solicitud.id)
+
+    segunda = client.post(
+        "/api/v1/documentos",
+        files={
+            "archivo": (
+                "factura_ajena_2.xml",
+                factura(numero="F001-00000852", emisor=empresa.ruc),
+                "application/xml",
+            )
+        },
+    )
+    assert segunda.status_code == 409
+    assert segunda.json()["detail"]["solicitud_id"] != str(solicitud.id)
+    alertas = session.scalars(
+        select(AlertaManual).where(
+            AlertaManual.tenant_id == tenant_id,
+            AlertaManual.asunto == "Autorización de documento de empresa ajena",
+        )
+    ).all()
+    assert len(alertas) == 1
+
+    ruta_lotes = "/api/v1/solicitudes-carga-emisor/lotes"
+    assert client.get(ruta_lotes).status_code == 403
+
     auth_prueba.como_admin()
+    lotes = client.get(ruta_lotes)
+    assert lotes.status_code == 200, lotes.text
+    assert lotes.json() == [
+        {
+            "ruc_emisor": empresa.ruc,
+            "gestor_solicitante_id": (
+                str(solicitud.gestor_solicitante_id) if solicitud.gestor_solicitante_id else None
+            ),
+            "cantidad_documentos": 2,
+            "cantidad_solicitudes": 2,
+        }
+    ]
+    detalle = f"{ruta_lotes}/{empresa.ruc}"
+    parametros = (
+        {"gestor_solicitante_id": str(solicitud.gestor_solicitante_id)}
+        if solicitud.gestor_solicitante_id
+        else {}
+    )
+    assert {fila["id"] for fila in client.get(detalle, params=parametros).json()} == {
+        str(solicitud.id),
+        segunda.json()["detail"]["solicitud_id"],
+    }
+    assert client.get(detalle, params={**parametros, "offset": 2}).json() == []
+    assert client.get(detalle, params={**parametros, "limite": 201}).status_code == 422
+    assert client.get(detalle, params={"gestor_solicitante_id": str(uuid.uuid4())}).json() == []
     # Una segunda cuenta administrativa REAL: la decisión conserva
     # trazabilidad y validez referencial con cuentas_acceso.
     revisor = CuentaAcceso(
@@ -255,13 +324,42 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
     session.add(revisor)
     session.commit()
     auth_prueba.contexto = replace(auth_prueba.contexto, cuenta_id=revisor.id)
-    rechazo = client.post(
-        f"/api/v1/solicitudes-carga-emisor/{solicitud.id}/rechazar",
-        json={"observacion": "No autorizado"},
+    payload = {
+        "gestor_solicitante_id": (
+            str(solicitud.gestor_solicitante_id) if solicitud.gestor_solicitante_id else None
+        ),
+        "cantidad_esperada": 2,
+        "observacion": "No autorizado",
+    }
+    ruta_rechazo = f"{detalle}/rechazar"
+    ruta_revision = f"{detalle}/resolver-revision"
+    revision = {
+        **payload,
+        "accion": "DERIVAR_REVISION",
+        "gestor_destino_id": str(gestor.id),
+        "referencia_sustento": "Verificación documental de prueba",
+    }
+    destino_invalido = client.post(
+        ruta_revision, json={**revision, "gestor_destino_id": str(uuid.uuid4())}
     )
-    assert rechazo.status_code == 200, rechazo.text
-    assert rechazo.json()["estado"] == "RECHAZADA"
-    assert not ruta_temporal.exists()
+    assert destino_invalido.status_code == 409
+    assert client.post(ruta_rechazo, json={**payload, "cantidad_esperada": 3}).status_code == 409
+    if derivar:
+        resultado = client.post(ruta_revision, json=revision)
+        assert resultado.status_code == 200, resultado.text
+        assert resultado.json() == {"resueltas": 2}
+        estado_esperado = "DERIVADA_REVISION"
+    else:
+        rechazo = client.post(ruta_rechazo, json=payload)
+        assert rechazo.status_code == 200, rechazo.text
+        assert rechazo.json() == {"rechazadas": 2}
+        estado_esperado = "RECHAZADA"
+    session.expire_all()
+    assert solicitud.estado == estado_esperado
+    assert ruta_temporal.exists()
+    assert client.get(ruta_lotes).json() == []
+    assert client.post(ruta_rechazo, json=payload).status_code == 409
+    assert client.post(ruta_revision, json=revision).status_code == 409
 
 
 def test_admin_asigna_empresa_y_bloquea_ajenos(
