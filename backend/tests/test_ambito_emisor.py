@@ -329,6 +329,16 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
         "observacion": "No autorizado",
     }
     ruta_rechazo = f"{detalle}/rechazar"
+    ruta_revision = f"{detalle}/resolver-revision"
+    revision = {
+        **payload,
+        "accion": "DERIVAR_REVISION",
+        "gestor_destino_id": str(gestor.id),
+        "referencia_sustento": "Verificación documental de prueba",
+    }
+    assert client.post(
+        ruta_revision, json={**revision, "gestor_destino_id": str(uuid.uuid4())}
+    ).status_code == 409
     assert client.post(ruta_rechazo, json={**payload, "cantidad_esperada": 3}).status_code == 409
     rechazo = client.post(ruta_rechazo, json=payload)
     assert rechazo.status_code == 200, rechazo.text
@@ -338,6 +348,7 @@ def test_api_bloquea_xml_de_otro_gestor_sin_documentos_ni_expedientes(
     assert ruta_temporal.exists()
     assert client.get(ruta_lotes).json() == []
     assert client.post(ruta_rechazo, json=payload).status_code == 409
+    assert client.post(ruta_revision, json=revision).status_code == 409
 
 
 def test_admin_asigna_empresa_y_bloquea_ajenos(
