@@ -15,6 +15,9 @@ from app.services import auditoria
 from app.services.eliminacion import bloquear_clave_archivo
 
 router = APIRouter(prefix="/solicitudes-carga-emisor", tags=["solicitudes-carga-emisor"])
+EstadoSolicitud = Literal[
+    "PENDIENTE", "APROBADA", "RECHAZADA", "REVISION_VALIDADA", "DERIVADA_REVISION"
+]
 
 
 class Decision(BaseModel):
@@ -259,7 +262,7 @@ def listar(
     session: SessionDep,
     tenant_id: TenantDep,
     auth: OperativeAuthDep,
-    estado: Literal["PENDIENTE", "APROBADA", "RECHAZADA", "REVISION_VALIDADA", "DERIVADA_REVISION"] = "PENDIENTE",
+    estado: EstadoSolicitud = "PENDIENTE",
 ) -> list[SolicitudCargaEmisor]:
     consulta = select(SolicitudCargaEmisor).where(
         SolicitudCargaEmisor.tenant_id == tenant_id,
