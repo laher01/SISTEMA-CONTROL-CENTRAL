@@ -4,6 +4,7 @@
 
 | ID | Trabajo | Área | Responsable | Estado | Rama / PR | Archivos previstos |
 | --- | --- | --- | --- | --- | --- | --- |
+| ORG-FILTROS-JERARQUIA | Filtrar gestores por usuario y usuarios por responsable desde el encabezado | Organización | Chat operativo | PR en borrador; tipado, lint y 72 pruebas de frontend aprobados localmente | `feat/filtros-jerarquia-organizacion` | `frontend/src/paginas/Organizacion.tsx` |
 | OCR-SUNAT-ECLIPSE | Clasificación SUNAT, partes y referencias GRE nativas | Operación documental | Chat operativo | PR #470 EN VALIDACIÓN; cinco PDF locales recuperados, CI pendiente; coordinar #462 (caché/layout) | `fix/sunat-eclipse-gre-native` | Extractor fiscal, disposición PDF, caché y regresiones sintéticas; no modifica permisos ni reglas de vinculación |
 | OCR-RHE-FECHA | Fecha de emisión RHE desde disposición visual, separada de observaciones | Operación documental | Chat operativo | EN DESARROLLO; coordinar solapamiento con #462 | `fix/rhe-fecha-emision-layout` | Procesamiento PDF, extractor fiscal, caché y regresión; no modifica creación de expedientes ni permisos |
 | OCR-NEXOMAR-FORMATOS | Lectura PDF nativo Facturalaya, EFACT, FactCentral y RHE; regresiones anonimizadas | Operación documental | Chat operativo | EN VALIDACIÓN CI; 18 PDF locales revisados, 251 líneas físicas conciliadas, 3 regresiones sintéticas aprobadas; coordinar #462 y #456 antes de integrar | `fix/lectura-formatos-nexomar-20261116` | Extractores de campos e ítems, módulo aislado y pruebas; sin reescaneo masivo ni cambios de datos |
