@@ -97,6 +97,11 @@ class MiembroOut(Orm):
     porcentaje_con_agente: Decimal | None
     porcentaje_sin_agente: Decimal | None
     activo: bool
+    acceso_activo: bool | None = None
+
+
+class EstadoAccesoIn(BaseModel):
+    activo: bool
 
 
 class MiembroActualizar(BaseModel):
@@ -127,6 +132,7 @@ class GestorOut(Orm):
     codigo: str
     nombre: str
     usuario_id: uuid.UUID | None
+    acceso_activo: bool | None = None
 
 
 class GestorActualizar(BaseModel):
