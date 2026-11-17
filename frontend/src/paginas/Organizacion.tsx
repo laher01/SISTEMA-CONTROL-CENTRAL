@@ -77,11 +77,49 @@ interface LoteEmisor {
   cantidad_solicitudes: number;
 }
 
+interface SolicitudEmisor {
+  id: string;
+  gestor_propietario_id: string | null;
+  responsable_propietario_id: string | null;
+  estado: string;
+}
+
+function DetalleLoteEmisor({ lote, gestores, miembros }: {
+  lote: LoteEmisor;
+  gestores: Gestor[];
+  miembros: Miembro[];
+}) {
+  const [pagina, setPagina] = useState(0);
+  const parametros = new URLSearchParams({ offset: String(pagina * 100), limite: "100" });
+  if (lote.gestor_solicitante_id) parametros.set("gestor_solicitante_id", lote.gestor_solicitante_id);
+  const { datos, error, cargando } = useDatos<SolicitudEmisor[]>(
+    "/api/v1/solicitudes-carga-emisor/lotes/" + encodeURIComponent(lote.ruc_emisor) + "?" + parametros.toString()
+  );
+  return <section>
+    <h4>Solicitudes de {lote.ruc_emisor}</h4>
+    {error && <p role="alert">{String(error)}</p>}
+    {cargando && <p>Cargando detalle…</p>}
+    {!!datos?.length && <table>
+      <thead><tr><th>Solicitud</th><th>Gestor de cartera</th><th>Responsable de cartera</th><th>Estado</th></tr></thead>
+      <tbody>{datos.map((solicitud) => <tr key={solicitud.id}>
+        <td>{solicitud.id}</td>
+        <td>{gestores.find((g) => g.id === solicitud.gestor_propietario_id)?.nombre ?? "Por verificar"}</td>
+        <td>{miembros.find((m) => m.id === solicitud.responsable_propietario_id)?.nombre ?? "Por verificar"}</td>
+        <td>{solicitud.estado}</td>
+      </tr>)}</tbody>
+    </table>}
+    {!cargando && !error && datos?.length === 0 && <p>No hay más solicitudes.</p>}
+    <button type="button" disabled={pagina === 0 || cargando} onClick={() => setPagina((p) => p - 1)}>Anterior</button>
+    <button type="button" disabled={cargando || (datos?.length ?? 0) < 100} onClick={() => setPagina((p) => p + 1)}>Siguiente</button>
+  </section>;
+}
+
 function RevisionEmisores({ gestores, miembros, empresas }: {
   gestores: Gestor[];
   miembros: Miembro[];
   empresas: Empresa[];
 }) {
+  const [loteSeleccionado, setLoteSeleccionado] = useState<LoteEmisor | null>(null);
   const { datos, error, cargando, recargar } = useDatos<LoteEmisor[]>("/api/v1/solicitudes-carga-emisor/lotes");
   return <section>
     <h3>Revisión de proveedores pendientes</h3>
@@ -91,7 +129,7 @@ function RevisionEmisores({ gestores, miembros, empresas }: {
     {error && <p role="alert">{String(error)}</p>}
     {!cargando && !error && datos?.length === 0 && <p>No hay solicitudes pendientes.</p>}
     {!!datos?.length && <div className="tabla-scroll"><table>
-      <thead><tr><th>RUC</th><th>Proveedor</th><th>Gestor solicitante</th><th>Usuario</th><th>Responsable</th><th>Archivos únicos</th><th>Solicitudes</th></tr></thead>
+      <thead><tr><th>RUC</th><th>Proveedor</th><th>Gestor solicitante</th><th>Usuario</th><th>Responsable</th><th>Archivos únicos</th><th>Solicitudes</th><th>Detalle</th></tr></thead>
       <tbody>{datos.map((lote) => {
         const gestor = gestores.find((g) => g.id === lote.gestor_solicitante_id);
         const usuario = miembros.find((m) => m.id === gestor?.usuario_id);
@@ -103,9 +141,11 @@ function RevisionEmisores({ gestores, miembros, empresas }: {
           <td>{usuario ? usuario.codigo + " · " + usuario.nombre : "No identificado"}</td>
           <td>{responsable ? responsable.codigo + " · " + responsable.nombre : "No identificado"}</td>
           <td>{lote.cantidad_documentos}</td><td>{lote.cantidad_solicitudes}</td>
+          <td><button type="button" onClick={() => setLoteSeleccionado(lote)}>Ver solicitudes</button></td>
         </tr>;
       })}</tbody>
     </table></div>}
+    {loteSeleccionado && <DetalleLoteEmisor key={loteSeleccionado.ruc_emisor + ":" + loteSeleccionado.gestor_solicitante_id} lote={loteSeleccionado} gestores={gestores} miembros={miembros} />}
   </section>;
 }
 
