@@ -575,7 +575,7 @@ function ConfirmarCampos({
 
   const abrir = () => {
     const previa = documento.datos_extraidos?.extraccion_confirmada;
-    const confirmados = previa && typeof previa === "object" && "campos" in previa
+    const confirmados: Record<string, string> = previa && typeof previa === "object" && "campos" in previa
       && previa.campos && typeof previa.campos === "object"
       ? Object.fromEntries(Object.entries(previa.campos).map(([nombre, valor]) => [nombre, String(valor)]))
       : {};
