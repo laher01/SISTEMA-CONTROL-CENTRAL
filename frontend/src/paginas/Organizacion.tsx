@@ -92,6 +92,9 @@ function DetalleLoteEmisor({ lote, gestores, miembros, alResolver }: {
 }) {
   const [pagina, setPagina] = useState(0);
   const [motivo, setMotivo] = useState("");
+  const [accion, setAccion] = useState("RECHAZAR");
+  const [sustento, setSustento] = useState("");
+  const [destino, setDestino] = useState("");
   const [resolviendo, setResolviendo] = useState(false);
   const [errorDecision, setErrorDecision] = useState("");
   const parametros = new URLSearchParams({ offset: String(pagina * 100), limite: "100" });
@@ -105,10 +108,12 @@ function DetalleLoteEmisor({ lote, gestores, miembros, alResolver }: {
     setResolviendo(true);
     setErrorDecision("");
     try {
-      await enviarJson("/api/v1/solicitudes-carga-emisor/lotes/" + encodeURIComponent(lote.ruc_emisor) + "/rechazar", "POST", {
+      const ruta = accion === "RECHAZAR" ? "/rechazar" : "/resolver-revision";
+      await enviarJson("/api/v1/solicitudes-carga-emisor/lotes/" + encodeURIComponent(lote.ruc_emisor) + ruta, "POST", {
         gestor_solicitante_id: lote.gestor_solicitante_id,
         cantidad_esperada: lote.cantidad_solicitudes,
         observacion: motivo.trim(),
+        ...(accion === "RECHAZAR" ? {} : { accion, referencia_sustento: sustento.trim(), gestor_destino_id: accion === "VALIDAR_REVISION" ? lote.gestor_solicitante_id : destino }),
       });
       alResolver();
     } catch (e) {
@@ -134,8 +139,18 @@ function DetalleLoteEmisor({ lote, gestores, miembros, alResolver }: {
     <button type="button" disabled={pagina === 0 || cargando} onClick={() => setPagina((p) => p - 1)}>Anterior</button>
     <button type="button" disabled={cargando || (datos?.length ?? 0) < 100} onClick={() => setPagina((p) => p + 1)}>Siguiente</button>
     <form onSubmit={(e) => void rechazar(e)}>
-      <label>Motivo del rechazo <input value={motivo} onChange={(e) => setMotivo(e.target.value)} maxLength={500} required /></label>
-      <button type="submit" disabled={!motivo.trim() || resolviendo}>Rechazar {lote.cantidad_solicitudes} solicitudes</button>
+      <label>Decisión <select value={accion} onChange={(e) => setAccion(e.target.value)}>
+        <option value="RECHAZAR">Rechazar lote</option>
+        <option value="VALIDAR_REVISION" disabled={!lote.gestor_solicitante_id}>Validar para revisión fiscal</option>
+        <option value="DERIVAR_REVISION">Derivar revisión al propietario</option>
+      </select></label>
+      {accion !== "RECHAZAR" && <label>Referencia del sustento <input value={sustento} onChange={(e) => setSustento(e.target.value)} maxLength={200} required /></label>}
+      {accion === "DERIVAR_REVISION" && <label>Gestor propietario <select value={destino} onChange={(e) => setDestino(e.target.value)} required>
+        <option value="">Seleccione gestor</option>
+        {gestores.filter((g) => datos?.some((d) => d.gestor_propietario_id === g.id)).map((g) => <option key={g.id} value={g.id}>{g.codigo} · {g.nombre}</option>)}
+      </select></label>}
+      <label>Motivo de la decisión <input value={motivo} onChange={(e) => setMotivo(e.target.value)} maxLength={500} required /></label>
+      <button type="submit" disabled={!motivo.trim() || resolviendo || (accion !== "RECHAZAR" && !sustento.trim()) || (accion === "DERIVAR_REVISION" && !destino)}>{accion === "RECHAZAR" ? "Rechazar" : "Resolver revisión de"} {lote.cantidad_solicitudes} solicitudes</button>
       <p>Los originales quedan en cuarentena y no se contabilizan.</p>
       {errorDecision && <p role="alert">{errorDecision}</p>}
     </form>
