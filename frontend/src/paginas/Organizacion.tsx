@@ -61,6 +61,15 @@ function coincideAsignacion(filtro: string, asignacion?: string | null) {
   return !filtro || (filtro === "sin-asignar" ? !asignacion : asignacion === filtro);
 }
 
+function EstadoAcceso({ activo, alCambiar }: { activo?: boolean | null; alCambiar?: () => void }) {
+  return <>
+    <span>{activo == null ? "Sin cuenta" : activo ? "Activo" : "Inactivo"}</span>
+    {activo != null && alCambiar && <>{" "}
+      <button type="button" onClick={alCambiar}>{activo ? "Desactivar" : "Activar"}</button>
+    </>}
+  </>;
+}
+
 function OrganizacionAdmin() {
   const { datos: miembros, error, cargando, recargar } = useDatos<Miembro[]>("/api/v1/miembros");
   const { datos: gestores, recargar: recargarGestores } = useDatos<Gestor[]>("/api/v1/gestores");
@@ -217,6 +226,19 @@ function OrganizacionAdmin() {
       setPorcentajeConAgente("1.5");
       setPorcentajeSinAgente("1.5");
       setMiembroEditando(null);
+      recargar();
+      recargarGestores();
+    } catch (e) {
+      setMensaje(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const cambiarAcceso = async (tipo: "miembros" | "gestores", id: string, activo: boolean) => {
+    try {
+      setMensaje("");
+      await enviarJson(`/api/v1/${tipo}/${id}/estado-acceso`, "PATCH", { activo });
+      setMensaje(activo ? "Acceso activado." : "Acceso desactivado. Sesiones cerradas.");
+      setCredencial(null);
       recargar();
       recargarGestores();
     } catch (e) {
@@ -475,10 +497,11 @@ function OrganizacionAdmin() {
               {pestanaAdmin === "USUARIO" && <FiltroColumna titulo="Responsable" etiqueta="Filtrar miembros por responsable"
                 todos="Todos los responsables" sinAsignar="Sin responsable"
                 opciones={responsables} valor={filtroResponsable} alCambiar={setFiltroResponsable} />}
+              {(pestanaAdmin === "USUARIO" || pestanaAdmin === "RESPONSABLE") && <th>Estado de acceso</th>}
               <th>Acciones</th></tr></thead>
             <tbody>
               {pestanaAdmin === "USUARIO" && miembrosVisibles.length === 0 && filtroResponsable &&
-                <tr><td colSpan={7}>No hay usuarios para este filtro.</td></tr>}
+                <tr><td colSpan={8}>No hay usuarios para este filtro.</td></tr>}
               {miembrosVisibles.map((m) => (
                 <tr key={m.id}>
                   <td>{m.codigo}</td><td>{m.nombre}</td><td>{m.rol}</td>
@@ -487,6 +510,9 @@ function OrganizacionAdmin() {
                   {pestanaAdmin === "USUARIO" && <td>
                     {responsables.find((r) => r.id === m.responsable_id)?.nombre ??
                       (m.responsable_id ? "No disponible" : "Sin asignar")}
+                  </td>}
+                  {(m.rol === "USUARIO" || m.rol === "RESPONSABLE") && <td>
+                    <EstadoAcceso activo={m.acceso_activo} alCambiar={() => void cambiarAcceso("miembros", m.id, !m.acceso_activo)} />
                   </td>}
                   <td>
                     <button type="button" onClick={() => {
@@ -551,6 +577,7 @@ function OrganizacionAdmin() {
               setPorcentajeGestor(g.porcentaje_comision ?? "");
             }}
             alRestablecer={(g) => void restablecerGestor(g)}
+            alCambiarAcceso={(g) => void cambiarAcceso("gestores", g.id, !g.acceso_activo)}
           />
         </section>}
       </div>
@@ -617,6 +644,17 @@ function OrganizacionUsuario({ sesion }: { sesion: SesionActual }) {
     }
   };
 
+  const cambiarAcceso = async (g: Gestor) => {
+    try {
+      await enviarJson(`/api/v1/gestores/${g.id}/estado-acceso`, "PATCH", { activo: !g.acceso_activo });
+      setMensaje(g.acceso_activo ? "Acceso desactivado. Sesiones cerradas." : "Acceso activado.");
+      setCredencial(null);
+      recargar();
+    } catch (e) {
+      setMensaje(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const restablecer = async (g: Gestor) => {
     const nueva = await enviarJson<CredencialTemporal>(
       "/api/v1/gestores/" + g.id + "/restablecer-acceso",
@@ -661,6 +699,7 @@ function OrganizacionUsuario({ sesion }: { sesion: SesionActual }) {
           setNombre(g.nombre);
         }}
         alRestablecer={(g) => void restablecer(g)}
+        alCambiarAcceso={(g) => void cambiarAcceso(g)}
         ocultarUsuario
       />
     </>
@@ -684,12 +723,14 @@ function TablaGestores({
   usuarios,
   alEditar,
   alRestablecer,
+  alCambiarAcceso,
   ocultarUsuario = false,
 }: {
   gestores: Gestor[];
   usuarios: Miembro[];
   alEditar: (gestor: Gestor) => void;
   alRestablecer: (gestor: Gestor) => void;
+  alCambiarAcceso: (gestor: Gestor) => void;
   ocultarUsuario?: boolean;
 }) {
   const [filtroUsuario, setFiltroUsuario] = useState("");
@@ -707,12 +748,13 @@ function TablaGestores({
             {!ocultarUsuario && <FiltroColumna titulo="Usuario" etiqueta="Filtrar gestores por usuario"
               todos="Todos los usuarios" sinAsignar="Sin usuario"
               opciones={usuarios} valor={filtroUsuario} alCambiar={setFiltroUsuario} />}
+            <th>Estado de acceso</th>
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
           {!ocultarUsuario && gestoresVisibles.length === 0 && filtroUsuario &&
-            <tr><td colSpan={4}>No hay gestores para este filtro.</td></tr>}
+            <tr><td colSpan={5}>No hay gestores para este filtro.</td></tr>}
           {gestoresVisibles.map((g) => {
             const usuario = usuarios.find((u) => u.id === g.usuario_id);
             return (
@@ -720,6 +762,7 @@ function TablaGestores({
                 <td>{g.codigo} · {g.nombre}</td>
                 <td>{g.porcentaje_comision != null ? g.porcentaje_comision + "%" : "Sin configurar"}</td>
                 {!ocultarUsuario && <td>{usuario ? usuario.codigo + " · " + usuario.nombre : "Sin usuario"}</td>}
+                <td><EstadoAcceso activo={g.acceso_activo} alCambiar={() => alCambiarAcceso(g)} /></td>
                 <td>
                   <button type="button" onClick={() => alEditar(g)}>Editar</button>{" "}
                   <button type="button" onClick={() => alRestablecer(g)}>Restablecer acceso</button>
