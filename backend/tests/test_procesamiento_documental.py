@@ -678,10 +678,7 @@ def test_detector_ose_no_confunde_nombres_comunes() -> None:
 def test_rhe_fecha_visual_distinta_de_pago(
     monkeypatch: pytest.MonkeyPatch, numero: str, dia: str, pago: str, total: str
 ) -> None:
-    encabezado = (
-        "RECIBO POR HONORARIOS ELECTRONICO\n"
-        f"R.U.C. 10123456789\nNro: E001- {numero}\n"
-    )
+    encabezado = f"RECIBO POR HONORARIOS ELECTRONICO\nR.U.C. 10123456789\nNro: E001- {numero}\n"
     observacion = f"Observación RECIBO POR PAGO REALIZADO EL {pago}\n"
     pie = f"Total por honorarios: {total}\nTotal Neto Recibido: {total} SOLES"
     plano = encabezado + observacion + f"{dia} Marzo 2026\nFecha de emisión\n" + pie
@@ -711,6 +708,9 @@ def test_fecha_rhe_visual_no_confunde_observacion() -> None:
     texto = "Observación: RECIBO POR PAGO REALIZADO EL 27 DE FEBRERO DEL 2026"
     assert extraer_fecha_emision_rhe_etiquetada(texto) is None
     assert extraer_fecha_emision_rhe_etiquetada("Fecha de emisión: 31 de febrero del 2026") is None
-    assert extraer_fecha_emision_rhe_etiquetada(
-        "Fecha de emisión: 10/03/2026\nFecha de emisión: 11/03/2026"
-    ) is None
+    assert (
+        extraer_fecha_emision_rhe_etiquetada(
+            "Fecha de emisión: 10/03/2026\nFecha de emisión: 11/03/2026"
+        )
+        is None
+    )
