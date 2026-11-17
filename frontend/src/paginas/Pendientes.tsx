@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import "./ExpedienteManual.css";
+import { validarCamposManuales } from "./validacionExpedienteManual";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { ErrorApi, conParametros, eliminar, enviarJson, obtener, urlArchivo, useDatos } from "../api";
@@ -58,6 +60,8 @@ const ETIQUETAS_CAMPOS: Record<string, string> = {
   fecha_emision: "Fecha de emisión",
   moneda: "Moneda",
   importe_total: "Importe total",
+  subtotal: "Subtotal (opcional)",
+  igv: "IGV (opcional)",
   numero_operacion: "N.º de operación",
 };
 
@@ -433,7 +437,7 @@ function Procesar({
           </details>
         )}
         <ConfirmarCampos
-            documentoId={documento.id}
+            documento={resultado}
             campos={lectura.campos}
             confirmado={lectura.confirmada}
             tipoSugerido={lectura.tipoSugerido}
@@ -481,7 +485,7 @@ function Procesar({
   return (
     <div className="formulario-linea">
       <ConfirmarCampos
-        documentoId={documento.id}
+        documento={resultado}
         campos={[]}
         confirmado={Boolean(resultado.datos_extraidos?.extraccion_confirmada)}
         alConfirmar={setResultado}
@@ -539,54 +543,73 @@ function obtenerLectura(documento: Documento): {
 }
 
 function ConfirmarCampos({
-  documentoId,
+  documento,
   campos,
   confirmado,
   tipoSugerido,
   alConfirmar,
   alCrear,
 }: {
-  documentoId: string;
+  documento: Documento;
   campos: CampoExtraido[];
   confirmado: boolean;
   tipoSugerido?: TipoDocumento;
   alConfirmar: (documento: Documento) => void;
   alCrear: () => void;
 }) {
-  const [valores, setValores] = useState<Record<string, string>>({
-    moneda: "PEN",
-    ...Object.fromEntries(campos.map((campo) => [campo.nombre, campo.valor])),
-  });
+  const documentoId = documento.id;
+  const dialogo = useRef<HTMLDialogElement>(null);
+  const [valores, setValores] = useState<Record<string, string>>({});
   const [mostrarManual, setMostrarManual] = useState(false);
-  const nombresCampos = [
-    "serie", "correlativo", "ruc_emisor", "ruc_receptor",
-    "fecha_emision", "moneda", "importe_total",
-    "razon_social_emisor", "razon_social_receptor",
-  ];
+  const [modificado, setModificado] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [creando, setCreando] = useState(false);
-  const [tipoComprobante, setTipoComprobante] = useState<"FACT" | "RHE">(
-    tipoSugerido === "RHE" ? "RHE" : "FACT",
-  );
-  const [razonEmisor, setRazonEmisor] = useState(
-    campos.find((campo) => campo.nombre === "razon_social_emisor")?.valor ?? "",
-  );
-  const [razonReceptor, setRazonReceptor] = useState(
-    campos.find((campo) => campo.nombre === "razon_social_receptor")?.valor ?? "",
-  );
-  const [requiereGuia, setRequiereGuia] = useState(tipoSugerido !== "RHE");
+  const [tipoComprobante, setTipoComprobante] = useState<"FACT" | "RHE">("FACT");
+  const [requiereGuia, setRequiereGuia] = useState(true);
   const [error, setError] = useState("");
   const [duplicado, setDuplicado] = useState<Expediente | null>(null);
+  const errores = validarCamposManuales(valores);
+  const ocupado = guardando || creando;
+  const listo = confirmado && !modificado;
+  const valido = Object.keys(errores).length === 0;
+
+  const abrir = () => {
+    const previa = documento.datos_extraidos?.extraccion_confirmada;
+    const confirmados = previa && typeof previa === "object" && "campos" in previa
+      && previa.campos && typeof previa.campos === "object"
+      ? Object.fromEntries(Object.entries(previa.campos).map(([nombre, valor]) => [nombre, String(valor)]))
+      : {};
+    setValores({ moneda: "PEN", ...Object.fromEntries(campos.map((campo) => [campo.nombre, campo.valor])), ...confirmados });
+    const tipo = tipoSugerido === "RHE" ? "RHE" : "FACT";
+    setTipoComprobante(tipo);
+    setRequiereGuia(tipo === "FACT");
+    setModificado(false);
+    setError("");
+    setDuplicado(null);
+    setMostrarManual(true);
+    dialogo.current?.showModal();
+  };
+  const editar = (nombre: string, valor: string) => {
+    setValores((actual) => ({ ...actual, [nombre]: nombre === "serie" ? valor.toUpperCase() : valor }));
+    setModificado(true);
+    setDuplicado(null);
+  };
   const guardar = async () => {
+    if (!valido || ocupado) return;
     setGuardando(true);
     setError("");
+    const permitidos = ["serie", "correlativo", "ruc_emisor", "ruc_receptor", "fecha_emision", "moneda", "importe_total", "razon_social_emisor", "razon_social_receptor", "subtotal", "igv", "descuentos", "importe_a_pagar", "numero_operacion"];
+    const payload = Object.fromEntries(Object.entries(valores).flatMap(([nombre, valor]) =>
+      permitidos.includes(nombre) && valor.trim() ? [[nombre, valor.trim()]] : [],
+    ));
     try {
       const actualizado = await enviarJson<Documento>(
         `/api/v1/documentos/${documentoId}/extraccion-confirmada`,
         "PUT",
-        valores,
+        payload,
       );
       alConfirmar(actualizado);
+      setModificado(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -594,6 +617,7 @@ function ConfirmarCampos({
     }
   };
   const crearExpediente = async () => {
+    if (!listo || !valido || ocupado) return;
     setCreando(true);
     setError("");
     setDuplicado(null);
@@ -603,11 +627,12 @@ function ConfirmarCampos({
         "POST",
         {
           tipo_comprobante: tipoComprobante,
-          razon_social_emisor: razonEmisor.trim() || undefined,
-          razon_social_receptor: razonReceptor.trim() || undefined,
+          razon_social_emisor: valores.razon_social_emisor?.trim() || undefined,
+          razon_social_receptor: valores.razon_social_receptor?.trim() || undefined,
           requiere_guia: tipoComprobante === "FACT" && requiereGuia,
         },
       );
+      dialogo.current?.close();
       alCrear();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -615,12 +640,9 @@ function ConfirmarCampos({
         const detalle = e.detalle as { duplicado?: boolean; expediente_id?: string };
         if (detalle.duplicado && detalle.expediente_id) {
           try {
-            const existente = await obtener<Expediente>(
-              `/api/v1/expedientes/${detalle.expediente_id}`,
-            );
-            setDuplicado(existente);
+            setDuplicado(await obtener<Expediente>(`/api/v1/expedientes/${detalle.expediente_id}`));
           } catch {
-            // El backend controla el ámbito: no mostrar información no autorizada.
+            // No mostrar información de expedientes fuera del ámbito autorizado.
           }
         }
       }
@@ -628,103 +650,109 @@ function ConfirmarCampos({
       setCreando(false);
     }
   };
+
+  const campo = (nombre: string, ancho = false) => {
+    const extraido = campos.find((item) => item.nombre === nombre);
+    const etiqueta = ETIQUETAS_CAMPOS[nombre] ?? nombre;
+    const id = `manual-${documentoId}-${nombre}`;
+    return (
+      <div className={`manual-expediente-campo${ancho ? " ancho" : ""}`}>
+        <label htmlFor={id}>{etiqueta}</label>
+        {nombre === "moneda" ? (
+          <select id={id} value={valores[nombre] ?? ""} onChange={(e) => editar(nombre, e.target.value)} aria-invalid={Boolean(errores[nombre])}>
+            <option value="">Seleccione moneda</option>
+            <option value="PEN">PEN — Soles</option>
+            <option value="USD">USD — Dólares</option>
+          </select>
+        ) : (
+          <input id={id} value={valores[nombre] ?? ""}
+            type={nombre === "fecha_emision" ? "date" : "text"}
+            inputMode={nombre.startsWith("ruc_") || nombre === "correlativo" ? "numeric" : ["importe_total", "subtotal", "igv"].includes(nombre) ? "decimal" : undefined}
+            maxLength={nombre.startsWith("ruc_") ? 11 : nombre === "serie" ? 4 : nombre === "correlativo" ? 32 : nombre.startsWith("razon_social") ? 300 : undefined}
+            onChange={(e) => editar(nombre, e.target.value)}
+            aria-invalid={Boolean(errores[nombre])}
+            aria-describedby={errores[nombre] ? id + "-error" : undefined}
+          />
+        )}
+        {errores[nombre] && <small className="error" id={id + "-error"}>{errores[nombre]}</small>}
+        {extraido && <details><summary>{Math.round(extraido.confianza * 100)} % · {extraido.fuente || "Lectura"}</summary>{extraido.evidencia}</details>}
+      </div>
+    );
+  };
   return (
     <div>
-      <button type="button" onClick={() => setMostrarManual((actual) => !actual)}>
-        {mostrarManual ? "Cerrar creación manual" : "Crear expediente manualmente"}
-      </button>
-      {mostrarManual && (
-      <div className="crear-expediente-asistido">
-      <p>Datos sugeridos ({campos.length}){confirmado ? " · Confirmados" : ""}</p>
-      <p>Confirme los datos del comprobante antes de crear el expediente. Si ya existe la misma identidad fiscal, el sistema debe rechazar la duplicación.</p>
-      <dl className="campos-extraidos">
-        {nombresCampos.map((nombre) => {
-          const campo = campos.find((item) => item.nombre === nombre);
-          return (
-          <div key={nombre}>
-            <dt>{ETIQUETAS_CAMPOS[nombre] ?? nombre}</dt>
-            <dd>
-              <input
-                aria-label={ETIQUETAS_CAMPOS[nombre] ?? nombre}
-                value={valores[nombre] ?? ""}
-                type={nombre === "fecha_emision" ? "date" : "text"}
-                onChange={(e) => setValores({ ...valores, [nombre]: e.target.value })}
-              />
-              {campo && (
-                <>
-                  <span> {Math.round(campo.confianza * 100)} % · {campo.fuente}</span>
-                  <small title={campo.evidencia}>Evidencia: {campo.evidencia}</small>
-                </>
-              )}
-            </dd>
+      <button type="button" onClick={abrir}>Crear expediente manualmente</button>
+      <dialog ref={dialogo} className="manual-expediente-dialog" aria-labelledby={`manual-titulo-${documentoId}`}
+        onClose={() => setMostrarManual(false)} onCancel={(e) => { if (ocupado) e.preventDefault(); }}>
+        {mostrarManual && <>
+          <header className="manual-expediente-cabecera">
+            <div><h2 id={`manual-titulo-${documentoId}`}>Creación manual de expediente</h2>
+              <p className="tenue">Revise el comprobante original, confirme los datos y cree el expediente.</p></div>
+            <button type="button" className="secundario" disabled={ocupado} onClick={() => dialogo.current?.close()}>Cerrar</button>
+          </header>
+          <div className="manual-expediente-cuerpo">
+            <section className="manual-expediente-archivo">
+              <h3>Documento original</h3>
+              <p><a href={urlArchivo(documentoId)} target="_blank" rel="noreferrer">{documento.nombre_original} · Abrir original</a></p>
+              {documento.nombre_original.toLowerCase().endsWith(".pdf") && <iframe className="manual-expediente-preview" title="Vista previa del PDF original" src={urlArchivo(documentoId)} />}
+              <h3>Ruta de origen</h3>
+              <div className="manual-expediente-ruta"><RutaOrigen origen={documento} /></div>
+            </section>
+            <section className="manual-expediente-formulario">
+              <div role="status" className="manual-expediente-aviso">{campos.length} datos sugeridos · {listo ? "Confirmados" : "Pendientes de confirmar"}{!valido && ` · ${Object.keys(errores).length} campos por revisar`}</div>
+              <fieldset disabled={ocupado} className="manual-expediente-grupo">
+                <legend>Identificación del comprobante</legend>
+                <div className="manual-expediente-campos">
+                  <div className="manual-expediente-campo ancho"><label htmlFor={`manual-tipo-${documentoId}`}>Tipo de comprobante</label>
+                    <select id={`manual-tipo-${documentoId}`} value={tipoComprobante} onChange={(e) => {
+                      const tipo = e.target.value as "FACT" | "RHE";
+                      setTipoComprobante(tipo); setRequiereGuia(tipo === "FACT"); setDuplicado(null);
+                      setModificado(true);
+                    }}><option value="FACT">Factura</option><option value="RHE">Recibo por honorarios</option></select>
+                  </div>
+                  {campo("serie")}{campo("correlativo")}{campo("fecha_emision")}{campo("moneda")}
+                </div>
+              </fieldset>
+              <fieldset disabled={ocupado} className="manual-expediente-grupo">
+                <legend>Emisor y receptor</legend>
+                <div className="manual-expediente-campos">
+                  {campo("ruc_emisor")}{campo("razon_social_emisor", true)}
+                  {campo("ruc_receptor")}{campo("razon_social_receptor", true)}
+                </div>
+              </fieldset>
+              <fieldset disabled={ocupado} className="manual-expediente-grupo">
+                <legend>Importes y requisitos</legend>
+                <div className="manual-expediente-campos">
+                  {tipoComprobante === "FACT" && <>{campo("subtotal")}{campo("igv")}</>}
+                  {campo("importe_total", true)}
+                  {tipoComprobante === "FACT" && <label className="manual-expediente-campo ancho"><span><input type="checkbox" checked={requiereGuia} onChange={(e) => setRequiereGuia(e.target.checked)} /> Requiere guía de remisión</span></label>}
+                </div>
+              </fieldset>
+              {error && <p role="alert" className="error manual-expediente-aviso">{error}</p>}
+              {duplicado && <div role="alert" className="manual-expediente-aviso">
+                <strong>Ya existe un expediente con esta identidad fiscal. No se creó otro.</strong>
+                <div className="manual-expediente-comparacion">
+                  <table><thead><tr><th>Campo</th><th>Confirmado</th><th>Existente</th></tr></thead><tbody>
+                    <tr><td>Serie y número</td><td>{valores.serie}-{valores.correlativo}</td><td>{duplicado.serie}-{duplicado.correlativo}</td></tr>
+                    <tr><td>RUC emisor</td><td>{valores.ruc_emisor}</td><td>{duplicado.emisor.ruc}</td></tr>
+                    <tr><td>RUC receptor</td><td>{valores.ruc_receptor}</td><td>{duplicado.receptor.ruc}</td></tr>
+                    <tr><td>Fecha</td><td>{valores.fecha_emision}</td><td>{duplicado.fecha_emision}</td></tr>
+                    <tr><td>Moneda</td><td>{valores.moneda}</td><td>{duplicado.moneda}</td></tr>
+                    <tr><td>Importe</td><td>{valores.importe_total}</td><td>{duplicado.importe_total}</td></tr>
+                  </tbody></table>
+                </div>
+                <Link to={`/expedientes/${duplicado.id}`}>Revisar expediente existente</Link>
+                <p>Para vincular, cierre esta ventana y use la búsqueda de expedientes de la bandeja.</p>
+              </div>}
+            </section>
           </div>
-          );
-        })}
-      </dl>
-      <button disabled={guardando} onClick={guardar}>
-        {guardando ? "Guardando…" : confirmado ? "Actualizar confirmación" : "Confirmar campos"}
-      </button>
-      {confirmado && (
-        <div className="crear-expediente-asistido">
-          <select
-            aria-label="Tipo de comprobante"
-            value={tipoComprobante}
-            onChange={(e) => {
-              const tipo = e.target.value as "FACT" | "RHE";
-              setTipoComprobante(tipo);
-              setRequiereGuia(tipo === "FACT");
-            }}
-          >
-            <option value="FACT">Factura</option>
-            <option value="RHE">Recibo por honorarios</option>
-          </select>
-          <input
-            placeholder="Razón social emisor (opcional)"
-            value={razonEmisor}
-            onChange={(e) => setRazonEmisor(e.target.value)}
-          />
-          <input
-            placeholder="Razón social receptor (opcional)"
-            value={razonReceptor}
-            onChange={(e) => setRazonReceptor(e.target.value)}
-          />
-          {tipoComprobante === "FACT" && (
-            <label>
-              <input
-                type="checkbox"
-                checked={requiereGuia}
-                onChange={(e) => setRequiereGuia(e.target.checked)}
-              />{" "}
-              Requiere guía
-            </label>
-          )}
-          <button disabled={creando} onClick={crearExpediente}>
-            {creando ? "Creando…" : "Crear o asociar expediente"}
-          </button>
-        </div>
-      )}
-      {error && <span className="error">{error}</span>}
-      {duplicado && (
-        <div role="alert">
-          <strong>Ya existe un expediente con esta identidad fiscal. No se creó otro.</strong>
-          <table>
-            <thead><tr><th>Campo</th><th>Confirmación manual</th><th>Expediente existente</th></tr></thead>
-            <tbody>
-              <tr><td>Serie</td><td>{valores.serie}</td><td>{duplicado.serie}</td></tr>
-              <tr><td>Número</td><td>{valores.correlativo}</td><td>{duplicado.correlativo}</td></tr>
-              <tr><td>RUC emisor</td><td>{valores.ruc_emisor}</td><td>{duplicado.emisor.ruc}</td></tr>
-              <tr><td>RUC receptor</td><td>{valores.ruc_receptor}</td><td>{duplicado.receptor.ruc}</td></tr>
-              <tr><td>Fecha</td><td>{valores.fecha_emision}</td><td>{duplicado.fecha_emision}</td></tr>
-              <tr><td>Moneda</td><td>{valores.moneda}</td><td>{duplicado.moneda}</td></tr>
-              <tr><td>Importe</td><td>{valores.importe_total}</td><td>{duplicado.importe_total}</td></tr>
-            </tbody>
-          </table>
-          <Link to={`/expedientes/${duplicado.id}`}>Revisar expediente existente</Link>
-          <p>La comparación es informativa. No se autoriza crear otro expediente ni contabilizar dos veces.</p>
-        </div>
-      )}
-      </div>
-      )}
+          <footer className="manual-expediente-pie">
+            <button type="button" className="secundario" disabled={ocupado} onClick={() => dialogo.current?.close()}>Cancelar</button>
+            <button type="button" disabled={ocupado || !valido} onClick={() => void guardar()}>{guardando ? "Guardando…" : listo ? "Actualizar confirmación" : "Confirmar datos"}</button>
+            <button type="button" disabled={ocupado || !listo || !valido || Boolean(duplicado)} onClick={() => void crearExpediente()}>{creando ? "Creando…" : "Crear expediente"}</button>
+          </footer>
+        </>}
+      </dialog>
     </div>
   );
 }
