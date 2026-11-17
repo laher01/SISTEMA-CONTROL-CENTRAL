@@ -770,9 +770,7 @@ def _extraer_partes_gre_sunat(
             razon = coincidencia.group(indices[1]).strip()
             if _razon_social_valida(razon):
                 _poner_campo(campos, f"ruc_{parte}", ruc, 0.96 * factor, ruc, fuente)
-                _poner_campo(
-                    campos, f"razon_social_{parte}", razon, 0.96 * factor, razon, fuente
-                )
+                _poner_campo(campos, f"razon_social_{parte}", razon, 0.96 * factor, razon, fuente)
                 etiqueta = "remitente" if parte == "emisor" else "beneficiario"
                 _poner_campo(campos, etiqueta, razon, 0.96 * factor, razon, fuente)
     referencias = extraer_referencias_factura_gre(texto)
