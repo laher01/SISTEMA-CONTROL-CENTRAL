@@ -4,6 +4,7 @@
 
 | ID | Trabajo | Área | Responsable | Estado | Rama / PR | Archivos previstos |
 | --- | --- | --- | --- | --- | --- | --- |
+| OCR-NEXOMAR-FORMATOS | Lectura PDF nativo Facturalaya, EFACT, FactCentral y RHE; regresiones anonimizadas | Operación documental | Chat operativo | EN DESARROLLO; coordinar #462 y #456 antes de integrar | `fix/lectura-formatos-nexomar-20261116` | Extractores de campos e ítems, módulo aislado y pruebas; sin reescaneo masivo ni cambios de datos |
 | DOC-ORIGEN-GRE | Mostrar ruta de origen de guías en Pendientes | Operación documental | Chat operativo | PR en borrador; verificación por CI | `feat/pendientes-origen-gre` | Listado de provisionales y vista Pendientes, con jerarquía documental existente |
 | DOC-ORD-001 | Ordenar Documentos, Registros y Expedientes antes de paginar | Operación documental | Chat operativo — solicitud del usuario | PR EN PREPARACIÓN; regresión API, frontend y compilación local aprobados | `feat/orden-columnas-documentales` | Rutas documentales, servicio de orden y encabezados de los tres listados |
 | COORD-001 | Crear Centro de Coordinación | Coordinación | Chat arquitectura SaaS | PR EN PREPARACIÓN | `docs/centro-coordinacion-saas-20261015` | `AGENTS.md`, `docs/COORDINACION/**` |
