@@ -37,6 +37,8 @@ def test_estado_acceso_organizacion(
     _, token = crear_sesion(session, cuenta, "GESTOR")
     session.commit()
     auth_prueba.como_usuario(auth_prueba.usuario_id)
+    assert client.patch(ruta, json={"activo": False}).status_code == 403
+    auth_prueba.como_admin()
     assert client.patch(ruta, json={"activo": False}).json()["acceso_activo"] is False
     session.expire_all()
     assert contexto_desde_token(session, token) is None
@@ -47,6 +49,7 @@ def test_estado_acceso_organizacion(
     assert client.patch(ruta, json={"activo": True}).json()["acceso_activo"] is True
     session.expire_all()
     assert contexto_desde_token(session, token) is None
+    auth_prueba.como_usuario(auth_prueba.usuario_id)
     assert client.patch(
         f"/api/v1/miembros/{auth_prueba.usuario_id}/estado-acceso", json={"activo": False}
     ).status_code == 403
