@@ -42,7 +42,7 @@ def importe_individual(documento: Documento) -> dict[str, Decimal | str | None]:
     return {"importe_total": valor, "moneda": Moneda(moneda) if moneda in ("PEN", "USD") else None}
 
 
-def _campo_documento(clave: str) -> ColumnElement[str]:
+def campo_documento(clave: str) -> ColumnElement[str]:
     datos = Documento.datos_extraidos
     fuentes = (
         datos["extraccion_confirmada"]["campos"][clave],
@@ -58,8 +58,8 @@ def _campo_documento(clave: str) -> ColumnElement[str]:
     )
 
 
-def _importe_documento(expediente: type[Expediente]) -> ColumnElement[Decimal]:
-    propio = _campo_documento("importe_total")
+def importe_documento(expediente: type[Expediente]) -> ColumnElement[Decimal]:
+    propio = campo_documento("importe_total")
     importe = case((propio.regexp_match(IMPORTE_VALIDO), cast(propio, Numeric())))
     return func.coalesce(
         case((Documento.tipo_documento.in_(("FACT", "RHE")), expediente.importe_total)), importe
@@ -119,18 +119,18 @@ def ordenar_listado[Fila: tuple[Any, ...]](
         if orden == "tipo_empresa":
             campos = (empresa.clasificacion_proveedor,)
         elif documento:
-            ruc = func.coalesce(empresa.ruc, _campo_documento(f"ruc_{orden}"))
+            ruc = func.coalesce(empresa.ruc, campo_documento(f"ruc_{orden}"))
             nombre = func.coalesce(
                 func.nullif(empresa.razon_social, empresa.ruc),
                 Documento.datos_extraidos[orden]["razon_social"].as_string(),
-                _campo_documento(f"razon_social_{orden}"),
+                campo_documento(f"razon_social_{orden}"),
                 ruc,
             )
             campos = (func.lower(nombre), ruc)
         else:
             campos = (func.lower(empresa.razon_social), empresa.ruc)
     elif orden == "monto":
-        campos = (_importe_documento(expediente) if documento else expediente.importe_total,)
+        campos = (importe_documento(expediente) if documento else expediente.importe_total,)
     elif orden == "fecha_carga":
         fecha_carga = (
             Documento.created_at
@@ -148,7 +148,7 @@ def ordenar_listado[Fila: tuple[Any, ...]](
         campos = (fecha_carga,)
     elif orden == "fecha_documento":
         if documento:
-            fecha = func.substr(_campo_documento("fecha_emision"), 1, 10)
+            fecha = func.substr(campo_documento("fecha_emision"), 1, 10)
             campos = (
                 func.coalesce(
                     case((fecha.regexp_match(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"), fecha)),
@@ -167,8 +167,8 @@ def ordenar_listado[Fila: tuple[Any, ...]](
         numero: ColumnElement[str] | InstrumentedAttribute[str] = expediente.correlativo
         if documento:
             principal = Documento.tipo_documento.in_(("FACT", "RHE"))
-            serie = func.coalesce(_campo_documento("serie"), case((principal, serie)))
-            numero = func.coalesce(_campo_documento("correlativo"), case((principal, numero)))
+            serie = func.coalesce(campo_documento("serie"), case((principal, serie)))
+            numero = func.coalesce(campo_documento("correlativo"), case((principal, numero)))
             if postgres:
                 coincidencia = func.regexp_match(
                     func.upper(Documento.nombre_original),

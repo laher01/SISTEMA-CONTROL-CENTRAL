@@ -22,7 +22,7 @@ from starlette.background import BackgroundTask
 
 from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado
-from app.enums import EstadoExpediente, RolMiembro
+from app.enums import EstadoExpediente, Moneda, RolMiembro
 from app.models import (
     Alerta,
     AlertaManual,
@@ -68,6 +68,7 @@ from app.services.expedientes import (
     recalcular_expedientes,
 )
 from app.services.exportacion_excel import exportar_listado
+from app.services.filtro_importes import LimiteImporte, filtrar_importes
 from app.services.ingesta import crear_expediente
 from app.services.jerarquia_documental import nombres_jerarquia
 from app.services.orden_listados import DireccionListado, OrdenListado, ordenar_listado
@@ -369,6 +370,10 @@ def listar(
     tipo_empresa: Literal["A", "B"] | None = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
+    importe_minimo: LimiteImporte = None,
+    importe_maximo: LimiteImporte = None,
+    importe_minimo_estricto: bool = False,
+    importe_moneda: Moneda = Moneda.PEN,
     dia: date | None = None,
     responsable_id: uuid.UUID | None = None,
     usuario_id: uuid.UUID | None = None,
@@ -462,6 +467,14 @@ def listar(
                 func.lower(emisor.razon_social).contains(texto, autoescape=True),
             )
         )
+    consulta = filtrar_importes(
+        consulta,
+        tenant_id,
+        importe_minimo,
+        importe_maximo,
+        importe_minimo_estricto,
+        importe_moneda,
+    )
     if formato == "xlsx":
         ids_exportacion = consulta.with_only_columns(Expediente.id, maintain_column_froms=True)
         return exportar_listado(session, tenant_id, ids_exportacion, "expedientes")
@@ -719,6 +732,10 @@ def resumen_filtrado(
     buscar: Annotated[str | None, Query(max_length=100)] = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
+    importe_minimo: LimiteImporte = None,
+    importe_maximo: LimiteImporte = None,
+    importe_minimo_estricto: bool = False,
+    importe_moneda: Moneda = Moneda.PEN,
     dia: date | None = None,
 ) -> dict[str, object]:
     consulta = select(Expediente).where(
@@ -801,6 +818,14 @@ def resumen_filtrado(
                 func.lower(emisor.razon_social).contains(texto, autoescape=True),
             )
         )
+    consulta = filtrar_importes(
+        consulta,
+        tenant_id,
+        importe_minimo,
+        importe_maximo,
+        importe_minimo_estricto,
+        importe_moneda,
+    )
     base = consulta.subquery()
     resultado = session.execute(
         select(
@@ -887,6 +912,10 @@ def listar_ids(
     tipo_empresa: Literal["A", "B"] | None = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
+    importe_minimo: LimiteImporte = None,
+    importe_maximo: LimiteImporte = None,
+    importe_minimo_estricto: bool = False,
+    importe_moneda: Moneda = Moneda.PEN,
     dia: date | None = None,
     responsable_id: uuid.UUID | None = None,
     usuario_id: uuid.UUID | None = None,
@@ -969,6 +998,14 @@ def listar_ids(
                 func.lower(emisor.razon_social).contains(texto, autoescape=True),
             )
         )
+    consulta = filtrar_importes(
+        consulta,
+        tenant_id,
+        importe_minimo,
+        importe_maximo,
+        importe_minimo_estricto,
+        importe_moneda,
+    )
     consulta = consulta.order_by(
         Expediente.fecha_emision.desc(),
         Expediente.created_at.desc(),

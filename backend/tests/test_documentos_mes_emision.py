@@ -1,5 +1,8 @@
 """El mes documental se calcula por emisión y modifica lista y resumen."""
 
+from io import BytesIO
+from zipfile import ZipFile
+
 from fastapi.testclient import TestClient
 
 from tests.conftest import AuthPrueba
@@ -152,3 +155,59 @@ def test_orden_documental_respeta_paginacion_y_filtros(client: TestClient) -> No
         ):
             respuesta = client.get(ruta, params={**filtros, "orden": orden})
             assert respuesta.status_code == 200, respuesta.text
+
+
+def test_rango_de_importes_en_listados_resumen_ids_y_excel(client: TestClient) -> None:
+    for numero, monto, moneda in (
+        ("101", "2000.00", "PEN"),
+        ("102", "2000.01", "PEN"),
+        ("103", "2500.00", "USD"),
+        ("104", "3000.00", "PEN"),
+    ):
+        subida = client.post(
+            "/api/v1/documentos",
+            files={"archivo": (f"F001-{numero}.xml", factura(f"F001-{numero}", monto, moneda))},
+        )
+        assert subida.status_code == 201, subida.text
+        if numero == "102":
+            esperado = subida.json()
+
+    rango = {
+        "importe_minimo": "2000",
+        "importe_minimo_estricto": "true",
+        "importe_maximo": "2000.01",
+        "importe_moneda": "PEN",
+    }
+    for modulo, clave in (
+        ("documentos", "id"),
+        ("expedientes", "id"),
+        ("registros", "expediente_id"),
+    ):
+        ruta = f"/api/v1/{modulo}"
+        respuesta = client.get(ruta, params={**rango, "orden": "monto", "limit": 1})
+        assert respuesta.status_code == 200, respuesta.text
+        resultado = respuesta.json()
+        filas = resultado["filas"] if modulo == "registros" else resultado
+        identificador = esperado["id" if modulo == "documentos" else "expediente_id"]
+        assert [fila[clave] for fila in filas] == [identificador]
+
+        exportacion = client.get(ruta, params={**rango, "formato": "xlsx", "offset": 8})
+        assert exportacion.status_code == 200, exportacion.text
+
+        with ZipFile(BytesIO(exportacion.content)) as libro:
+            hoja = libro.read("xl/worksheets/sheet1.xml").decode()
+        assert "F001-102" in hoja
+        assert all(f"F001-{numero}" not in hoja for numero in ("101", "103", "104"))
+
+        invalido = client.get(ruta, params={**rango, "importe_maximo": "1999"})
+        assert invalido.status_code == 422
+
+    for modulo in ("documentos", "expedientes"):
+        resumen = client.get(f"/api/v1/{modulo}/resumen", params=rango)
+        assert resumen.status_code == 200, resumen.text
+        assert resumen.json()[f"total_{modulo}"] == 1
+        assert float(resumen.json()["total_pen"]) == 2000.01
+
+    ids = client.get("/api/v1/expedientes/ids", params=rango)
+    assert ids.status_code == 200, ids.text
+    assert ids.json() == [esperado["expediente_id"]]

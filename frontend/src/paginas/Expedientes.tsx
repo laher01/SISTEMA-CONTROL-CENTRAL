@@ -1,3 +1,4 @@
+import FiltroImportes, { parametrosImportes } from "../componentes/FiltroImportes";
 import EncabezadoOrden, { parametrosOrden } from "../componentes/EncabezadoOrden";
 import ExportarExcel from "../ExportarExcel";
 import { useState } from "react";
@@ -87,6 +88,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
     dia: mes ? "" : dia,
     fecha_desde: inicioMes || desde,
     fecha_hasta: finMes || hasta,
+    ...parametrosImportes(parametros),
     buscar: buscar.trim(),
   };
 
@@ -361,6 +363,10 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
           onChange={(e) => cambiar("receptor_ruc", e.target.value.replace(/\D/g, ""))}
         />
       </div>
+      <FiltroImportes parametros={parametros} aplicar={(siguiente) => {
+        setSeleccionados(new Set()); setMensaje("");
+        setParametros(siguiente);
+      }} />
 
       <section className="panel-configuracion">
         <strong>Total del filtro completo (todas las páginas)</strong>

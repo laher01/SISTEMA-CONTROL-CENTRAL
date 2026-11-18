@@ -1,3 +1,4 @@
+import FiltroImportes, { parametrosImportes } from "../componentes/FiltroImportes";
 import EncabezadoOrden, { parametrosOrden } from "../componentes/EncabezadoOrden";
 import ExportarExcel from "../ExportarExcel";
 import { useState } from "react";
@@ -66,6 +67,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
     empresa_receptora: receptor.length === 11 ? undefined : receptor,
     fecha_desde: desde,
     fecha_hasta: hasta,
+    ...parametrosImportes(parametros),
     ...parametrosOrden(orden),
     limit: String(POR_PAGINA),
     offset: String(pagina * POR_PAGINA),
@@ -97,6 +99,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
     empresa_receptora: receptor.length === 11 ? undefined : receptor,
     fecha_desde: desde,
     fecha_hasta: hasta,
+    ...parametrosImportes(parametros),
   }));
   const [reprocesando, setReprocesando] = useState(false);
   const [resultadoLote, setResultadoLote] = useState<ResultadoLote>();
@@ -133,6 +136,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
         empresa_receptora: receptor.length === 11 ? undefined : receptor,
         fecha_desde: desde,
         fecha_hasta: hasta,
+        ...parametrosImportes(parametros),
         limit: "101",
         offset: "0",
       }));
@@ -499,6 +503,10 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
         </label>
         <button className="secundario" onClick={limpiar}>Limpiar filtros</button>
       </div>
+      <FiltroImportes parametros={parametros} aplicar={(siguiente) => {
+        setSeleccionados([]); setDocumentosSeleccionados({});
+        setParametros(siguiente);
+      }} />
 
       <section className="panel-configuracion">
         <strong>Total del filtro completo (todas las páginas)</strong>
