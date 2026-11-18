@@ -155,6 +155,90 @@ def opciones(
     return RegistroOpciones(responsables=responsables, usuarios=usuarios, gestores=gestores)
 
 
+
+@router.get("/auditoria-fiscal")
+def auditoria_fiscal(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+    emisor: Annotated[str | None, Query(max_length=100)] = None,
+    receptor: Annotated[str | None, Query(max_length=100)] = None,
+    moneda: Literal["PEN", "USD"] | None = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict[str, Any]:
+    """Inventario de facturas para revisión, sin determinar crédito tributario."""
+    if auth.rol not in (
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.SECRETARIA,
+        RolMiembro.GERENTE,
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Consulta no autorizada")
+    if auth.rol == RolMiembro.SECRETARIA and not permiso_habilitado(
+        session, tenant_id, auth.rol, "SECRETARIA_MENU_REGISTROS"
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Módulo desactivado para Secretaría")
+    if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Periodo inválido")
+    emisor_empresa = aliased(Empresa)
+    receptor_empresa = aliased(Empresa)
+    consulta = (
+        select(Expediente, emisor_empresa.ruc, receptor_empresa.ruc)
+        .join(emisor_empresa, Expediente.emisor_id == emisor_empresa.id)
+        .join(receptor_empresa, Expediente.receptor_id == receptor_empresa.id)
+        .where(
+            Expediente.tenant_id == tenant_id,
+            emisor_empresa.tenant_id == tenant_id,
+            receptor_empresa.tenant_id == tenant_id,
+            Expediente.deleted_at.is_(None),
+            Expediente.tipo_comprobante == "FACT",
+            Expediente.pendiente_aprobacion.is_(False),
+            Expediente.documentos.any(
+                (Documento.tenant_id == tenant_id)
+                & Documento.deleted_at.is_(None)
+                & (Documento.tipo_documento == TipoDocumento.FACT)
+                & (Documento.estado == "RELACIONADO")
+            ),
+        )
+    )
+    consulta = _aplicar_ambito(consulta, auth)
+    if fecha_desde:
+        consulta = consulta.where(Expediente.fecha_emision >= fecha_desde)
+    if fecha_hasta:
+        consulta = consulta.where(Expediente.fecha_emision <= fecha_hasta)
+    if moneda:
+        consulta = consulta.where(Expediente.moneda == moneda)
+    for texto, empresa in ((emisor, emisor_empresa), (receptor, receptor_empresa)):
+        if texto and texto.strip():
+            termino = texto.strip().lower()
+            consulta = consulta.where(
+                func.lower(empresa.ruc).contains(termino, autoescape=True)
+                | func.lower(empresa.razon_social).contains(termino, autoescape=True)
+            )
+    total = session.scalar(select(func.count()).select_from(consulta.subquery())) or 0
+    filas = []
+    for expediente, emisor_ruc, receptor_ruc in session.execute(
+        consulta.order_by(Expediente.fecha_emision.desc(), Expediente.id)
+        .limit(limit)
+        .offset(offset)
+    ):
+        filas.append(
+            {
+                "expediente_id": str(expediente.id),
+                "comprobante": f"{expediente.serie}-{expediente.correlativo}",
+                "fecha_emision": expediente.fecha_emision.isoformat(),
+                "emisor_ruc": emisor_ruc,
+                "receptor_ruc": receptor_ruc,
+                "moneda": expediente.moneda,
+                "estado_documental": expediente.estado,
+                "estado_fiscal": "PENDIENTE_VERIFICACION",
+            }
+        )
+    return {"total": total, "filas": filas}
+
+
 @router.get("", response_model=RegistroResumen)
 def listar(
     session: SessionDep,
