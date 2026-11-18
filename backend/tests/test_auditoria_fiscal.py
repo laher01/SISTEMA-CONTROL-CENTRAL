@@ -1,10 +1,23 @@
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
+from app.models import Empresa
 from tests.conftest import AuthPrueba
-from tests.xml import factura
+from tests.xml import RECEPTOR, factura
 
 
-def test_auditoria_fiscal_solo_consulta(client: TestClient, auth_prueba: AuthPrueba) -> None:
+def test_auditoria_fiscal_solo_consulta(
+    client: TestClient, auth_prueba: AuthPrueba, session: Session
+) -> None:
+    session.add(
+        Empresa(
+            tenant_id=auth_prueba.contexto.tenant_id,
+            ruc=RECEPTOR,
+            razon_social="CLIENTE SAC",
+            autorizada=True,
+        )
+    )
+    session.commit()
     ruta = "/api/v1/registros/auditoria-fiscal"
     subida = client.post(
         "/api/v1/documentos",
