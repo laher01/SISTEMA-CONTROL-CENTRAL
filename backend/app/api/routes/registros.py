@@ -10,7 +10,7 @@ from sqlalchemy.orm import aliased
 
 from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.enums import Moneda, RolMiembro, TipoDocumento
-from app.models import Documento, Empresa, Expediente, Gestor, Miembro
+from app.models import Documento, Empresa, Expediente, Gestor, Miembro, PermisoConfigurado
 from app.schemas import FiltroOpcion, RegistroFila, RegistroOpciones, RegistroResumen
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.expedientes import (
@@ -155,7 +155,6 @@ def opciones(
     return RegistroOpciones(responsables=responsables, usuarios=usuarios, gestores=gestores)
 
 
-
 @router.get("/auditoria-fiscal")
 def auditoria_fiscal(
     session: SessionDep,
@@ -176,10 +175,16 @@ def auditoria_fiscal(
         RolMiembro.GERENTE,
     ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Consulta no autorizada")
-    if auth.rol == RolMiembro.SECRETARIA and not permiso_habilitado(
-        session, tenant_id, auth.rol, "SECRETARIA_MENU_REGISTROS"
-    ):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Módulo desactivado para Secretaría")
+    if auth.rol == RolMiembro.SECRETARIA:
+        permiso = session.scalar(
+            select(PermisoConfigurado).where(
+                PermisoConfigurado.tenant_id == tenant_id,
+                PermisoConfigurado.rol == RolMiembro.SECRETARIA,
+                PermisoConfigurado.permiso == "SECRETARIA_MENU_REGISTROS",
+            )
+        )
+        if permiso is not None and not permiso.habilitado:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Módulo desactivado para Secretaría")
     if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Periodo inválido")
     emisor_empresa = aliased(Empresa)
