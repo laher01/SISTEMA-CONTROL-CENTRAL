@@ -7,6 +7,8 @@ from uuid import UUID
 from fastapi import HTTPException, Query
 from sqlalchemy import Select, case, func
 from sqlalchemy.orm import aliased
+from sqlalchemy.orm.attributes import InstrumentedAttribute
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.enums import Moneda
 from app.models import Documento, Expediente
@@ -34,6 +36,8 @@ def filtrar_importes[Fila: tuple[Any, ...]](
     ):
         raise HTTPException(422, "El rango de importes no es válido")
 
+    importe: ColumnElement[Decimal] | InstrumentedAttribute[Decimal]
+    moneda_fila: ColumnElement[str] | InstrumentedAttribute[str]
     if documento:
         expediente = aliased(Expediente)
         consulta = consulta.outerjoin(
