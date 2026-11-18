@@ -1,8 +1,11 @@
 from types import SimpleNamespace
 
 import pytest
+from fastapi.testclient import TestClient
 
+from app.api.routes import registros
 from app.services import sunat_observaciones
+from tests.conftest import AuthPrueba
 
 
 def test_resumen_observado(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -29,3 +32,20 @@ def test_resumen_observado(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_rechaza_archivo_no_pdf() -> None:
     with pytest.raises(ValueError, match="PDF inválido"):
         sunat_observaciones.resumir_observaciones_sunat(b"texto")
+
+
+def test_endpoint_observaciones_permisos(
+    client: TestClient, auth_prueba: AuthPrueba, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ruta = "/api/v1/registros/sunat/observaciones"
+    archivos = {"archivo": ("requerimiento.pdf", b"%PDF-", "application/pdf")}
+    assert client.post(ruta, files=archivos).status_code == 403
+    auth_prueba.como_admin()
+    monkeypatch.setattr(
+        registros,
+        "resumir_observaciones_sunat",
+        lambda _: {"estado": "OBSERVADO_PENDIENTE_VERIFICACION"},
+    )
+    respuesta = client.post(ruta, files=archivos)
+    assert respuesta.status_code == 200
+    assert respuesta.json()["estado"] == "OBSERVADO_PENDIENTE_VERIFICACION"
