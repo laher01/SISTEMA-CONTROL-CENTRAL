@@ -9,6 +9,7 @@ import { enviarJson, useDatos } from "./api";
 import NexusFlotante from "./componentes/NexusFlotante";
 import AparienciaPersonal from "./componentes/AparienciaPersonal";
 import Alertas from "./paginas/Alertas";
+import AuditoriaFiscal from "./paginas/AuditoriaFiscal";
 import AprobacionesMISD from "./paginas/AprobacionesMISD";
 import Configuracion from "./paginas/Configuracion";
 import CarteraGerencia from "./paginas/CarteraGerencia";
@@ -71,6 +72,7 @@ const MENU: { a: string; texto: string; icono: string; roles: RolSesion[] }[] = 
     icono: "▦",
     roles: ["SUPERADMIN", "ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"],
   },
+  { a: "/registros/auditoria-fiscal", texto: "Auditoría de crédito fiscal", icono: "↳", roles: ["ADMINISTRADOR", "SECRETARIA", "GERENTE"] },
   {
     a: "/chat",
     texto: "Chat interno",
@@ -185,7 +187,7 @@ export default function App() {
   const menu = sesion.rol === "SUPERADMIN"
     ? [{ a: "/configuracion", texto: "Consola SaaS", icono: "⚙", roles: ["SUPERADMIN" as RolSesion] }]
     : MENU.filter((item) => item.roles.includes(sesion.rol) && (sesion.rol !== "SECRETARIA" || (
-      (item.a !== "/registros" || activaciones?.registros !== false) &&
+      (!["/registros", "/registros/auditoria-fiscal"].includes(item.a) || activaciones?.registros !== false) &&
       (item.a !== "/secretaria" || activaciones?.control_documental !== false) &&
       (item.a !== "/documentos" || activaciones?.documentos !== false)
     )));
@@ -210,7 +212,7 @@ export default function App() {
         </div>
         <nav>
           {menu.map((item) => (
-            <NavLink key={item.a} to={item.a} end={item.a === "/"} className={item.a.startsWith("/contabilidad-items/") ? "menu-subitem" : undefined} title={item.texto} aria-label={item.texto}>
+            <NavLink key={item.a} to={item.a} end={item.a === "/" || item.a === "/registros"} className={item.a.startsWith("/contabilidad-items/") || item.a.startsWith("/registros/") ? "menu-subitem" : undefined} title={item.texto} aria-label={item.texto}>
               <span className="menu-icono" aria-hidden="true">{item.icono}</span><span className="barra-texto menu-etiqueta">{item.texto}</span>
             </NavLink>
           ))}
@@ -240,6 +242,7 @@ export default function App() {
           <Route path="/" element={sesion.es_administracion_demo && sesion.rol === "ADMINISTRADOR" ? <Navigate to="/organizacion" replace /> : <Dashboard key={`${sesion.rol}-${sesion.codigo}`} sesion={sesion} />} />
           <Route path="/ingresar" element={<Navigate to="/" replace />} />
           <Route path="/subir" element={sesion.rol === "GESTOR" ? <Subir sesion={sesion} /> : <Navigate to="/" replace />} />
+          <Route path="/registros/auditoria-fiscal" element={["ADMINISTRADOR", "SECRETARIA", "GERENTE"].includes(sesion.rol) && !(sesion.rol === "SECRETARIA" && activaciones?.registros === false) ? <AuditoriaFiscal /> : <Navigate to="/" replace />} />
           <Route path="/registros" element={sesion.rol === "SECRETARIA" && activaciones?.registros === false ? <Navigate to="/expedientes" replace /> : <Registros sesion={sesion} />} />
           <Route path="/mi-recepcion" element={sesion.rol === "GESTOR" ? <RecepcionGestor /> : <Navigate to={sesion.rol === "ADMINISTRADOR" ? "/configuracion?seccion=correos" : "/"} replace />} />
           <Route path="/chat" element={<Chat />} />
