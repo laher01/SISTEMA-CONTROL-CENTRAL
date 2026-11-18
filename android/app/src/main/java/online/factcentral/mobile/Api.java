@@ -14,7 +14,16 @@ final class Api {
  }
  synchronized void logout()throws Exception{try{request("/api/v1/auth/logout",new JSONObject());}finally{cookies.getCookieStore().removeAll();}}
  synchronized void clear(){cookies.getCookieStore().removeAll();}
- private Object request(String route,JSONObject body)throws Exception{
+ synchronized JSONObject reviewPdf(byte[] pdf)throws Exception{
+  if(pdf.length<5||pdf.length>20*1024*1024||!new String(pdf,0,5,StandardCharsets.US_ASCII).equals("%PDF-"))throw new IOException("PDF inválido o demasiado grande.");
+  String boundary="FC"+UUID.randomUUID().toString().replace("-","");
+  ByteArrayOutputStream data=new ByteArrayOutputStream();
+  data.write(("--"+boundary+"\r\nContent-Disposition: form-data; name=\"archivo\"; filename=\"observaciones.pdf\"\r\nContent-Type: application/pdf\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+  data.write(pdf);data.write(("\r\n--"+boundary+"--\r\n").getBytes(StandardCharsets.UTF_8));
+  return (JSONObject)requestBytes("/api/v1/registros/sunat/observaciones",data.toByteArray(),"multipart/form-data; boundary="+boundary);
+ }
+ private Object request(String route,JSONObject body)throws Exception{return requestBytes(route,body==null?null:body.toString().getBytes(StandardCharsets.UTF_8),"application/json");}
+ private Object requestBytes(String route,byte[] body,String contentType)throws Exception{
   if(!route.startsWith("/api/v1/")||route.contains("..")||route.contains("\\"))throw new IOException("Ruta inválida");
   URI uri=URI.create(BASE+route);
   HttpURLConnection c=(HttpURLConnection)uri.toURL().openConnection();
@@ -22,7 +31,7 @@ final class Api {
   c.setRequestProperty("Accept","application/json");c.setRequestProperty("Origin",BASE);c.setRequestProperty("Referer",BASE+"/");
   for(var e:cookies.get(uri,Collections.emptyMap()).entrySet())for(String v:e.getValue())c.addRequestProperty(e.getKey(),v);
   try{
-   if(body!=null){c.setRequestMethod("POST");c.setDoOutput(true);c.setRequestProperty("Content-Type","application/json");try(OutputStream o=c.getOutputStream()){o.write(body.toString().getBytes(StandardCharsets.UTF_8));}}
+   if(body!=null){c.setRequestMethod("POST");c.setDoOutput(true);c.setRequestProperty("Content-Type",contentType);c.setFixedLengthStreamingMode(body.length);try(OutputStream o=c.getOutputStream()){o.write(body);}}
    int code=c.getResponseCode();
    cookies.put(uri,c.getHeaderFields());
    if(code==401){clear();throw new IOException("Sesión vencida. Vuelve a ingresar.");}

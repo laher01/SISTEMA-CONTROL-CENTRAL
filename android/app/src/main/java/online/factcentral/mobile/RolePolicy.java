@@ -8,5 +8,6 @@ final class RolePolicy {
  static boolean operational(String role){return ROLES.contains(role)&&!role.equals("SUPERADMIN");}
  static boolean documents(String role,boolean enabled){return set("ADMINISTRADOR","USUARIO","GESTOR").contains(role)||(role.equals("SECRETARIA")&&enabled);}
  static boolean expedients(String role,boolean enabled){return operational(role)&&(!role.equals("SECRETARIA")||enabled);}
+ static boolean audit(String role,boolean enabled){return set("ADMINISTRADOR","GERENTE").contains(role)||(role.equals("SECRETARIA")&&enabled);}
  static boolean alerts(String role){return set("ADMINISTRADOR","SECRETARIA","RESPONSABLE","USUARIO","GESTOR").contains(role);}
 }
