@@ -21,9 +21,12 @@ def test_auditoria_fiscal_solo_consulta(client: TestClient, auth_prueba: AuthPru
     assert resultado["filas"][0]["estado_fiscal"] == "PENDIENTE_VERIFICACION"
     assert "credito_fiscal" not in resultado
     assert client.get(ruta, params={"emisor": "00000000000"}).json()["total"] == 0
-    assert client.get(
-        ruta, params={"fecha_desde": "2026-10-10", "fecha_hasta": "2026-10-01"}
-    ).status_code == 422
+    assert (
+        client.get(
+            ruta, params={"fecha_desde": "2026-10-10", "fecha_hasta": "2026-10-01"}
+        ).status_code
+        == 422
+    )
 
     auth_prueba.como_gerente()
     respuesta = client.get(ruta)
