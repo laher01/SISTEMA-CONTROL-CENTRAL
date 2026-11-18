@@ -3,14 +3,15 @@ from datetime import date
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
+from pypdf.errors import PdfReadError
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import aliased
 
 from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.enums import Moneda, RolMiembro, TipoDocumento
-from app.models import Documento, Empresa, Expediente, Gestor, Miembro
+from app.models import Documento, Empresa, Expediente, Gestor, Miembro, PermisoConfigurado
 from app.schemas import FiltroOpcion, RegistroFila, RegistroOpciones, RegistroResumen
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.expedientes import (
@@ -22,6 +23,7 @@ from app.services.expedientes import (
 from app.services.exportacion_excel import exportar_listado
 from app.services.orden_listados import DireccionListado, OrdenListado, ordenar_listado
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
+from app.services.sunat_observaciones import resumir_observaciones_sunat
 
 router = APIRouter(prefix="/registros", tags=["registros"])
 
@@ -422,3 +424,36 @@ def _validar_filtros(
             status.HTTP_403_FORBIDDEN,
             "El Usuario ya está limitado a su propia información",
         )
+
+
+@router.post("/sunat/observaciones")
+def revisar_observaciones_sunat(
+    session: SessionDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    archivo: Annotated[UploadFile, File()],
+) -> dict[str, object]:
+    """Resume el PDF aportado por el operador sin guardar ni modificar registros."""
+    if auth.rol not in (
+        RolMiembro.ADMINISTRADOR,
+        RolMiembro.SECRETARIA,
+        RolMiembro.GERENTE,
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Consulta no autorizada")
+    if auth.rol == RolMiembro.SECRETARIA:
+        permiso = session.scalar(
+            select(PermisoConfigurado).where(
+                PermisoConfigurado.tenant_id == tenant_id,
+                PermisoConfigurado.rol == RolMiembro.SECRETARIA,
+                PermisoConfigurado.permiso == "SECRETARIA_MENU_REGISTROS",
+            )
+        )
+        if permiso is not None and not permiso.habilitado:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Módulo desactivado para Secretaría")
+    contenido = archivo.file.read(20 * 1024 * 1024 + 1)
+    try:
+        return resumir_observaciones_sunat(contenido)
+    except (ValueError, PdfReadError, OSError) as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "No se pudo leer el anexo de observaciones"
+        ) from exc
