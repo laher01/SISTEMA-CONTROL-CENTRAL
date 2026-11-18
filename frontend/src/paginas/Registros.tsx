@@ -1,3 +1,4 @@
+import FiltroImportes, { parametrosImportes } from "../componentes/FiltroImportes";
 import EncabezadoOrden, { parametrosOrden } from "../componentes/EncabezadoOrden";
 import ExportarExcel from "../ExportarExcel";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
@@ -50,6 +51,7 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
     dia,
     fecha_desde: desde,
     fecha_hasta: hasta,
+    ...parametrosImportes(parametros),
     mes,
     ...parametrosOrden(orden),
     limit: String(POR_PAGINA),
@@ -157,6 +159,7 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
       dia: mes ? "" : dia,
       fecha_desde: inicioMes || desde,
       fecha_hasta: finMes || hasta,
+      ...parametrosImportes(parametros),
       empresa_emisora: emisor.length === 11 ? undefined : emisor,
       emisor_ruc: emisor.length === 11 ? emisor : undefined,
       empresa_receptora: receptor.length === 11 ? undefined : receptor,
@@ -280,6 +283,10 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
         </label>
         <button className="secundario" onClick={limpiar}>Limpiar filtros</button>
       </div>
+      <FiltroImportes parametros={parametros} aplicar={(siguiente) => {
+        setSeleccionados(new Set()); setMensajeLote("");
+        setParametros(siguiente);
+      }} />
 
       {capacidades?.puede_retirar && <div className="acciones" aria-label="Eliminación de expedientes seleccionados">
         <label>

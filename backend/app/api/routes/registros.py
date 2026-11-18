@@ -20,6 +20,7 @@ from app.services.expedientes import (
     tipos_presentes,
 )
 from app.services.exportacion_excel import exportar_listado
+from app.services.filtro_importes import LimiteImporte, filtrar_importes
 from app.services.orden_listados import DireccionListado, OrdenListado, ordenar_listado
 from app.services.permisos import PERMISO_ELIMINAR_REGISTROS, permiso_habilitado
 
@@ -170,6 +171,10 @@ def listar(
     dia: date | None = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
+    importe_minimo: LimiteImporte = None,
+    importe_maximo: LimiteImporte = None,
+    importe_minimo_estricto: bool = False,
+    importe_moneda: Moneda = Moneda.PEN,
     mes: Annotated[str | None, Query(pattern=r"^\d{4}-\d{2}$")] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -263,6 +268,14 @@ def listar(
             func.extract("month", Expediente.fecha_emision) == numero_mes,
         )
 
+    consulta = filtrar_importes(
+        consulta,
+        tenant_id,
+        importe_minimo,
+        importe_maximo,
+        importe_minimo_estricto,
+        importe_moneda,
+    )
     if formato == "xlsx":
         ids_exportacion = consulta.with_only_columns(Expediente.id, maintain_column_froms=True)
         return exportar_listado(session, tenant_id, ids_exportacion, "registros")

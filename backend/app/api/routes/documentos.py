@@ -75,6 +75,7 @@ from app.services.expedientes import (
     eliminar_expediente_vacio,
 )
 from app.services.exportacion_excel import exportar_listado
+from app.services.filtro_importes import LimiteImporte, filtrar_importes
 from app.services.identidad_cotizaciones import identidad_cotizacion
 from app.services.ingesta import (
     ArchivoSubido,
@@ -806,6 +807,10 @@ def listar_documentos(
     empresa_receptora: Annotated[str | None, Query(max_length=100)] = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
+    importe_minimo: LimiteImporte = None,
+    importe_maximo: LimiteImporte = None,
+    importe_minimo_estricto: bool = False,
+    importe_moneda: Moneda = Moneda.PEN,
     fecha_emision: date | None = None,
     mes: Annotated[str | None, Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")] = None,
     serie_correlativo: Annotated[str | None, Query(min_length=1, max_length=60)] = None,
@@ -998,6 +1003,15 @@ def listar_documentos(
                     | (receptor.ruc.contains(termino, autoescape=True))
                 )
 
+    consulta = filtrar_importes(
+        consulta,
+        tenant_id,
+        importe_minimo,
+        importe_maximo,
+        importe_minimo_estricto,
+        importe_moneda,
+        documento=True,
+    )
     if formato == "xlsx":
         ids_exportacion = consulta.with_only_columns(Documento.id, maintain_column_froms=True)
         return exportar_listado(session, tenant_id, ids_exportacion, "documentos")
@@ -1047,6 +1061,10 @@ def resumen_documentos(
     empresa_receptora: Annotated[str | None, Query(max_length=100)] = None,
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
+    importe_minimo: LimiteImporte = None,
+    importe_maximo: LimiteImporte = None,
+    importe_minimo_estricto: bool = False,
+    importe_moneda: Moneda = Moneda.PEN,
     fecha_emision: date | None = None,
     mes: Annotated[str | None, Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")] = None,
     serie_correlativo: Annotated[str | None, Query(min_length=1, max_length=60)] = None,
@@ -1210,6 +1228,15 @@ def resumen_documentos(
                     (func.lower(receptor.razon_social).contains(termino, autoescape=True))
                     | (receptor.ruc.contains(termino, autoescape=True))
                 )
+    consulta = filtrar_importes(
+        consulta,
+        tenant_id,
+        importe_minimo,
+        importe_maximo,
+        importe_minimo_estricto,
+        importe_moneda,
+        documento=True,
+    )
     filtrados = consulta.subquery()
     cantidad = session.scalar(select(func.count()).select_from(filtrados)) or 0
     expedientes_unicos = (
