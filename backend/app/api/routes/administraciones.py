@@ -14,6 +14,7 @@ from app.api.deps import OperativeAuthDep, SessionDep, SettingsDep
 from app.enums import RolMiembro
 from app.models import CuentaAcceso, Documento, Empresa, Expediente, Gestor, Miembro, Tenant
 from app.security import crear_o_restablecer_cuenta
+from app.services import auditoria
 from app.services.expedientes import expediente_tiene_documentos_activos
 from app.tenant_host import validar_subdominio
 
@@ -187,7 +188,31 @@ def inspeccionar_tenant(
         )
         or 0,
     }
+    propietarios = [
+        m for m in miembros if m.rol == RolMiembro.ADMINISTRADOR and m.codigo == "ADMIN01"
+    ]
+    propietario = propietarios[0] if len(propietarios) == 1 else None
+    auditoria.registrar(
+        session,
+        auth.tenant_id,
+        "ADMINISTRACION_INSPECCIONADA",
+        "tenant",
+        tenant.id,
+        {"actor_cuenta_id": str(auth.cuenta_id)},
+    )
+    session.commit()
     return {
+        "acceso_propietario": {
+            "espacio": tenant.codigo or tenant.nombre,
+            "propietario": propietario.nombre if propietario else None,
+            "login": cuentas.get(propietario.id) if propietario else None,
+            "habilitado": bool(
+                propietario
+                and propietario.activo
+                and cuentas.get(propietario.id)
+                and tenant.estado == "ACTIVO"
+            ),
+        },
         "tenant": {
             "id": str(tenant.id),
             "codigo": tenant.codigo,

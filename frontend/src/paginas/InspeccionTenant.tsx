@@ -5,6 +5,7 @@ type Miembro = { id: string; codigo: string; nombre: string; rol: string; activo
 type Gestor = { id: string; codigo: string; nombre: string; usuario_id: string | null };
 type Inspeccion = {
   solo_lectura: boolean;
+  acceso_propietario?: { espacio: string; propietario: string | null; login: string | null; habilitado: boolean };
   tenant: { id: string; codigo: string | null; nombre: string; estado: string; subdominio: string | null };
   miembros: Miembro[];
   gestores: Gestor[];
@@ -28,6 +29,15 @@ export default function InspeccionTenant({ tenantId, cerrar }: { tenantId: strin
     {datos && <>
       <h4>{datos.tenant.nombre} · {datos.tenant.codigo ?? "Sin código"}</h4>
       <p>Estado: {datos.tenant.estado} · Subdominio: {datos.tenant.subdominio ?? "No asignado"}</p>
+      {datos.acceso_propietario && <>
+        <h4>Acceso del administrador propietario</h4>
+        <dl>
+          <dt>Espacio administrativo</dt><dd><code>{datos.acceso_propietario.espacio}</code></dd>
+          <dt>Propietario</dt><dd>{datos.acceso_propietario.propietario ?? "Sin propietario identificado"}</dd>
+          <dt>Usuario o correo</dt><dd>{datos.acceso_propietario.login ?? "Sin cuenta activa"}</dd>
+          <dt>Estado del acceso</dt><dd>{datos.acceso_propietario.habilitado ? "Habilitado" : "Pendiente de revisión"}</dd>
+        </dl>
+      </>}
       <div className="resumen-carga">
         <strong>Empresas: {datos.contadores.empresas}</strong>{" · "}
         <strong>Expedientes: {datos.contadores.expedientes}</strong>{" · "}
