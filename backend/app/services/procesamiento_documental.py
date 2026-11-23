@@ -398,6 +398,7 @@ def _ejecutar_tesseract(
         raise DocumentoNoProcesable(f"Tesseract no pudo procesar la imagen: {mensaje}")
     return _leer_tsv(proceso.stdout, limite)
 
+
 def _cantidad_paginas(contenido: bytes) -> int:
     try:
         documento = pdfium.PdfDocument(contenido)
