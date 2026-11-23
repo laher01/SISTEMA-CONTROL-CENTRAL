@@ -1,9 +1,9 @@
 from app.enums import TipoDocumento
 from app.services.extraccion_campos import extraer_campos
 from app.services.procesamiento_documental import (
+    ResultadoProcesamiento,
     _leer_tsv,
     _requiere_lectura_auxiliar,
-    ResultadoProcesamiento,
     sugerir_tipo,
 )
 
