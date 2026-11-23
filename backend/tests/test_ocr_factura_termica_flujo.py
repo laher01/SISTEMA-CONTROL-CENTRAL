@@ -70,7 +70,8 @@ def test_ticket_termico_multiplataforma_confirma_identidad_antes_de_crear_expedi
 
     solicitud = {"tipo_comprobante": "FACT", "requiere_guia": False}
     bloqueado = client.post(f"/api/v1/documentos/{documento_id}/crear-expediente", json=solicitud)
-    assert bloqueado.status_code == 422, bloqueado.text
+    assert bloqueado.status_code == 409, bloqueado.text
+    assert "Debe confirmar la extracción" in bloqueado.json()["detail"]
 
     confirmacion = client.put(
         f"/api/v1/documentos/{documento_id}/extraccion-confirmada",
