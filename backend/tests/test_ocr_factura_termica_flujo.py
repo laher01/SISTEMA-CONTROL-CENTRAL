@@ -45,7 +45,13 @@ def test_ticket_termico_multiplataforma_confirma_identidad_antes_de_crear_expedi
     # Contrato compartido: web (FormData) y Android (multipart), mismo campo "archivo".
     subida = client.post(
         "/api/v1/documentos",
-        files={"archivo": ("factura-termica-sintetica.pdf", _pdf_termico_sintetico(), "application/pdf")},
+        files={
+            "archivo": (
+                "factura-termica-sintetica.pdf",
+                _pdf_termico_sintetico(),
+                "application/pdf",
+            )
+        },
     )
     assert subida.status_code == 201, subida.text
     documento_id = subida.json()["id"]
@@ -83,7 +89,8 @@ def test_ticket_termico_multiplataforma_confirma_identidad_antes_de_crear_expedi
         },
     )
     assert confirmacion.status_code == 200, confirmacion.text
-    assert confirmacion.json()["datos_extraidos"]["extraccion_confirmada"]["campos"]["serie"] == "FF01"
+    campos_confirmados = confirmacion.json()["datos_extraidos"]["extraccion_confirmada"]["campos"]
+    assert campos_confirmados["serie"] == "FF01"
 
     creado = client.post(
         f"/api/v1/documentos/{documento_id}/crear-expediente", json=solicitud
