@@ -69,9 +69,7 @@ def test_ticket_termico_multiplataforma_confirma_identidad_antes_de_crear_expedi
     assert procesado.json()["expediente_id"] is None
 
     solicitud = {"tipo_comprobante": "FACT", "requiere_guia": False}
-    bloqueado = client.post(
-        f"/api/v1/documentos/{documento_id}/crear-expediente", json=solicitud
-    )
+    bloqueado = client.post(f"/api/v1/documentos/{documento_id}/crear-expediente", json=solicitud)
     assert bloqueado.status_code == 422, bloqueado.text
 
     confirmacion = client.put(
@@ -92,17 +90,13 @@ def test_ticket_termico_multiplataforma_confirma_identidad_antes_de_crear_expedi
     campos_confirmados = confirmacion.json()["datos_extraidos"]["extraccion_confirmada"]["campos"]
     assert campos_confirmados["serie"] == "FF01"
 
-    creado = client.post(
-        f"/api/v1/documentos/{documento_id}/crear-expediente", json=solicitud
-    )
+    creado = client.post(f"/api/v1/documentos/{documento_id}/crear-expediente", json=solicitud)
     assert creado.status_code == 200, creado.text
     assert creado.json()["expediente"]["serie"] == "FF01"
     assert str(creado.json()["expediente"]["importe_total"]) == "62.00"
 
     # Evita duplicar identidad fiscal y monto si se repite la operación.
-    repetido = client.post(
-        f"/api/v1/documentos/{documento_id}/crear-expediente", json=solicitud
-    )
+    repetido = client.post(f"/api/v1/documentos/{documento_id}/crear-expediente", json=solicitud)
     assert repetido.status_code == 200, repetido.text
     assert repetido.json()["creado"] is False
     assert repetido.json()["expediente"]["id"] == creado.json()["expediente"]["id"]
