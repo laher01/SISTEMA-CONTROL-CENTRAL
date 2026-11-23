@@ -353,7 +353,7 @@ def _idioma_disponible(ejecutable: str) -> str:
 
 def _leer_tsv(tsv: str, limite: int) -> tuple[str, float | None]:
     """Conserva las líneas del texto OCR de facturas y tickets térmicos."""
-    lineas: dict[tuple[str, str, str, str], list[str]] = {}
+    lineas: dict[tuple[str, ...], list[str]] = {}
     confianzas: list[float] = []
     for fila in csv.DictReader(io.StringIO(tsv), delimiter="\t"):
         palabra = (fila.get("text") or "").strip()
