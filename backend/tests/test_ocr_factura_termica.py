@@ -1,11 +1,11 @@
 from app.enums import TipoDocumento
+from app.services.extraccion_campos import extraer_campos
 from app.services.procesamiento_documental import (
     _leer_tsv,
     _requiere_lectura_auxiliar,
     ResultadoProcesamiento,
     sugerir_tipo,
 )
-from app.services.extraccion_campos import extraer_campos
 
 
 def test_ticket_termico_ocr_conserva_lineas_y_montos():
