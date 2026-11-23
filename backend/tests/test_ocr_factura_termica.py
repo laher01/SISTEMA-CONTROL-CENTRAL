@@ -3,8 +3,8 @@ import io
 import pytest
 from pypdf import PdfWriter
 
-from app.services import procesamiento_documental as pd
 from app.enums import TipoDocumento
+from app.services import procesamiento_documental as pd
 from app.services.extraccion_campos import extraer_campos
 from app.services.procesamiento_documental import (
     ResultadoProcesamiento,
