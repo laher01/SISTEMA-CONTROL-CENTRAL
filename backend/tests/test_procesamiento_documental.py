@@ -795,7 +795,6 @@ def test_pse_no_coincide_con_fragmento_de_razon_social() -> None:
     assert detectar_formato_documental("PROVEEDOR PSE") == "PSE"
 
 
-
 @pytest.mark.parametrize("pdf", [False, True])
 def test_reescanea_lectura_vacia_y_conserva_trazabilidad(monkeypatch, pdf):
     monkeypatch.setattr(pd.shutil, "which", lambda _: "/usr/bin/tesseract")
