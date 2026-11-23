@@ -8,7 +8,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 # Cambiar esta versión cuando una regla OCR pueda cambiar los campos extraídos.
-VERSION_CACHE = "ocr-core-v6-sunat-layout"
+VERSION_CACHE = "ocr-core-v7-thermal-rescan"
+VERSION_CACHE_ANTERIOR = "ocr-core-v6-sunat-layout"
 
 
 def procesar_con_cache(
@@ -66,7 +67,8 @@ def eliminar_cache_ocr(
     max_paginas_ocr: int,
 ) -> None:
     """Retira el resultado OCR persistente asociado al archivo eliminado."""
-    clave = hashlib.sha256(
-        f"{VERSION_CACHE}:{sha256_archivo}:{limite_caracteres}:{max_paginas_ocr}".encode()
-    ).hexdigest()
-    (carpeta / tenant_id / clave[:2] / f"{clave}.json").unlink(missing_ok=True)
+    for version in (VERSION_CACHE, VERSION_CACHE_ANTERIOR):
+        clave = hashlib.sha256(
+            f"{version}:{sha256_archivo}:{limite_caracteres}:{max_paginas_ocr}".encode()
+        ).hexdigest()
+        (carpeta / tenant_id / clave[:2] / f"{clave}.json").unlink(missing_ok=True)
