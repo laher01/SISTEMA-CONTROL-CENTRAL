@@ -5,7 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import org.json.*;
 final class Api {
- static final String BASE="https://factcentral.online";
+ static final String BASE="https://app.nexomarnegocioseirl.online";
  private final CookieManager cookies=new CookieManager(null,CookiePolicy.ACCEPT_ORIGINAL_SERVER);
  synchronized Object get(String route)throws Exception{return request(route,null);}
  synchronized JSONObject login(String space,String login,String password)throws Exception{
