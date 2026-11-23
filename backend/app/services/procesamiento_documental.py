@@ -25,7 +25,6 @@ from app.services.extraccion_campos import (
     extraer_fecha_emision_rhe_etiquetada,
 )
 
-
 CONFIANZA_MINIMA_REESCANEO = 0.75
 TIEMPO_REESCANEO_SEGUNDOS = 20
 
