@@ -22,8 +22,28 @@ final class Api {
   data.write(pdf);data.write(("\r\n--"+boundary+"--\r\n").getBytes(StandardCharsets.UTF_8));
   return (JSONObject)requestBytes("/api/v1/registros/sunat/observaciones",data.toByteArray(),"multipart/form-data; boundary="+boundary);
  }
+ synchronized JSONObject previewRemove(String id)throws Exception {
+  JSONArray ids=new JSONArray().put(id);
+  return (JSONObject)request("/api/v1/documentos/previsualizar-retirada",new JSONObject().put("documentos_ids",ids));
+ }
+ synchronized JSONObject removeDocument(String id)throws Exception {
+  if(!id.matches("[0-9a-fA-F-]{36}"))throw new IOException("Identificador inválido");
+  return (JSONObject)requestMethod("/api/v1/documentos/"+id,null,"application/json","DELETE");
+ }
+ synchronized JSONObject uploadDocument(String filename,String mime,byte[] data)throws Exception {
+  if(data==null||data.length==0||data.length>20*1024*1024)throw new IOException("Archivo vacío o superior a 20 MB.");
+  String safe=filename.replaceAll("[\\r\\n\\\"]","_");
+  String boundary="FC"+UUID.randomUUID().toString().replace("-","");
+  ByteArrayOutputStream out=new ByteArrayOutputStream();
+  out.write(("--"+boundary+"\r\nContent-Disposition: form-data; name=\"archivo\"; filename=\""+safe+"\"\r\nContent-Type: "+mime+"\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+  out.write(data);out.write(("\r\n--"+boundary+"--\r\n").getBytes(StandardCharsets.UTF_8));
+  return (JSONObject)requestBytes("/api/v1/documentos",out.toByteArray(),"multipart/form-data; boundary="+boundary);
+ }
  private Object request(String route,JSONObject body)throws Exception{return requestBytes(route,body==null?null:body.toString().getBytes(StandardCharsets.UTF_8),"application/json");}
- private Object requestBytes(String route,byte[] body,String contentType)throws Exception{
+ private Object requestMethod(String route,byte[] body,String type,String method)throws Exception{return send(route,body,type,method);}
+
+ private Object requestBytes(String route,byte[] body,String contentType)throws Exception{return send(route,body,contentType,body==null?"GET":"POST");}
+ private Object send(String route,byte[] body,String contentType,String method)throws Exception{
   if(!route.startsWith("/api/v1/")||route.contains("..")||route.contains("\\"))throw new IOException("Ruta inválida");
   URI uri=URI.create(BASE+route);
   HttpURLConnection c=(HttpURLConnection)uri.toURL().openConnection();
@@ -31,7 +51,8 @@ final class Api {
   c.setRequestProperty("Accept","application/json");c.setRequestProperty("Origin",BASE);c.setRequestProperty("Referer",BASE+"/");
   for(var e:cookies.get(uri,Collections.emptyMap()).entrySet())for(String v:e.getValue())c.addRequestProperty(e.getKey(),v);
   try{
-   if(body!=null){c.setRequestMethod("POST");c.setDoOutput(true);c.setRequestProperty("Content-Type",contentType);c.setFixedLengthStreamingMode(body.length);try(OutputStream o=c.getOutputStream()){o.write(body);}}
+   c.setRequestMethod(method);
+   if(body!=null){c.setDoOutput(true);c.setRequestProperty("Content-Type",contentType);c.setFixedLengthStreamingMode(body.length);try(OutputStream o=c.getOutputStream()){o.write(body);}}
    int code=c.getResponseCode();
    cookies.put(uri,c.getHeaderFields());
    if(code==401){clear();throw new IOException("Sesión vencida. Vuelve a ingresar.");}
