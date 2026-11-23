@@ -1,3 +1,9 @@
+import io
+
+import pytest
+from pypdf import PdfWriter
+
+from app.services import procesamiento_documental as pd
 from app.enums import TipoDocumento
 from app.services.extraccion_campos import extraer_campos
 from app.services.procesamiento_documental import (
@@ -70,3 +76,50 @@ def test_lectura_auxiliar_no_modifica_campos_fiscales():
     ).a_dict()
     assert resultado["ocr_revision"]["requiere_confirmacion"] is True
     assert "serie" not in resultado["extraccion_estructurada"]["campos"]
+
+
+def test_pdf_termico_dispara_ocr_auxiliar_sin_autocompletar_identidad(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    salida = io.BytesIO()
+    writer = PdfWriter()
+    writer.add_blank_page(width=130, height=380)
+    writer.write(salida)
+    monkeypatch.setattr(pd.shutil, "which", lambda _: "/usr/bin/tesseract")
+    monkeypatch.setattr(pd, "_idioma_disponible", lambda _: "spa")
+    llamadas: list[int | None] = []
+
+    def ocr(_exe: str, _ruta: object, _idioma: str, _limite: int, psm: int | None = None):
+        llamadas.append(psm)
+        if psm == 6:
+            return "FFOL - 000136", 0.50
+        return "FACTURA ELECTRONICA\nRUC 20600000001\nTotal: S/ 62.00", 0.91
+
+    monkeypatch.setattr(pd, "_ejecutar_tesseract", ocr)
+    resultado = pd._procesar_pdf_escaneado(salida.getvalue(), 10000, 5, [""])
+    datos = resultado.a_dict()
+    assert llamadas == [None, 6]
+    assert datos["ocr_revision"]["requiere_confirmacion"] is True
+    assert "FFOL" in datos["ocr_revision"]["texto"]
+    assert "serie" not in datos["extraccion_estructurada"]["campos"]
+
+
+def test_pdf_con_serie_clara_omite_ocr_auxiliar(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    salida = io.BytesIO()
+    writer = PdfWriter()
+    writer.add_blank_page(width=130, height=380)
+    writer.write(salida)
+    monkeypatch.setattr(pd.shutil, "which", lambda _: "/usr/bin/tesseract")
+    monkeypatch.setattr(pd, "_idioma_disponible", lambda _: "spa")
+    llamadas: list[int | None] = []
+
+    def ocr(_exe: str, _ruta: object, _idioma: str, _limite: int, psm: int | None = None):
+        llamadas.append(psm)
+        return "FACTURA ELECTRONICA\nF001-000123\nTotal: S/ 62.00", 0.91
+
+    monkeypatch.setattr(pd, "_ejecutar_tesseract", ocr)
+    resultado = pd._procesar_pdf_escaneado(salida.getvalue(), 10000, 5, [""])
+    assert llamadas == [None]
+    assert "ocr_revision" not in resultado.a_dict()
