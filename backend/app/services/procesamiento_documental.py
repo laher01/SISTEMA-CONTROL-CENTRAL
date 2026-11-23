@@ -7,6 +7,7 @@ import tempfile
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
+from time import monotonic
 
 import pypdfium2 as pdfium
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
@@ -23,6 +24,10 @@ from app.services.extraccion_campos import (
     extraer_campos_sunat_layout,
     extraer_fecha_emision_rhe_etiquetada,
 )
+
+
+CONFIANZA_MINIMA_REESCANEO = 0.75
+TIEMPO_REESCANEO_SEGUNDOS = 20
 
 
 class DocumentoNoProcesable(Exception):
@@ -58,6 +63,8 @@ class ResultadoProcesamiento:
     fecha_emision_rhe: CampoExtraido | None = None
     campos_sunat_layout: dict[str, CampoExtraido] | None = None
     texto_ocr_revision: str | None = None
+    reescaneo_intentos: int = 0
+    reescaneo_aplicados: int = 0
 
     def a_dict(self) -> dict[str, object]:
         resultado: dict[str, object] = {
@@ -67,6 +74,11 @@ class ResultadoProcesamiento:
             "paginas": self.paginas,
             "requiere_ocr": self.requiere_ocr,
         }
+        if self.reescaneo_intentos:
+            resultado["reescaneo_ocr"] = {
+                "intentos": self.reescaneo_intentos,
+                "aplicados": self.reescaneo_aplicados,
+            }
         if self.texto_tabla_items:
             resultado["texto_tabla_items"] = self.texto_tabla_items
         if self.texto_ocr_revision:
@@ -210,6 +222,7 @@ def _procesar_pdf_escaneado(
     confianzas: list[float] = []
     lecturas_revision: list[str] = []
     paginas_ocr_leidas = 0
+    reescaneo = _ReescaneoOCR()
     try:
         with tempfile.TemporaryDirectory(prefix="fact-central-pdf-ocr-") as temporal:
             for indice in range(paginas):
@@ -226,7 +239,7 @@ def _procesar_pdf_escaneado(
                     imagen.close()
                     bitmap.close()
                     pagina.close()
-                texto, confianza = _ejecutar_tesseract(ejecutable, entrada, idioma, limite)
+                texto, confianza = reescaneo.leer(ejecutable, entrada, idioma, limite)
                 if texto:
                     textos.append(f"--- Página {indice + 1} ---\n{texto}")
                     paginas_ocr_leidas += 1
@@ -250,6 +263,8 @@ def _procesar_pdf_escaneado(
         requiere_ocr=paginas_ocr_leidas < pendientes,
         sugerencia=sugerir_tipo(texto_final),
         texto_ocr_revision=_limitar("\n\n".join(lecturas_revision), limite) or None,
+        reescaneo_intentos=reescaneo.intentos,
+        reescaneo_aplicados=reescaneo.aplicados,
     )
 
 
@@ -260,10 +275,11 @@ def _procesar_imagen(contenido: bytes, extension: str, limite: int) -> Resultado
             "Tesseract OCR no está instalado; el original permanece guardado para reprocesarlo"
         )
     idioma = _idioma_disponible(ejecutable)
+    reescaneo = _ReescaneoOCR()
     with tempfile.TemporaryDirectory(prefix="fact-central-ocr-") as temporal:
         entrada = Path(temporal) / "entrada.png"
         _preparar_imagen_ocr(contenido, entrada, extension)
-        texto, confianza = _ejecutar_tesseract(ejecutable, entrada, idioma, limite)
+        texto, confianza = reescaneo.leer(ejecutable, entrada, idioma, limite)
         adicional = None
         if _requiere_lectura_auxiliar(texto):
             alternativa, _ = _ejecutar_tesseract(ejecutable, entrada, idioma, limite, 6)
@@ -279,6 +295,8 @@ def _procesar_imagen(contenido: bytes, extension: str, limite: int) -> Resultado
         requiere_ocr=not texto,
         sugerencia=sugerir_tipo(texto),
         texto_ocr_revision=adicional,
+        reescaneo_intentos=reescaneo.intentos,
+        reescaneo_aplicados=reescaneo.aplicados,
     )
 
 
@@ -305,17 +323,72 @@ def _preparar_imagen_ocr(contenido: bytes, destino: Path, extension: str) -> Non
     imagen.save(destino, format="PNG", optimize=True)
 
 
+@dataclass
+class _ReescaneoOCR:
+    """Segundo modo OCR con presupuesto acumulado por documento."""
+
+    intentos: int = 0
+    aplicados: int = 0
+    segundos_restantes: float = TIEMPO_REESCANEO_SEGUNDOS
+
+    def leer(
+        self, ejecutable: str, entrada: Path, idioma: str, limite: int
+    ) -> tuple[str, float | None]:
+        error_original = None
+        try:
+            texto, confianza = _ejecutar_tesseract(ejecutable, entrada, idioma, limite)
+        except DocumentoNoProcesable as exc:
+            error_original = exc
+            texto, confianza = "", None
+        lectura_suficiente = (
+            texto and confianza is not None and confianza >= CONFIANZA_MINIMA_REESCANEO
+        )
+        if not lectura_suficiente and self.segundos_restantes > 0:
+            inicio = monotonic()
+            self.intentos += 1
+            try:
+                alternativo, confianza_alternativa = _ejecutar_tesseract(
+                    ejecutable,
+                    entrada,
+                    idioma,
+                    limite,
+                    modo_segmentacion=11,
+                    timeout=self.segundos_restantes,
+                )
+            except DocumentoNoProcesable:
+                alternativo, confianza_alternativa = "", None
+            finally:
+                self.segundos_restantes -= monotonic() - inicio
+            if alternativo and (not texto or (confianza_alternativa or 0) > (confianza or 0)):
+                self.aplicados += 1
+                return alternativo, confianza_alternativa
+        if error_original is not None and not texto:
+            raise error_original
+        return texto, confianza
+
+
 def _ejecutar_tesseract(
-    ejecutable: str, entrada: Path, idioma: str, limite: int, psm: int | None = None
+    ejecutable: str,
+    entrada: Path,
+    idioma: str,
+    limite: int,
+    psm: int | None = None,
+    *,
+    modo_segmentacion: int | None = None,
+    timeout: float = 120,
 ) -> tuple[str, float | None]:
+    # Compatible con las llamadas OCR térmico (psm6) y el reescaneo (psm11).
+    modo = modo_segmentacion if modo_segmentacion is not None else psm
+    comando = [ejecutable, str(entrada), "stdout", "-l", idioma]
+    if modo is not None:
+        comando.extend(["--psm", str(modo)])
+    comando.append("tsv")
     try:
         proceso = subprocess.run(
-            [ejecutable, str(entrada), "stdout", "-l", idioma]
-            + (["--psm", str(psm)] if psm is not None else [])
-            + ["tsv"],
+            comando,
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=timeout,
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
@@ -325,7 +398,6 @@ def _ejecutar_tesseract(
         mensaje = detalle[-1][:300] if detalle else "error desconocido"
         raise DocumentoNoProcesable(f"Tesseract no pudo procesar la imagen: {mensaje}")
     return _leer_tsv(proceso.stdout, limite)
-
 
 def _cantidad_paginas(contenido: bytes) -> int:
     try:
