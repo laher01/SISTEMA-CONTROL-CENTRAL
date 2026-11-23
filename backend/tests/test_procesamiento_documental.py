@@ -808,7 +808,7 @@ def test_reescanea_lectura_vacia_y_conserva_trazabilidad(monkeypatch, pdf):
         return "OPERACIÓN EXITOSA Nro. operación: AB-908771 TOTAL PAGADO S/ 350.00", 0.89
 
     monkeypatch.setattr(pd, "_ejecutar_tesseract", ejecutar)
-    contenido = pdf_vacio() if pdf else b"\\x89PNG\\r\\n\\x1a\\ncontenido"
+    contenido = pdf_vacio() if pdf else b"\x89PNG\r\n\x1a\ncontenido"
     resultado = pd.procesar(contenido, 10_000).a_dict()
 
     assert resultado["requiere_ocr"] is False
