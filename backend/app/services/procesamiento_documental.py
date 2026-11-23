@@ -359,7 +359,9 @@ def _leer_tsv(tsv: str, limite: int) -> tuple[str, float | None]:
         palabra = (fila.get("text") or "").strip()
         if not palabra:
             continue
-        clave = tuple(fila.get(campo, "") for campo in ("page_num", "block_num", "par_num", "line_num"))
+        clave = tuple(
+            fila.get(campo, "") for campo in ("page_num", "block_num", "par_num", "line_num")
+        )
         lineas.setdefault(clave, []).append(palabra)
         try:
             confianza = float(fila.get("conf", "-1"))
