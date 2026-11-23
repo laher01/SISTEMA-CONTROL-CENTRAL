@@ -439,6 +439,16 @@ function Procesar({
             <pre className="texto-extraido">{lectura.texto}</pre>
           </details>
         )}
+        {lectura.textoRevision && (
+          <details>
+            <summary>Segunda lectura OCR (solo apoyo para revisión)</summary>
+            <p>
+              Esta lectura puede confundir letras y números. Verifica la serie, el correlativo
+              y los RUC contra el documento original antes de confirmarlos.
+            </p>
+            <pre className="texto-extraido">{lectura.textoRevision}</pre>
+          </details>
+        )}
         <ConfirmarCampos
             documento={resultado}
             campos={lectura.campos}
@@ -518,6 +528,7 @@ function obtenerLectura(documento: Documento): {
   tipoSugerido?: TipoDocumento;
   requiereOcr: boolean;
   texto: string;
+  textoRevision: string;
   campos: CampoExtraido[];
   confirmada: boolean;
 } | null {
@@ -540,6 +551,14 @@ function obtenerLectura(documento: Documento): {
     tipoSugerido: tipo,
     requiereOcr: "requiere_ocr" in proceso && proceso.requiere_ocr === true,
     texto: "texto" in proceso ? String(proceso.texto) : "",
+    textoRevision:
+      "ocr_revision" in proceso &&
+      proceso.ocr_revision &&
+      typeof proceso.ocr_revision === "object" &&
+      "texto" in proceso.ocr_revision &&
+      typeof proceso.ocr_revision.texto === "string"
+        ? proceso.ocr_revision.texto
+        : "",
     campos: obtenerCampos(proceso),
     confirmada: Boolean(documento.datos_extraidos?.extraccion_confirmada),
   };
