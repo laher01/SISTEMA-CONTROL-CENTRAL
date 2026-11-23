@@ -6,6 +6,8 @@ import android.provider.OpenableColumns;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.WebResourceRequest;
+import android.webkit.CookieManager;
+import android.webkit.WebStorage;
 import android.content.Intent;
 import android.net.Uri;
 import java.io.*;
@@ -25,6 +27,7 @@ public class MainActivity extends Activity {
  private final Api api=new Api();
  private final ExecutorService worker=Executors.newSingleThreadExecutor();
  private LinearLayout root,body,nav;
+ private WebView portalWeb;
  private String role="",name="";
  private boolean docs=false,exp=false,audit=false,canRemove=false;
  private int pickerGeneration=-1;
@@ -37,7 +40,7 @@ public class MainActivity extends Activity {
  private TextView text(String s,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);if(bold)t.setTypeface(null,Typeface.BOLD);return t;}
  private LinearLayout vertical(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);return l;}
  private void frame(String heading,boolean menu){
-  generation++;root=vertical();root.setBackgroundColor(bg);setContentView(root);
+  generation++;closePortal();root=vertical();root.setBackgroundColor(bg);setContentView(root);
   LinearLayout top=vertical();top.setBackgroundColor(navy);top.setPadding(dp(20),dp(16),dp(20),dp(16));top.addView(text("◆  FACT CENTRAL    ·    NEXOMAR",14,Color.rgb(120,230,218),true));top.addView(text(heading,27,Color.WHITE,true));top.addView(text("Gestión documental segura",12,Color.rgb(200,220,235),false));root.addView(top);
   ScrollView scroll=new ScrollView(this);body=vertical();body.setPadding(dp(16),dp(16),dp(16),dp(16));scroll.addView(body);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
   if(menu){nav=new LinearLayout(this);nav.setBackgroundColor(Color.WHITE);root.addView(nav);if(RolePolicy.operational(role)){tab("Inicio",this::home);if(docs)tab("Documentos",()->list(true));if(exp)tab("Expedientes",()->list(false));}tab("Más",this::more);}
@@ -52,6 +55,10 @@ public class MainActivity extends Activity {
   int current=generation;worker.execute(()->{try{Object value=job.run();runOnUiThread(()->{if(current!=generation||isFinishing())return;try{result.show(value);}catch(Exception e){error("Respuesta no válida.");}});}catch(Exception e){runOnUiThread(()->{if(current==generation&&!isFinishing())error(e instanceof java.io.IOException?e.getMessage():"No se pudo completar la operación.");});}});
  }
  private void error(String msg){card("Aviso",msg,null);}
+ private void closePortal(){if(portalWeb!=null){WebView old=portalWeb;portalWeb=null;old.stopLoading();if(old.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)old.getParent()).removeView(old);old.destroy();}}
+ private void clearWebSession(Runnable finished){
+   CookieManager.getInstance().removeAllCookies(value->{CookieManager.getInstance().flush();WebStorage.getInstance().deleteAllData();finished.run();});
+ }
  private void login(){role="";name="";docs=false;exp=false;audit=false;canRemove=false;frame("Iniciar sesión",false);card("Acceso seguro","Usa tu cuenta existente. Conexión HTTPS.",null);EditText space=field("Espacio administrativo",false),user=field("Usuario o correo",false),pass=field("Clave",true);
   button("Ingresar",()->{String s=space.getText().toString().trim(),u=user.getText().toString().trim(),p=pass.getText().toString();if(u.isEmpty()||p.isEmpty()){error("Completa usuario y clave.");return;}pass.setText("");task(()->{api.clear();api.login(s,u,p);return api.get("/api/v1/auth/me");},v->{JSONObject j=(JSONObject)v;role=j.optString("rol");name=j.optString("nombre");if(!RolePolicy.ROLES.contains(role)){api.clear();login();error("Rol no reconocido.");return;}if(j.optBoolean("cambio_clave_obligatorio")){api.clear();login();error("Cambia tu clave en el portal web antes de ingresar.");return;}if(role.equals("SECRETARIA")){frame("Verificando permisos",false);task(()->api.get("/api/v1/configuracion/permisos/secretaria"),x->{JSONObject f=(JSONObject)x;docs=RolePolicy.documents(role,f.optBoolean("documentos",false));exp=RolePolicy.expedients(role,f.optBoolean("expedientes",false));audit=RolePolicy.audit(role,f.optBoolean("registros",false));home();});}else{docs=RolePolicy.documents(role,true);exp=RolePolicy.expedients(role,true);audit=RolePolicy.audit(role,true);home();}});});}
  private void home(){frame("Panel de control",true);card("Hola, "+name,role+" · Resumen actualizado desde el servidor",null);if(!RolePolicy.operational(role)){card("Consola SaaS","La administración de plataforma se realiza en el portal web.",this::webPortal);return;}
@@ -60,7 +67,7 @@ public class MainActivity extends Activity {
   task(()->api.get("/api/v1/dashboard/resumen"),v->{JSONObject j=(JSONObject)v;
     card("EXPEDIENTES",j.optString("expedientes_total","—")+" registrados",exp?()->list(false):null);
     card("PENDIENTES",j.optString("pendientes_aprobacion","—")+" por aprobar",null);
-    JSONArray amounts=j.optJSONArray("montos");if(amounts!=null)for(int i=0;i<amounts.length();i++){JSONObject a=amounts.optJSONObject(i);if(a!=null)card("TOTAL "+a.optString("moneda"),a.optString("total","—"),null);}
+    JSONArray amounts=j.optJSONArray("montos");if(amounts!=null)for(int i=0;i<amounts.length();i++){JSONObject a=amounts.optJSONObject(i);if(a!=null){String curr=a.optString("moneda","PEN");card("Bancarizable · "+curr,a.optString("bancarizable","—"),null);card("No bancarizable · "+curr,a.optString("no_bancarizable","—"),null);}}
     JSONObject states=j.optJSONObject("por_estado");if(states!=null){java.util.Iterator<String> ks=states.keys();while(ks.hasNext()){String k=ks.next();card("Expedientes · "+k,states.optString(k),null);}}
     if(docs)card("Documentos","Consultar, cargar y gestionar según permisos",()->list(true));
     if(exp)card("Expedientes","Ver expedientes autorizados",()->list(false));
@@ -118,13 +125,13 @@ public class MainActivity extends Activity {
    LinearLayout header=vertical();header.setBackgroundColor(navy);header.setPadding(dp(16),dp(12),dp(16),dp(12));
    header.addView(text("FACT CENTRAL · Portal actualizado",19,Color.WHITE,true));root.addView(header);
    Button back=new Button(this);back.setText("← Volver a la aplicación");back.setAllCaps(false);back.setOnClickListener(v->home());root.addView(back);
-   WebView web=new WebView(this);web.getSettings().setJavaScriptEnabled(true);web.getSettings().setDomStorageEnabled(true);
-   web.getSettings().setAllowFileAccess(false);web.getSettings().setAllowContentAccess(false);web.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+   WebView web=new WebView(this);portalWeb=web;web.getSettings().setJavaScriptEnabled(true);web.getSettings().setDomStorageEnabled(true);
+   web.getSettings().setAllowFileAccess(false);web.getSettings().setAllowContentAccess(false);web.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);web.getSettings().setSafeBrowsingEnabled(true);
    web.setWebViewClient(new WebViewClient(){@Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
      Uri uri=request.getUrl();return !("https".equals(uri.getScheme())&&"app.nexomarnegocioseirl.online".equals(uri.getHost()));}});
    root.addView(web,new LinearLayout.LayoutParams(-1,0,1));
    web.loadUrl(Api.BASE+"/");
  }
- private void more(){frame("Más",true);card(name,role,null);button("Portal web · mejoras actualizadas",this::webPortal);if(audit)card("Fiscalización SUNAT","Resumen de observaciones · solo lectura",this::auditPage);if(RolePolicy.alerts(role))card("Alertas","Consultar avisos del servidor",this::alerts);button("Actualizar sesión",()->{api.clear();login();});button("Cerrar sesión",()->{frame("Cerrando sesión",false);task(()->{try{api.logout();}catch(Exception ignored){}finally{api.clear();}return new JSONObject();},v->login());});}
- @Override protected void onDestroy(){generation++;worker.shutdownNow();super.onDestroy();}
+ private void more(){frame("Más",true);card(name,role,null);button("Portal web · mejoras actualizadas",this::webPortal);if(audit)card("Fiscalización SUNAT","Resumen de observaciones · solo lectura",this::auditPage);if(RolePolicy.alerts(role))card("Alertas","Consultar avisos del servidor",this::alerts);button("Actualizar sesión",()->{api.clear();clearWebSession(this::login);});button("Cerrar sesión",()->{frame("Cerrando sesión",false);task(()->{try{api.logout();}catch(Exception ignored){}finally{api.clear();}return new JSONObject();},v->clearWebSession(this::login));});}
+ @Override protected void onDestroy(){generation++;worker.shutdownNow();closePortal();super.onDestroy();}
 }
