@@ -167,3 +167,10 @@ def test_cabecera_electro_con_ruc_emisor_ilegible_en_pdf_real() -> None:
 def test_cabecera_electro_sin_fecha_no_confunde_comprobante() -> None:
     texto = "FACTURA ELECTRO\nDocumento: 20999999992\nTotal: S/ 62.00"
     assert sugerir_tipo(texto) is None
+
+
+@pytest.mark.parametrize("fuente", ["OCR_PDF", "OCR_IMAGEN"])
+def test_ticket_no_lee_cantidad_de_item_como_total(fuente):
+    texto = "FACTURA ELECTRONICA\nCantidad Descripción Total\n1 PRODUCTO 80.75\nTotal: S/ 80.75\n"
+    campos = extraer_campos(texto, fuente, 0.88)["campos"]
+    assert campos["importe_total"]["valor"] == "80.75"
