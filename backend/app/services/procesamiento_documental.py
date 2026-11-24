@@ -493,6 +493,17 @@ def sugerir_tipo(texto: str) -> SugerenciaClasificacion | None:
     # Una cabecera térmica deteriorada solo aporta una sugerencia de baja confianza.
     if re.search(r"\bFACTURA\s+EL[A-Z0-9 ]{0,16}RON[TI]", normalizado):
         return SugerenciaClasificacion(TipoDocumento.FACT, 0.67, ("CABECERA_OCR_DEGRADADA",))
+    # Un ticket térmico puede truncar "ELECTRONICA" a "ELECTRO".
+    # Exigir al menos RUC y total explícitos evita confundir una descripción
+    # de electrodomésticos con un comprobante fiscal.
+    if (
+        re.search(r"\bFACTURA\s+ELECTRO\b", normalizado)
+        and re.search(r"\bRUC\s*:?\s*\d{11}\b", normalizado)
+        and re.search(r"\bTOTAL\s*:?\s*S/?\s*\d", normalizado)
+    ):
+        return SugerenciaClasificacion(
+            TipoDocumento.FACT, 0.63, ("CABECERA_OCR_TRUNCADA_CON_EVIDENCIA_FISCAL",)
+        )
     return None
 
 
