@@ -500,8 +500,10 @@ def sugerir_tipo(texto: str) -> SugerenciaClasificacion | None:
     ruc_emisor_visible = re.search(r"\bRUC\s*:?\s*\d{11}\b", normalizado)
     documento_receptor = re.search(r"\bDOCUMENTO\s*:?\s*\d{11}\b", normalizado)
     fecha_emision = re.search(r"\bEMISION\s*:?\s*\d{2}/\d{2}/\d{4}\b", normalizado)
-    if cabecera_truncada and total_etiquetado and (
-        ruc_emisor_visible or (documento_receptor and fecha_emision)
+    if (
+        cabecera_truncada
+        and total_etiquetado
+        and (ruc_emisor_visible or (documento_receptor and fecha_emision))
     ):
         return SugerenciaClasificacion(
             TipoDocumento.FACT, 0.59, ("CABECERA_OCR_TRUNCADA_CON_EVIDENCIA_FISCAL",)
