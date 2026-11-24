@@ -69,7 +69,7 @@ const ETIQUETAS_CAMPOS: Record<string, string> = {
 };
 
 export default function Pendientes({ rol }: { rol: SesionActual["rol"] }) {
-  const mostrarOrigen = ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE"].includes(rol);
+  const mostrarOrigen = ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE", "USUARIO", "GESTOR"].includes(rol);
   const [parametros, setParametros] = useSearchParams();
   const estado = parametros.get("estado") === "PENDIENTE_RELACION" ? "PENDIENTE_RELACION" : "PENDIENTE_CLASIFICACION";
   const pagina = Number(parametros.get("pagina") ?? "0");
@@ -212,7 +212,7 @@ export default function Pendientes({ rol }: { rol: SesionActual["rol"] }) {
           <p className="tenue">Ya identificados por la GRE remitente. Sin monto ni producción hasta recibir la factura y validar al cliente.</p>
           <table>
             <thead>
-              <tr><th>Factura referenciada</th><th>RUC emisor</th><th>RUC receptor</th><th>Validación del cliente</th>{mostrarOrigen && <th>Ruta de origen</th>}<th>Guía</th></tr>
+              <tr><th>Factura referenciada</th><th>RUC emisor</th><th>RUC receptor</th><th>Validación del cliente</th>{mostrarOrigen && <th>Ruta</th>}<th>Guía</th></tr>
             </thead>
             <tbody>
               {provisionales.map((p) => (
@@ -275,7 +275,7 @@ export default function Pendientes({ rol }: { rol: SesionActual["rol"] }) {
             <tr>
               <th><input type="checkbox" aria-label="Seleccionar pendientes visibles" checked={(datos?.length ?? 0) > 0 && (datos ?? []).every((d) => seleccionados.includes(d.id))} onChange={(e) => setSeleccionados(e.target.checked ? (datos ?? []).map((d) => d.id) : [])} /></th>
               <th>Archivo</th>
-              {mostrarOrigen && <th>Ruta de origen</th>}
+              {mostrarOrigen && <th>Ruta</th>}
               <th>Subido</th>
               <th>Lectura</th>
               <th>Vincular</th>
@@ -303,9 +303,9 @@ function RutaOrigen({ origen }: { origen: OrigenDocumental }) {
     ["Responsable", origen.responsable_nombre, origen.responsable_codigo],
   ];
   return niveles.map(([nivel, nombre, codigo]) => (
-    <span key={nivel} className="bloque">
+    <div key={nivel} className="bloque">
       <strong>{nivel}</strong>{" "}{[nombre, codigo].filter(Boolean).join(" · ") || "Sin asignar"}
-    </span>
+    </div>
   ));
 }
 
@@ -439,6 +439,16 @@ function Procesar({
             <pre className="texto-extraido">{lectura.texto}</pre>
           </details>
         )}
+        {lectura.textoRevision && (
+          <details>
+            <summary>Segunda lectura OCR (solo apoyo para revisión)</summary>
+            <p>
+              Esta lectura puede confundir letras y números. Verifica la serie, el correlativo
+              y los RUC contra el documento original antes de confirmarlos.
+            </p>
+            <pre className="texto-extraido">{lectura.textoRevision}</pre>
+          </details>
+        )}
         <ConfirmarCampos
             documento={resultado}
             campos={lectura.campos}
@@ -518,6 +528,7 @@ function obtenerLectura(documento: Documento): {
   tipoSugerido?: TipoDocumento;
   requiereOcr: boolean;
   texto: string;
+  textoRevision: string;
   campos: CampoExtraido[];
   confirmada: boolean;
 } | null {
@@ -540,6 +551,14 @@ function obtenerLectura(documento: Documento): {
     tipoSugerido: tipo,
     requiereOcr: "requiere_ocr" in proceso && proceso.requiere_ocr === true,
     texto: "texto" in proceso ? String(proceso.texto) : "",
+    textoRevision:
+      "ocr_revision" in proceso &&
+      proceso.ocr_revision &&
+      typeof proceso.ocr_revision === "object" &&
+      "texto" in proceso.ocr_revision &&
+      typeof proceso.ocr_revision.texto === "string"
+        ? proceso.ocr_revision.texto
+        : "",
     campos: obtenerCampos(proceso),
     confirmada: Boolean(documento.datos_extraidos?.extraccion_confirmada),
   };

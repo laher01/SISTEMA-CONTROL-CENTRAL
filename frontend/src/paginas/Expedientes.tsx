@@ -26,7 +26,17 @@ type GreProvisional = {
   receptor_ruc: string;
   estado: string;
   monto_contabilizable: string;
+  gestor_nombre?: string | null;
+  gestor_codigo?: string | null;
+  usuario_nombre?: string | null;
+  usuario_codigo?: string | null;
+  responsable_nombre?: string | null;
+  responsable_codigo?: string | null;
 };
+
+function origenGRE(nombre?: string | null, codigo?: string | null): string {
+  return [codigo, nombre].filter(Boolean).join(" · ") || "Sin asignar";
+}
 
 function etiquetaTipoOperacion(tipo: string): string {
   const normalizado = tipo.trim().toUpperCase();
@@ -47,6 +57,7 @@ function detalleLecturaPago(pago: ComprobantePagoExpediente): string {
 }
 
 export default function Expedientes({ sesion }: { sesion: SesionActual }) {
+  const mostrarOrigenGRE = ["ADMINISTRADOR", "GERENTE", "SECRETARIA", "RESPONSABLE"].includes(sesion.rol);
   const [parametros, setParametros] = useSearchParams();
   const ubicacion = useLocation();
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
@@ -386,7 +397,9 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
           <table>
             <thead><tr>
               <th>Factura indicada en GRE</th><th>RUC emisor factura</th>
-              <th>RUC destinatario</th><th>Estado</th><th>Monto</th><th>Documento</th>
+              <th>RUC destinatario</th>
+              {mostrarOrigenGRE && <><th>Gestor</th><th>Usuario</th><th>Responsable</th></>}
+              <th>Estado</th><th>Monto</th><th>Documento</th>
             </tr></thead>
             <tbody>
               {greFiltradas.map((guia) => (
@@ -394,6 +407,11 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
                   <td>{guia.factura}</td>
                   <td>{guia.emisor_ruc}</td>
                   <td>{guia.receptor_ruc}</td>
+                  {mostrarOrigenGRE && <>
+                    <td>{origenGRE(guia.gestor_nombre, guia.gestor_codigo)}</td>
+                    <td>{origenGRE(guia.usuario_nombre, guia.usuario_codigo)}</td>
+                    <td>{origenGRE(guia.responsable_nombre, guia.responsable_codigo)}</td>
+                  </>}
                   <td>Pendiente de factura</td>
                   <td>S/ {guia.monto_contabilizable}</td>
                   <td><Link to="/pendientes">Ver GRE en Pendientes</Link></td>

@@ -132,4 +132,10 @@ def test_provisional_muestra_jerarquia_en_administracion(
     respuesta = client.get(ruta)
     assert respuesta.status_code == 200, respuesta.text
     fila = next(item for item in respuesta.json() if item["documento_id"] == documento_id)
-    assert "responsable_nombre" not in fila
+    assert (fila["gestor_nombre"], fila["usuario_nombre"], fila["responsable_nombre"]) == esperado
+
+    auth_prueba.como_usuario(auth_prueba.usuario_id)
+    respuesta = client.get(ruta)
+    assert respuesta.status_code == 200, respuesta.text
+    fila = next(item for item in respuesta.json() if item["documento_id"] == documento_id)
+    assert (fila["gestor_nombre"], fila["usuario_nombre"], fila["responsable_nombre"]) == esperado

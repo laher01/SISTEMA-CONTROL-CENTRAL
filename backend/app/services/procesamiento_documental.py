@@ -7,6 +7,7 @@ import tempfile
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
+from time import monotonic
 
 import pypdfium2 as pdfium
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
@@ -23,6 +24,9 @@ from app.services.extraccion_campos import (
     extraer_campos_sunat_layout,
     extraer_fecha_emision_rhe_etiquetada,
 )
+
+CONFIANZA_MINIMA_REESCANEO = 0.75
+TIEMPO_REESCANEO_SEGUNDOS = 20
 
 
 class DocumentoNoProcesable(Exception):
@@ -57,6 +61,9 @@ class ResultadoProcesamiento:
     texto_tabla_items: str | None = None
     fecha_emision_rhe: CampoExtraido | None = None
     campos_sunat_layout: dict[str, CampoExtraido] | None = None
+    texto_ocr_revision: str | None = None
+    reescaneo_intentos: int = 0
+    reescaneo_aplicados: int = 0
 
     def a_dict(self) -> dict[str, object]:
         resultado: dict[str, object] = {
@@ -66,8 +73,20 @@ class ResultadoProcesamiento:
             "paginas": self.paginas,
             "requiere_ocr": self.requiere_ocr,
         }
+        if self.reescaneo_intentos:
+            resultado["reescaneo_ocr"] = {
+                "intentos": self.reescaneo_intentos,
+                "aplicados": self.reescaneo_aplicados,
+            }
         if self.texto_tabla_items:
             resultado["texto_tabla_items"] = self.texto_tabla_items
+        if self.texto_ocr_revision:
+            # Nunca usar un segundo OCR incierto para confirmar identidad fiscal.
+            resultado["ocr_revision"] = {
+                "texto": self.texto_ocr_revision,
+                "modo": "psm6",
+                "requiere_confirmacion": True,
+            }
         if self.confianza is not None:
             resultado["confianza"] = self.confianza
         if self.idioma is not None:
@@ -200,7 +219,9 @@ def _procesar_pdf_escaneado(
         )
     textos: list[str] = []
     confianzas: list[float] = []
+    lecturas_revision: list[str] = []
     paginas_ocr_leidas = 0
+    reescaneo = _ReescaneoOCR()
     try:
         with tempfile.TemporaryDirectory(prefix="fact-central-pdf-ocr-") as temporal:
             for indice in range(paginas):
@@ -217,12 +238,16 @@ def _procesar_pdf_escaneado(
                     imagen.close()
                     bitmap.close()
                     pagina.close()
-                texto, confianza = _ejecutar_tesseract(ejecutable, entrada, idioma, limite)
+                texto, confianza = reescaneo.leer(ejecutable, entrada, idioma, limite)
                 if texto:
                     textos.append(f"--- Página {indice + 1} ---\n{texto}")
                     paginas_ocr_leidas += 1
                 if confianza is not None:
                     confianzas.append(confianza)
+                if indice < 2 and _requiere_lectura_auxiliar(texto):
+                    alternativa, _ = _ejecutar_tesseract(ejecutable, entrada, idioma, limite, 6)
+                    if alternativa and alternativa != texto:
+                        lecturas_revision.append(f"--- Página {indice + 1} ---\n{alternativa}")
     finally:
         documento.close()
     texto_final = _limitar("\n\n".join(textos), limite)
@@ -236,6 +261,9 @@ def _procesar_pdf_escaneado(
         idioma=idioma,
         requiere_ocr=paginas_ocr_leidas < pendientes,
         sugerencia=sugerir_tipo(texto_final),
+        texto_ocr_revision=_limitar("\n\n".join(lecturas_revision), limite) or None,
+        reescaneo_intentos=reescaneo.intentos,
+        reescaneo_aplicados=reescaneo.aplicados,
     )
 
 
@@ -246,10 +274,16 @@ def _procesar_imagen(contenido: bytes, extension: str, limite: int) -> Resultado
             "Tesseract OCR no está instalado; el original permanece guardado para reprocesarlo"
         )
     idioma = _idioma_disponible(ejecutable)
+    reescaneo = _ReescaneoOCR()
     with tempfile.TemporaryDirectory(prefix="fact-central-ocr-") as temporal:
         entrada = Path(temporal) / "entrada.png"
         _preparar_imagen_ocr(contenido, entrada, extension)
-        texto, confianza = _ejecutar_tesseract(ejecutable, entrada, idioma, limite)
+        texto, confianza = reescaneo.leer(ejecutable, entrada, idioma, limite)
+        adicional = None
+        if _requiere_lectura_auxiliar(texto):
+            alternativa, _ = _ejecutar_tesseract(ejecutable, entrada, idioma, limite, 6)
+            if alternativa and alternativa != texto:
+                adicional = alternativa
     return ResultadoProcesamiento(
         texto=texto,
         metodo="OCR_IMAGEN",
@@ -259,6 +293,9 @@ def _procesar_imagen(contenido: bytes, extension: str, limite: int) -> Resultado
         idioma=idioma,
         requiere_ocr=not texto,
         sugerencia=sugerir_tipo(texto),
+        texto_ocr_revision=adicional,
+        reescaneo_intentos=reescaneo.intentos,
+        reescaneo_aplicados=reescaneo.aplicados,
     )
 
 
@@ -285,15 +322,72 @@ def _preparar_imagen_ocr(contenido: bytes, destino: Path, extension: str) -> Non
     imagen.save(destino, format="PNG", optimize=True)
 
 
+@dataclass
+class _ReescaneoOCR:
+    """Segundo modo OCR con presupuesto acumulado por documento."""
+
+    intentos: int = 0
+    aplicados: int = 0
+    segundos_restantes: float = TIEMPO_REESCANEO_SEGUNDOS
+
+    def leer(
+        self, ejecutable: str, entrada: Path, idioma: str, limite: int
+    ) -> tuple[str, float | None]:
+        error_original = None
+        try:
+            texto, confianza = _ejecutar_tesseract(ejecutable, entrada, idioma, limite)
+        except DocumentoNoProcesable as exc:
+            error_original = exc
+            texto, confianza = "", None
+        lectura_suficiente = (
+            texto and confianza is not None and confianza >= CONFIANZA_MINIMA_REESCANEO
+        )
+        if not lectura_suficiente and self.segundos_restantes > 0:
+            inicio = monotonic()
+            self.intentos += 1
+            try:
+                alternativo, confianza_alternativa = _ejecutar_tesseract(
+                    ejecutable,
+                    entrada,
+                    idioma,
+                    limite,
+                    modo_segmentacion=11,
+                    timeout=self.segundos_restantes,
+                )
+            except DocumentoNoProcesable:
+                alternativo, confianza_alternativa = "", None
+            finally:
+                self.segundos_restantes -= monotonic() - inicio
+            if alternativo and (not texto or (confianza_alternativa or 0) > (confianza or 0)):
+                self.aplicados += 1
+                return alternativo, confianza_alternativa
+        if error_original is not None and not texto:
+            raise error_original
+        return texto, confianza
+
+
 def _ejecutar_tesseract(
-    ejecutable: str, entrada: Path, idioma: str, limite: int
+    ejecutable: str,
+    entrada: Path,
+    idioma: str,
+    limite: int,
+    psm: int | None = None,
+    *,
+    modo_segmentacion: int | None = None,
+    timeout: float = 120,
 ) -> tuple[str, float | None]:
+    # Compatible con las llamadas OCR térmico (psm6) y el reescaneo (psm11).
+    modo = modo_segmentacion if modo_segmentacion is not None else psm
+    comando = [ejecutable, str(entrada), "stdout", "-l", idioma]
+    if modo is not None:
+        comando.extend(["--psm", str(modo)])
+    comando.append("tsv")
     try:
         proceso = subprocess.run(
-            [ejecutable, str(entrada), "stdout", "-l", idioma, "tsv"],
+            comando,
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=timeout,
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
@@ -330,22 +424,34 @@ def _idioma_disponible(ejecutable: str) -> str:
 
 
 def _leer_tsv(tsv: str, limite: int) -> tuple[str, float | None]:
-    palabras: list[str] = []
+    """Conserva las líneas del texto OCR de facturas y tickets térmicos."""
+    lineas: dict[tuple[str, ...], list[str]] = {}
     confianzas: list[float] = []
     for fila in csv.DictReader(io.StringIO(tsv), delimiter="\t"):
         palabra = (fila.get("text") or "").strip()
         if not palabra:
             continue
-        palabras.append(palabra)
+        clave = tuple(
+            fila.get(campo, "") for campo in ("page_num", "block_num", "par_num", "line_num")
+        )
+        lineas.setdefault(clave, []).append(palabra)
         try:
             confianza = float(fila.get("conf", "-1"))
         except ValueError:
             continue
         if confianza >= 0:
             confianzas.append(confianza)
-    texto = _limitar(" ".join(palabras), limite)
+    texto = _limitar("\n".join(" ".join(partes) for partes in lineas.values()), limite)
     promedio = round(sum(confianzas) / len(confianzas) / 100, 4) if confianzas else None
     return texto, promedio
+
+
+def _requiere_lectura_auxiliar(texto: str) -> bool:
+    """OCR secundario solo para facturas sin serie completa y confiable."""
+    sugerencia = sugerir_tipo(texto)
+    if sugerencia is None or sugerencia.tipo != TipoDocumento.FACT:
+        return False
+    return re.search(r"\b[A-Z0-9]{4}\s*[-–—]\s*\d{1,32}\b", texto, re.I) is None
 
 
 def sugerir_tipo(texto: str) -> SugerenciaClasificacion | None:
@@ -384,6 +490,24 @@ def sugerir_tipo(texto: str) -> SugerenciaClasificacion | None:
         if encontrados:
             confianza = min(0.95, 0.65 + 0.15 * len(encontrados))
             return SugerenciaClasificacion(tipo, confianza, encontrados)
+    # Una cabecera térmica deteriorada solo aporta una sugerencia de baja confianza.
+    if re.search(r"\bFACTURA\s+EL[A-Z0-9 ]{0,16}RON[TI]", normalizado):
+        return SugerenciaClasificacion(TipoDocumento.FACT, 0.67, ("CABECERA_OCR_DEGRADADA",))
+    # En tickets térmicos, Tesseract puede truncar "ELECTRONICA" a
+    # "ELECTRO" y perder el RUC del emisor. Nunca deducirlo del receptor.
+    cabecera_truncada = re.search(r"\bFACTURA\s+ELECTRO\b", normalizado)
+    total_etiquetado = re.search(r"\bTOTAL\s*:?\s*S/?\s*\d", normalizado)
+    ruc_emisor_visible = re.search(r"\bRUC\s*:?\s*\d{11}\b", normalizado)
+    documento_receptor = re.search(r"\bDOCUMENTO\s*:?\s*\d{11}\b", normalizado)
+    fecha_emision = re.search(r"\bEMISION\s*:?\s*\d{2}/\d{2}/\d{4}\b", normalizado)
+    if (
+        cabecera_truncada
+        and total_etiquetado
+        and (ruc_emisor_visible or (documento_receptor and fecha_emision))
+    ):
+        return SugerenciaClasificacion(
+            TipoDocumento.FACT, 0.59, ("CABECERA_OCR_TRUNCADA_CON_EVIDENCIA_FISCAL",)
+        )
     return None
 
 
