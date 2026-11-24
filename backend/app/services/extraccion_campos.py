@@ -298,6 +298,15 @@ def extraer_campos(
                     texto[max(0, coincidencia.start() - 24) : coincidencia.start()],
                     re.IGNORECASE,
                 )
+                # Un encabezado de tabla «Cantidad … Total» puede quedar
+                # seguido por la cantidad del primer ítem en la línea siguiente.
+                and not (
+                    fuente == "OCR"
+                    and re.match(r"TOTAL[ \t]*\n[ \t]*\d", coincidencia[0], re.I)
+                    and texto[
+                        texto.rfind("\n", 0, coincidencia.start()) + 1 : coincidencia.start()
+                    ].strip()
+                )
             ),
             None,
         )
