@@ -123,3 +123,25 @@ def test_pdf_con_serie_clara_omite_ocr_auxiliar(
     resultado = pd._procesar_pdf_escaneado(salida.getvalue(), 10000, 5, [""])
     assert llamadas == [None]
     assert "ocr_revision" not in resultado.a_dict()
+
+
+def test_cabecera_electro_truncada_con_evidencia_fiscal_requiere_revision() -> None:
+    # Representa la transcripción OCR real con RUC ficticio; no publica el ticket.
+    texto = (
+        "COMERCIO SINTETICO\nRUC 20999999991\nFACTURA ELECTRO\n"
+        "FFOL = 000138\nEmisión: 21/11/2026\n"
+        "Documento : 20999999992\nTotal: S/ 62.00"
+    )
+    sugerencia = sugerir_tipo(texto)
+    assert sugerencia is not None
+    assert sugerencia.tipo == TipoDocumento.FACT
+    assert sugerencia.confianza < 0.8
+    assert _requiere_lectura_auxiliar(texto)
+    campos = extraer_campos(texto, "OCR_PDF", 0.86)["campos"]
+    assert "serie" not in campos
+    assert "correlativo" not in campos
+
+
+def test_electro_sin_evidencia_fiscal_no_es_factura() -> None:
+    assert sugerir_tipo("FACTURA ELECTRO\nPRODUCTOS ELECTRODOMESTICOS") is None
+    assert not _requiere_lectura_auxiliar("FACTURA ELECTRO\nPRODUCTOS ELECTRODOMESTICOS")
