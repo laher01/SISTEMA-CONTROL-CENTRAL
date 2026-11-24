@@ -145,3 +145,25 @@ def test_cabecera_electro_truncada_con_evidencia_fiscal_requiere_revision() -> N
 def test_electro_sin_evidencia_fiscal_no_es_factura() -> None:
     assert sugerir_tipo("FACTURA ELECTRO\nPRODUCTOS ELECTRODOMESTICOS") is None
     assert not _requiere_lectura_auxiliar("FACTURA ELECTRO\nPRODUCTOS ELECTRODOMESTICOS")
+
+
+def test_cabecera_electro_con_ruc_emisor_ilegible_en_pdf_real() -> None:
+    # Simula texto de la rasterización PDF a 216 dpi, con RUC emisor dañado.
+    texto = (
+        "COMERCIO PRUEBA\nRG er O20\nFACTURA ELECTRO\n"
+        "FFO1 - PESA\nEmisión : 21/11/2026 20:53:35\n"
+        "Documento : 20999999992\nTotal: S/ 62.00"
+    )
+    tipo = sugerir_tipo(texto)
+    assert tipo is not None
+    assert tipo.tipo == TipoDocumento.FACT
+    assert tipo.confianza < 0.7
+    assert _requiere_lectura_auxiliar(texto)
+    campos = extraer_campos(texto, "OCR_PDF", 0.76)["campos"]
+    assert "serie" not in campos
+    assert "ruc_emisor" not in campos
+
+
+def test_cabecera_electro_sin_fecha_no_confunde_comprobante() -> None:
+    texto = "FACTURA ELECTRO\nDocumento: 20999999992\nTotal: S/ 62.00"
+    assert sugerir_tipo(texto) is None
