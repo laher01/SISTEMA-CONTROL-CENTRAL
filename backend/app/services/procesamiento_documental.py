@@ -493,16 +493,18 @@ def sugerir_tipo(texto: str) -> SugerenciaClasificacion | None:
     # Una cabecera térmica deteriorada solo aporta una sugerencia de baja confianza.
     if re.search(r"\bFACTURA\s+EL[A-Z0-9 ]{0,16}RON[TI]", normalizado):
         return SugerenciaClasificacion(TipoDocumento.FACT, 0.67, ("CABECERA_OCR_DEGRADADA",))
-    # Un ticket térmico puede truncar "ELECTRONICA" a "ELECTRO".
-    # Exigir al menos RUC y total explícitos evita confundir una descripción
-    # de electrodomésticos con un comprobante fiscal.
-    if (
-        re.search(r"\bFACTURA\s+ELECTRO\b", normalizado)
-        and re.search(r"\bRUC\s*:?\s*\d{11}\b", normalizado)
-        and re.search(r"\bTOTAL\s*:?\s*S/?\s*\d", normalizado)
+    # En tickets térmicos, Tesseract puede truncar "ELECTRONICA" a
+    # "ELECTRO" y perder el RUC del emisor. Nunca deducirlo del receptor.
+    cabecera_truncada = re.search(r"\bFACTURA\s+ELECTRO\b", normalizado)
+    total_etiquetado = re.search(r"\bTOTAL\s*:?\s*S/?\s*\d", normalizado)
+    ruc_emisor_visible = re.search(r"\bRUC\s*:?\s*\d{11}\b", normalizado)
+    documento_receptor = re.search(r"\bDOCUMENTO\s*:?\s*\d{11}\b", normalizado)
+    fecha_emision = re.search(r"\bEMISION\s*:?\s*\d{2}/\d{2}/\d{4}\b", normalizado)
+    if cabecera_truncada and total_etiquetado and (
+        ruc_emisor_visible or (documento_receptor and fecha_emision)
     ):
         return SugerenciaClasificacion(
-            TipoDocumento.FACT, 0.63, ("CABECERA_OCR_TRUNCADA_CON_EVIDENCIA_FISCAL",)
+            TipoDocumento.FACT, 0.59, ("CABECERA_OCR_TRUNCADA_CON_EVIDENCIA_FISCAL",)
         )
     return None
 
