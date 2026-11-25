@@ -180,3 +180,26 @@ def test_ticket_no_lee_cantidad_de_item_como_total(fuente):
 def test_ticket_conserva_gran_total_en_linea_separada(metodo):
     campos = extraer_campos("FACTURA ELECTRONICA\nGRAN TOTAL\n80.75", metodo, 0.88)["campos"]
     assert campos["importe_total"]["valor"] == "80.75"
+
+
+def test_ticket_coteja_importes_e_items_sin_confundir_icbper():
+    from app.services.contabilidad_items_ubl import extraer_items_pdf
+
+    texto = (
+        "FACTURA ELECTRO\nDocumento: 20999999992\n"
+        "Cant Descripcién IcePeR Total\n"
+        "2 PRODUCTO DE PRUEBA 0.00 70,75\n"
+        "1 BEBIDA DE PRUEBA 0.00 10.00\n"
+        "Op. Gravadas: S/ 68.43\nI.G.V (18%): S/ 12.32\nTotal: S/ 80.75"
+    )
+    campos = extraer_campos(texto, "OCR_PDF", 0.8)["campos"]
+    assert campos["ruc_receptor"]["valor"] == "20999999992"
+    assert campos["subtotal"]["valor"] == "68.43"
+    assert campos["igv"]["valor"] == "12.32"
+    assert campos["importe_total"]["valor"] == "80.75"
+    items = extraer_items_pdf(texto)
+    assert [(item.descripcion, str(item.importe)) for item in items] == [
+        ("PRODUCTO DE PRUEBA", "70.75"),
+        ("BEBIDA DE PRUEBA", "10.00"),
+    ]
+    assert extraer_items_pdf(texto.replace("70,75", "71,75")) == []

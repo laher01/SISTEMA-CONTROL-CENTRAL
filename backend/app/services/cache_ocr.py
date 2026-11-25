@@ -8,8 +8,12 @@ from collections.abc import Callable
 from pathlib import Path
 
 # Cambiar esta versión cuando una regla OCR pueda cambiar los campos extraídos.
-VERSION_CACHE = "ocr-core-v8-ticket-total"
-VERSIONES_CACHE_ANTERIORES = ("ocr-core-v7-thermal-rescan", "ocr-core-v6-sunat-layout")
+VERSION_CACHE = "ocr-core-v9-ticket-fiscal"
+VERSIONES_CACHE_ANTERIORES = (
+    "ocr-core-v8-ticket-total",
+    "ocr-core-v7-thermal-rescan",
+    "ocr-core-v6-sunat-layout",
+)
 
 
 def procesar_con_cache(

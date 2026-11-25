@@ -324,6 +324,21 @@ def extraer_campos(
             format(importe, ".2f"), min(0.96, 0.94 * factor), total_match.group(0).strip()
         ).a_dict(fuente)
 
+    if (
+        fuente == "OCR"
+        and re.search(r"(?im)^\s*CANT(?:IDAD)?\.?[ \t]+DESCRIPCI\w+[^\n]+\bTOTAL[ \t]*$", texto)
+        and re.search(r"\bFACTURA\s+ELECTRO", texto, re.I)
+    ):
+        for nombre, etiqueta in (
+            ("ruc_receptor", r"DOCUMENTO[ \t]*:[ \t]*((?:10|20)\d{9})\b"),
+            ("subtotal", r"OP\.[ \t]+GRAVADAS:[ \t]*S/[ \t]*(\d+[.,]\d{2})"),
+            ("igv", r"I\.?G\.?V\.?[ \t]*(?:\(\d+%\))?[ \t]*:[ \t]*S/[ \t]*(\d+[.,]\d{2})"),
+        ):
+            lectura = re.search(rf"(?im)^[ \t]*{etiqueta}", texto)
+            if lectura:
+                valor = lectura[1] if nombre == "ruc_receptor" else lectura[1].replace(",", ".")
+                _poner_campo(campos, nombre, valor, 0.85 * factor, lectura[0], fuente)
+
     operacion = OPERACION.search(texto)
     if operacion:
         campos["numero_operacion"] = CampoExtraido(
