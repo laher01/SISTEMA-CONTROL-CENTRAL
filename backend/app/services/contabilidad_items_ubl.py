@@ -288,6 +288,44 @@ def extraer_items_pdf_ticket(texto: str) -> list[ItemUBL]:
     """Lee tickets fiscales con descripción primero o cantidad primero."""
     if not re.search(r"\bFACTURA\b", texto, re.I):
         return []
+    cabecera_icbper = re.search(
+        r"(?im)^[ \t]*CANT(?:IDAD)?\.?[ \t]+DESCRIPCI\w+[ \t]+\S+[ \t]+TOTAL[ \t]*$",
+        texto,
+    )
+    if cabecera_icbper:
+        bloque = texto[cabecera_icbper.end() :]
+        cierre = re.search(r"(?im)^[ \t]*OP\.[ \t]+GRAVADAS[ \t]*:", bloque)
+        if cierre:
+            monto = r"\d+[.,]\d{2}"
+            fila = re.compile(
+                rf"(?P<cantidad>\d+)\s+(?P<descripcion>.+?)\s+{monto}\s+(?P<importe>{monto})"
+            )
+            items = []
+            for linea in bloque[: cierre.start()].splitlines():
+                limpia = " ".join(linea.split())
+                if not limpia or re.fullmatch(r"[.\-=]+", limpia):
+                    continue
+                campos = fila.fullmatch(limpia)
+                if campos is None or not 0 < int(campos["cantidad"]) < 10**14:
+                    return []
+                importe = Decimal(campos["importe"].replace(",", "."))
+                if importe >= 10**16:
+                    return []
+                items.append(
+                    ItemUBL(
+                        len(items) + 1,
+                        campos["descripcion"][:2000],
+                        Decimal(campos["cantidad"]),
+                        "NIU",
+                        importe,
+                    )
+                )
+            total = re.search(rf"(?im)^[ \t]*TOTAL:[ \t]*S/[ \t]*({monto})[ \t]*$", bloque)
+            if total and sum(i.importe for i in items if i.importe is not None) == Decimal(
+                total[1].replace(",", ".")
+            ):
+                return items
+            return []
     cantidad = r"CANT(?:IDAD)?\.?"
     unidad = r"(?:U\.?\s*M\.?|UNIDAD(?:\s+(?:DE\s+)?MEDIDA)?)"
     descripcion = r"(?:DESCRIPCI[ÓO]N|PRODUCTO)"
