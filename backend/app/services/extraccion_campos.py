@@ -303,9 +303,13 @@ def extraer_campos(
                 and not (
                     fuente == "OCR"
                     and re.match(r"TOTAL[ \t]*\n[ \t]*\d", coincidencia[0], re.I)
-                    and texto[
-                        texto.rfind("\n", 0, coincidencia.start()) + 1 : coincidencia.start()
-                    ].strip()
+                    and re.search(
+                        r"\b(?:CANT(?:IDAD)?|DESCRIPCI[ÓOÉE]N)\b",
+                        texto[
+                            texto.rfind("\n", 0, coincidencia.start()) + 1 : coincidencia.start()
+                        ],
+                        re.I,
+                    )
                 )
             ),
             None,

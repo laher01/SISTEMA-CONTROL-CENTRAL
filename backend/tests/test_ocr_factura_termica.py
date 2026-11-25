@@ -174,3 +174,9 @@ def test_ticket_no_lee_cantidad_de_item_como_total(fuente):
     texto = "FACTURA ELECTRONICA\nCantidad Descripción Total\n1 PRODUCTO 80.75\nTotal: S/ 80.75\n"
     campos = extraer_campos(texto, fuente, 0.88)["campos"]
     assert campos["importe_total"]["valor"] == "80.75"
+
+
+@pytest.mark.parametrize("metodo", ["OCR_PDF", "OCR_IMAGEN"])
+def test_ticket_conserva_gran_total_en_linea_separada(metodo):
+    campos = extraer_campos("FACTURA ELECTRONICA\nGRAN TOTAL\n80.75", metodo, 0.88)["campos"]
+    assert campos["importe_total"]["valor"] == "80.75"
