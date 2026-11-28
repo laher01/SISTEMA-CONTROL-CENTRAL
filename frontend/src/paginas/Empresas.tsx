@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { enviarJson, useDatos } from "../api";
+import ConsultaRucSunat from "../componentes/ConsultaRucSunat";
 import { Estado } from "../componentes";
 import type {
   ClasificacionProveedor,
@@ -205,6 +206,10 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
   return (
     <>
       <h2>Empresas</h2>
+      {sesion.rol !== "SUPERADMIN" && <nav className="acciones" aria-label="Consultas de empresas">
+        <Link to="/empresas/coactiva">Consulta Coactiva</Link>
+        <Link to="/empresas/ssco">Consulta SSCO</Link>
+      </nav>}
       <p className="tenue">
         Proveedores y clientes se administran por separado. Si un mismo RUC cumple ambos roles,
         aparecerá en las dos pestañas. La clasificación Tipo A / Tipo B aplica únicamente a
@@ -287,7 +292,7 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
                     disabled={!pendientes.some((e) => e.id === empresa.id)}
                     checked={seleccion.includes(empresa.id)}
                     onChange={(ev) => setSeleccion((prev) => ev.target.checked ? [...prev, empresa.id] : prev.filter((id) => id !== empresa.id))}/></td>
-                  <td>{empresa.ruc}</td>
+                  <td>{empresa.ruc}{sesion.rol !== "SUPERADMIN" && <ConsultaRucSunat ruc={empresa.ruc} />}</td>
                   <td>
                     {editandoRazon ? (
                       <div className="acciones empresas-razon-social-edicion">

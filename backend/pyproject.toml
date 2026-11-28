@@ -5,6 +5,7 @@ description = "FACT CENTRAL — backend MVP"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi",
+    "httpx",
     "uvicorn[standard]",
     "sqlalchemy>=2.0",
     "alembic",
@@ -18,12 +19,12 @@ dependencies = [
     "pypdfium2>=5.0,<6.0",
     "pillow>=11.0,<13.0",
     "rarfile>=4.5",
+    "openpyxl>=3.1.5",
 ]
 
 [dependency-groups]
 dev = [
     "pytest",
-    "httpx",
     "ruff",
     "mypy",
     "types-defusedxml",
