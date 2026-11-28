@@ -1672,3 +1672,70 @@ def test_restaurar_documento_y_expediente_ya_no_disponible(client: TestClient) -
     expediente_id = "00000000-0000-0000-0000-000000000001"
     assert client.post(f"/api/v1/documentos/{documento_id}/restaurar").status_code == 410
     assert client.post(f"/api/v1/expedientes/{expediente_id}/restaurar").status_code == 410
+
+
+@pytest.mark.parametrize(
+    ("codigo", "descripcion", "http", "esperado"),
+    [
+        ("1", "ACEPTADO", 200, "VALIDO"),
+        ("2", "ANULADO", 200, "INVALIDO"),
+        ("", "", 503, "PENDIENTE"),
+    ],
+)
+def test_cpe_persiste_en_vistas_para_factura_nueva(
+    client, settings, monkeypatch, auth_prueba, codigo, descripcion, http, esperado
+):
+    import httpx
+
+    settings.consulta_coactiva_token = "token-prueba"
+
+    def consultar(url, **opciones):
+        carga = opciones["json"]
+        respuesta = {
+            "success": True,
+            "data": {
+                "ruc_emisor": carga["ruc_emisor"],
+                "serie_documento": carga["serie_documento"],
+                "numero_documento": carga["numero_documento"],
+                "comprobante_estado_codigo": codigo,
+                "comprobante_estado_descripcion": descripcion,
+            },
+        }
+        return httpx.Response(http, request=httpx.Request("POST", url), json=respuesta)
+
+    monkeypatch.setattr("app.services.validacion_cpe.httpx.post", consultar)
+    documento = subir(client, "cpe-nuevo.xml", factura(numero="F001-00000981"))
+    assert documento["cpe_estado"] == esperado
+    auth_prueba.como_admin()
+    detalle = client.get(f"/api/v1/expedientes/{documento['expediente_id']}")
+    assert detalle.status_code == 200, detalle.text
+    assert detalle.json()["cpe_estado"] == esperado
+
+
+def test_retiro_protegido_rechaza_uso_y_recupera_empresa(client, session, auth_prueba):
+    subir(client, "empresa-en-uso.xml", factura(numero="F001-00000982"))
+    empresa = Empresa(
+        tenant_id=auth_prueba.contexto.tenant_id,
+        ruc="20500000003",
+        razon_social="Empresa sin documentos",
+        autorizada=True,
+    )
+    session.add(empresa)
+    session.commit()
+    empresa_id = str(empresa.id)
+    rol_gestor = auth_prueba.contexto
+    auth_prueba.como_admin()
+    empresas = client.get("/api/v1/empresas").json()
+    activa = next(e["id"] for e in empresas if e["ruc"] == "20500000002")
+    ruta = "/api/v1/empresas/eliminar-seleccion"
+    assert (
+        client.post(ruta, json={"empresa_ids": [activa], "solo_sin_uso": True}).status_code == 409
+    )
+    retirada = client.post(ruta, json={"empresa_ids": [empresa_id], "solo_sin_uso": True})
+    assert retirada.json() == {"eliminadas": 1}
+    auth_prueba.contexto = rol_gestor
+    xml = factura(numero="F001-00000983").replace(b"20500000002", b"20500000003")
+    subir(client, "empresa-recuperada.xml", xml)
+    recuperada = client.get("/api/v1/empresas?ruc=20500000003").json()
+    assert recuperada[0]["id"] == empresa_id
+    assert recuperada[0]["autorizada"] is False
