@@ -22,6 +22,7 @@ from app.services.ambito_emisor import EstadoAmbitoEmisor, revisar_asignaciones_
 from app.services.contabilidad_items_rhe import registrar_item_rhe
 from app.services.contabilidad_items_ubl import registrar_items_pdf_estacion
 from app.services.expedientes import (
+    bloquear_empresas_ingesta,
     buscar_expediente,
     eliminar_expediente_vacio,
     obtener_o_crear_empresa,
@@ -320,6 +321,7 @@ def aplicar_automaticamente(
     razon_receptor = campos.get("razon_social_receptor", "").strip()
     if not razon_social_confiable(razon_receptor):
         razon_receptor = receptor_ruc
+    bloquear_empresas_ingesta(session, documento.tenant_id, emisor_ruc, receptor_ruc)
     obtener_o_crear_empresa(
         session,
         documento.tenant_id,
