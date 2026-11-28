@@ -43,7 +43,7 @@ export default function ConfiguracionApiEmpresas() {
     setOcupado(true);
     try {
       setConfig(await enviarJson<Config>(ruta, "PATCH", {
-        endpoints: config.endpoints,
+        endpoints: Object.fromEntries(campos.map(([clave]) => [clave, (config.endpoints[clave] ?? "").trim()])),
         api_token: token.trim() || null,
       }));
       setToken("");
@@ -71,12 +71,14 @@ export default function ConfiguracionApiEmpresas() {
           </label>
           {config.token_configurado && <p>Deja el token en blanco para conservar el actual.</p>}
           {campos.map(([clave, titulo]) => <p key={clave}><label>{titulo}
-            <select value={config.endpoints[clave]} onChange={ev => {
+            <input type="text" inputMode="url" required list={`apiperu-${clave}`} value={config.endpoints[clave] ?? ""} onChange={ev => {
               const url = ev.target.value;
+              setGuardado(false);
               setConfig({ ...config, endpoints: { ...config.endpoints, [clave]: url } });
-            }}>
-              {config.permitidos[clave]?.map(url => <option key={url} value={url}>{url}</option>)}
-            </select>
+            }} />
+            <datalist id={`apiperu-${clave}`}>
+              {config.permitidos[clave]?.map(url => <option key={url} value={url} />)}
+            </datalist>
           </label></p>)}
           <button type="submit">Guardar</button>
         </fieldset>
