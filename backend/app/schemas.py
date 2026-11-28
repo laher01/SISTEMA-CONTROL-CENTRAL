@@ -49,6 +49,7 @@ class EmpresaUsuarioOut(BaseModel):
 
 class EmpresaListadoOut(EmpresaOut):
     usuarios: list[EmpresaUsuarioOut] = Field(default_factory=list)
+    rutas: list[str] = Field(default_factory=list)
 
 
 class EmpresaActualizar(BaseModel):
