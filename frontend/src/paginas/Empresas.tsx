@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { enviarJson, useDatos } from "../api";
+import "./EmpresasConsultas.css";
 import ConsultaProveedor from "../componentes/ConsultaProveedor";
 import ConsultaRucSunat from "../componentes/ConsultaRucSunat";
 import { Estado } from "../componentes";
@@ -334,7 +335,7 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
                     }} /></td>}
                   <td>
                     {empresa.ruc}
-                    {sesion.rol !== "SUPERADMIN" && <div className="acciones">
+                    {sesion.rol !== "SUPERADMIN" && <div className="empresas-consultas">
                       <ConsultaRucSunat ruc={empresa.ruc} />
                       {pestana === "PROVEEDORES" && <ConsultaProveedor ruc={empresa.ruc} razon={empresa.razon_social} />}
                     </div>}
