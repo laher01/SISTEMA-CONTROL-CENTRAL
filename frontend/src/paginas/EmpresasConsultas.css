@@ -1,0 +1,26 @@
+.empresas-consultas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+}
+
+.empresas-consultas > button {
+  min-height: 1.75rem;
+  padding: 0.2rem 0.48rem;
+  border: 1px solid #94a8bf;
+  border-radius: 0.35rem;
+  background: #f5f8fc;
+  color: #204568;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.empresas-consultas > button:hover:not(:disabled) {
+  background: #e6eef9;
+}
+
+.empresas-consultas > button:focus-visible {
+  outline: 2px solid #204568;
+  outline-offset: 2px;
+}
