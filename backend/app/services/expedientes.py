@@ -45,6 +45,19 @@ def obtener_tenant(session: Session, nombre: str) -> Tenant:
     return tenant
 
 
+def bloquear_empresas_ingesta(session: Session, tenant_id: uuid.UUID, *rucs: str) -> None:
+    # El orden coincide con el retiro administrativo y es independiente de
+    # cuál de las empresas actúa como emisor en el comprobante.
+    list(
+        session.scalars(
+            select(Empresa.id)
+            .where(Empresa.tenant_id == tenant_id, Empresa.ruc.in_(rucs))
+            .order_by(Empresa.ruc)
+            .with_for_update()
+        )
+    )
+
+
 def obtener_o_crear_empresa(
     session: Session,
     tenant_id: uuid.UUID,
