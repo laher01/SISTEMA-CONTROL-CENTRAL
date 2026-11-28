@@ -20,7 +20,7 @@ from app.models import (
     ReferenciaGRE,
     ahora,
 )
-from app.services import auditoria
+from app.services import auditoria, validacion_cpe
 from app.services.contabilidad_items_ubl import registrar_items_ubl
 from app.services.eliminacion import bloquear_clave_archivo
 from app.services.expedientes import (
@@ -235,6 +235,7 @@ def ingerir_documento(
         actualizar_expediente(session, expediente, hoy, settings)
         if tipo_documento == TipoDocumento.FACT:
             _conciliar_guias_de_factura(session, settings, hoy, expediente)
+            validacion_cpe.validar_factura(session, settings, expediente, documento)
     elif (
         comprobante is not None
         and tipo_documento == TipoDocumento.GRR
@@ -303,6 +304,7 @@ def vincular_documento(
         actualizar_expediente(session, anterior, hoy, settings)
     if tipo_documento == TipoDocumento.FACT:
         _conciliar_guias_de_factura(session, settings, hoy, expediente)
+        validacion_cpe.validar_factura(session, settings, expediente, documento)
     return documento
 
 
@@ -423,10 +425,10 @@ def crear_expediente(
     correlativo_original: str | None = None,
 ) -> Expediente:
     empresa_receptora = obtener_o_crear_empresa(
-        session, tenant_id, *receptor, tipo_relacion="CLIENTE"
+        session, tenant_id, *receptor, tipo_relacion="CLIENTE", recuperar=gestor_id is not None
     )
     empresa_emisora = obtener_o_crear_empresa(
-        session, tenant_id, *emisor, tipo_relacion="PROVEEDOR"
+        session, tenant_id, *emisor, tipo_relacion="PROVEEDOR", recuperar=gestor_id is not None
     )
     usuario_id = usuario_id or _usuario_de_gestor(session, tenant_id, gestor_id)
     expediente = Expediente(
@@ -491,6 +493,7 @@ def _expediente_para_comprobante(
             comprobante.receptor.ruc,
             comprobante.receptor.razon_social,
             tipo_relacion="CLIENTE",
+            recuperar=gestor_id is not None,
         )
         emisor = obtener_o_crear_empresa(
             session,
@@ -498,6 +501,7 @@ def _expediente_para_comprobante(
             comprobante.emisor.ruc,
             comprobante.emisor.razon_social,
             tipo_relacion="PROVEEDOR",
+            recuperar=gestor_id is not None,
         )
         usuario_id = usuario_id or _usuario_de_gestor(session, tenant_id, gestor_id)
         expediente = Expediente(
