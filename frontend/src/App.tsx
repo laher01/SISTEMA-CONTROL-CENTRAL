@@ -159,6 +159,7 @@ export default function App() {
   const { datos: activaciones } = useDatos<{ registros: boolean; control_documental: boolean; documentos: boolean; expedientes: boolean }>("/api/v1/configuracion/permisos/secretaria");
 
   const [avisoEmpresas, setAvisoEmpresas] = useState<AvisoEmpresas>();
+  const [consultandoEmpresas, setConsultandoEmpresas] = useState(false);
   const ingresoPendiente = useRef(false);
   const consultaAviso = useRef<AbortController | null>(null);
   const alIngresar = () => {
@@ -178,10 +179,16 @@ export default function App() {
     const controlador = new AbortController();
     consultaAviso.current = controlador;
     ingresoPendiente.current = false;
-    void consultarAvisoEmpresas(controlador.signal).then(aviso => {
+    const mostrar = (aviso: AvisoEmpresas) => {
       if (!controlador.signal.aborted && (aviso.incompleta || aviso.hallazgos.length)) {
         setAvisoEmpresas(aviso);
       }
+    };
+    void Promise.resolve().then(async () => {
+      if (controlador.signal.aborted) return;
+      setConsultandoEmpresas(true);
+      mostrar(await consultarAvisoEmpresas(controlador.signal, mostrar));
+      if (!controlador.signal.aborted) setConsultandoEmpresas(false);
     });
   }, [cargando, error, sesion]);
 
@@ -210,6 +217,7 @@ export default function App() {
     consultaAviso.current = null;
     ingresoPendiente.current = false;
     setAvisoEmpresas(undefined);
+    setConsultandoEmpresas(false);
     try {
       await enviarJson<unknown>("/api/v1/auth/logout", "POST");
     } finally {
@@ -264,18 +272,19 @@ export default function App() {
             ))}
           </div>
         </header>
-        {avisoEmpresas && (
+        {(consultandoEmpresas || avisoEmpresas) && (
           <section className="tarjeta" aria-label="Aviso de empresas">
             <h2>Aviso de empresas</h2>
-            {avisoEmpresas.incompleta && <p role="status">Consulta incompleta. Algún resultado no pudo verificarse o usa un padrón anterior.</p>}
-            {avisoEmpresas.hallazgos.length > 0 && <ul>
+            {consultandoEmpresas && <p role="status">Verificando SSCO y deuda coactiva…</p>}
+            {avisoEmpresas?.incompleta && <p role="status">Consulta incompleta. Algún resultado no pudo verificarse o usa un padrón anterior.</p>}
+            {avisoEmpresas && avisoEmpresas.hallazgos.length > 0 && <ul>
               {avisoEmpresas.hallazgos.map(empresa => <li key={empresa.ruc}>
                 <strong>{empresa.razon} · {empresa.ruc}</strong>
                 {empresa.deuda !== undefined && <span> · Con deuda coactiva{empresa.deuda && ` (S/ ${empresa.deuda})`}</span>}
                 {empresa.ssco !== undefined && <span> · Figura en SSCO{empresa.ssco && ` (corte: ${empresa.ssco})`}</span>}
               </li>)}
             </ul>}
-            <button type="button" onClick={() => setAvisoEmpresas(undefined)}>Cerrar aviso</button>
+            {!consultandoEmpresas && <button type="button" onClick={() => setAvisoEmpresas(undefined)}>Cerrar aviso</button>}
           </section>
         )}
         <Routes>
