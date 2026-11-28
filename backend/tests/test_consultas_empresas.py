@@ -117,3 +117,35 @@ def test_responsable_puede_consultar_empresas(client, auth_prueba):
         respuesta = client.get("/api/v1/empresas/consultas/ssco/20000000001")
     assert respuesta.status_code == 200
     assert respuesta.json()["estado"] == "No figura"
+
+
+def test_solo_admin_puede_rotar_token_y_la_api_no_lo_devuelve(client, auth_prueba, settings):
+    from cryptography.fernet import Fernet
+
+    ruta = "/api/v1/empresas/consultas/configuracion"
+    settings.consultas_empresas_encryption_key = Fernet.generate_key().decode()
+    datos = {"api_token": "token-de-prueba-1", "endpoints": ce.ENDPOINTS}
+    assert client.get(ruta).status_code == 403
+    assert client.patch(ruta, json=datos).status_code == 403
+    auth_prueba.como_admin()
+    respuesta = client.patch(ruta, json=datos)
+    assert respuesta.status_code == 200
+    assert respuesta.json()["token_configurado"]
+    assert datos["api_token"] not in respuesta.text
+    assert datos["api_token"] not in client.get(ruta).text
+    datos["api_token"] = "token-de-prueba-2"
+    assert client.patch(ruta, json=datos).status_code == 200
+    with patch.object(ce, "consultar_coactiva", return_value={"estado": "Sin deuda"}) as coactiva:
+        assert client.get("/api/v1/empresas/consultas/coactiva/20000000001").status_code == 200
+        coactiva.assert_called_once_with("20000000001", datos["api_token"], ce.FUENTE_COACTIVA)
+
+
+def test_configuracion_rechaza_destino_ajeno(client, auth_prueba):
+    auth_prueba.como_admin()
+    respuesta = client.patch(
+        "/api/v1/empresas/consultas/configuracion",
+        json={
+            "endpoints": {**ce.ENDPOINTS, "coactiva": "https://otro.example/"},
+        },
+    )
+    assert respuesta.status_code == 422

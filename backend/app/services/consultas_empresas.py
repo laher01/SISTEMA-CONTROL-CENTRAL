@@ -14,7 +14,19 @@ from openpyxl.utils.exceptions import InvalidFileException  # type: ignore[impor
 FUENTE_SSCO = "https://www.sunat.gob.pe/padronesnotificaciones/sujeSinCapacidadOperativa.html"
 ARCHIVO_SSCO = "https://www.sunat.gob.pe/padronesnotificaciones/ssco/sujesincapacidadOperativa.xlsx"
 BASE_APIPERU = "https://api.apiperu.dev"
-FUENTE_COACTIVA = f"{BASE_APIPERU}/ruc-deuda-coactiva"
+RUTAS_APIPERU = {
+    "coactiva": "ruc-deuda-coactiva",
+    "ssco": "ruc-ssco",
+    "domicilio": "ruc-domicilio-fiscal",
+    "sunat": "ruc-sunat",
+}
+ENDPOINTS = {tipo: f"{BASE_APIPERU}/{ruta}" for tipo, ruta in RUTAS_APIPERU.items()}
+PERMITIDOS: dict[str, tuple[str, ...]] = {
+    tipo: (ENDPOINTS[tipo], f"https://apiperu.dev/api/{ruta}")
+    for tipo, ruta in RUTAS_APIPERU.items()
+}
+PERMITIDOS["coactiva"] += ("https://apiperu.dev/api/ruc_deuda_coactiva/",)
+FUENTE_COACTIVA = ENDPOINTS["coactiva"]
 
 
 def _consultar_api(url: str, ruc: str, token: str) -> object:
@@ -38,8 +50,8 @@ def _consultar_api(url: str, ruc: str, token: str) -> object:
     return datos["data"]
 
 
-def consultar_coactiva(ruc: str, token: str) -> dict[str, object]:
-    datos = _consultar_api(FUENTE_COACTIVA, ruc, token)
+def consultar_coactiva(ruc: str, token: str, endpoint: str = FUENTE_COACTIVA) -> dict[str, object]:
+    datos = _consultar_api(endpoint, ruc, token)
     registros = [] if datos is None else datos
     if not isinstance(registros, list):
         raise ValueError("Respuesta de deuda incompleta")
@@ -58,10 +70,11 @@ def consultar_coactiva(ruc: str, token: str) -> dict[str, object]:
     }
 
 
-def consultar_ficha(ruc: str, token: str, tipo: str) -> dict[str, object]:
+def consultar_ficha(
+    ruc: str, token: str, tipo: str, endpoint: str | None = None
+) -> dict[str, object]:
     domicilio = tipo == "domicilio"
-    endpoint = "ruc-domicilio-fiscal" if domicilio else "ruc-sunat"
-    datos = _consultar_api(f"{BASE_APIPERU}/{endpoint}", ruc, token)
+    datos = _consultar_api(endpoint or ENDPOINTS[tipo], ruc, token)
     if datos is None:
         return {"estado_consulta": "Sin resultados"}
     if not isinstance(datos, dict):
@@ -85,8 +98,8 @@ def consultar_ficha(ruc: str, token: str, tipo: str) -> dict[str, object]:
     return {k: datos[k] for k in claves if k in datos}
 
 
-def consultar_ssco_apiperu(ruc: str, token: str) -> dict[str, object]:
-    datos = _consultar_api(f"{BASE_APIPERU}/ruc-ssco", ruc, token)
+def consultar_ssco_apiperu(ruc: str, token: str, endpoint: str | None = None) -> dict[str, object]:
+    datos = _consultar_api(endpoint or ENDPOINTS["ssco"], ruc, token)
     if datos is None:
         return {"estado": "No figura en el padrón consultado", "fuente": "APIPERU"}
     if not isinstance(datos, dict) or str(datos.get("ruc")) != ruc:

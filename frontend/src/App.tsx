@@ -308,7 +308,7 @@ export default function App() {
           <Route path="/empresas" element={<Empresas sesion={sesion} />} />
           {(["coactiva", "ssco"] as const).map(tipo => (
             <Route key={tipo} path={`/empresas/${tipo}`} element={sesion.rol !== "SUPERADMIN"
-              ? <ConsultasEmpresas key={tipo} tipo={tipo} />
+              ? <ConsultasEmpresas key={tipo} tipo={tipo} puedeConfigurar={sesion.rol === "ADMINISTRADOR"} />
               : <Navigate to="/empresas" replace />} />
           ))}
           <Route path="/mi-equipo" element={<MiEquipoResponsable />} />
