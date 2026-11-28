@@ -1,5 +1,8 @@
 import uuid
+from decimal import InvalidOperation
+from typing import Literal
 
+import httpx
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import exists, or_, select
@@ -25,7 +28,7 @@ from app.schemas import (
     EmpresasEliminarOut,
     EmpresaUsuarioOut,
 )
-from app.services import auditoria
+from app.services import auditoria, consultas_empresas
 from app.services.ambito_gerencia import alcance_expedientes_gerente
 from app.services.expedientes import expediente_tiene_documentos_activos, recalcular_expedientes
 
@@ -148,6 +151,40 @@ def listar(
             )
         )
     return salida
+
+
+@router.get("/consultas/{tipo}/{ruc}")
+def consultar_empresa(
+    tipo: Literal["coactiva", "ssco"],
+    ruc: str,
+    auth: OperativeAuthDep,
+    settings: SettingsDep,
+    buscar_razon: bool = False,
+) -> dict[str, object]:
+    if auth.rol not in {
+        "ADMINISTRADOR",
+        "GERENTE",
+        "SECRETARIA",
+        "RESPONSABLE",
+        "USUARIO",
+        "GESTOR",
+    }:
+        raise HTTPException(403, "Rol sin acceso a consultas de empresas")
+    if len(ruc) != 11 or not ruc.isascii() or not ruc.isdigit():
+        raise HTTPException(422, "El RUC debe tener 11 dígitos")
+    token = settings.consulta_coactiva_token
+    try:
+        if tipo == "ssco":
+            resultado = consultas_empresas.consultar_ssco(ruc)
+        elif token:
+            resultado = consultas_empresas.consultar_coactiva(ruc, token)
+        else:
+            raise ValueError("Servicio sin configurar")
+    except (httpx.HTTPError, ValueError, InvalidOperation):
+        raise HTTPException(503, "Consulta no disponible") from None
+    if buscar_razon and token and not resultado.get("coincidencias"):
+        resultado["razon_social"] = consultas_empresas.consultar_razon_social(ruc, token)
+    return resultado
 
 
 class SolicitudClasificacionIn(BaseModel):
