@@ -14,7 +14,11 @@ from app.api.deps import HoyDep, OperativeAuthDep, SessionDep, SettingsDep, Tena
 from app.api.errores import no_encontrado
 from app.enums import RolMiembro
 from app.models import (
+    AbonoClienteERP,
+    AsignacionEmpresaGestor,
+    AsignacionPedidoGerencia,
     ChatMensaje,
+    ComisionResponsableRegla,
     ConfiguracionConsultasEmpresa,
     CuentaAcceso,
     Empresa,
@@ -22,6 +26,8 @@ from app.models import (
     GerenteEmpresa,
     Gestor,
     Miembro,
+    PedidoGerencia,
+    SolicitudCargaEmisor,
     Tenant,
     ahora,
 )
@@ -590,17 +596,68 @@ def eliminar_seleccion(
 
     empresas = list(
         session.scalars(
-            select(Empresa).where(
+            select(Empresa)
+            .where(
                 Empresa.tenant_id == tenant_id,
                 Empresa.id.in_(datos.empresa_ids),
                 Empresa.deleted_at.is_(None),
             )
+            .order_by(Empresa.ruc)
+            .with_for_update()
         )
     )
+    if datos.solo_sin_uso and empresas:
+        ids = [empresa.id for empresa in empresas]
+        en_uso = session.scalar(
+            select(
+                or_(
+                    exists().where(
+                        Expediente.tenant_id == tenant_id,
+                        Expediente.deleted_at.is_(None),
+                        expediente_tiene_documentos_activos(),
+                        or_(Expediente.emisor_id.in_(ids), Expediente.receptor_id.in_(ids)),
+                    ),
+                    exists().where(
+                        AsignacionEmpresaGestor.tenant_id == tenant_id,
+                        AsignacionEmpresaGestor.empresa_id.in_(ids),
+                        AsignacionEmpresaGestor.activo.is_(True),
+                    ),
+                    exists().where(
+                        GerenteEmpresa.tenant_id == tenant_id,
+                        GerenteEmpresa.empresa_id.in_(ids),
+                        GerenteEmpresa.activo.is_(True),
+                    ),
+                    exists().where(
+                        SolicitudCargaEmisor.tenant_id == tenant_id,
+                        SolicitudCargaEmisor.empresa_id.in_(ids),
+                        SolicitudCargaEmisor.estado == "PENDIENTE",
+                    ),
+                    exists().where(
+                        AbonoClienteERP.tenant_id == tenant_id, AbonoClienteERP.cliente_id.in_(ids)
+                    ),
+                    exists().where(
+                        PedidoGerencia.tenant_id == tenant_id,
+                        PedidoGerencia.cliente_id.in_(ids),
+                        PedidoGerencia.estado == "ACTIVO",
+                    ),
+                    exists().where(
+                        AsignacionPedidoGerencia.tenant_id == tenant_id,
+                        AsignacionPedidoGerencia.proveedor_id.in_(ids),
+                    ),
+                    exists().where(
+                        ComisionResponsableRegla.tenant_id == tenant_id,
+                        ComisionResponsableRegla.cliente_id.in_(ids),
+                    ),
+                )
+            )
+        )
+        if en_uso:
+            raise HTTPException(409, "La selección incluye empresas en uso.")
     momento = ahora()
     for empresa in empresas:
         empresa.autorizada = False
         empresa.deleted_at = momento
+        empresa.recuperar_en_ingesta = datos.solo_sin_uso
         auditoria.registrar(
             session,
             tenant_id,
