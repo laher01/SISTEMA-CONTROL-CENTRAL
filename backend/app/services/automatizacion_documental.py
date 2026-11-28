@@ -326,6 +326,7 @@ def aplicar_automaticamente(
         emisor_ruc,
         razon_emisor,
         tipo_relacion="PROVEEDOR",
+        recuperar=documento.gestor_id is not None,
     )
     obtener_o_crear_empresa(
         session,
@@ -333,6 +334,7 @@ def aplicar_automaticamente(
         receptor_ruc,
         razon_receptor,
         tipo_relacion="CLIENTE",
+        recuperar=documento.gestor_id is not None,
     )
 
     expediente = buscar_expediente(
