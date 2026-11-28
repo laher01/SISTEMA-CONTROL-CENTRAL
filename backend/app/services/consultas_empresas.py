@@ -26,17 +26,22 @@ PERMITIDOS: dict[str, tuple[str, ...]] = {
     for tipo, ruta in RUTAS_APIPERU.items()
 }
 PERMITIDOS["coactiva"] += ("https://apiperu.dev/api/ruc_deuda_coactiva/",)
+FICHA_RUC_LEGACY = "https://apiperu.dev/api/ruc/"
+PERMITIDOS["sunat"] += (FICHA_RUC_LEGACY,)
 FUENTE_COACTIVA = ENDPOINTS["coactiva"]
 
 
 def _consultar_api(url: str, ruc: str, token: str) -> object:
-    respuesta = httpx.post(
-        url,
-        json={"ruc": ruc},
-        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-        timeout=12,
-    )
-    datos = respuesta.json()
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    if url == FICHA_RUC_LEGACY:
+        respuesta = httpx.get(f"{url}{ruc}", headers=headers, timeout=12)
+    else:
+        respuesta = httpx.post(url, json={"ruc": ruc}, headers=headers, timeout=12)
+    try:
+        datos = respuesta.json()
+    except ValueError:
+        respuesta.raise_for_status()
+        raise
     if (
         respuesta.status_code == 404
         and isinstance(datos, dict)
@@ -95,7 +100,12 @@ def consultar_ficha(
     )
     if not domicilio and str(datos.get("ruc")) != ruc:
         raise ValueError("La ficha no corresponde al RUC")
-    return {k: datos[k] for k in claves if k in datos}
+    ficha = {k: datos[k] for k in claves if k in datos}
+    if endpoint == FICHA_RUC_LEGACY:
+        if "direccion_completa" not in ficha and isinstance(datos.get("direccion"), str):
+            ficha["direccion_completa"] = datos["direccion"]
+        ficha["fuente"] = "Ficha básica de APIPERU"
+    return ficha
 
 
 def consultar_ssco_apiperu(ruc: str, token: str, endpoint: str | None = None) -> dict[str, object]:
