@@ -25,6 +25,7 @@ from app.services.contabilidad_items_ubl import registrar_items_ubl
 from app.services.eliminacion import bloquear_clave_archivo
 from app.services.expedientes import (
     actualizar_expediente,
+    bloquear_empresas_ingesta,
     buscar_expediente,
     eliminar_expediente_vacio,
     obtener_o_crear_empresa,
@@ -424,6 +425,7 @@ def crear_expediente(
     creado_por_cuenta_id: uuid.UUID | None = None,
     correlativo_original: str | None = None,
 ) -> Expediente:
+    bloquear_empresas_ingesta(session, tenant_id, receptor[0], emisor[0])
     empresa_receptora = obtener_o_crear_empresa(
         session, tenant_id, *receptor, tipo_relacion="CLIENTE", recuperar=gestor_id is not None
     )
@@ -487,6 +489,9 @@ def _expediente_para_comprobante(
             return expediente
         if comprobante.moneda is None or comprobante.importe_total is None:
             return None
+        bloquear_empresas_ingesta(
+            session, tenant_id, comprobante.receptor.ruc, comprobante.emisor.ruc
+        )
         receptor = obtener_o_crear_empresa(
             session,
             tenant_id,
