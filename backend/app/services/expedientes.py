@@ -51,9 +51,10 @@ def obtener_o_crear_empresa(
     ruc: str,
     razon_social: str,
     tipo_relacion: str = "SIN_CLASIFICAR",
+    recuperar: bool = False,
 ) -> Empresa:
     empresa = session.scalar(
-        select(Empresa).where(Empresa.tenant_id == tenant_id, Empresa.ruc == ruc)
+        select(Empresa).where(Empresa.tenant_id == tenant_id, Empresa.ruc == ruc).with_for_update()
     )
     if empresa is None:
         empresa = Empresa(
@@ -65,9 +66,12 @@ def obtener_o_crear_empresa(
         session.add(empresa)
         session.flush()
     else:
-        # La ingesta no puede reactivar una empresa eliminada por Administración.
         if empresa.deleted_at is not None:
-            return empresa
+            if not recuperar or not empresa.recuperar_en_ingesta:
+                return empresa
+            empresa.deleted_at = None
+            empresa.recuperar_en_ingesta = False
+            empresa.autorizada = False
         actual = empresa.razon_social.strip()
         actual_compacto = "".join(ch for ch in actual.upper() if ch.isalnum())
         placeholder = (
