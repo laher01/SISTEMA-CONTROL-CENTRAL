@@ -8,18 +8,26 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, SecretStr
 from sqlalchemy import exists, or_, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import aliased
 
 from app.api.deps import HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado
 from app.enums import RolMiembro
 from app.models import (
+    AbonoClienteERP,
+    AsignacionEmpresaGestor,
+    AsignacionPedidoGerencia,
     ChatMensaje,
+    ComisionResponsableRegla,
     ConfiguracionConsultasEmpresa,
     CuentaAcceso,
     Empresa,
     Expediente,
     GerenteEmpresa,
+    Gestor,
     Miembro,
+    PedidoGerencia,
+    SolicitudCargaEmisor,
     Tenant,
     ahora,
 )
@@ -117,10 +125,18 @@ def listar(
 
     empresas = list(session.scalars(consulta.order_by(Empresa.razon_social)))
     salida: list[EmpresaListadoOut] = []
+    responsable = aliased(Miembro)
     for empresa in empresas:
         usuarios_q = (
-            select(Miembro)
+            select(Miembro, Gestor.codigo, responsable.codigo)
             .join(Expediente, Expediente.usuario_id == Miembro.id)
+            .outerjoin(
+                Gestor, (Expediente.gestor_id == Gestor.id) & (Gestor.tenant_id == tenant_id)
+            )
+            .outerjoin(
+                responsable,
+                (Miembro.responsable_id == responsable.id) & (responsable.tenant_id == tenant_id),
+            )
             .where(
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
@@ -143,14 +159,20 @@ def listar(
         elif auth.rol == RolMiembro.RESPONSABLE:
             usuarios_q = usuarios_q.where(Miembro.responsable_id == auth.miembro_id)
 
-        usuarios = [
-            EmpresaUsuarioOut(id=u.id, codigo=u.codigo, nombre=u.nombre)
-            for u in session.scalars(usuarios_q)
-        ]
+        usuarios: dict[uuid.UUID, EmpresaUsuarioOut] = {}
+        rutas: set[str] = set()
+        for usuario, gestor_codigo, responsable_codigo in session.execute(usuarios_q):
+            usuarios[usuario.id] = EmpresaUsuarioOut(
+                id=usuario.id, codigo=usuario.codigo, nombre=usuario.nombre
+            )
+            rutas.add(
+                " → ".join(c for c in (gestor_codigo, usuario.codigo, responsable_codigo) if c)
+            )
         salida.append(
             EmpresaListadoOut(
                 **EmpresaOut.model_validate(empresa).model_dump(),
-                usuarios=usuarios,
+                usuarios=list(usuarios.values()),
+                rutas=sorted(rutas),
             )
         )
     return salida
@@ -574,17 +596,68 @@ def eliminar_seleccion(
 
     empresas = list(
         session.scalars(
-            select(Empresa).where(
+            select(Empresa)
+            .where(
                 Empresa.tenant_id == tenant_id,
                 Empresa.id.in_(datos.empresa_ids),
                 Empresa.deleted_at.is_(None),
             )
+            .order_by(Empresa.ruc)
+            .with_for_update()
         )
     )
+    if datos.solo_sin_uso and empresas:
+        ids = [empresa.id for empresa in empresas]
+        en_uso = session.scalar(
+            select(
+                or_(
+                    exists().where(
+                        Expediente.tenant_id == tenant_id,
+                        Expediente.deleted_at.is_(None),
+                        expediente_tiene_documentos_activos(),
+                        or_(Expediente.emisor_id.in_(ids), Expediente.receptor_id.in_(ids)),
+                    ),
+                    exists().where(
+                        AsignacionEmpresaGestor.tenant_id == tenant_id,
+                        AsignacionEmpresaGestor.empresa_id.in_(ids),
+                        AsignacionEmpresaGestor.activo.is_(True),
+                    ),
+                    exists().where(
+                        GerenteEmpresa.tenant_id == tenant_id,
+                        GerenteEmpresa.empresa_id.in_(ids),
+                        GerenteEmpresa.activo.is_(True),
+                    ),
+                    exists().where(
+                        SolicitudCargaEmisor.tenant_id == tenant_id,
+                        SolicitudCargaEmisor.empresa_id.in_(ids),
+                        SolicitudCargaEmisor.estado == "PENDIENTE",
+                    ),
+                    exists().where(
+                        AbonoClienteERP.tenant_id == tenant_id, AbonoClienteERP.cliente_id.in_(ids)
+                    ),
+                    exists().where(
+                        PedidoGerencia.tenant_id == tenant_id,
+                        PedidoGerencia.cliente_id.in_(ids),
+                        PedidoGerencia.estado == "ACTIVO",
+                    ),
+                    exists().where(
+                        AsignacionPedidoGerencia.tenant_id == tenant_id,
+                        AsignacionPedidoGerencia.proveedor_id.in_(ids),
+                    ),
+                    exists().where(
+                        ComisionResponsableRegla.tenant_id == tenant_id,
+                        ComisionResponsableRegla.cliente_id.in_(ids),
+                    ),
+                )
+            )
+        )
+        if en_uso:
+            raise HTTPException(409, "La selección incluye empresas en uso.")
     momento = ahora()
     for empresa in empresas:
         empresa.autorizada = False
         empresa.deleted_at = momento
+        empresa.recuperar_en_ingesta = datos.solo_sin_uso
         auditoria.registrar(
             session,
             tenant_id,

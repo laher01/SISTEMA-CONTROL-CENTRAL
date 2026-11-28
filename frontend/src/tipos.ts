@@ -55,6 +55,7 @@ export interface Empresa {
   tipo_relacion: TipoRelacionEmpresa;
   clasificacion_proveedor: ClasificacionProveedor | null;
   usuarios?: EmpresaUsuario[];
+  rutas?: string[];
   autorizada: boolean;
   agente_retencion: boolean;
 }
@@ -82,6 +83,7 @@ export interface Gestor {
 }
 
 export interface Documento {
+  cpe_estado?: string | null;
   id: string;
   expediente_id: string | null;
   emisor?: Empresa | null;
@@ -132,6 +134,7 @@ export interface Alerta {
 }
 
 export interface Expediente {
+  cpe_estado?: string | null;
   id: string;
   receptor: Empresa;
   emisor: Empresa;
@@ -287,6 +290,7 @@ export interface AltaGestor {
 
 
 export interface RegistroFila {
+  cpe_estado?: string | null;
   responsable_codigo?: string | null;
   responsable_nombre?: string | null;
   fecha_registro: string;

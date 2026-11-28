@@ -19,7 +19,7 @@ type Consulta = {
   coincidencias?: Coincidencia[];
 };
 type Fila = Consulta & {
-  ruc: string; razon: string; estadoSsco: string; domicilio: string;
+  ruc: string; razon: string; estadoSsco: string; domicilio: string; rutas: string;
 };
 type Columna = { clave: string; titulo: string; valor: (fila: Fila) => string | number };
 
@@ -29,6 +29,7 @@ const comunes: Columna[] = [
 ];
 const columnas: Columna[] = [
   ...comunes,
+  { clave: "ruta", titulo: "Ruta", valor: f => f.rutas },
   { clave: "ssco", titulo: "SSCO", valor: f => f.estadoSsco },
   { clave: "estado", titulo: "Deuda coactiva", valor: f => f.estado },
   { clave: "monto", titulo: "Total deuda (S/)", valor: f => f.monto === undefined ? "" : Number(f.monto) },
@@ -43,9 +44,12 @@ const columnas: Columna[] = [
 
 export default function ConsultasEmpresas({ tipo, puedeConfigurar = false }: { tipo: Tipo; puedeConfigurar?: boolean }) {
   const { datos, error, cargando } = useDatos<Empresa[]>("/api/v1/empresas?autorizada=true");
-  const proveedores = (datos ?? []).filter(e => e.tipo_relacion === "PROVEEDOR" || e.tipo_relacion === "AMBOS");
-  const [modo, setModo] = useState<"todos" | "proveedor" | "ruc">("todos");
+  const empresas = datos ?? [];
+  const proveedores = empresas.filter(e => e.tipo_relacion === "PROVEEDOR" || e.tipo_relacion === "AMBOS");
+  const [modo, setModo] = useState<"todos" | "proveedor" | "ruc" | "seleccionadas">("todos");
   const [seleccion, setSeleccion] = useState("");
+  const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set());
+  const empresasSeleccionadas = empresas.filter(e => seleccionadas.has(e.id));
   const [ruc, setRuc] = useState("");
   const [filas, setFilas] = useState<Fila[]>([]);
   const [ocupado, setOcupado] = useState(false);
@@ -53,16 +57,19 @@ export default function ConsultasEmpresas({ tipo, puedeConfigurar = false }: { t
   const [orden, setOrden] = useState({ clave: "ruc", ascendente: true });
 
   const ejecutar = async () => {
+    const codigoManual = ruc.trim();
+    const empresaManual = empresas.find(e => e.ruc === codigoManual);
     const objetivos = modo === "ruc"
-      ? [{ ruc: ruc.trim(), razon_social: proveedores.find(p => p.ruc === ruc.trim())?.razon_social ?? "" }]
-      : modo === "proveedor" ? proveedores.filter(p => p.ruc === seleccion) : proveedores;
+      ? [empresaManual ?? { ruc: codigoManual, razon_social: "", rutas: [] }]
+      : modo === "proveedor" ? proveedores.filter(p => p.ruc === seleccion)
+        : modo === "seleccionadas" ? empresasSeleccionadas : proveedores;
     setOcupado(true);
     setCompletado(false);
     setFilas([]);
     try {
       for (let i = 0; i < objetivos.length; i += 2) {
         const bloque = await Promise.all(objetivos.slice(i, i + 2).map(async empresa => {
-          const base = { ruc: empresa.ruc, razon: empresa.razon_social };
+          const base = { ruc: empresa.ruc, razon: empresa.razon_social, rutas: (empresa.rutas ?? []).join(" · ") };
           const ruta = "/api/v1/empresas/consultas";
           const codigo = encodeURIComponent(empresa.ruc);
           const [deuda, ssco, domicilio] = await Promise.allSettled([
@@ -98,7 +105,8 @@ export default function ConsultasEmpresas({ tipo, puedeConfigurar = false }: { t
     return orden.ascendente ? comparar : -comparar;
   });
   const puedeConsultar = modo === "ruc" ? /^[0-9]{11}$/.test(ruc.trim())
-    : modo === "proveedor" ? Boolean(seleccion) : proveedores.length > 0;
+    : modo === "proveedor" ? Boolean(seleccion)
+      : modo === "seleccionadas" ? empresasSeleccionadas.length > 0 : proveedores.length > 0;
 
   return (
     <section>
@@ -114,17 +122,33 @@ export default function ConsultasEmpresas({ tipo, puedeConfigurar = false }: { t
           <option value="todos">Todos los proveedores activos</option>
           <option value="proveedor">Seleccionar proveedor</option>
           <option value="ruc">Ingresar RUC</option>
+          <option value="seleccionadas">Seleccionar empresas a consultar</option>
         </select></label>
         {modo === "proveedor" && <label>Proveedor <select value={seleccion} disabled={ocupado} onChange={ev => setSeleccion(ev.target.value)}>
           <option value="">Seleccione un proveedor</option>
           {proveedores.map(p => <option key={p.ruc} value={p.ruc}>{p.ruc} · {p.razon_social}</option>)}
         </select></label>}
         {modo === "ruc" && <label>RUC <input value={ruc} disabled={ocupado} onChange={ev => setRuc(ev.target.value)} inputMode="numeric" maxLength={11} placeholder="11 dígitos" /></label>}
+        {modo === "seleccionadas" && empresas.length > 0 && <fieldset disabled={ocupado}>
+          <legend>Empresas a consultar ({empresasSeleccionadas.length})</legend>
+          {empresas.map(empresa => <div key={empresa.id}><label>
+            <input type="checkbox" checked={seleccionadas.has(empresa.id)} onChange={ev => {
+              const marcada = ev.target.checked;
+              setSeleccionadas(anterior => {
+                const actual = new Set(anterior);
+                if (marcada) actual.add(empresa.id);
+                else actual.delete(empresa.id);
+                return actual;
+              });
+            }} />
+            {empresa.ruc} · {empresa.razon_social}
+          </label></div>)}
+        </fieldset>}
         <button disabled={ocupado || !puedeConsultar}>Consultar</button>
       </form>
       {modo !== "ruc" && cargando && <p role="status">Cargando proveedores…</p>}
       {modo !== "ruc" && error && <p role="alert">{error}</p>}
-      {modo !== "ruc" && !cargando && !error && !proveedores.length && <p>Sin proveedores activos en tu ámbito.</p>}
+      {modo !== "ruc" && !cargando && !error && (modo === "seleccionadas" ? !empresas.length : !proveedores.length) && <p>Sin empresas disponibles para este modo.</p>}
       {(ocupado || completado) && <p role="status">{ocupado ? "Consultando" : "Consulta finalizada"} · {filas.length} resultados</p>}
       {filas.some(f => f.desactualizado) && <p role="alert">No se pudo actualizar SUNAT. Se usó la última copia disponible en el servidor.</p>}
       {filas.length > 0 && <div className="tabla-contenedor"><table>

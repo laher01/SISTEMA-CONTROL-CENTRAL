@@ -87,6 +87,7 @@ class Empresa(ConId, ConTenant, ConCreacion, Base):
     updated_at: Mapped[datetime] = mapped_column(
         default=ahora, onupdate=ahora, server_default=func.now()
     )
+    recuperar_en_ingesta: Mapped[bool] = mapped_column(default=False, server_default="false")
     deleted_at: Mapped[datetime | None]
 
 
@@ -250,6 +251,8 @@ class Expediente(ConId, ConTenant, ConCreacion, Base):
     fecha_emision: Mapped[date] = mapped_column(Date)
     moneda: Mapped[str] = mapped_column(String(3))
     importe_total: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    cpe_estado: Mapped[str | None] = mapped_column(String(12))
+    cpe_identidad: Mapped[str | None] = mapped_column(String(128))
     requiere_guia: Mapped[bool] = mapped_column(default=True, server_default="true")
     guia_no_aplica_confirmada: Mapped[bool] = mapped_column(default=False, server_default="false")
     gestor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gestores.id"), index=True)
@@ -332,6 +335,12 @@ class Documento(ConId, ConTenant, ConCreacion, Base):
     @property
     def importe_total(self) -> Decimal | None:
         return self.expediente.importe_total if self.expediente is not None else None
+
+    @property
+    def cpe_estado(self) -> str | None:
+        if self.tipo_documento != "FACT" or self.expediente is None:
+            return None
+        return self.expediente.cpe_estado
 
     @property
     def emisor(self) -> Empresa | None:

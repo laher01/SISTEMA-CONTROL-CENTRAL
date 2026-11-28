@@ -1,3 +1,4 @@
+import CeldaCpe from "../componentes/CeldaCpe";
 import FiltroImportes, { parametrosImportes } from "../componentes/FiltroImportes";
 import EncabezadoOrden, { parametrosOrden } from "../componentes/EncabezadoOrden";
 import ExportarExcel from "../ExportarExcel";
@@ -458,13 +459,14 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
               <th>DTS-COMP-PGO</th>
               <th>Vínculo de pago</th>
               <EncabezadoOrden className="num" campo="monto" orden={orden} cambiar={cambiar}>Importe</EncabezadoOrden>
+                <th scope="col">CPE</th>
               <th>Descarga</th>
         {(capacidades?.puede_retirar ?? false) && <th>Acciones</th>}
             </tr>
           </thead>
           <tbody>
             {datos?.map((e, indice) => (
-              <tr key={e.id}>
+              <tr key={e.id} className={e.cpe_estado === "INVALIDO" ? "cpe-invalido" : undefined}>
                 <td>
                   <input
                     type="checkbox"
@@ -537,6 +539,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
                   )) : <span className="tenue">Sin pago vinculado</span>}
                 </td>
                 <td className="num">{formatearMonto(e.moneda, e.importe_total)}</td>
+      <CeldaCpe estado={e.cpe_estado} />
                 <td>
                   <a href={urlPdfExpediente(e.id)} download={`expediente-${e.serie}-${e.correlativo}.pdf`}>
                     Descargar PDF

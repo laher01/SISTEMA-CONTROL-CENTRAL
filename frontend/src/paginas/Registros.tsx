@@ -1,3 +1,4 @@
+import CeldaCpe from "../componentes/CeldaCpe";
 import FiltroImportes, { parametrosImportes } from "../componentes/FiltroImportes";
 import EncabezadoOrden, { parametrosOrden } from "../componentes/EncabezadoOrden";
 import ExportarExcel from "../ExportarExcel";
@@ -318,6 +319,7 @@ export default function Registros({ sesion }: { sesion: SesionActual }) {
                 <EncabezadoOrden className="columna-empresa" campo="emisor" orden={orden} cambiar={cambiar}>Emisor</EncabezadoOrden>
                 <EncabezadoOrden className="columna-empresa" campo="receptor" orden={orden} cambiar={cambiar}>Receptor</EncabezadoOrden>
                 <EncabezadoOrden className="num" campo="monto" orden={orden} cambiar={cambiar}>Monto</EncabezadoOrden>
+                <th scope="col">CPE</th>
                 <th>Documentación / opciones</th>
               </tr>
             </thead>
@@ -450,7 +452,7 @@ function FilaRegistro({
   };
 
   return (
-    <tr>
+    <tr className={fila.cpe_estado === "INVALIDO" ? "cpe-invalido" : undefined}>
       <td><Semaforo estado={fila.estado} /></td>
       <td><input type="checkbox" aria-label={`Seleccionar expediente ${fila.serie}-${fila.correlativo}`} checked={seleccionado} onChange={(e) => alSeleccionar(e.target.checked)} /></td>
       {mostrarResponsable && (
@@ -483,6 +485,7 @@ function FilaRegistro({
       <td className="columna-empresa"><strong>{fila.emisor_razon_social || "Sin razón social"}</strong><small className="bloque tenue">RUC {fila.emisor_ruc}</small></td>
       <td className="columna-empresa"><strong>{fila.receptor_razon_social || "Sin razón social"}</strong><small className="bloque tenue">RUC {fila.receptor_ruc}</small></td>
       <td className="num">{formatearMonto(fila.moneda, fila.importe_total)}</td>
+      <CeldaCpe estado={fila.cpe_estado} />
       <td>
         <div className="acciones-registro">
           <a href={urlZipExpediente(fila.expediente_id)}>Descargar ZIP</a>
