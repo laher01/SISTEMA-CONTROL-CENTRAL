@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, SecretStr
 from sqlalchemy import exists, or_, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import aliased
 
 from app.api.deps import HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado
@@ -19,6 +20,7 @@ from app.models import (
     Empresa,
     Expediente,
     GerenteEmpresa,
+    Gestor,
     Miembro,
     Tenant,
     ahora,
@@ -117,10 +119,18 @@ def listar(
 
     empresas = list(session.scalars(consulta.order_by(Empresa.razon_social)))
     salida: list[EmpresaListadoOut] = []
+    responsable = aliased(Miembro)
     for empresa in empresas:
         usuarios_q = (
-            select(Miembro)
+            select(Miembro, Gestor.codigo, responsable.codigo)
             .join(Expediente, Expediente.usuario_id == Miembro.id)
+            .outerjoin(
+                Gestor, (Expediente.gestor_id == Gestor.id) & (Gestor.tenant_id == tenant_id)
+            )
+            .outerjoin(
+                responsable,
+                (Miembro.responsable_id == responsable.id) & (responsable.tenant_id == tenant_id),
+            )
             .where(
                 Expediente.tenant_id == tenant_id,
                 Expediente.deleted_at.is_(None),
@@ -143,14 +153,20 @@ def listar(
         elif auth.rol == RolMiembro.RESPONSABLE:
             usuarios_q = usuarios_q.where(Miembro.responsable_id == auth.miembro_id)
 
-        usuarios = [
-            EmpresaUsuarioOut(id=u.id, codigo=u.codigo, nombre=u.nombre)
-            for u in session.scalars(usuarios_q)
-        ]
+        usuarios: dict[uuid.UUID, EmpresaUsuarioOut] = {}
+        rutas: set[str] = set()
+        for usuario, gestor_codigo, responsable_codigo in session.execute(usuarios_q):
+            usuarios[usuario.id] = EmpresaUsuarioOut(
+                id=usuario.id, codigo=usuario.codigo, nombre=usuario.nombre
+            )
+            rutas.add(
+                " → ".join(c for c in (gestor_codigo, usuario.codigo, responsable_codigo) if c)
+            )
         salida.append(
             EmpresaListadoOut(
                 **EmpresaOut.model_validate(empresa).model_dump(),
-                usuarios=usuarios,
+                usuarios=list(usuarios.values()),
+                rutas=sorted(rutas),
             )
         )
     return salida
