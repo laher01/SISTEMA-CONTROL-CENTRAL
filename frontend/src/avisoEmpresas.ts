@@ -6,7 +6,10 @@ type SSCO = { estado: string; corte?: string; desactualizado?: boolean };
 export type HallazgoEmpresa = { ruc: string; razon: string; deuda?: string; ssco?: string };
 export type AvisoEmpresas = { hallazgos: HallazgoEmpresa[]; incompleta: boolean };
 
-export async function consultarAvisoEmpresas(signal: AbortSignal): Promise<AvisoEmpresas> {
+export async function consultarAvisoEmpresas(
+  signal: AbortSignal,
+  alAvanzar?: (aviso: AvisoEmpresas) => void,
+): Promise<AvisoEmpresas> {
   const aviso: AvisoEmpresas = { hallazgos: [], incompleta: false };
   try {
     const visibles = await obtener<Empresa[]>("/api/v1/empresas", signal);
@@ -27,6 +30,7 @@ export async function consultarAvisoEmpresas(signal: AbortSignal): Promise<Aviso
         if (s?.estado === "Figura en el padrón") hallazgo.ssco = s.corte ?? "";
         if (hallazgo.deuda !== undefined || hallazgo.ssco !== undefined) aviso.hallazgos.push(hallazgo);
       }));
+      if (!signal.aborted) alAvanzar?.({ ...aviso, hallazgos: [...aviso.hallazgos] });
     }
   } catch {
     aviso.incompleta = true;
