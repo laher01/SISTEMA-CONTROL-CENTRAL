@@ -1,0 +1,4 @@
+.cpe-celda { text-align: center; }
+.cpe-celda span[aria-label="CPE válido"] { color: #176236; font-weight: 700; }
+tr.cpe-invalido > td { background-color: #ffecec; }
+.cpe-invalido .cpe-celda { color: #a21f27; font-weight: 700; }
