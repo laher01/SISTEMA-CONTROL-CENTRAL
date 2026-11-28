@@ -1143,6 +1143,8 @@ def test_empresas_clasifican_proveedor_cliente_y_usuario(
     assert cliente["clasificacion_proveedor"] is None
     assert [u["id"] for u in proveedor["usuarios"]] == [str(auth_prueba.contexto.usuario_id)]
     assert [u["id"] for u in cliente["usuarios"]] == [str(auth_prueba.contexto.usuario_id)]
+    assert proveedor["rutas"] == ["TESTGST → TESTUSR"]
+    assert cliente["rutas"] == ["TESTGST → TESTUSR"]
 
     auth_prueba.como_admin()
     actualizado = client.patch(
