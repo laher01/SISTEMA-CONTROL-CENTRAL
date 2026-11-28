@@ -18,6 +18,7 @@ import ComisionesResponsables from "./paginas/ComisionesResponsables";
 import Dashboard from "./paginas/Dashboard";
 import Documentos from "./paginas/Documentos";
 import Empresas from "./paginas/Empresas";
+import ConsultasEmpresas from "./paginas/ConsultasEmpresas";
 import ExpedienteDetalle from "./paginas/ExpedienteDetalle";
 import Expedientes from "./paginas/Expedientes";
 import { CambiarClave, Login } from "./paginas/Login";
@@ -259,6 +260,11 @@ export default function App() {
           <Route path="/aprobaciones-misd" element={sesion.rol === "ADMINISTRADOR" || sesion.rol === "RESPONSABLE" ? <AprobacionesMISD rol={sesion.rol} /> : <Navigate to="/expedientes" replace />} />
           <Route path="/alertas" element={<Alertas sesion={sesion} />} />
           <Route path="/empresas" element={<Empresas sesion={sesion} />} />
+          {(["coactiva", "ssco"] as const).map(tipo => (
+            <Route key={tipo} path={`/empresas/${tipo}`} element={sesion.rol !== "SUPERADMIN"
+              ? <ConsultasEmpresas key={tipo} tipo={tipo} />
+              : <Navigate to="/empresas" replace />} />
+          ))}
           <Route path="/mi-equipo" element={<MiEquipoResponsable />} />
           <Route path="/mi-equipo/pedidos" element={<MiEquipoResponsable inicial="PEDIDOS" />} />
           <Route path="/mi-equipo/cobros" element={<MiEquipoResponsable inicial="COBROS" />} />

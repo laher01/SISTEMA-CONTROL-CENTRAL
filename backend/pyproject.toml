@@ -18,6 +18,7 @@ dependencies = [
     "pypdfium2>=5.0,<6.0",
     "pillow>=11.0,<13.0",
     "rarfile>=4.5",
+    "openpyxl>=3.1.5",
 ]
 
 [dependency-groups]
