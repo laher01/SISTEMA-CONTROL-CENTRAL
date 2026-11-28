@@ -1,0 +1,55 @@
+.ficha-ruc {
+  box-sizing: border-box;
+  width: min(48rem, calc(100% - 2rem));
+  max-height: calc(100% - 2rem);
+  overflow: auto;
+  padding: clamp(0.85rem, 3vw, 1.5rem);
+  border: 1px solid #aebed1;
+  border-radius: 0.5rem;
+  color: #172b43;
+  background: #fff;
+}
+
+.ficha-ruc h3 { margin: 0 0 0.5rem; }
+.ficha-ruc__razon { font-weight: 700; }
+.ficha-ruc__datos > div {
+  display: grid;
+  grid-template-columns: minmax(9rem, 32%) minmax(0, 1fr);
+  gap: 0.3rem 1rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid #dce4ee;
+}
+
+.ficha-ruc dt { font-weight: 600; }
+.ficha-ruc dd { margin: 0; overflow-wrap: anywhere; }
+.ficha-ruc [data-tono="verde"] { color: #176236; }
+.ficha-ruc [data-tono="rojo"] { color: #ae231e; }
+.ficha-ruc [data-tono="ambar"] { color: #815300; }
+.ficha-ruc__aviso { margin: 0.35rem 0 0; }
+
+.ficha-ruc__actividades {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  overflow-wrap: anywhere;
+}
+
+.ficha-ruc__actividades caption {
+  text-align: left;
+  font-weight: 700;
+  padding-bottom: 0.5rem;
+}
+
+.ficha-ruc__actividades :is(th, td) {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.5rem;
+  border-bottom: 1px solid #dce4ee;
+}
+
+.ficha-ruc__actividades th { background: #eef3f8; }
+
+@media (max-width: 34rem) {
+  .ficha-ruc__datos > div { grid-template-columns: minmax(0, 1fr); }
+  .ficha-ruc__actividades :is(th, td) { padding-inline: 0.3rem; }
+}
