@@ -1,3 +1,4 @@
+from dataclasses import replace
 from io import BytesIO
 from unittest.mock import patch
 
@@ -108,3 +109,11 @@ def test_ficha_sunat_separa_condicion_del_domicilio():
         )
         assert ce.consultar_ficha(ruc, "prueba", "sunat")["condicion"] == "HABIDO"
         assert post.call_args.args[0].endswith("/ruc-sunat")
+
+
+def test_responsable_puede_consultar_empresas(client, auth_prueba):
+    auth_prueba.contexto = replace(auth_prueba.contexto, rol="RESPONSABLE")
+    with patch.object(ce, "consultar_ssco", return_value={"estado": "No figura"}):
+        respuesta = client.get("/api/v1/empresas/consultas/ssco/20000000001")
+    assert respuesta.status_code == 200
+    assert respuesta.json()["estado"] == "No figura"

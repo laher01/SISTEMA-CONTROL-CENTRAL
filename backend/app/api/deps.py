@@ -85,7 +85,13 @@ def get_contexto_operativo(
             and request.url.path in {"/api/v1/registros", "/api/v1/registros/opciones"}
         )
         or (request.url.path.startswith("/api/v1/chat/") and request.method in {"GET", "POST"})
-        or (request.method == "GET" and request.url.path == "/api/v1/empresas")
+        or (
+            request.method == "GET"
+            and (
+                request.url.path == "/api/v1/empresas"
+                or request.url.path.startswith("/api/v1/empresas/consultas/")
+            )
+        )
         or (request.method == "PATCH" and request.url.path.startswith("/api/v1/empresas/"))
         or (
             request.method == "POST"
