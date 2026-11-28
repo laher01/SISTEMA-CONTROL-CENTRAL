@@ -155,11 +155,12 @@ def listar(
 
 @router.get("/consultas/{tipo}/{ruc}")
 def consultar_empresa(
-    tipo: Literal["coactiva", "ssco"],
+    tipo: Literal["coactiva", "ssco", "domicilio", "sunat"],
     ruc: str,
     auth: OperativeAuthDep,
     settings: SettingsDep,
     buscar_razon: bool = False,
+    ssco_apiperu: bool = False,
 ) -> dict[str, object]:
     if auth.rol not in {
         "ADMINISTRADOR",
@@ -175,9 +176,20 @@ def consultar_empresa(
     token = settings.consulta_coactiva_token
     try:
         if tipo == "ssco":
-            resultado = consultas_empresas.consultar_ssco(ruc)
-        elif token:
+            try:
+                resultado = (
+                    consultas_empresas.consultar_ssco_apiperu(ruc, token)
+                    if ssco_apiperu and token
+                    else consultas_empresas.consultar_ssco(ruc)
+                )
+            except (httpx.HTTPError, ValueError):
+                if not ssco_apiperu or not token:
+                    raise
+                resultado = consultas_empresas.consultar_ssco(ruc)
+        elif token and tipo == "coactiva":
             resultado = consultas_empresas.consultar_coactiva(ruc, token)
+        elif token:
+            resultado = consultas_empresas.consultar_ficha(ruc, token, tipo)
         else:
             raise ValueError("Servicio sin configurar")
     except (httpx.HTTPError, ValueError, InvalidOperation):

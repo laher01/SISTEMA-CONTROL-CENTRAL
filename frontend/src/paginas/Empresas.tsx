@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { enviarJson, useDatos } from "../api";
+import ConsultaRucSunat from "../componentes/ConsultaRucSunat";
 import { Estado } from "../componentes";
 import type {
   ClasificacionProveedor,
@@ -291,7 +292,7 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
                     disabled={!pendientes.some((e) => e.id === empresa.id)}
                     checked={seleccion.includes(empresa.id)}
                     onChange={(ev) => setSeleccion((prev) => ev.target.checked ? [...prev, empresa.id] : prev.filter((id) => id !== empresa.id))}/></td>
-                  <td>{empresa.ruc}</td>
+                  <td>{empresa.ruc}{sesion.rol !== "SUPERADMIN" && <ConsultaRucSunat ruc={empresa.ruc} />}</td>
                   <td>
                     {editandoRazon ? (
                       <div className="acciones empresas-razon-social-edicion">
