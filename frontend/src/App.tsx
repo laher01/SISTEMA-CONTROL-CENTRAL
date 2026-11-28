@@ -2,10 +2,11 @@ import ContabilidadItems from "./paginas/ContabilidadItems";
 import CategoriasItems from "./paginas/CategoriasItems";
 import CatalogoItems from "./paginas/CatalogoItems";
 import ReescanearItems from "./paginas/ReescanearItems";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 
 import { enviarJson, useDatos } from "./api";
+import { consultarAvisoEmpresas, type AvisoEmpresas } from "./avisoEmpresas";
 import NexusFlotante from "./componentes/NexusFlotante";
 import AparienciaPersonal from "./componentes/AparienciaPersonal";
 import Alertas from "./paginas/Alertas";
@@ -157,6 +158,33 @@ export default function App() {
   const { datos: sesion, error, cargando, recargar } = useDatos<SesionActual>("/api/v1/auth/me");
   const { datos: activaciones } = useDatos<{ registros: boolean; control_documental: boolean; documentos: boolean; expedientes: boolean }>("/api/v1/configuracion/permisos/secretaria");
 
+  const [avisoEmpresas, setAvisoEmpresas] = useState<AvisoEmpresas>();
+  const ingresoPendiente = useRef(false);
+  const consultaAviso = useRef<AbortController | null>(null);
+  const alIngresar = () => {
+    consultaAviso.current?.abort();
+    consultaAviso.current = null;
+    setAvisoEmpresas(undefined);
+    ingresoPendiente.current = true;
+    recargar();
+  };
+
+  useEffect(() => {
+    if (!ingresoPendiente.current || cargando || error || !sesion || sesion.cambio_clave_obligatorio
+      || consultaAviso.current) return;
+    if (sesion.rol === "SUPERADMIN") return;
+
+    // Solo Login habilita este efecto. Una sesión recuperada tras recargar no lo habilita.
+    const controlador = new AbortController();
+    consultaAviso.current = controlador;
+    ingresoPendiente.current = false;
+    void consultarAvisoEmpresas(controlador.signal).then(aviso => {
+      if (!controlador.signal.aborted && (aviso.incompleta || aviso.hallazgos.length)) {
+        setAvisoEmpresas(aviso);
+      }
+    });
+  }, [cargando, error, sesion]);
+
   if (window.location.pathname === "/privacidad") return <PaginaLegal tipo="privacidad" />;
   if (window.location.pathname === "/terminos") return <PaginaLegal tipo="terminos" />;
   if (window.location.pathname === "/bienvenida") return <LandingPublica />;
@@ -164,20 +192,24 @@ export default function App() {
   // Priorizarla explícitamente para evitar regresiones en cambios de portada.
   if (window.location.pathname.replace(/\/+$/, "") === "/ingresar") {
     if (cargando) return <main className="contenido"><p>Cargando sesión…</p></main>;
-    if (!sesion || error) return <Login alIngresar={recargar} />;
+    if (!sesion || error) return <Login alIngresar={alIngresar} />;
     if (sesion.cambio_clave_obligatorio) return <CambiarClave sesion={sesion} alCambiar={recargar} />;
     return <Navigate to="/" replace />;
   }
   if (cargando) return <main className="contenido"><p>Cargando sesión…</p></main>;
   if (!sesion || error) {
     const esPortalOracle = window.location.hostname === "factcentral.online";
-    return esPortalOracle ? <Presentacion /> : <Login alIngresar={recargar} />;
+    return esPortalOracle ? <Presentacion /> : <Login alIngresar={alIngresar} />;
   }
   if (sesion.cambio_clave_obligatorio) {
     return <CambiarClave sesion={sesion} alCambiar={recargar} />;
   }
 
   const cerrarSesion = async () => {
+    consultaAviso.current?.abort();
+    consultaAviso.current = null;
+    ingresoPendiente.current = false;
+    setAvisoEmpresas(undefined);
     try {
       await enviarJson<unknown>("/api/v1/auth/logout", "POST");
     } finally {
@@ -232,6 +264,20 @@ export default function App() {
             ))}
           </div>
         </header>
+        {avisoEmpresas && (
+          <section className="tarjeta" aria-label="Aviso de empresas">
+            <h2>Aviso de empresas</h2>
+            {avisoEmpresas.incompleta && <p role="status">Consulta incompleta. Algún resultado no pudo verificarse o usa un padrón anterior.</p>}
+            {avisoEmpresas.hallazgos.length > 0 && <ul>
+              {avisoEmpresas.hallazgos.map(empresa => <li key={empresa.ruc}>
+                <strong>{empresa.razon} · {empresa.ruc}</strong>
+                {empresa.deuda !== undefined && <span> · Con deuda coactiva{empresa.deuda && ` (S/ ${empresa.deuda})`}</span>}
+                {empresa.ssco !== undefined && <span> · Figura en SSCO{empresa.ssco && ` (corte: ${empresa.ssco})`}</span>}
+              </li>)}
+            </ul>}
+            <button type="button" onClick={() => setAvisoEmpresas(undefined)}>Cerrar aviso</button>
+          </section>
+        )}
         <Routes>
           {sesion.rol === "SUPERADMIN" ? (
             <>
