@@ -13,6 +13,7 @@ from sqlalchemy import (
     MetaData,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
     Uuid,
     func,
@@ -536,6 +537,14 @@ class AlertaManual(ConId, ConTenant, ConCreacion, Base):
     mensaje: Mapped[str] = mapped_column(String(1000))
     resuelta: Mapped[bool] = mapped_column(default=False, server_default="false", index=True)
     resuelta_at: Mapped[datetime | None]
+
+
+class ConfiguracionConsultasEmpresa(Base):
+    __tablename__ = "configuracion_consultas_empresa"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), primary_key=True)
+    token_cifrado: Mapped[str | None] = mapped_column(Text)
+    endpoints: Mapped[dict[str, str]] = mapped_column(JSON)
 
 
 class ConfiguracionAcceso(ConId, ConTenant, ConCreacion, Base):

@@ -3,8 +3,9 @@ from decimal import InvalidOperation
 from typing import Literal
 
 import httpx
+from cryptography.fernet import Fernet, InvalidToken
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 from sqlalchemy import exists, or_, select
 from sqlalchemy.exc import IntegrityError
 
@@ -13,11 +14,13 @@ from app.api.errores import no_encontrado
 from app.enums import RolMiembro
 from app.models import (
     ChatMensaje,
+    ConfiguracionConsultasEmpresa,
     CuentaAcceso,
     Empresa,
     Expediente,
     GerenteEmpresa,
     Miembro,
+    Tenant,
     ahora,
 )
 from app.schemas import (
@@ -153,12 +156,97 @@ def listar(
     return salida
 
 
+class ConfigConsultasIn(BaseModel):
+    api_token: SecretStr | None = None
+    endpoints: dict[str, str]
+
+
+def _admin_consultas(rol: str) -> None:
+    if rol != "ADMINISTRADOR":
+        raise HTTPException(403, "Solo Administración puede configurar APIPERU")
+
+
+def _estado_config_consultas(
+    config: ConfiguracionConsultasEmpresa | None, token_servidor: str | None
+) -> dict[str, object]:
+    return {
+        "token_configurado": bool((config and config.token_cifrado) or token_servidor),
+        "endpoints": config.endpoints if config else consultas_empresas.ENDPOINTS,
+        "permitidos": consultas_empresas.PERMITIDOS,
+    }
+
+
+@router.get("/consultas/configuracion")
+def configuracion_consultas(
+    auth: OperativeAuthDep,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    settings: SettingsDep,
+) -> dict[str, object]:
+    _admin_consultas(auth.rol)
+    config = session.get(ConfiguracionConsultasEmpresa, tenant_id)
+    return _estado_config_consultas(config, settings.consulta_coactiva_token)
+
+
+@router.patch("/consultas/configuracion")
+def actualizar_configuracion_consultas(
+    datos: ConfigConsultasIn,
+    auth: OperativeAuthDep,
+    session: SessionDep,
+    tenant_id: TenantDep,
+    settings: SettingsDep,
+) -> dict[str, object]:
+    _admin_consultas(auth.rol)
+    if datos.endpoints.keys() != consultas_empresas.PERMITIDOS.keys() or any(
+        url not in consultas_empresas.PERMITIDOS[tipo] for tipo, url in datos.endpoints.items()
+    ):
+        raise HTTPException(422, "Seleccione únicamente endpoints autorizados de APIPERU")
+    cifrado = None
+    if datos.api_token is not None:
+        token = datos.api_token.get_secret_value().strip()
+        if (
+            not 8 <= len(token) <= 512
+            or not token.isascii()
+            or not token.isprintable()
+            or " " in token
+        ):
+            raise HTTPException(422, "Formato de token inválido")
+        try:
+            cifrado = (
+                Fernet(settings.consultas_empresas_encryption_key or "")
+                .encrypt(token.encode())
+                .decode()
+            )
+        except ValueError:
+            raise HTTPException(503, "Cifrado de credenciales sin configurar") from None
+    session.scalar(select(Tenant.id).where(Tenant.id == tenant_id).with_for_update())
+    config = session.get(ConfiguracionConsultasEmpresa, tenant_id)
+    if config is None:
+        config = ConfiguracionConsultasEmpresa(tenant_id=tenant_id)
+        session.add(config)
+    config.endpoints = datos.endpoints
+    if cifrado is not None:
+        config.token_cifrado = cifrado
+    auditoria.registrar(
+        session,
+        tenant_id,
+        "CONFIGURACION_APIPERU_ACTUALIZADA",
+        "configuracion_consultas_empresa",
+        tenant_id,
+        {"actor": auth.codigo, "token_reemplazado": cifrado is not None},
+    )
+    session.commit()
+    return _estado_config_consultas(config, settings.consulta_coactiva_token)
+
+
 @router.get("/consultas/{tipo}/{ruc}")
 def consultar_empresa(
     tipo: Literal["coactiva", "ssco", "domicilio", "sunat"],
     ruc: str,
     auth: OperativeAuthDep,
     settings: SettingsDep,
+    session: SessionDep,
+    tenant_id: TenantDep,
     buscar_razon: bool = False,
     ssco_apiperu: bool = False,
 ) -> dict[str, object]:
@@ -173,12 +261,25 @@ def consultar_empresa(
         raise HTTPException(403, "Rol sin acceso a consultas de empresas")
     if len(ruc) != 11 or not ruc.isascii() or not ruc.isdigit():
         raise HTTPException(422, "El RUC debe tener 11 dígitos")
+    config = session.get(ConfiguracionConsultasEmpresa, tenant_id)
     token = settings.consulta_coactiva_token
+    endpoint = config.endpoints.get(tipo) if config else None
+    if endpoint not in consultas_empresas.PERMITIDOS[tipo]:
+        endpoint = consultas_empresas.ENDPOINTS[tipo]
+    if config and config.token_cifrado:
+        try:
+            token = (
+                Fernet(settings.consultas_empresas_encryption_key or "")
+                .decrypt(config.token_cifrado.encode())
+                .decode()
+            )
+        except (ValueError, InvalidToken):
+            token = None
     try:
         if tipo == "ssco":
             try:
                 resultado = (
-                    consultas_empresas.consultar_ssco_apiperu(ruc, token)
+                    consultas_empresas.consultar_ssco_apiperu(ruc, token, endpoint)
                     if ssco_apiperu and token
                     else consultas_empresas.consultar_ssco(ruc)
                 )
@@ -187,9 +288,9 @@ def consultar_empresa(
                     raise
                 resultado = consultas_empresas.consultar_ssco(ruc)
         elif token and tipo == "coactiva":
-            resultado = consultas_empresas.consultar_coactiva(ruc, token)
+            resultado = consultas_empresas.consultar_coactiva(ruc, token, endpoint)
         elif token:
-            resultado = consultas_empresas.consultar_ficha(ruc, token, tipo)
+            resultado = consultas_empresas.consultar_ficha(ruc, token, tipo, endpoint)
         else:
             raise ValueError("Servicio sin configurar")
     except (httpx.HTTPError, ValueError, InvalidOperation):

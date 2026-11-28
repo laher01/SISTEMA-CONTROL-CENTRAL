@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { obtener, useDatos } from "../api";
 import ConsultaRucSunat from "../componentes/ConsultaRucSunat";
+import ConfiguracionApiEmpresas from "../componentes/ConfiguracionApiEmpresas";
 import type { Empresa } from "../tipos";
 
 type Tipo = "coactiva" | "ssco";
@@ -40,7 +41,7 @@ const columnas: Columna[] = [
   { clave: "fuente", titulo: "Fuente SSCO", valor: f => f.fuente ?? "" },
 ];
 
-export default function ConsultasEmpresas({ tipo }: { tipo: Tipo }) {
+export default function ConsultasEmpresas({ tipo, puedeConfigurar = false }: { tipo: Tipo; puedeConfigurar?: boolean }) {
   const { datos, error, cargando } = useDatos<Empresa[]>("/api/v1/empresas?autorizada=true");
   const proveedores = (datos ?? []).filter(e => e.tipo_relacion === "PROVEEDOR" || e.tipo_relacion === "AMBOS");
   const [modo, setModo] = useState<"todos" | "proveedor" | "ruc">("todos");
@@ -107,6 +108,7 @@ export default function ConsultasEmpresas({ tipo }: { tipo: Tipo }) {
         <Link to="/empresas/ssco">Consulta SSCO</Link>
       </nav>
       <h2>{tipo === "coactiva" ? "Consulta Coactiva" : "Consulta SSCO"}</h2>
+      {tipo === "coactiva" && puedeConfigurar && <ConfiguracionApiEmpresas />}
       <form className="acciones" onSubmit={ev => { ev.preventDefault(); if (!ocupado && puedeConsultar) void ejecutar(); }}>
         <label>Modo de consulta <select value={modo} disabled={ocupado} onChange={ev => setModo(ev.target.value as typeof modo)}>
           <option value="todos">Todos los proveedores activos</option>

@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     google_oauth_redirect_uri: str | None = None
     microsoft_oauth_client_id: str | None = None
     microsoft_oauth_redirect_uri: str | None = None
+    consultas_empresas_encryption_key: str | None = None
     consulta_coactiva_token: str | None = None
     nexus_ruc_url_template: str | None = None
     nexus_ruc_token: str | None = None
