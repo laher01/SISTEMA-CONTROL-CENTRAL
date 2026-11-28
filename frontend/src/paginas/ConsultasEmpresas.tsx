@@ -5,6 +5,7 @@ import { obtener, useDatos } from "../api";
 import ConsultaRucSunat from "../componentes/ConsultaRucSunat";
 import ConfiguracionApiEmpresas from "../componentes/ConfiguracionApiEmpresas";
 import type { Empresa } from "../tipos";
+import "./ConsultasEmpresas.css";
 
 type Tipo = "coactiva" | "ssco";
 type Coincidencia = { razon_social: string; resolucion: string; firme: string; publicacion: string };
@@ -20,6 +21,7 @@ type Consulta = {
 };
 type Fila = Consulta & {
   ruc: string; razon: string; estadoSsco: string; domicilio: string; rutas: string;
+  clasificacion: Empresa["clasificacion_proveedor"];
 };
 type Columna = { clave: string; titulo: string; valor: (fila: Fila) => string | number };
 
@@ -60,7 +62,7 @@ export default function ConsultasEmpresas({ tipo, puedeConfigurar = false }: { t
     const codigoManual = ruc.trim();
     const empresaManual = empresas.find(e => e.ruc === codigoManual);
     const objetivos = modo === "ruc"
-      ? [empresaManual ?? { ruc: codigoManual, razon_social: "", rutas: [] }]
+      ? [empresaManual ?? { ruc: codigoManual, razon_social: "", rutas: [], clasificacion_proveedor: null }]
       : modo === "proveedor" ? proveedores.filter(p => p.ruc === seleccion)
         : modo === "seleccionadas" ? empresasSeleccionadas : proveedores;
     setOcupado(true);
@@ -69,7 +71,12 @@ export default function ConsultasEmpresas({ tipo, puedeConfigurar = false }: { t
     try {
       for (let i = 0; i < objetivos.length; i += 2) {
         const bloque = await Promise.all(objetivos.slice(i, i + 2).map(async empresa => {
-          const base = { ruc: empresa.ruc, razon: empresa.razon_social, rutas: (empresa.rutas ?? []).join(" · ") };
+          const base = {
+            ruc: empresa.ruc,
+            razon: empresa.razon_social,
+            rutas: (empresa.rutas ?? []).join(" · "),
+            clasificacion: empresa.clasificacion_proveedor,
+          };
           const ruta = "/api/v1/empresas/consultas";
           const codigo = encodeURIComponent(empresa.ruc);
           const [deuda, ssco, domicilio] = await Promise.allSettled([
@@ -158,6 +165,12 @@ export default function ConsultasEmpresas({ tipo, puedeConfigurar = false }: { t
           </button>
         </th>)}<th>Ficha RUC</th></tr></thead>
         <tbody>{resultados.map(f => <tr key={f.ruc}>{columnas.map(c => {
+          if (c.clave === "ruc") return <td key={c.clave}>
+            <span>{f.ruc}</span>
+            {f.clasificacion && <span className="consulta-empresa-tipo" data-tipo={f.clasificacion}>
+              Tipo {f.clasificacion}
+            </span>}
+          </td>;
           const valor = c.valor(f);
           return <td key={c.clave}>{valor === "" ? "—" : c.clave === "monto" ? Number(valor).toLocaleString("es-PE", { minimumFractionDigits: 2 }) : valor}</td>;
         })}<td><ConsultaRucSunat ruc={f.ruc} /></td></tr>)}</tbody>
