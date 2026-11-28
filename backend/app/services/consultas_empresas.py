@@ -13,21 +13,34 @@ from openpyxl.utils.exceptions import InvalidFileException  # type: ignore[impor
 
 FUENTE_SSCO = "https://www.sunat.gob.pe/padronesnotificaciones/sujeSinCapacidadOperativa.html"
 ARCHIVO_SSCO = "https://www.sunat.gob.pe/padronesnotificaciones/ssco/sujesincapacidadOperativa.xlsx"
-FUENTE_COACTIVA = "https://apiperu.dev/api/ruc_deuda_coactiva/"
+BASE_APIPERU = "https://api.apiperu.dev"
+FUENTE_COACTIVA = f"{BASE_APIPERU}/ruc-deuda-coactiva"
 
 
-def consultar_coactiva(ruc: str, token: str) -> dict[str, object]:
+def _consultar_api(url: str, ruc: str, token: str) -> object:
     respuesta = httpx.post(
-        FUENTE_COACTIVA,
+        url,
         json={"ruc": ruc},
         headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
         timeout=12,
     )
-    respuesta.raise_for_status()
     datos = respuesta.json()
-    if not isinstance(datos, dict) or datos.get("success") is not True:
-        raise ValueError("Respuesta de deuda no confirmada")
-    registros = datos.get("data")
+    if (
+        respuesta.status_code == 404
+        and isinstance(datos, dict)
+        and datos.get("success") is False
+        and datos.get("code") == "document_not_found"
+    ):
+        return None
+    respuesta.raise_for_status()
+    if not isinstance(datos, dict) or datos.get("success") is not True or datos.get("data") is None:
+        raise ValueError("Respuesta no confirmada")
+    return datos["data"]
+
+
+def consultar_coactiva(ruc: str, token: str) -> dict[str, object]:
+    datos = _consultar_api(FUENTE_COACTIVA, ruc, token)
+    registros = [] if datos is None else datos
     if not isinstance(registros, list):
         raise ValueError("Respuesta de deuda incompleta")
     total = Decimal(0)
@@ -42,6 +55,53 @@ def consultar_coactiva(ruc: str, token: str) -> dict[str, object]:
         "estado": "Con deuda" if total > 0 else "Sin deuda",
         "monto": format(total, "f"),
         "registros": len(registros),
+    }
+
+
+def consultar_ficha(ruc: str, token: str, tipo: str) -> dict[str, object]:
+    domicilio = tipo == "domicilio"
+    endpoint = "ruc-domicilio-fiscal" if domicilio else "ruc-sunat"
+    datos = _consultar_api(f"{BASE_APIPERU}/{endpoint}", ruc, token)
+    if datos is None:
+        return {"estado_consulta": "Sin resultados"}
+    if not isinstance(datos, dict):
+        raise ValueError("Ficha no válida")
+    claves = (
+        ("direccion_completa", "departamento", "provincia", "distrito", "actividad_economica")
+        if domicilio
+        else (
+            "ruc",
+            "nombre_o_razon_social",
+            "estado",
+            "condicion",
+            "direccion_completa",
+            "tipo_contribuyente",
+            "actividades_economicas",
+            "fecha_inscripcion",
+        )
+    )
+    if not domicilio and str(datos.get("ruc")) != ruc:
+        raise ValueError("La ficha no corresponde al RUC")
+    return {k: datos[k] for k in claves if k in datos}
+
+
+def consultar_ssco_apiperu(ruc: str, token: str) -> dict[str, object]:
+    datos = _consultar_api(f"{BASE_APIPERU}/ruc-ssco", ruc, token)
+    if datos is None:
+        return {"estado": "No figura en el padrón consultado", "fuente": "APIPERU"}
+    if not isinstance(datos, dict) or str(datos.get("ruc")) != ruc:
+        raise ValueError("Resultado SSCO no válido")
+    return {
+        "estado": "Figura en el padrón",
+        "fuente": "APIPERU",
+        "coincidencias": [
+            {
+                "razon_social": datos.get("razon_social"),
+                "resolucion": datos.get("resolucion"),
+                "firme": datos.get("fecha_firme"),
+                "publicacion": datos.get("fecha_publicacion"),
+            }
+        ],
     }
 
 
@@ -147,6 +207,7 @@ def consultar_ssco(ruc: str) -> dict[str, object]:
             if coincidencias
             else "No figura en el padrón consultado",
             "corte": corte,
+            "fuente": "Padrón SUNAT",
             "desactualizado": _desactualizado,
             "coincidencias": coincidencias,
         }

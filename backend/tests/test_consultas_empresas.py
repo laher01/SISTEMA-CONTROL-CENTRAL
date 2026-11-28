@@ -77,3 +77,34 @@ def test_coactiva_rechaza_resultados_fallidos():
         pytest.raises(ValueError),
     ):
         ce.consultar_coactiva("20000000001", "prueba")
+
+
+def test_coactiva_404_documentado_y_503_son_distintos():
+    peticion = httpx.Request("POST", ce.FUENTE_COACTIVA)
+    with patch.object(
+        ce.httpx,
+        "post",
+        side_effect=[
+            httpx.Response(
+                404, request=peticion, json={"success": False, "code": "document_not_found"}
+            ),
+            httpx.Response(
+                503, request=peticion, json={"success": False, "code": "upstream_unavailable"}
+            ),
+        ],
+    ):
+        assert ce.consultar_coactiva("20000000001", "prueba")["registros"] == 0
+        with pytest.raises(httpx.HTTPStatusError):
+            ce.consultar_coactiva("20000000001", "prueba")
+
+
+def test_ficha_sunat_separa_condicion_del_domicilio():
+    ruc = "20000000001"
+    with patch.object(ce.httpx, "post") as post:
+        post.return_value = httpx.Response(
+            200,
+            request=httpx.Request("POST", f"{ce.BASE_APIPERU}/ruc-sunat"),
+            json={"success": True, "data": {"ruc": ruc, "estado": "ACTIVO", "condicion": "HABIDO"}},
+        )
+        assert ce.consultar_ficha(ruc, "prueba", "sunat")["condicion"] == "HABIDO"
+        assert post.call_args.args[0].endswith("/ruc-sunat")
