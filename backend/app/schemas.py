@@ -63,6 +63,7 @@ class EmpresaActualizar(BaseModel):
 
 class EmpresasEliminarIn(BaseModel):
     empresa_ids: list[uuid.UUID] = Field(min_length=1)
+    solo_sin_uso: bool = False
 
 
 class EmpresasEliminarOut(BaseModel):
@@ -166,6 +167,7 @@ class DocumentoOut(Orm):
     correlativo: str | None = None
     moneda: Moneda | None = None
     importe_total: Decimal | None = None
+    cpe_estado: str | None = None
     gestor_id: uuid.UUID | None
     usuario_id: uuid.UUID | None
     responsable_nombre: str | None = None
@@ -276,6 +278,7 @@ class ExpedienteOut(Orm):
     fecha_emision: date
     moneda: Moneda
     importe_total: Decimal
+    cpe_estado: str | None = None
     requiere_guia: bool
     guia_no_aplica_confirmada: bool = False
     documentos_count: int = 0
@@ -456,6 +459,7 @@ class RegistroFila(BaseModel):
     receptor_razon_social: str
     moneda: Moneda
     importe_total: Decimal
+    cpe_estado: str | None = None
     documentos_requeridos: list[TipoDocumento]
     documentos_presentes: list[TipoDocumento]
     documentos_faltantes: list[TipoDocumento]
