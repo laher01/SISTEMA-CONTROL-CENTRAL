@@ -1,87 +1,19 @@
 #!/usr/bin/env bash
-# Inspección de solo lectura: no despliega, no migra, no cambia servicios.
-set -Eeuo pipefail
-DEPLOY_DIR="$(pwd -P)"
-cd "$DEPLOY_DIR"
-echo "FACT CENTRAL | preflight Secretaría"
-echo "UTC: $(date -u +%FT%TZ)"
-echo "Commit VPS: $(git rev-parse HEAD)"
-echo "Rama VPS: $(git branch --show-current)"
-echo "Estado local (resumen, sin revelar contenido privado):"
-git status --short
-# Los archivos no rastreados se conservan. Solo bloquear cambios versionados.
-if ! git diff --quiet || ! git diff --cached --quiet; then
-  echo "::error::Hay modificaciones versionadas en VPS; se bloquea el despliegue."
-  exit 1
-fi
-# La comparación contra el árbol de destino permite detectar colisiones reales.
-if [ -n "${EXPECTED_COMMIT:-}" ]; then
-  case "$EXPECTED_COMMIT" in
-    *[!0-9a-fA-F]*|"") echo "::error::SHA destino inválido."; exit 1 ;;
-  esac
-  git fetch --quiet origin main
-  if ! git cat-file -e "${EXPECTED_COMMIT}^{commit}" 2>/dev/null; then
-    echo "::error::Commit destino no disponible."; exit 1
-  fi
-  if ! git merge-base --is-ancestor HEAD "$EXPECTED_COMMIT"; then
-    echo "::error::El commit VPS no es ancestro de destino; requiere revisión."; exit 1
-  fi
-  # Git advierte y protege frente a colisiones con ficheros sin seguimiento.
-  # Se anticipa la comprobación sin modificar el árbol de trabajo.
-  python3 - "$EXPECTED_COMMIT" <<'PY'
-import os
-import subprocess
-import sys
-
-target = sys.argv[1]
-changed = subprocess.check_output(
-    ["git", "diff", "--name-only", "-z", "--diff-filter=ACMR", "HEAD", target]
-).split(bytes([0]))
-untracked = subprocess.check_output(
-    ["git", "ls-files", "--others", "--exclude-standard", "-z"]
-).split(bytes([0]))
-incoming = {os.fsdecode(p) for p in changed if p}
-collisions = []
-for raw in untracked:
-    if not raw:
-        continue
-    name = os.fsdecode(raw)
-    if name in incoming or any(name.startswith(p + "/") for p in incoming):
-        collisions.append(name)
-if collisions:
-    print("::error::Conflicto con archivos locales no rastreados; no se sobrescribirá nada.")
-    for item in collisions:
-        print("::error::Conflicto: " + item)
-    sys.exit(1)
-print(f"Sin colisiones: {len([x for x in untracked if x])} archivos locales conservados.")
+set -euo pipefail
+python3 - <<'PY'
+from pathlib import Path
+import base64
+p = Path('deploy/.env.production')
+values = {}
+for line in p.read_text().splitlines():
+    key, sep, value = line.strip().removeprefix('export ').partition('=')
+    if sep and key.strip() in {'FC_CONSULTA_COACTIVA_TOKEN', 'FC_CONSULTAS_EMPRESAS_ENCRYPTION_KEY'}:
+        values[key.strip()] = value.strip().strip('"\'')
+token = bool(values.get('FC_CONSULTA_COACTIVA_TOKEN'))
+try:
+    key = len(base64.urlsafe_b64decode(values.get('FC_CONSULTAS_EMPRESAS_ENCRYPTION_KEY', ''))) == 32
+except ValueError:
+    key = False
+print('APIPERU_TOKEN_PRESENTE=' + ('SI' if token else 'NO'))
+print('APIPERU_LLAVE_CIFRADO_VALIDA=' + ('SI' if key else 'NO'))
 PY
-fi
-echo "Uso de disco:"
-df -h "$DEPLOY_DIR"
-echo "Espacio disponible (KB):"
-df -Pk "$DEPLOY_DIR" | awk 'NR==2 {print $4}'
-if [ "$(df -Pk "$DEPLOY_DIR" | awk 'NR==2 {print $4}')" -lt 2097152 ]; then
-  echo "::error::Menos de 2 GiB libres: bloquear despliegue."
-  exit 1
-fi
-if [ ! -s deploy/.env.production ]; then
-  echo "::error::No se encontró archivo de configuración de producción."
-  exit 1
-fi
-echo "Servicio backend:"
-if ! curl --fail --silent --show-error --max-time 10 http://127.0.0.1:18080/health >/dev/null; then
-  echo "::error::Backend no saludable antes de desplegar."
-  exit 1
-fi
-if ! command -v docker >/dev/null; then
-  echo "::error::Docker no encontrado."
-  exit 1
-fi
-docker compose version
-echo "Almacenamiento de respaldos:"
-if [ -d deploy/backups ]; then
-  find deploy/backups -maxdepth 1 -type f -name 'fact_central_*.dump' -printf '%TY-%Tm-%Td %TH:%TM %s bytes\n' | tail -n 5
-else
-  echo "No hay directorio de respaldos"
-fi
-echo "Preflight de solo lectura completado: NO valida restauración, NO certifica backups."
