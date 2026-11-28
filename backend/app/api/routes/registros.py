@@ -386,6 +386,7 @@ def listar(
                 receptor_razon_social=receptor_nombre,
                 moneda=expediente.moneda,
                 importe_total=expediente.importe_total,
+                cpe_estado=expediente.cpe_estado,
                 documentos_requeridos=requeridos,
                 documentos_presentes=presentes,
                 documentos_faltantes=faltantes,
