@@ -1,5 +1,6 @@
 import io
 import shutil
+import uuid
 from datetime import date
 from decimal import Decimal
 
@@ -1739,3 +1740,50 @@ def test_retiro_protegido_rechaza_uso_y_recupera_empresa(client, session, auth_p
     recuperada = client.get("/api/v1/empresas?ruc=20500000003").json()
     assert recuperada[0]["id"] == empresa_id
     assert recuperada[0]["autorizada"] is False
+
+
+def test_verificar_cpe_historico_preserva_resultados_y_exige_admin(
+    client, settings, monkeypatch, auth_prueba, session
+):
+    import httpx
+
+    settings.consulta_coactiva_token = None
+    documento = subir(client, "historica.xml", factura(numero="F001-00000990"))
+    expediente = session.get(Expediente, uuid.UUID(documento["expediente_id"]))
+    assert expediente is not None
+    expediente.cpe_estado = None
+    session.commit()
+
+    ruta = "/api/v1/expedientes/verificar-cpe-pendiente"
+    assert client.post(ruta).status_code == 403
+    auth_prueba.como_admin()
+    settings.consulta_coactiva_token = "token-prueba"
+    consultados = []
+
+    def consultar(url, **opciones):
+        carga = opciones["json"]
+        consultados.append(carga)
+        return httpx.Response(
+            200,
+            request=httpx.Request("POST", url),
+            json={
+                "success": True,
+                "data": {
+                    "ruc_emisor": carga["ruc_emisor"],
+                    "serie_documento": carga["serie_documento"],
+                    "numero_documento": carga["numero_documento"],
+                    "comprobante_estado_codigo": "1",
+                },
+            },
+        )
+
+    monkeypatch.setattr("app.services.validacion_cpe.httpx.post", consultar)
+    respuesta = client.post(ruta)
+    assert respuesta.json() == {
+        "finalizado": False,
+        "expediente_id": documento["expediente_id"],
+        "estado": "VALIDO",
+        "pausa": None,
+    }
+    assert client.post(ruta).json() == {"finalizado": True}
+    assert len(consultados) == 1

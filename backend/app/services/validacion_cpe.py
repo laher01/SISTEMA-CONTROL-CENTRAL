@@ -18,6 +18,10 @@ def validar_factura(
 ) -> None:
     if documento.tipo_documento != TipoDocumento.FACT or documento.gestor_id is None:
         return
+    consultar_factura(session, settings, expediente)
+
+
+def consultar_factura(session: Session, settings: Settings, expediente: Expediente) -> str | None:
     ruc = expediente.emisor.ruc
     serie = expediente.serie.upper()
     numero = expediente.correlativo
@@ -29,12 +33,12 @@ def validar_factura(
         or expediente.importe_total < 0
     ):
         expediente.cpe_estado = "PENDIENTE"
-        return
+        return None
     identidad = (
         f"{ruc}:{serie}:{int(numero)}:{expediente.fecha_emision}:{expediente.importe_total:.2f}"
     )
     if expediente.cpe_identidad == identidad and expediente.cpe_estado in {"VALIDO", "INVALIDO"}:
-        return
+        return None
     expediente.cpe_estado = "PENDIENTE"
     expediente.cpe_identidad = identidad
     config = session.get(ConfiguracionConsultasEmpresa, expediente.tenant_id)
@@ -47,9 +51,9 @@ def validar_factura(
                 .decode()
             )
         except (ValueError, InvalidToken):
-            return
+            return "La credencial de APIPERU no se pudo leer."
     if not token:
-        return
+        return "Configura la credencial de APIPERU antes de continuar."
     try:
         respuesta = httpx.post(
             URL_CPE,
@@ -66,22 +70,30 @@ def validar_factura(
         )
         respuesta.raise_for_status()
         datos = respuesta.json()
-    except (httpx.HTTPError, ValueError):
-        return
+    except httpx.HTTPStatusError as exc:
+        estado_http = exc.response.status_code
+        if estado_http in {401, 402, 403, 429} or estado_http >= 500:
+            return f"APIPERU devolvió HTTP {estado_http}. La verificación se pausó."
+        return None
+    except httpx.RequestError:
+        return "No hay conexión con APIPERU. La verificación se pausó."
+    except ValueError:
+        return None
     if not isinstance(datos, dict) or datos.get("success") is not True:
-        return
+        return None
     comprobante = datos.get("data")
     if not isinstance(comprobante, dict):
-        return
+        return None
     if (
         comprobante.get("ruc_emisor") != ruc
         or comprobante.get("serie_documento") != serie
         or str(comprobante.get("numero_documento", "")).lstrip("0") != numero.lstrip("0")
     ):
-        return
+        return None
     if str(comprobante.get("comprobante_estado_codigo")) == "1":
         expediente.cpe_estado = "VALIDO"
-        return
+        return None
     estado = str(comprobante.get("comprobante_estado_descripcion", "")).strip().upper()
     if estado in {"NO EXISTE", "ANULADO", "NO AUTORIZADO", "NO ACEPTADO", "RECHAZADO"}:
         expediente.cpe_estado = "INVALIDO"
+    return None

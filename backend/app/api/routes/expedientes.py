@@ -22,7 +22,7 @@ from starlette.background import BackgroundTask
 
 from app.api.deps import AlmacenDep, HoyDep, OperativeAuthDep, SessionDep, SettingsDep, TenantDep
 from app.api.errores import no_encontrado
-from app.enums import EstadoExpediente, Moneda, RolMiembro
+from app.enums import EstadoExpediente, Moneda, RolMiembro, TipoComprobante, TipoDocumento
 from app.models import (
     Alerta,
     AlertaManual,
@@ -53,7 +53,7 @@ from app.schemas import (
     Recalculo,
 )
 from app.security import cuenta_administradora_responsable
-from app.services import auditoria
+from app.services import auditoria, validacion_cpe
 from app.services.ambito_gerencia import alcance_expedientes_gerente, expediente_visible_gerente
 from app.services.eliminacion import (
     procesar_archivo_pendiente,
@@ -1355,6 +1355,43 @@ def recalcular(
     actualizados = recalcular_expedientes(session, tenant_id, hoy, settings)
     session.commit()
     return Recalculo(actualizados=actualizados)
+
+
+@router.post("/verificar-cpe-pendiente")
+def verificar_cpe_pendiente(
+    session: SessionDep,
+    settings: SettingsDep,
+    tenant_id: TenantDep,
+    auth: OperativeAuthDep,
+    despues_de: uuid.UUID | None = None,
+) -> dict[str, object]:
+    if auth.rol != RolMiembro.ADMINISTRADOR:
+        raise HTTPException(403, "Solo Administración puede verificar el historial CPE.")
+
+    consulta = select(Expediente).where(
+        Expediente.tenant_id == tenant_id,
+        Expediente.deleted_at.is_(None),
+        Expediente.tipo_comprobante == TipoComprobante.FACT,
+        or_(Expediente.cpe_estado.is_(None), Expediente.cpe_estado == "PENDIENTE"),
+        Expediente.documentos.any(
+            (Documento.tenant_id == tenant_id)
+            & Documento.deleted_at.is_(None)
+            & (Documento.tipo_documento == TipoDocumento.FACT)
+        ),
+    )
+    if despues_de is not None:
+        consulta = consulta.where(Expediente.id > despues_de)
+    expediente = session.scalar(consulta.order_by(Expediente.id).limit(1).with_for_update())
+    if expediente is None:
+        return {"finalizado": True}
+    pausa = validacion_cpe.consultar_factura(session, settings, expediente)
+    session.commit()
+    return {
+        "finalizado": False,
+        "expediente_id": str(expediente.id),
+        "estado": expediente.cpe_estado,
+        "pausa": pausa,
+    }
 
 
 @router.get("/{expediente_id}", response_model=ExpedienteDetalle)
