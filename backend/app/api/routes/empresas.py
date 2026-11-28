@@ -161,6 +161,13 @@ class ConfigConsultasIn(BaseModel):
     endpoints: dict[str, str]
 
 
+def _normalizar_valor_apiperu(valor: str) -> str:
+    valor = valor.strip()
+    if len(valor) >= 2 and valor[0] == valor[-1] and valor[0] in ("'", '"'):
+        return valor[1:-1].strip()
+    return valor
+
+
 def _admin_consultas(rol: str) -> None:
     if rol != "ADMINISTRADOR":
         raise HTTPException(403, "Solo Administración puede configurar APIPERU")
@@ -197,13 +204,14 @@ def actualizar_configuracion_consultas(
     settings: SettingsDep,
 ) -> dict[str, object]:
     _admin_consultas(auth.rol)
-    if datos.endpoints.keys() != consultas_empresas.PERMITIDOS.keys() or any(
-        url not in consultas_empresas.PERMITIDOS[tipo] for tipo, url in datos.endpoints.items()
+    endpoints = {tipo: _normalizar_valor_apiperu(url) for tipo, url in datos.endpoints.items()}
+    if endpoints.keys() != consultas_empresas.PERMITIDOS.keys() or any(
+        url not in consultas_empresas.PERMITIDOS[tipo] for tipo, url in endpoints.items()
     ):
         raise HTTPException(422, "Seleccione únicamente endpoints autorizados de APIPERU")
     cifrado = None
     if datos.api_token is not None:
-        token = datos.api_token.get_secret_value().strip()
+        token = _normalizar_valor_apiperu(datos.api_token.get_secret_value())
         if (
             not 8 <= len(token) <= 512
             or not token.isascii()
@@ -224,7 +232,7 @@ def actualizar_configuracion_consultas(
     if config is None:
         config = ConfiguracionConsultasEmpresa(tenant_id=tenant_id)
         session.add(config)
-    config.endpoints = datos.endpoints
+    config.endpoints = endpoints
     if cifrado is not None:
         config.token_cifrado = cifrado
     auditoria.registrar(
@@ -262,7 +270,7 @@ def consultar_empresa(
     if len(ruc) != 11 or not ruc.isascii() or not ruc.isdigit():
         raise HTTPException(422, "El RUC debe tener 11 dígitos")
     config = session.get(ConfiguracionConsultasEmpresa, tenant_id)
-    token = settings.consulta_coactiva_token
+    token = _normalizar_valor_apiperu(settings.consulta_coactiva_token or "")
     endpoint = config.endpoints.get(tipo) if config else None
     if endpoint not in consultas_empresas.PERMITIDOS[tipo]:
         endpoint = consultas_empresas.ENDPOINTS[tipo]
@@ -274,7 +282,11 @@ def consultar_empresa(
                 .decode()
             )
         except (ValueError, InvalidToken):
-            token = None
+            token = ""
+    if tipo != "ssco" and not token:
+        raise HTTPException(
+            503, "Credencial de APIPERU no disponible. Revisa la configuración de Administración."
+        )
     try:
         if tipo == "ssco":
             try:
@@ -293,8 +305,18 @@ def consultar_empresa(
             resultado = consultas_empresas.consultar_ficha(ruc, token, tipo, endpoint)
         else:
             raise ValueError("Servicio sin configurar")
-    except (httpx.HTTPError, ValueError, InvalidOperation):
+    except httpx.HTTPStatusError as exc:
+        if tipo == "sunat":
+            raise HTTPException(
+                503,
+                f"APIPERU respondió con HTTP {exc.response.status_code} al realizar la consulta.",
+            ) from None
         raise HTTPException(503, "Consulta no disponible") from None
+    except (httpx.HTTPError, ValueError, InvalidOperation):
+        detalle = "Consulta no disponible"
+        if tipo == "sunat":
+            detalle = "No se pudo obtener una ficha válida de APIPERU."
+        raise HTTPException(503, detalle) from None
     if buscar_razon and token and not resultado.get("coincidencias"):
         resultado["razon_social"] = consultas_empresas.consultar_razon_social(ruc, token)
     return resultado

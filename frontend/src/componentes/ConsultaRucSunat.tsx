@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { obtener } from "../api";
+import { ErrorApi, obtener } from "../api";
 
 const etiquetas: [string, string][] = [
   ["ruc", "RUC"], ["nombre_o_razon_social", "Razón social"], ["estado", "Estado"],
@@ -21,8 +21,8 @@ export default function ConsultaRucSunat({ ruc }: { ruc: string }) {
     setError("");
     try {
       setFicha(await obtener(`/api/v1/empresas/consultas/sunat/${encodeURIComponent(ruc)}`));
-    } catch {
-      setError("Consulta no disponible");
+    } catch (e) {
+      setError(e instanceof ErrorApi ? e.message : "No se pudo conectar con FACT CENTRAL.");
     } finally {
       setCargando(false);
     }
@@ -35,6 +35,7 @@ export default function ConsultaRucSunat({ ruc }: { ruc: string }) {
       {cargando && <p role="status">Consultando…</p>}
       {error && <p role="alert">{error}</p>}
       {ficha?.estado_consulta === "Sin resultados" && <p>Sin resultados para este RUC.</p>}
+      {typeof ficha?.fuente === "string" && <p>{ficha.fuente}</p>}
       {ficha && <dl>{etiquetas.map(([clave, etiqueta]) => {
         const valor = ficha[clave];
         const texto = typeof valor === "string" ? valor
