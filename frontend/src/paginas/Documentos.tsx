@@ -1,3 +1,4 @@
+import CeldaCpe from "../componentes/CeldaCpe";
 import FiltroImportes, { parametrosImportes } from "../componentes/FiltroImportes";
 import EncabezadoOrden, { parametrosOrden } from "../componentes/EncabezadoOrden";
 import ExportarExcel from "../ExportarExcel";
@@ -545,6 +546,7 @@ export default function Documentos({ sesion }: { sesion: SesionActual }) {
                 <EncabezadoOrden campo="emisor" orden={orden} cambiar={cambiar}>Emisor</EncabezadoOrden>
                 <EncabezadoOrden campo="receptor" orden={orden} cambiar={cambiar}>Receptor</EncabezadoOrden>
                 <EncabezadoOrden className="num" campo="monto" orden={orden} cambiar={cambiar}>Monto</EncabezadoOrden>
+                <th scope="col">CPE</th>
                 <th>Expediente</th>
                 <th>Acciones</th>
               </tr>
@@ -667,7 +669,7 @@ function FilaDocumento({
   };
 
   return (
-    <tr>
+    <tr className={documento.cpe_estado === "INVALIDO" ? "cpe-invalido" : undefined}>
       <td>
         <input type="checkbox" aria-label={`Seleccionar ${documento.nombre_original}`}
           checked={seleccionado} disabled={seleccionBloqueada}
@@ -714,6 +716,7 @@ function FilaDocumento({
       </td>
       <td className="num">{documento.importe_total == null ? "—" : documento.moneda
         ? formatearMonto(documento.moneda, documento.importe_total) : documento.importe_total}</td>
+      <CeldaCpe estado={documento.cpe_estado} />
       <td>
         {documento.expediente_id ? (
           <><Link to={`/expedientes/${documento.expediente_id}`}>Ver expediente</Link>{" · "}<a href={urlZipExpediente(documento.expediente_id)}>ZIP</a>{" · "}<a href={urlPdfExpediente(documento.expediente_id)}>PDF</a></>
