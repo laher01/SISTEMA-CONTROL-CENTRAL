@@ -149,3 +149,39 @@ def test_configuracion_rechaza_destino_ajeno(client, auth_prueba):
         },
     )
     assert respuesta.status_code == 422
+
+
+def test_ficha_ruc_legacy_consulta_por_get_y_muestra_domicilio():
+    ruc = "20131312955"
+    url = ce.FICHA_RUC_LEGACY
+    respuesta = httpx.Response(
+        200,
+        request=httpx.Request("GET", f"{url}{ruc}"),
+        json={"success": True, "data": {"ruc": ruc, "direccion": "Av. Garcilaso"}},
+    )
+    with patch.object(ce.httpx, "get", return_value=respuesta) as consulta:
+        ficha = ce.consultar_ficha(ruc, "prueba", "sunat", url)
+    assert consulta.call_args.args == (f"{url}{ruc}",)
+    assert ficha["direccion_completa"] == "Av. Garcilaso"
+    assert ficha["fuente"] == "Ficha básica de APIPERU"
+
+
+def test_configuracion_acepta_formato_dotenv_de_la_pc(client, auth_prueba, settings):
+    from cryptography.fernet import Fernet
+
+    auth_prueba.como_admin()
+    settings.consultas_empresas_encryption_key = Fernet.generate_key().decode()
+    endpoint = "https://apiperu.dev/api/ruc_deuda_coactiva/"
+    ruta = "/api/v1/empresas/consultas"
+    respuesta = client.patch(
+        f"{ruta}/configuracion",
+        json={
+            "api_token": " 'token-de-prueba' ",
+            "endpoints": {**ce.ENDPOINTS, "coactiva": f" '{endpoint}' "},
+        },
+    )
+    assert respuesta.status_code == 200
+    assert respuesta.json()["endpoints"]["coactiva"] == endpoint
+    with patch.object(ce, "consultar_coactiva", return_value={"estado": "Con deuda"}) as consulta:
+        assert client.get(f"{ruta}/coactiva/20601865484").status_code == 200
+    consulta.assert_called_once_with("20601865484", "token-de-prueba", endpoint)
