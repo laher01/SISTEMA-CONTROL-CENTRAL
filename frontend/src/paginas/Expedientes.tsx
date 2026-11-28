@@ -1,3 +1,4 @@
+import VerificarCpeHistorico from "../componentes/VerificarCpeHistorico";
 import CeldaCpe from "../componentes/CeldaCpe";
 import FiltroImportes, { parametrosImportes } from "../componentes/FiltroImportes";
 import EncabezadoOrden, { parametrosOrden } from "../componentes/EncabezadoOrden";
@@ -325,6 +326,7 @@ export default function Expedientes({ sesion }: { sesion: SesionActual }) {
           Actualizar expedientes y total
         </button>
       </div>
+      {sesion.rol === "ADMINISTRADOR" && <VerificarCpeHistorico recargar={recargar} />}
       <div className="filtros">
         <FiltroJerarquia sesion={sesion} responsableId={responsableId} usuarioId={usuarioId} gestorId={gestorId} cambiar={cambiar} />
         <select aria-label="Tipo de empresa" value={tipoEmpresa} onChange={(e) => cambiar("tipo_empresa", e.target.value)}>
