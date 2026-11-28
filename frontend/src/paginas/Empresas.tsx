@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { enviarJson, useDatos } from "../api";
+import ConsultaProveedor from "../componentes/ConsultaProveedor";
 import ConsultaRucSunat from "../componentes/ConsultaRucSunat";
 import { Estado } from "../componentes";
 import type {
@@ -39,6 +40,7 @@ export function ordenarEmpresas(
 }
 
 export default function Empresas({ sesion }: { sesion: SesionActual }) {
+  const puedeEliminar = sesion.rol === "ADMINISTRADOR";
   const puedeClasificar = sesion.rol === "SUPERADMIN" || sesion.rol === "ADMINISTRADOR";
   const puedeAutorizar = puedeClasificar || sesion.rol === "SECRETARIA" || sesion.rol === "RESPONSABLE" || sesion.rol === "GERENTE";
   const { datos, error, cargando, recargar } = useDatos<Empresa[]>("/api/v1/empresas");
@@ -47,6 +49,7 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
   const [pestana, setPestana] = useState<PestanaEmpresa | "SIN_CLASIFICAR">(
     params.get("pendientes") === "1" ? "SIN_CLASIFICAR" : "PROVEEDORES",
   );
+  const [seleccionEliminar, setSeleccionEliminar] = useState<string[]>([]);
   const [seleccion, setSeleccion] = useState<string[]>([]);
   const [clasificacionMasiva, setClasificacionMasiva] = useState<"A" | "B">("B");
   const [operando, setOperando] = useState(false);
@@ -72,6 +75,7 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
     datos?.filter((e) => e.tipo_relacion === "SIN_CLASIFICAR" ||
       ((e.tipo_relacion === "PROVEEDOR" || e.tipo_relacion === "AMBOS") && !e.clasificacion_proveedor)) ?? []
   ).filter((e) => !rucFiltro || e.ruc === rucFiltro);
+  const idsParaEliminar = empresasVisibles.filter(e => seleccionEliminar.includes(e.id)).map(e => e.id);
   const esProveedor = pestana !== "CLIENTES";
   const pendientes = empresasVisibles.filter((e) => e.tipo_relacion === "SIN_CLASIFICAR" ||
     ((e.tipo_relacion === "PROVEEDOR" || e.tipo_relacion === "AMBOS") && !e.clasificacion_proveedor));
@@ -95,6 +99,28 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
       </button>
     </th>
   );
+
+  const eliminarSeleccionadas = async () => {
+    if (!puedeEliminar || operando || !idsParaEliminar.length) return;
+    if (!window.confirm(`¿Retirar ${idsParaEliminar.length} empresa(s) seleccionada(s)? Se omite el retiro si alguna está en uso.`)) return;
+    setOperando(true);
+    setMensaje("");
+    setErrorCambio("");
+    try {
+      const respuesta = await enviarJson<{ eliminadas: number }>(
+        "/api/v1/empresas/eliminar-seleccion", "POST",
+        { empresa_ids: idsParaEliminar, solo_sin_uso: true },
+      );
+      setSeleccionEliminar([]);
+      setSeleccion([]);
+      setMensaje(`Empresas retiradas: ${respuesta.eliminadas}`);
+      recargar();
+    } catch (e) {
+      setErrorCambio(e instanceof Error ? e.message : String(e));
+    } finally {
+      setOperando(false);
+    }
+  };
 
   const notificar = async () => {
     if (!seleccion.length) return;
@@ -222,6 +248,7 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
           className={pestana === "PROVEEDORES" ? "activo" : undefined}
           onClick={() => {
             setPestana("PROVEEDORES");
+            setSeleccionEliminar([]);
             cancelarEdicionRazon();
           }}
         >
@@ -231,6 +258,7 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
           className={pestana === "CLIENTES" ? "activo" : undefined}
           onClick={() => {
             setPestana("CLIENTES");
+            setSeleccionEliminar([]);
             cancelarEdicionRazon();
           }}
         >
@@ -240,7 +268,7 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
 
       <div className="acciones">
         <button type="button" className={pestana === "SIN_CLASIFICAR" ? "activo" : undefined}
-          onClick={() => { setPestana("SIN_CLASIFICAR"); setSeleccion([]); cancelarEdicionRazon(); }}>
+          onClick={() => { setPestana("SIN_CLASIFICAR"); setSeleccionEliminar([]); setSeleccion([]); cancelarEdicionRazon(); }}>
           Sin clasificar ({(datos ?? []).filter((e) => e.tipo_relacion === "SIN_CLASIFICAR" ||
             ((e.tipo_relacion === "PROVEEDOR" || e.tipo_relacion === "AMBOS") && !e.clasificacion_proveedor)).length})
         </button>
@@ -257,6 +285,11 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
           </button>
         </>}
       </div>
+      {puedeEliminar && <div className="acciones">
+        <button type="button" disabled={operando || !idsParaEliminar.length} onClick={() => void eliminarSeleccionadas()}>
+          Eliminar seleccionadas ({idsParaEliminar.length})
+        </button>
+      </div>}
       {mensaje && <p role="status">{mensaje}</p>}
       {sinClasificar.length > 0 && (
         <p className="tenue">
@@ -274,6 +307,7 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
               <th><input type="checkbox" aria-label="Seleccionar pendientes visibles"
                 checked={pendientes.length > 0 && pendientes.every((e) => seleccion.includes(e.id))}
                 onChange={(ev) => setSeleccion(ev.target.checked ? pendientes.map((e) => e.id) : [])}/></th>
+              {puedeEliminar && <th scope="col">Retiro</th>}
               {encabezadoOrdenable("RUC", "ruc")}
               {encabezadoOrdenable("Razón social", "razon_social")}
               {encabezadoOrdenable("Usuario", "usuario")}
@@ -292,7 +326,19 @@ export default function Empresas({ sesion }: { sesion: SesionActual }) {
                     disabled={!pendientes.some((e) => e.id === empresa.id)}
                     checked={seleccion.includes(empresa.id)}
                     onChange={(ev) => setSeleccion((prev) => ev.target.checked ? [...prev, empresa.id] : prev.filter((id) => id !== empresa.id))}/></td>
-                  <td>{empresa.ruc}{sesion.rol !== "SUPERADMIN" && <ConsultaRucSunat ruc={empresa.ruc} />}</td>
+                  {puedeEliminar && <td><input type="checkbox" aria-label={`Seleccionar ${empresa.ruc} para eliminar`}
+                    disabled={operando} checked={seleccionEliminar.includes(empresa.id)}
+                    onChange={ev => {
+                      const marcada = ev.target.checked;
+                      setSeleccionEliminar(prev => marcada ? [...prev, empresa.id] : prev.filter(id => id !== empresa.id));
+                    }} /></td>}
+                  <td>
+                    {empresa.ruc}
+                    {sesion.rol !== "SUPERADMIN" && <div className="acciones">
+                      <ConsultaRucSunat ruc={empresa.ruc} />
+                      {pestana === "PROVEEDORES" && <ConsultaProveedor ruc={empresa.ruc} razon={empresa.razon_social} />}
+                    </div>}
+                  </td>
                   <td>
                     {editandoRazon ? (
                       <div className="acciones empresas-razon-social-edicion">
