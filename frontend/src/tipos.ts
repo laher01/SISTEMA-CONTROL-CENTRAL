@@ -55,6 +55,7 @@ export interface Empresa {
   tipo_relacion: TipoRelacionEmpresa;
   clasificacion_proveedor: ClasificacionProveedor | null;
   usuarios?: EmpresaUsuario[];
+  rutas?: string[];
   autorizada: boolean;
   agente_retencion: boolean;
 }
