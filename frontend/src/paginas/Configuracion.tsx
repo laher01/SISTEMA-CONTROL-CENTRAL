@@ -887,8 +887,8 @@ function EmpresasRegistradasPanel() {
     if (seleccionadas.length === 0) return;
     const confirmar = window.confirm(
       `¿Eliminar ${seleccionadas.length} empresa(s) seleccionada(s)? ` +
-        "Solo desaparecerán del padrón activo. Si un RUC vuelve a aparecer en un comprobante, " +
-        "la empresa se reactivará automáticamente.",
+        "Solo se pueden retirar empresas sin uso. Si un Gestor vuelve a cargar ese RUC, " +
+        "la empresa reaparecerá para revisión administrativa.",
     );
     if (!confirmar) return;
 
@@ -897,7 +897,7 @@ function EmpresasRegistradasPanel() {
       const resultado = await enviarJson<{ eliminadas: number }>(
         "/api/v1/empresas/eliminar-seleccion",
         "POST",
-        { empresa_ids: seleccionadas },
+        { empresa_ids: seleccionadas, solo_sin_uso: true },
       );
       setMensaje(`Empresas retiradas del padrón activo: ${resultado.eliminadas}`);
       setSeleccionadas([]);
